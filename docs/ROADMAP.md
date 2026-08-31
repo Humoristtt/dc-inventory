@@ -184,10 +184,10 @@ CUSTODY  → у конкретного пользователя
 Если доступ нужен срочно, свяжитесь с @Humoristttt.
 ```
 
-- [ ] Неизвестный пользователь не получает доступ к каталогу.
-- [ ] Пользователь сначала видит понятный экран доступа и кликабельный контакт ADMIN.
-- [ ] Пользователь подтверждает запрос кнопкой «ОК, запросить доступ».
-- [ ] Дубликаты активного запроса не создаются.
+- [x] Неизвестный пользователь не получает доступ к каталогу на frontend gate; production smoke ещё впереди.
+- [x] Пользователь сначала видит понятный экран доступа и кликабельный контакт ADMIN.
+- [x] Пользователь подтверждает запрос кнопкой «ОК, запросить доступ».
+- [x] Создание запроса идемпотентно на уровне service + partial unique DB invariant.
 - [ ] ADMIN получает Telegram-уведомление.
 - [ ] Основной approve/reject workflow выполняется inline-кнопками **в чате с ботом**, а не в Mini App.
 - [ ] В сообщении ADMIN есть `[ ✅ Разрешить ]` и `[ ❌ Отклонить ]`.
@@ -236,7 +236,7 @@ Spikatel Inventory
 
 ## 4.3. Telegram WebApp authentication
 
-- [ ] Frontend передаёт оригинальный Telegram `initData`.
+- [x] Frontend передаёт оригинальный Telegram `initData` в `/api/auth/telegram`.
 - [x] Backend validator реализует Telegram HMAC-SHA-256 verification.
 - [x] Проверяется `auth_date` и ограничение свежести.
 - [x] Просроченный / существенно будущий initData отклоняется.
@@ -244,11 +244,11 @@ Spikatel Inventory
 - [x] Duplicate query fields отклоняются.
 - [x] Нельзя доверять `initDataUnsafe` без server-side validation.
 - [x] Реализована persistence-модель отзывной server-side session; в БД хранится только SHA-256 token hash.
-- [ ] Подключить реальный frontend → `/api/auth/telegram`.
+- [x] Подключить реальный frontend → `/api/auth/telegram`.
 - [x] `/api/auth/telegram` после validation создаёт/обновляет Telegram identity.
 - [x] `/api/auth/telegram` выдаёт защищённую `HttpOnly` session cookie; в production `Secure`.
-- [ ] Bearer token не хранится в `localStorage`.
-- [ ] Обычное открытие production URL вне Telegram не даёт доступ к складу.
+- [x] Bearer token не используется и не хранится в `localStorage`.
+- [x] Frontend gate не пропускает браузер без валидной session/Telegram initData; production smoke ещё впереди.
 
 ## 4.4. Telegram webhook
 
@@ -1504,12 +1504,12 @@ Viewport profiles:
 - [ ] Webhook.
 - [ ] Webhook secret.
 - [ ] Telegram update dedupe.
-- [~] initData validation — backend foundation implemented, real Telegram integration pending.
-- [~] Auth session — persistence/API foundation implemented, real Telegram integration pending.
+- [~] initData validation — backend + frontend integration implemented, production Telegram smoke pending.
+- [~] Auth session — persistence/API + frontend session reuse implemented, production Telegram smoke pending.
 - [x] User entity persistence.
 - [x] ADMIN/USER persistence.
 - [x] AccessStatus persistence.
-- [ ] Request access.
+- [x] Request access backend API + first-entry/pending frontend flow.
 - [ ] Admin approve через inline callback в Telegram-чате.
 - [ ] Admin reject через inline callback в Telegram-чате.
 - [ ] Admin Telegram notification.
@@ -1829,11 +1829,11 @@ Import:
 - [x] Спроектировать User / TelegramIdentity / AccessRequest.
 - [x] Реализовать User / TelegramIdentity / AccessRequest persistence + migration.
 - [x] Спроектировать session/auth contract.
-- [~] Реализовать Telegram initData validator + auth session API + security tests.
+- [x] Реализовать Telegram initData validator + auth session API + security tests.
 - [ ] Реализовать `/start` webhook.
 - [ ] Развернуть Telegram Gateway Worker.
 - [ ] Проверить outbound `sendMessage`.
-- [ ] Реализовать request access.
+- [x] Реализовать request access + кликабельный `@Humoristttt` + pending screen.
 - [ ] Реализовать ADMIN approve/reject.
 - [ ] Уведомить ADMIN.
 - [ ] Уведомить USER.

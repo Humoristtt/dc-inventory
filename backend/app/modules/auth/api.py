@@ -92,9 +92,11 @@ async def authenticate_with_telegram(
 @router.get("/me", response_model=AuthStateOut)
 async def get_me(
     request: Request,
+    response: Response,
     authenticated: Authenticated,
 ) -> AuthStateOut:
     settings: Settings = request.app.state.settings
+    response.headers["Cache-Control"] = "no-store"
     return _state_response(authenticated.user, authenticated.identity, settings)
 
 

@@ -18,6 +18,31 @@
 - Production разворачивается только из зафиксированного Git commit.
 - Production VM имеет только read-only доступ к GitHub-репозиторию.
 
+## Текущее состояние
+
+Реализован backend runtime foundation:
+
+- Python 3.12;
+- FastAPI;
+- SQLAlchemy 2 в async-режиме;
+- asyncpg;
+- Alembic;
+- PostgreSQL 18 для локальной разработки;
+- `/api/health/live`;
+- `/api/health/ready`;
+- Ruff;
+- mypy в strict-режиме;
+- Pytest;
+- development Docker Compose для PostgreSQL.
+
+Фактически проверено:
+
+    DB UP   -> live 200 / ready 200
+    DB DOWN -> live 200 / ready 503
+    DB BACK -> live 200 / ready 200
+
+Readiness восстанавливается после возврата PostgreSQL без рестарта backend.
+
 ## Номенклатура
 
 На старте система должна учитывать, в частности:
@@ -66,3 +91,7 @@ Production VM:
 Каноническая документация проекта находится в каталоге [`docs/`](docs/).
 
 История проекта ведётся в [`docs/HISTORY.md`](docs/HISTORY.md).
+
+Развёртывание:
+
+[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)

@@ -20,3 +20,36 @@
 - Получены исходные Excel-файлы текущей складской номенклатуры.
 - Получены фирменный guidebook Spikatel 2026 и оригинальные web-логотипы.
 - Документация проекта ведётся на русском языке и должна обновляться вместе с реализацией.
+
+## 2026-08-31 — Backend runtime foundation
+
+- Создан backend foundation на Python 3.12 и FastAPI.
+- Зафиксирован архитектурный стиль модульного монолита.
+- Выделены инфраструктурные слои `api`, `core`, `db` и каталог будущих предметных модулей `modules`.
+- Настроен SQLAlchemy 2 в async-режиме через `asyncpg`.
+- Добавлена обязательная конфигурация `DATABASE_URL`.
+- Добавлен ограниченный timeout подключения к PostgreSQL.
+- Настроен Alembic в async-режиме.
+- Строка подключения к PostgreSQL не хранится в `alembic.ini`.
+- Создан baseline Alembic `48c2f07f01a0`.
+- Добавлен PostgreSQL 18 для локальной разработки через `compose.dev.yaml`.
+- Development PostgreSQL публикуется только на `127.0.0.1:55432`.
+- Локальный `.env` исключён из Git; добавлен `.env.example`.
+- Реализован `/api/health/live`.
+- Реализован `/api/health/ready` с реальной проверкой PostgreSQL.
+- DB health logic вынесена из HTTP-слоя в `app/db/health.py`.
+- Настроены Ruff, mypy strict и Pytest.
+- Unit tests проверяют успешный readiness и ответ HTTP 503 при недоступной БД.
+- Выполнен acceptance с реальным PostgreSQL: `UP -> 200/200`, `DOWN -> 200/503`, `BACK -> 200/200`.
+- Подтверждено восстановление readiness без рестарта backend.
+- Для будущих автоматизированных runtime-проверок вместо фиксированных задержек будет использоваться bounded readiness polling.
+
+## 2026-08-31 — Production-shaped runtime foundation
+
+- Добавлен production Compose `compose.yaml`.
+- В production на host публикуется только Nginx на `127.0.0.1:8080`.
+- Backend и PostgreSQL не публикуют host-порты.
+- Добавлен `requirements-dev.lock` с hash-locked development/CI-зависимостями.
+- Добавлен GitHub Actions CI для backend, frontend, миграций и сборки Docker images.
+- Удалены остаточные файлы стандартного Vite scaffold.
+- Добавлена deployment-документация.

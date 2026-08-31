@@ -1,25 +1,68 @@
-# DC Inventory
+# Инвентаризация оборудования ЦОД
 
-Telegram Mini App for datacenter equipment inventory and movement tracking.
+Внутреннее Telegram Mini App для учёта оборудования и расходных материалов ЦОД.
 
-## Core principles
+Система предназначена для контроля фактических складских остатков и полной истории движения оборудования: кто, когда, откуда, куда, что именно и в каком количестве получил, вернул, переместил, оприходовал или списал.
 
-- PostgreSQL-backed inventory ledger is the source of truth.
-- Inventory changes are represented as immutable movements.
-- Supports quantity-based and serial-number-based inventory.
-- Multiple warehouse / datacenter locations.
-- Telegram authentication with ADMIN and USER roles.
-- Administrative Telegram notifications for equipment withdrawals.
-- Production is deployed from reviewed Git commits.
-- Production VM has read-only access to this repository.
+## Основные принципы
 
-## Planned stack
+- PostgreSQL является каноническим источником данных.
+- Остатки изменяются только через складские операции.
+- История операций сохраняется и не переписывается задним числом.
+- Поддерживается количественный и серийный учёт.
+- Поддерживается несколько складов и локаций.
+- Категории оборудования расширяемы без переделки всей системы.
+- Доступ пользователей осуществляется через Telegram.
+- Базовые роли: `ADMIN` и `USER`.
+- Администратор получает уведомления о выдаче оборудования.
+- Production разворачивается только из зафиксированного Git commit.
+- Production VM имеет только read-only доступ к GitHub-репозиторию.
 
-- React + TypeScript + Vite
-- FastAPI
-- PostgreSQL
-- SQLAlchemy + Alembic
-- aiogram
-- Docker Compose
-- Nginx
-- Cloudflare Tunnel
+## Номенклатура
+
+На старте система должна учитывать, в частности:
+
+- SFP/SFP+/SFP28 и другие трансиверы;
+- оптические кабели;
+- медные кабели;
+- силовые кабели;
+- диски;
+- сетевые карты;
+- другие категории, которые будут добавляться позднее.
+
+Исходные Excel-файлы используются только для первичного импорта и сверки. После запуска приложения они не являются источником истины.
+
+## Технологический стек
+
+- Frontend: React + TypeScript + Vite
+- Backend: FastAPI
+- ORM: SQLAlchemy 2
+- Миграции: Alembic
+- База данных: PostgreSQL
+- Telegram Bot: aiogram
+- Контейнеризация: Docker Compose
+- Reverse proxy: Nginx
+- Публикация Mini App: Cloudflare Tunnel
+- CI: GitHub Actions
+- Backend tests: Pytest
+- Frontend tests: Vitest
+- E2E: Playwright
+
+## Инфраструктура
+
+Production VM:
+
+- Ubuntu Server 24.04 LTS
+- Docker Engine + Docker Compose
+- SSH только по ключу
+- серверное время UTC
+- приложение публикуется через Cloudflare
+- PostgreSQL не публикуется наружу
+
+Прямой доступ production VM к `api.telegram.org` в текущей сети блокируется на TCP/443. Для Telegram Bot API будет предусмотрен отдельный безопасный gateway через Cloudflare.
+
+## Документация
+
+Каноническая документация проекта находится в каталоге [`docs/`](docs/).
+
+История проекта ведётся в [`docs/HISTORY.md`](docs/HISTORY.md).

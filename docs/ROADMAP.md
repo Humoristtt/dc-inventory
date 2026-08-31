@@ -1813,7 +1813,8 @@ Import:
 
 Ближайшая последовательность:
 
-- [ ] Спроектировать User / TelegramIdentity / AccessRequest.
+- [x] Спроектировать User / TelegramIdentity / AccessRequest.
+- [~] Реализовать User / TelegramIdentity / AccessRequest persistence + migration.
 - [ ] Спроектировать session/auth contract.
 - [ ] Реализовать Telegram initData validator + security tests.
 - [ ] Реализовать `/start` webhook.

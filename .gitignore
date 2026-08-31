@@ -27,3 +27,6 @@ data/
 backups/
 tmp/
 *.log
+
+# Python packaging
+*.egg-info/

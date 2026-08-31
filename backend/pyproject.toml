@@ -23,7 +23,6 @@ dev = [
   "pytest>=8.4,<9.0",
   "pytest-asyncio>=1.1,<2.0",
   "ruff>=0.12,<1.0",
-  "pip-tools>=7.5,<8.0",
 ]
 
 [tool.setuptools.packages.find]

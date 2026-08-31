@@ -53,3 +53,15 @@
 - Добавлен GitHub Actions CI для backend, frontend, миграций и сборки Docker images.
 - Удалены остаточные файлы стандартного Vite scaffold.
 - Добавлена deployment-документация.
+
+## 2026-08-31 — Архитектурный pre-feature hardening
+
+- Проведён полный аудит runtime foundation перед Telegram authentication и первой предметной миграцией.
+- Добавлен naming convention SQLAlchemy до появления предметных constraints.
+- Зафиксированы DB pool, statement timeout и lock timeout boundaries.
+- PostgreSQL runtime sessions закреплены в UTC.
+- Production Swagger/OpenAPI отключены.
+- Исправлена proxy-chain семантика Cloudflare -> Nginx -> Uvicorn для scheme и client IP.
+- PostgreSQL изолирован от web отдельной internal Docker network.
+- CI расширен production-shaped runtime smoke test через Nginx, FastAPI, Alembic и PostgreSQL.
+- Обновлена canonical документация frontend/runtime/deployment.

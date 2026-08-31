@@ -2,33 +2,46 @@
 
 ## Требования
 
-Для текущего backend необходимы:
+Для текущего проекта необходимы:
 
 - Python 3.12;
+- Node.js 24;
 - Docker Engine;
 - Docker Compose.
 
-Frontend пока не реализован.
-
-## Python environment
+## Backend environment
 
 Рабочее окружение backend создаётся в каталоге `backend`:
 
     cd backend
     python3 -m venv .venv
     source .venv/bin/activate
-    python -m pip install --upgrade pip
-    python -m pip install -e '.[dev]'
+    python -m pip install --require-hashes -r requirements-dev.lock
 
 `.venv` является локальным development-окружением и не хранится в Git.
+
+`requirements-dev.lock` является воспроизводимым набором зависимостей для локальных проверок и CI. После изменения зависимостей в `pyproject.toml` lock-файл должен быть пересобран через `pip-compile` и проверен чистой установкой с `--require-hashes`.
+
+## Frontend environment
+
+Frontend использует Node.js 24:
+
+    cd frontend
+    npm ci
+
+Основные команды:
+
+    npm run dev
+    npm run lint
+    npm run typecheck
+    npm test
+    npm run build
 
 ## Конфигурация
 
 Пример конфигурации находится в `.env.example`.
 
-Локальная разработка использует `.env` в корне репозитория.
-
-`.env` содержит локальные секреты и исключён из Git.
+Локальная разработка использует `.env` в корне репозитория. Файл содержит локальные секреты и исключён из Git.
 
 Реальные пароли, токены и production URLs коммитить запрещено.
 
@@ -38,21 +51,13 @@ Frontend пока не реализован.
 
     docker compose --env-file .env -f compose.dev.yaml up -d --wait postgres
 
-Проверить состояние контейнера можно через:
-
-    docker compose --env-file .env -f compose.dev.yaml ps
-
-PostgreSQL должен перейти в состояние `healthy`.
-
 Development-порт публикуется только на loopback:
 
     127.0.0.1:55432
 
 ## Alembic
 
-При запуске Alembic с development-машины используется host-порт PostgreSQL.
-
-Пример:
+При запуске Alembic с development-машины используется host-порт PostgreSQL:
 
     set -a
     source .env
@@ -67,9 +72,7 @@ Development-порт публикуется только на loopback:
 
     48c2f07f01a0
 
-## Локальный запуск backend
-
-Из корня репозитория:
+## Локальный backend
 
     set -a
     source .env
@@ -78,35 +81,55 @@ Development-порт публикуется только на loopback:
     HOST_DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:55432/${POSTGRES_DB}"
 
     cd backend
-
-    DATABASE_URL="$HOST_DATABASE_URL" APP_ENV=development       uvicorn app.main:app --host 127.0.0.1 --port 8000
+    DATABASE_URL="$HOST_DATABASE_URL" APP_ENV=development uvicorn app.main:app --host 127.0.0.1 --port 8000
 
 Endpoints:
 
     GET http://127.0.0.1:8000/api/health/live
     GET http://127.0.0.1:8000/api/health/ready
 
-OpenAPI:
+Swagger/OpenAPI доступны только вне production:
 
     http://127.0.0.1:8000/api/docs
 
-## Проверки backend
+## Единый development runtime
 
-Перед фиксацией законченного change set выполняются:
+Полный стек запускается из корня:
 
+    docker compose --env-file .env -f compose.dev.yaml up -d --build --wait web
+
+Единая точка входа:
+
+    http://127.0.0.1:8080
+
+Backend и PostgreSQL остаются разделены отдельной внутренней DB-сетью; frontend/Nginx не имеет прямого доступа к PostgreSQL.
+
+## Проверки
+
+Backend:
+
+    cd backend
     ruff check app tests migrations
     mypy app tests migrations/env.py migrations/versions
     pytest -q
 
-Из корня репозитория дополнительно:
+Frontend:
+
+    cd frontend
+    npm run lint
+    npm run typecheck
+    npm test
+    npm run build
+
+Из корня репозитория:
 
     git diff --check
 
-Не требуется выполнять полный набор проверок после каждого небольшого редактирования файла. Проверки выполняются на границе логического этапа.
+Полный набор проверок выполняется на границе логического change set, а не после каждого небольшого редактирования.
 
 ## Health-check acceptance
 
-Фактически проверено:
+Проверенный lifecycle:
 
     PostgreSQL UP:
       /live  -> 200

@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -14,6 +14,35 @@ class Settings(BaseSettings):
     database_pool_timeout_seconds: int = Field(default=5, ge=1, le=60)
     database_statement_timeout_seconds: int = Field(default=30, ge=1, le=300)
     database_lock_timeout_seconds: int = Field(default=5, ge=1, le=60)
+
+    telegram_bot_token: SecretStr | None = None
+    telegram_init_data_max_age_seconds: int = Field(default=300, ge=30, le=3600)
+    admin_telegram_user_id: int | None = Field(default=None, gt=0, le=2**52)
+    support_telegram_username: str = Field(
+        default="Humoristttt",
+        pattern=r"^[A-Za-z][A-Za-z0-9_]{4,31}$",
+    )
+    auth_session_ttl_seconds: int = Field(default=43_200, ge=300, le=2_592_000)
+    auth_cookie_name: str = Field(
+        default="dc_inventory_session",
+        pattern=r"^[A-Za-z0-9_-]{1,64}$",
+    )
+
+    @field_validator("admin_telegram_user_id", mode="before")
+    @classmethod
+    def empty_admin_telegram_user_id_is_none(cls, value: object) -> object:
+        return None if value == "" else value
+
+    @property
+    def telegram_bot_token_value(self) -> str | None:
+        if self.telegram_bot_token is None:
+            return None
+        value = self.telegram_bot_token.get_secret_value().strip()
+        return value or None
+
+    @property
+    def support_telegram_url(self) -> str:
+        return f"https://t.me/{self.support_telegram_username}"
 
     model_config = SettingsConfigDict(
         extra="ignore",

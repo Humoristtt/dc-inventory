@@ -165,27 +165,37 @@ CUSTODY  → у конкретного пользователя
 Первое открытие неизвестным пользователем:
 
 ```text
-Доступ не предоставлен
-[ Запросить доступ ]
+Нужен доступ
+
+Это внутреннее приложение для учёта оборудования ЦОД.
+Для получения доступа и по всем вопросам обратитесь к @Humoristttt.
+
+[ ОК, запросить доступ ]
 ```
+
+`@Humoristttt` должен быть кликабельным Telegram-контактом (`https://t.me/Humoristttt`); username и URL приходят из backend config, а не размазываются константами по frontend.
 
 После запроса:
 
 ```text
-PENDING
-Ожидается подтверждение администратора
+Запрос отправлен
+Статус: На рассмотрении
+
+Если доступ нужен срочно, свяжитесь с @Humoristttt.
 ```
 
 - [ ] Неизвестный пользователь не получает доступ к каталогу.
-- [ ] Пользователь может отправить запрос.
+- [ ] Пользователь сначала видит понятный экран доступа и кликабельный контакт ADMIN.
+- [ ] Пользователь подтверждает запрос кнопкой «ОК, запросить доступ».
 - [ ] Дубликаты активного запроса не создаются.
 - [ ] ADMIN получает Telegram-уведомление.
-- [ ] ADMIN может разрешить доступ.
-- [ ] ADMIN может отклонить запрос.
-- [ ] ADMIN может сделать это в Mini App.
-- [ ] При необходимости ADMIN может сделать это из Telegram callback.
-- [ ] Пользователь получает уведомление об одобрении.
-- [ ] Пользователь получает уведомление об отказе.
+- [ ] Основной approve/reject workflow выполняется inline-кнопками **в чате с ботом**, а не в Mini App.
+- [ ] В сообщении ADMIN есть `[ ✅ Разрешить ]` и `[ ❌ Отклонить ]`.
+- [ ] Callback может выполнить только ADMIN.
+- [ ] Повторное нажатие уже обработанного callback безопасно.
+- [ ] После решения inline-кнопки убираются / сообщение помечается обработанным.
+- [ ] Пользователь получает Telegram-уведомление об одобрении + кнопку «Открыть приложение».
+- [ ] Пользователь получает уведомление об отказе + кликабельный контакт `@Humoristttt`.
 - [ ] Отозванный доступ немедленно блокирует новые защищённые запросы.
 
 ---
@@ -227,13 +237,16 @@ Spikatel Inventory
 ## 4.3. Telegram WebApp authentication
 
 - [ ] Frontend передаёт оригинальный Telegram `initData`.
-- [ ] Backend криптографически проверяет подпись.
-- [ ] Проверяется `auth_date`.
-- [ ] Просроченный initData отклоняется.
-- [ ] Любое изменение user payload ломает подпись.
-- [ ] Нельзя доверять `initDataUnsafe` без server-side validation.
-- [ ] После validation создаётся/обновляется Telegram identity.
-- [ ] Выдаётся защищённая server-side session / Secure cookie.
+- [x] Backend validator реализует Telegram HMAC-SHA-256 verification.
+- [x] Проверяется `auth_date` и ограничение свежести.
+- [x] Просроченный / существенно будущий initData отклоняется.
+- [x] Любое изменение подписанного payload ломает подпись.
+- [x] Duplicate query fields отклоняются.
+- [x] Нельзя доверять `initDataUnsafe` без server-side validation.
+- [x] Реализована persistence-модель отзывной server-side session; в БД хранится только SHA-256 token hash.
+- [ ] Подключить реальный frontend → `/api/auth/telegram`.
+- [x] `/api/auth/telegram` после validation создаёт/обновляет Telegram identity.
+- [x] `/api/auth/telegram` выдаёт защищённую `HttpOnly` session cookie; в production `Secure`.
 - [ ] Bearer token не хранится в `localStorage`.
 - [ ] Обычное открытие production URL вне Telegram не даёт доступ к складу.
 
@@ -259,8 +272,8 @@ api.telegram.org
 ```
 
 - [ ] Создать отдельный Worker Gateway.
-- [ ] Telegram bot token хранится как Cloudflare Secret.
-- [ ] VM не хранит bot token там, где он не нужен.
+- [ ] Worker хранит Telegram bot token как Cloudflare Secret для Bot API.
+- [ ] Backend получает тот же bot token только через production secret/env для HMAC-проверки initData; frontend/Git/logs его не получают.
 - [ ] Backend → Worker защищён отдельным gateway secret.
 - [ ] Worker не является универсальным open proxy.
 - [ ] Разрешён whitelist Bot API методов.
@@ -1491,14 +1504,14 @@ Viewport profiles:
 - [ ] Webhook.
 - [ ] Webhook secret.
 - [ ] Telegram update dedupe.
-- [ ] initData validation.
-- [ ] Auth session.
-- [ ] User entity.
-- [ ] ADMIN/USER.
-- [ ] AccessStatus.
+- [~] initData validation — backend foundation implemented, real Telegram integration pending.
+- [~] Auth session — persistence/API foundation implemented, real Telegram integration pending.
+- [x] User entity persistence.
+- [x] ADMIN/USER persistence.
+- [x] AccessStatus persistence.
 - [ ] Request access.
-- [ ] Admin approve.
-- [ ] Admin reject.
+- [ ] Admin approve через inline callback в Telegram-чате.
+- [ ] Admin reject через inline callback в Telegram-чате.
 - [ ] Admin Telegram notification.
 - [ ] User approval notification.
 - [ ] User rejection notification.
@@ -1814,9 +1827,9 @@ Import:
 Ближайшая последовательность:
 
 - [x] Спроектировать User / TelegramIdentity / AccessRequest.
-- [~] Реализовать User / TelegramIdentity / AccessRequest persistence + migration.
-- [ ] Спроектировать session/auth contract.
-- [ ] Реализовать Telegram initData validator + security tests.
+- [x] Реализовать User / TelegramIdentity / AccessRequest persistence + migration.
+- [x] Спроектировать session/auth contract.
+- [~] Реализовать Telegram initData validator + auth session API + security tests.
 - [ ] Реализовать `/start` webhook.
 - [ ] Развернуть Telegram Gateway Worker.
 - [ ] Проверить outbound `sendMessage`.

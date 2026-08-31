@@ -65,3 +65,14 @@
 - PostgreSQL изолирован от web отдельной internal Docker network.
 - CI расширен production-shaped runtime smoke test через Nginx, FastAPI, Alembic и PostgreSQL.
 - Обновлена canonical документация frontend/runtime/deployment.
+
+## 2026-09-01 — Telegram identity, auth и access foundation
+
+- `533a7b5` — User / TelegramIdentity / AccessRequest persistence.
+- `c13f030` — Telegram initData validation, server-side AuthSession и auth API.
+- `93490cd` — frontend auth gate, кликабельный `@Humoristttt`, access request и
+  pending flow.
+- Post-checkpoint audit выделил Stage 4.3a до outbox/webhook: retry после
+  `REJECTED`, backend `Approved`/`Admin` boundary, bootstrap ADMIN consistency,
+  PostgreSQL integration tests, Compose secret boundary и синхронизация docs.
+- Stage 4.4 блокирован до полного gate и повторного archive audit 4.3a.

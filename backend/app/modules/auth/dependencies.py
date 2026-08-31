@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.db.session import get_db_session
 from app.modules.auth.service import AuthenticatedContext, load_auth_context
+from app.modules.identity.enums import UserAccessStatus, UserRole
 
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 
@@ -33,3 +34,30 @@ async def get_authenticated_context(
 
 
 Authenticated = Annotated[AuthenticatedContext, Depends(get_authenticated_context)]
+
+async def get_approved_context(
+    authenticated: Authenticated,
+) -> AuthenticatedContext:
+    if authenticated.user.access_status != UserAccessStatus.APPROVED:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="access approval required",
+        )
+    return authenticated
+
+
+Approved = Annotated[AuthenticatedContext, Depends(get_approved_context)]
+
+
+async def get_admin_context(
+    approved: Approved,
+) -> AuthenticatedContext:
+    if approved.user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="administrator role required",
+        )
+    return approved
+
+
+Admin = Annotated[AuthenticatedContext, Depends(get_admin_context)]

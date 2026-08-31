@@ -18,10 +18,6 @@ class AccessAlreadyApprovedError(AccessRequestError):
     """Доступ уже предоставлен."""
 
 
-class AccessRejectedError(AccessRequestError):
-    """Запрос отклонён; пользователю нужно связаться с администратором."""
-
-
 class AccessBlockedError(AccessRequestError):
     """Пользователь заблокирован администратором."""
 
@@ -64,10 +60,12 @@ async def create_or_get_access_request(
 
     if user.access_status == UserAccessStatus.APPROVED:
         raise AccessAlreadyApprovedError
-    if user.access_status == UserAccessStatus.REJECTED:
-        raise AccessRejectedError
     if user.access_status == UserAccessStatus.BLOCKED:
         raise AccessBlockedError
+    if user.access_status == UserAccessStatus.REJECTED:
+        user.access_status = UserAccessStatus.PENDING
+        user.approved_at = None
+        user.approved_by_user_id = None
 
     existing = await get_pending_access_request(db, user.id)
     if existing is not None:

@@ -177,17 +177,42 @@ function RequestAccessScreen({
   );
 }
 
-function RejectedAccessScreen({ support }: { support: SupportContact }) {
+function RejectedAccessScreen({
+  support,
+  onRequest,
+  pending,
+  failed,
+}: {
+  support: SupportContact;
+  onRequest: () => void;
+  pending: boolean;
+  failed: boolean;
+}) {
   return (
     <AccessScreen
       eyebrow="Доступ"
       title="Запрос отклонён"
       support={support}
+      action={
+        <button
+          className="access-gate__button"
+          disabled={pending}
+          onClick={onRequest}
+          type="button"
+        >
+          {pending ? "Отправляем запрос…" : "Запросить доступ снова"}
+        </button>
+      }
     >
       <p>
-        Доступ к приложению пока не предоставлен. Если это нужно
-        пересмотреть, свяжитесь с администратором.
+        Предыдущий запрос отклонён. Если доступ всё ещё нужен,
+        можно отправить новый запрос или связаться с администратором.
       </p>
+      {failed ? (
+        <p className="access-gate__error">
+          Не удалось отправить новый запрос. Попробуйте ещё раз.
+        </p>
+      ) : null}
     </AccessScreen>
   );
 }
@@ -270,9 +295,40 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
     queryKey: accessQueryKey,
     queryFn: ({ signal }) => getAccessState(signal),
     enabled: authState?.user.access_status === "PENDING",
-    refetchInterval: authState?.user.access_status === "PENDING" ? 15_000 : false,
+    refetchInterval: (query) =>
+      (
+        query.state.data?.access_status
+        ?? authState?.user.access_status
+      ) === "PENDING"
+        ? 15_000
+        : false,
     retry: false,
   });
+
+  const observedAccessStatus = accessQuery.data?.access_status;
+
+  useEffect(() => {
+    if (observedAccessStatus === undefined) {
+      return;
+    }
+
+    queryClient.setQueryData<AuthState>(authQueryKey, (current) => {
+      if (
+        current === undefined
+        || current.user.access_status === observedAccessStatus
+      ) {
+        return current;
+      }
+
+      return {
+        ...current,
+        user: {
+          ...current.user,
+          access_status: observedAccessStatus,
+        },
+      };
+    });
+  }, [observedAccessStatus, queryClient]);
 
   const requestMutation = useMutation({
     mutationFn: requestAccess,
@@ -308,7 +364,14 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
   }
 
   if (effectiveAccessStatus === "REJECTED") {
-    return <RejectedAccessScreen support={authState.support} />;
+    return (
+      <RejectedAccessScreen
+        onRequest={() => requestMutation.mutate()}
+        failed={requestMutation.isError}
+        pending={requestMutation.isPending}
+        support={authState.support}
+      />
+    );
   }
 
   if (effectiveAccessStatus === "BLOCKED") {

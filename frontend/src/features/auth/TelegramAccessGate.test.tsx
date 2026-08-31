@@ -1,4 +1,5 @@
 import {
+  cleanup,
   fireEvent,
   render,
   screen,
@@ -29,6 +30,7 @@ function renderGate() {
 }
 
 afterEach(() => {
+  cleanup();
   vi.unstubAllGlobals();
   delete window.Telegram;
 });
@@ -174,4 +176,73 @@ it("пропускает пользователя, если access state уже 
   renderGate();
 
   expect(await screen.findByText("Каталог доступен")).toBeInTheDocument();
+});
+
+it("позволяет повторно запросить доступ после отказа", async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+
+    if (url === "/api/auth/me") {
+      return new Response(
+        JSON.stringify({
+          user: {
+            id: "00000000-0000-0000-0000-000000000004",
+            telegram_user_id: 1004,
+            username: "rejected",
+            first_name: "Rejected",
+            last_name: null,
+            role: "USER",
+            access_status: "REJECTED",
+          },
+          support,
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    if (url === "/api/access-requests" && init?.method === "POST") {
+      return new Response(
+        JSON.stringify({
+          access_status: "PENDING",
+          request: {
+            id: "00000000-0000-0000-0000-000000000011",
+            status: "PENDING",
+            requested_at: "2026-09-01T01:00:00Z",
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    if (url === "/api/access-requests/me") {
+      return new Response(
+        JSON.stringify({
+          access_status: "PENDING",
+          request: {
+            id: "00000000-0000-0000-0000-000000000011",
+            status: "PENDING",
+            requested_at: "2026-09-01T01:00:00Z",
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+  vi.stubGlobal("fetch", fetchMock);
+
+  renderGate();
+
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Запросить доступ снова" }),
+  );
+
+  expect(
+    await screen.findByRole("heading", { name: "Запрос отправлен" }),
+  ).toBeInTheDocument();
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/access-requests",
+    expect.objectContaining({ method: "POST" }),
+  );
 });

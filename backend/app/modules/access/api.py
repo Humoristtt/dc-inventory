@@ -4,7 +4,6 @@ from app.modules.access.schemas import AccessRequestOut, AccessStateOut
 from app.modules.access.service import (
     AccessAlreadyApprovedError,
     AccessBlockedError,
-    AccessRejectedError,
     create_or_get_access_request,
     get_pending_access_request,
 )
@@ -50,11 +49,6 @@ async def request_access(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="access already approved",
-        ) from exc
-    except AccessRejectedError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="access request rejected; contact administrator",
         ) from exc
     except AccessBlockedError as exc:
         raise HTTPException(

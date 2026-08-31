@@ -54,15 +54,18 @@ jobs:
         working-directory: backend
         run: mypy app tests migrations/env.py migrations/versions
 
-      - name: Tests
-        working-directory: backend
-        run: pytest -q
-
       - name: Migrations
         working-directory: backend
         run: |
           alembic upgrade head
+          alembic check
           alembic current
+
+      - name: Tests
+        working-directory: backend
+        env:
+          RUN_POSTGRES_INTEGRATION: "1"
+        run: pytest -q
 
   frontend:
     runs-on: ubuntu-latest
@@ -115,6 +118,9 @@ jobs:
           DATABASE_POOL_TIMEOUT_SECONDS=5
           DATABASE_STATEMENT_TIMEOUT_SECONDS=30
           DATABASE_LOCK_TIMEOUT_SECONDS=5
+          TELEGRAM_BOT_TOKEN=ci-runtime-only-token
+          ADMIN_TELEGRAM_USER_ID=42424242
+          SUPPORT_TELEGRAM_USERNAME=Humoristttt
           EOF
 
       - name: Start production-shaped runtime
@@ -127,6 +133,8 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1:8080/api/health/ready | grep -q '"status":"ready"'
           docker compose --env-file .env.ci -f compose.yaml exec -T backend id | grep -q 'uid=10001(app)'
           docker compose --env-file .env.ci -f compose.yaml exec -T web id | grep -q 'uid=101(nginx)'
+          docker compose --env-file .env.ci -f compose.yaml exec -T backend sh -c 'test "$TELEGRAM_BOT_TOKEN" = "ci-runtime-only-token"'
+          docker compose --env-file .env.ci -f compose.yaml run --rm --no-deps migrate sh -c 'test -z "${TELEGRAM_BOT_TOKEN:-}" && test -z "${ADMIN_TELEGRAM_USER_ID:-}"'
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/api/docs)" = "404"
 
       - name: Runtime state

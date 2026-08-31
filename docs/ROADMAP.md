@@ -5,8 +5,9 @@
 > **Правило:** завершённые пункты отмечаются `[x]`, текущие — `[~]`, запланированные — `[ ]`.
 > Если решение меняется, старый пункт не удаляется бесследно: он переносится в раздел «Изменённые / отложенные решения» с короткой причиной.
 >
-> **Последнее обновление:** 2026-08-31  
+> **Последнее обновление:** 2026-09-01
 > **Production baseline:** `ef0eefb096e2fada46394c8b969b9e7cf6dd13fc`
+> **База Stage 4.3a:** `93490cdb0f7a3aa178fd6ac3e204d40877646c47`
 
 ---
 
@@ -150,8 +151,9 @@ CUSTODY  → у конкретного пользователя
 
 - [ ] ADMIN имеет полный доступ к административным операциям.
 - [ ] USER может работать только в разрешённом пользовательском сценарии.
-- [ ] Ролевые проверки выполняются на backend, а не только скрытием кнопок в UI.
-- [ ] Bootstrap первого ADMIN задаётся явно, а не правилом «первый вошедший становится админом».
+- [x] Общий backend authorization foundation различает `Authenticated`, `Approved` и `Admin`.
+- [ ] Каждый будущий предметный endpoint использует `Approved` / `Admin` согласно policy.
+- [x] Bootstrap первого ADMIN задаётся явно numeric Telegram ID, а не правилом «первый вошедший становится админом».
 
 ## 3.2. Статусы доступа
 
@@ -188,6 +190,9 @@ CUSTODY  → у конкретного пользователя
 - [x] Пользователь сначала видит понятный экран доступа и кликабельный контакт ADMIN.
 - [x] Пользователь подтверждает запрос кнопкой «ОК, запросить доступ».
 - [x] Создание запроса идемпотентно на уровне service + partial unique DB invariant.
+- [x] `REJECTED` допускает новый запрос; `BLOCKED` запрещает повторный запрос.
+- [x] Backend security boundary не полагается на frontend gate.
+- [x] Bootstrap ADMIN recovery закрывает оставшийся `PENDING` AccessRequest.
 - [ ] ADMIN получает Telegram-уведомление.
 - [ ] Основной approve/reject workflow выполняется inline-кнопками **в чате с ботом**, а не в Mini App.
 - [ ] В сообщении ADMIN есть `[ ✅ Разрешить ]` и `[ ❌ Отклонить ]`.
@@ -1141,6 +1146,8 @@ Detail:
 - [ ] Locks.
 - [ ] Idempotency.
 - [ ] Concurrency.
+- [x] Access foundation: два конкурентных request-access вызова дают ровно один `PENDING`.
+- [x] Auth foundation: настоящий PostgreSQL отбрасывает revoked/expired sessions.
 
 Критический acceptance:
 
@@ -1498,7 +1505,7 @@ Viewport profiles:
 - [x] Mini App enabled.
 - [x] Menu button configured.
 - [x] First Mini App launch PASS.
-- [~] Реализовать Telegram backend foundation.
+- [~] Telegram backend foundation: Stage 4.3a auth/access hardening перед webhook/outbox.
 - [ ] Cloudflare Telegram Gateway.
 - [ ] `/start`.
 - [ ] Webhook.
@@ -1510,6 +1517,8 @@ Viewport profiles:
 - [x] ADMIN/USER persistence.
 - [x] AccessStatus persistence.
 - [x] Request access backend API + first-entry/pending frontend flow.
+- [x] Stage 4.3a: rejected retry, polling sync, backend authz boundary, bootstrap consistency, PostgreSQL/CI coverage, docs.
+- [~] Повторный source archive audit Stage 4.3a после полного gate.
 - [ ] Admin approve через inline callback в Telegram-чате.
 - [ ] Admin reject через inline callback в Telegram-чате.
 - [ ] Admin Telegram notification.
@@ -1834,6 +1843,8 @@ Import:
 - [ ] Развернуть Telegram Gateway Worker.
 - [ ] Проверить outbound `sendMessage`.
 - [x] Реализовать request access + кликабельный `@Humoristttt` + pending screen.
+- [x] Stage 4.3a hardening + полный gate.
+- [~] Провести повторный source archive audit Stage 4.3a.
 - [ ] Реализовать ADMIN approve/reject.
 - [ ] Уведомить ADMIN.
 - [ ] Уведомить USER.

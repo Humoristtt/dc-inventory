@@ -59,6 +59,12 @@ services:
     <<: *backend-image
     environment:
       <<: *backend-environment
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: ${TELEGRAM_INIT_DATA_MAX_AGE_SECONDS:-300}
+      ADMIN_TELEGRAM_USER_ID: ${ADMIN_TELEGRAM_USER_ID:-}
+      SUPPORT_TELEGRAM_USERNAME: ${SUPPORT_TELEGRAM_USERNAME:-Humoristttt}
+      AUTH_SESSION_TTL_SECONDS: ${AUTH_SESSION_TTL_SECONDS:-43200}
+      AUTH_COOKIE_NAME: ${AUTH_COOKIE_NAME:-dc_inventory_session}
     depends_on:
       postgres:
         condition: service_healthy
@@ -93,7 +99,7 @@ services:
     build:
       context: ./frontend
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:${WEB_PORT:-8080}:8080"
     depends_on:
       backend:
         condition: service_healthy

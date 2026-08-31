@@ -12,8 +12,12 @@ from sqlalchemy.orm import joinedload
 from app.core.config import Settings
 from app.modules.auth.models import AuthSession
 from app.modules.auth.telegram import ValidatedTelegramInitData
-from app.modules.identity.enums import UserAccessStatus, UserRole
-from app.modules.identity.models import TelegramIdentity, User
+from app.modules.identity.enums import (
+    AccessRequestStatus,
+    UserAccessStatus,
+    UserRole,
+)
+from app.modules.identity.models import AccessRequest, TelegramIdentity, User
 
 SESSION_TOKEN_BYTES = 32
 
@@ -94,6 +98,22 @@ async def upsert_telegram_identity(
         user.access_status = UserAccessStatus.APPROVED
         if user.approved_at is None:
             user.approved_at = current_time
+
+        pending_statement = (
+            select(AccessRequest)
+            .where(
+                AccessRequest.user_id == user.id,
+                AccessRequest.status == AccessRequestStatus.PENDING,
+            )
+            .with_for_update()
+        )
+        pending_result = await db.scalars(pending_statement)
+        pending_request = pending_result.first()
+        if pending_request is not None:
+            pending_request.status = AccessRequestStatus.APPROVED
+            pending_request.decided_at = current_time
+            pending_request.decided_by_user_id = user.id
+            pending_request.decision_note = "bootstrap admin configuration"
 
     await db.flush()
     return user, identity

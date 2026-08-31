@@ -96,14 +96,47 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-  containers:
+  runtime:
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v7
 
-      - name: Build backend
-        run: docker build -t dc-inventory-backend:ci ./backend
+      - name: Create runtime environment
+        run: |
+          cat > .env.ci <<'EOF'
+          POSTGRES_DB=dc_inventory
+          POSTGRES_USER=dc_inventory
+          POSTGRES_PASSWORD=ci-runtime-only-password
+          DATABASE_URL=postgresql+asyncpg://dc_inventory:ci-runtime-only-password@postgres:5432/dc_inventory
+          DATABASE_CONNECT_TIMEOUT_SECONDS=5
+          DATABASE_POOL_SIZE=5
+          DATABASE_MAX_OVERFLOW=5
+          DATABASE_POOL_TIMEOUT_SECONDS=5
+          DATABASE_STATEMENT_TIMEOUT_SECONDS=30
+          DATABASE_LOCK_TIMEOUT_SECONDS=5
+          EOF
 
-      - name: Build web
-        run: docker build -t dc-inventory-web:ci ./frontend
+      - name: Start production-shaped runtime
+        run: docker compose --env-file .env.ci -f compose.yaml up -d --build --wait web
+
+      - name: Verify runtime
+        run: |
+          curl --fail --silent --show-error http://127.0.0.1:8080/healthz | grep -q '^ok$'
+          curl --fail --silent --show-error http://127.0.0.1:8080/api/health/live | grep -q '"status":"ok"'
+          curl --fail --silent --show-error http://127.0.0.1:8080/api/health/ready | grep -q '"status":"ready"'
+          docker compose --env-file .env.ci -f compose.yaml exec -T backend id | grep -q 'uid=10001(app)'
+          docker compose --env-file .env.ci -f compose.yaml exec -T web id | grep -q 'uid=101(nginx)'
+          test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/api/docs)" = "404"
+
+      - name: Runtime state
+        if: always()
+        run: docker compose --env-file .env.ci -f compose.yaml ps -a
+
+      - name: Runtime logs
+        if: failure()
+        run: docker compose --env-file .env.ci -f compose.yaml logs --no-color
+
+      - name: Stop runtime
+        if: always()
+        run: docker compose --env-file .env.ci -f compose.yaml down -v --remove-orphans

@@ -54,6 +54,10 @@ async def run_async_migrations() -> None:
         poolclass=pool.NullPool,
         connect_args={
             "timeout": settings.database_connect_timeout_seconds,
+            "server_settings": {
+                "application_name": "dc-inventory-migrations",
+                "timezone": "UTC",
+            },
         },
     )
 

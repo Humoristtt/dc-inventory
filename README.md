@@ -20,20 +20,21 @@
 
 ## Текущее состояние
 
-Реализован backend runtime foundation:
+Реализован и развёрнут runtime foundation:
 
-- Python 3.12;
-- FastAPI;
-- SQLAlchemy 2 в async-режиме;
-- asyncpg;
+- Python 3.12 + FastAPI;
+- SQLAlchemy 2 async + asyncpg;
 - Alembic;
-- PostgreSQL 18 для локальной разработки;
-- `/api/health/live`;
-- `/api/health/ready`;
-- Ruff;
-- mypy в strict-режиме;
-- Pytest;
-- development Docker Compose для PostgreSQL.
+- PostgreSQL 18;
+- React + TypeScript + Vite;
+- Nginx как единая точка входа;
+- production-shaped Docker Compose;
+- `/api/health/live` и `/api/health/ready`;
+- Ruff, mypy strict, Pytest, Oxlint, TypeScript, Vitest;
+- GitHub Actions CI;
+- Cloudflare Tunnel для публикации Mini App.
+
+Production runtime публикует на host только `127.0.0.1:8080`; backend и PostgreSQL доступны только внутри Docker-сетей.
 
 Фактически проверено:
 

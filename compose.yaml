@@ -9,6 +9,11 @@ x-backend-environment: &backend-environment
   APP_ENV: production
   DATABASE_URL: ${DATABASE_URL}
   DATABASE_CONNECT_TIMEOUT_SECONDS: ${DATABASE_CONNECT_TIMEOUT_SECONDS:-5}
+  DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-5}
+  DATABASE_MAX_OVERFLOW: ${DATABASE_MAX_OVERFLOW:-5}
+  DATABASE_POOL_TIMEOUT_SECONDS: ${DATABASE_POOL_TIMEOUT_SECONDS:-5}
+  DATABASE_STATEMENT_TIMEOUT_SECONDS: ${DATABASE_STATEMENT_TIMEOUT_SECONDS:-30}
+  DATABASE_LOCK_TIMEOUT_SECONDS: ${DATABASE_LOCK_TIMEOUT_SECONDS:-5}
 
 services:
   postgres:
@@ -27,6 +32,8 @@ services:
       start_period: 10s
     volumes:
       - postgres_data:/var/lib/postgresql
+    networks:
+      - db_net
     restart: unless-stopped
 
   migrate:
@@ -37,6 +44,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - db_net
     read_only: true
     tmpfs:
       - /tmp
@@ -65,6 +74,9 @@ services:
       timeout: 3s
       retries: 12
       start_period: 5s
+    networks:
+      - app_net
+      - db_net
     read_only: true
     tmpfs:
       - /tmp
@@ -93,6 +105,8 @@ services:
       timeout: 3s
       retries: 12
       start_period: 5s
+    networks:
+      - app_net
     read_only: true
     tmpfs:
       - /tmp
@@ -105,3 +119,8 @@ services:
 
 volumes:
   postgres_data:
+
+networks:
+  app_net:
+  db_net:
+    internal: true

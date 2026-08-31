@@ -1,0 +1,29 @@
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+coverage/
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
+
+# Runtime
+data/
+backups/
+tmp/
+*.log

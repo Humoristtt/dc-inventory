@@ -7,9 +7,15 @@ import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
+from app.core.config import Settings
 from app.modules.access.service import create_or_get_access_request
 from app.modules.auth.models import AuthSession
-from app.modules.auth.service import hash_session_token, load_auth_context
+from app.modules.auth.service import (
+    hash_session_token,
+    load_auth_context,
+    upsert_telegram_identity,
+)
+from app.modules.auth.telegram import TelegramWebAppUser, ValidatedTelegramInitData
 from app.modules.identity.enums import AccessRequestStatus, UserAccessStatus
 from app.modules.identity.models import AccessRequest, TelegramIdentity, User
 
@@ -143,6 +149,67 @@ async def test_auth_session_query_rejects_revoked_and_expired_rows() -> None:
                     delete(TelegramIdentity).where(TelegramIdentity.user_id == user_id)
                 )
                 await db.execute(delete(User).where(User.id == user_id))
+                await db.commit()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_concurrent_first_telegram_auth_creates_one_identity() -> None:
+    engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
+    telegram_user_id = 4_200_000_001
+    now = datetime(2026, 9, 1, 2, 0, tzinfo=UTC)
+    settings = Settings(database_url=DATABASE_URL)
+    validated = ValidatedTelegramInitData(
+        user=TelegramWebAppUser(
+            id=telegram_user_id,
+            first_name="Concurrent",
+            username="concurrent-user",
+            language_code="ru",
+        ),
+        auth_date=now,
+        query_id="concurrent-query",
+    )
+
+    try:
+        barrier = asyncio.Barrier(2)
+
+        async def authenticate() -> tuple[uuid.UUID, uuid.UUID]:
+            async with AsyncSession(engine, expire_on_commit=False) as db:
+                await barrier.wait()
+                async with db.begin():
+                    user, identity = await upsert_telegram_identity(
+                        db,
+                        validated,
+                        settings,
+                        now=now,
+                    )
+                    return user.id, identity.id
+
+        first, second = await asyncio.gather(authenticate(), authenticate())
+
+        assert first == second
+
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            try:
+                identities = (
+                    await db.scalars(
+                        select(TelegramIdentity).where(
+                            TelegramIdentity.telegram_user_id == telegram_user_id
+                        )
+                    )
+                ).all()
+
+                assert len(identities) == 1
+                assert identities[0].id == first[1]
+                assert identities[0].user_id == first[0]
+            finally:
+                await db.execute(
+                    delete(TelegramIdentity).where(
+                        TelegramIdentity.telegram_user_id == telegram_user_id
+                    )
+                )
+                await db.execute(delete(User).where(User.id == first[0]))
                 await db.commit()
     finally:
         await engine.dispose()

@@ -75,4 +75,9 @@
 - Post-checkpoint audit выделил Stage 4.3a до outbox/webhook: retry после
   `REJECTED`, backend `Approved`/`Admin` boundary, bootstrap ADMIN consistency,
   PostgreSQL integration tests, Compose secret boundary и синхронизация docs.
-- Stage 4.4 блокирован до полного gate и повторного archive audit 4.3a.
+- Повторный source audit Stage 4.3a выявил stale access-cache риск во frontend:
+  access-state одного пользователя не должен иметь приоритет над свежим auth-state
+  и не должен переиспользоваться между user ID.
+- Stage 4.3b закрывает user-scoped access cache, PENDING-only frontend authority,
+  реальный PostgreSQL race первого Telegram login и CI runtime network boundaries.
+- Stage 4.4 начинается после полного gate Stage 4.3b.

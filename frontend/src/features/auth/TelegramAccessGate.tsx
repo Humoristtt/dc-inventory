@@ -29,7 +29,9 @@ import {
 import "./access-gate.css";
 
 const authQueryKey = ["auth", "state"] as const;
-const accessQueryKey = ["access", "me"] as const;
+function accessQueryKey(userId: string | undefined) {
+  return ["access", "me", userId] as const;
+}
 
 class TelegramContextRequiredError extends Error {
   constructor() {
@@ -291,30 +293,38 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
   });
 
   const authState = authQuery.data;
+  const currentAccessQueryKey = accessQueryKey(authState?.user.id);
+  const authIsPending = authState?.user.access_status === "PENDING";
+
   const accessQuery = useQuery({
-    queryKey: accessQueryKey,
+    queryKey: currentAccessQueryKey,
     queryFn: ({ signal }) => getAccessState(signal),
-    enabled: authState?.user.access_status === "PENDING",
+    enabled: authIsPending,
     refetchInterval: (query) =>
-      (
-        query.state.data?.access_status
-        ?? authState?.user.access_status
-      ) === "PENDING"
+      authIsPending && query.state.data?.access_status !== "APPROVED"
         ? 15_000
         : false,
     retry: false,
   });
 
-  const observedAccessStatus = accessQuery.data?.access_status;
+  const observedAccessStatus = authIsPending
+    ? accessQuery.data?.access_status
+    : undefined;
+  const observedUserId = authState?.user.id;
 
   useEffect(() => {
-    if (observedAccessStatus === undefined) {
+    if (
+      observedAccessStatus === undefined
+      || observedUserId === undefined
+    ) {
       return;
     }
 
     queryClient.setQueryData<AuthState>(authQueryKey, (current) => {
       if (
         current === undefined
+        || current.user.id !== observedUserId
+        || current.user.access_status !== "PENDING"
         || current.user.access_status === observedAccessStatus
       ) {
         return current;
@@ -328,12 +338,37 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
         },
       };
     });
-  }, [observedAccessStatus, queryClient]);
+  }, [observedAccessStatus, observedUserId, queryClient]);
 
   const requestMutation = useMutation({
     mutationFn: requestAccess,
     onSuccess: (state: AccessState) => {
-      queryClient.setQueryData(accessQueryKey, state);
+      const userId = authState?.user.id;
+      if (userId === undefined) {
+        return;
+      }
+
+      queryClient.setQueryData(accessQueryKey(userId), state);
+
+      if (state.access_status === "PENDING") {
+        queryClient.setQueryData<AuthState>(authQueryKey, (current) => {
+          if (
+            current === undefined
+            || current.user.id !== userId
+            || current.user.access_status === "BLOCKED"
+          ) {
+            return current;
+          }
+
+          return {
+            ...current,
+            user: {
+              ...current.user,
+              access_status: "PENDING",
+            },
+          };
+        });
+      }
     },
   });
 
@@ -357,7 +392,9 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
   }
 
   const effectiveAccessStatus =
-    accessQuery.data?.access_status ?? authState.user.access_status;
+    authState.user.access_status === "PENDING"
+      ? accessQuery.data?.access_status ?? "PENDING"
+      : authState.user.access_status;
 
   if (effectiveAccessStatus === "APPROVED") {
     return children;

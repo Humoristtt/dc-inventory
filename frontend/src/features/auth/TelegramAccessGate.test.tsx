@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -11,7 +12,7 @@ import {
   vi,
 } from "vitest";
 
-import { AppProviders } from "../../app/providers/AppProviders";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TelegramAccessGate } from "./TelegramAccessGate";
 
 const support = {
@@ -19,14 +20,27 @@ const support = {
   url: "https://t.me/Humoristttt",
 };
 
-function renderGate() {
+function createTestQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+        staleTime: Number.POSITIVE_INFINITY,
+        refetchOnWindowFocus: false,
+      },
+    },
+  });
+}
+
+function renderGate(queryClient = createTestQueryClient()) {
   render(
-    <AppProviders>
+    <QueryClientProvider client={queryClient}>
       <TelegramAccessGate>
         <div>Каталог доступен</div>
       </TelegramAccessGate>
-    </AppProviders>,
+    </QueryClientProvider>,
   );
+  return queryClient;
 }
 
 afterEach(() => {
@@ -245,4 +259,108 @@ it("позволяет повторно запросить доступ посл
     "/api/access-requests",
     expect.objectContaining({ method: "POST" }),
   );
+});
+
+it("свежий BLOCKED из auth не затирается старым APPROVED access cache", async () => {
+  const userId = "00000000-0000-0000-0000-000000000005";
+  const queryClient = createTestQueryClient();
+
+  queryClient.setQueryData(["auth", "state"], {
+    user: {
+      id: userId,
+      telegram_user_id: 1005,
+      username: "transition",
+      first_name: "Transition",
+      last_name: null,
+      role: "USER",
+      access_status: "PENDING",
+    },
+    support,
+  });
+  queryClient.setQueryData(["access", "me", userId], {
+    access_status: "APPROVED",
+    request: null,
+  });
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => {
+      throw new Error("unexpected fetch");
+    }),
+  );
+
+  renderGate(queryClient);
+  expect(await screen.findByText("Каталог доступен")).toBeInTheDocument();
+
+  await act(async () => {
+    queryClient.setQueryData(["auth", "state"], {
+      user: {
+        id: userId,
+        telegram_user_id: 1005,
+        username: "transition",
+        first_name: "Transition",
+        last_name: null,
+        role: "USER",
+        access_status: "BLOCKED",
+      },
+      support,
+    });
+  });
+
+  expect(
+    await screen.findByRole("heading", { name: "Доступ ограничен" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("Каталог доступен")).not.toBeInTheDocument();
+});
+
+it("access cache одного пользователя не применяется к другому", async () => {
+  const secondUserId = "00000000-0000-0000-0000-000000000006";
+  const queryClient = createTestQueryClient();
+
+  queryClient.setQueryData(["auth", "state"], {
+    user: {
+      id: secondUserId,
+      telegram_user_id: 1006,
+      username: "second",
+      first_name: "Second",
+      last_name: null,
+      role: "USER",
+      access_status: "PENDING",
+    },
+    support,
+  });
+
+  queryClient.setQueryData(["access", "me"], {
+    access_status: "APPROVED",
+    request: null,
+  });
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/access-requests/me") {
+        return new Response(
+          JSON.stringify({
+            access_status: "PENDING",
+            request: {
+              id: "00000000-0000-0000-0000-000000000012",
+              status: "PENDING",
+              requested_at: "2026-09-01T02:00:00Z",
+            },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    }),
+  );
+
+  renderGate(queryClient);
+
+  expect(
+    await screen.findByRole("heading", { name: "Запрос отправлен" }),
+  ).toBeInTheDocument();
+  expect(screen.queryByText("Каталог доступен")).not.toBeInTheDocument();
 });

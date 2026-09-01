@@ -1505,7 +1505,7 @@ Viewport profiles:
 - [x] Mini App enabled.
 - [x] Menu button configured.
 - [x] First Mini App launch PASS.
-- [~] Telegram backend foundation: Stage 4.3a auth/access hardening перед webhook/outbox.
+- [~] Telegram backend foundation: Stage 4.3b final access-state hardening перед webhook/outbox.
 - [ ] Cloudflare Telegram Gateway.
 - [ ] `/start`.
 - [ ] Webhook.
@@ -1518,7 +1518,8 @@ Viewport profiles:
 - [x] AccessStatus persistence.
 - [x] Request access backend API + first-entry/pending frontend flow.
 - [x] Stage 4.3a: rejected retry, polling sync, backend authz boundary, bootstrap consistency, PostgreSQL/CI coverage, docs.
-- [~] Повторный source archive audit Stage 4.3a после полного gate.
+- [x] Повторный source audit Stage 4.3a выполнен; stale frontend access-cache вынесен в Stage 4.3b.
+- [~] Stage 4.3b: user-scoped access cache, PENDING-only authority, identity race test, CI topology regression.
 - [ ] Admin approve через inline callback в Telegram-чате.
 - [ ] Admin reject через inline callback в Telegram-чате.
 - [ ] Admin Telegram notification.
@@ -1844,7 +1845,8 @@ Import:
 - [ ] Проверить outbound `sendMessage`.
 - [x] Реализовать request access + кликабельный `@Humoristttt` + pending screen.
 - [x] Stage 4.3a hardening + полный gate.
-- [~] Провести повторный source archive audit Stage 4.3a.
+- [x] Провести повторный source audit Stage 4.3a.
+- [~] Закрыть Stage 4.3b final access-state hardening.
 - [ ] Реализовать ADMIN approve/reject.
 - [ ] Уведомить ADMIN.
 - [ ] Уведомить USER.

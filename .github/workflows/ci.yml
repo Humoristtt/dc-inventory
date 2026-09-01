@@ -135,6 +135,44 @@ jobs:
           docker compose --env-file .env.ci -f compose.yaml exec -T web id | grep -q 'uid=101(nginx)'
           docker compose --env-file .env.ci -f compose.yaml exec -T backend sh -c 'test "$TELEGRAM_BOT_TOKEN" = "ci-runtime-only-token"'
           docker compose --env-file .env.ci -f compose.yaml run --rm --no-deps migrate sh -c 'test -z "${TELEGRAM_BOT_TOKEN:-}" && test -z "${ADMIN_TELEGRAM_USER_ID:-}"'
+
+          backend_cid="$(docker compose --env-file .env.ci -f compose.yaml ps -q backend)"
+          postgres_cid="$(docker compose --env-file .env.ci -f compose.yaml ps -q postgres)"
+          web_cid="$(docker compose --env-file .env.ci -f compose.yaml ps -q web)"
+
+          python3 - "$backend_cid" "$postgres_cid" "$web_cid" <<'PY'
+          import json
+          import subprocess
+          import sys
+
+          backend_id, postgres_id, web_id = sys.argv[1:4]
+          backend, postgres, web = json.loads(
+              subprocess.check_output(
+                  ["docker", "inspect", backend_id, postgres_id, web_id],
+                  text=True,
+              )
+          )
+
+          assert (backend["HostConfig"].get("PortBindings") or {}) == {}
+          assert (postgres["HostConfig"].get("PortBindings") or {}) == {}
+
+          web_bindings = web["HostConfig"].get("PortBindings") or {}
+          assert web_bindings == {
+              "8080/tcp": [{"HostIp": "127.0.0.1", "HostPort": "8080"}]
+          }
+
+          backend_networks = set(backend["NetworkSettings"]["Networks"])
+          postgres_networks = set(postgres["NetworkSettings"]["Networks"])
+          web_networks = set(web["NetworkSettings"]["Networks"])
+
+          assert len(backend_networks) == 2
+          assert len(postgres_networks) == 1
+          assert len(web_networks) == 1
+          assert backend_networks & postgres_networks
+          assert backend_networks & web_networks
+          assert not (postgres_networks & web_networks)
+          PY
+
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/api/docs)" = "404"
 
       - name: Runtime state

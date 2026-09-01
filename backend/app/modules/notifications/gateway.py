@@ -40,6 +40,7 @@ class TelegramGatewayClient:
             method="POST",
             headers={
                 "Content-Type": "application/json",
+                "User-Agent": "dc-inventory-telegram-worker/1.0",
                 "X-DC-Inventory-Gateway-Secret": self.secret,
             },
         )

@@ -64,12 +64,14 @@ Stage 4 Telegram/auth/access foundation закрыт production smoke 2026-09-01
 - Category, Manufacturer и Item;
 - metadata-driven CategoryAttribute и typed ItemAttributeValue;
 - Approved read API и Admin mutation API;
-- пять initial versioned schemas: SFP, оптика, кабели питания, NIC и диски.
+- пять initial versioned schemas: SFP, оптика, кабели питания, NIC и диски;
+- source-backed refinement: медные сетевые кабели, conductor attributes для
+  кабелей питания и уточнённые SFP vocabularies.
 
 Item является каталожной позицией; физические serial units относятся к будущему
-InventoryUnit и в Stage 5 не реализованы. Реальная складская номенклатура и
-исходные Excel/CSV ещё не сверены с provisional vocabularies. Эта сверка
-остаётся следующим шагом закрытия Stage 5; Stage 6 не начат.
+InventoryUnit и в Stage 5 не реализованы. Три локальных workbook сверены только
+как reference examples для catalog design. Refinement ожидает независимый
+review/CI; Stage 6 не начат.
 
 ## Номенклатура
 
@@ -83,7 +85,11 @@ InventoryUnit и в Stage 5 не реализованы. Реальная скл
 - сетевые карты;
 - другие категории, которые будут добавляться позднее.
 
-Исходные Excel-файлы используются только для первичного импорта и сверки. После запуска приложения они не являются источником истины.
+Исходные Excel-файлы используются только как reference material для границ
+категорий, терминологии и технических атрибутов. Они не являются inventory
+database или обязательным import source. Существующие количества/остатки не
+импортируются; фактический stock проверяется владельцем вручную при вводе
+оборудования. После запуска PostgreSQL остаётся единственным источником истины.
 
 ## Технологический стек
 

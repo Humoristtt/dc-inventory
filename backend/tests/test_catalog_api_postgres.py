@@ -109,6 +109,7 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
             assert {
                 "sfp",
                 "optics",
+                "copper_network_cable",
                 "power_cable",
                 "nic",
                 "disk",

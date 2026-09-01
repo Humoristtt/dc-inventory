@@ -98,6 +98,59 @@ async def test_stage5_migration_seeded_five_system_category_schemas() -> None:
 
 
 @pytest.mark.asyncio
+async def test_source_reference_refinement_metadata_is_versioned() -> None:
+    engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            sfp = await get_category_record(db, "sfp")
+            sfp_by_key = {attribute.key: attribute for attribute in sfp.attributes}
+            assert {"XFP"} <= set(
+                sfp_by_key["form_factor"].allowed_values or []
+            )
+            assert {"SC Simplex"} <= set(
+                sfp_by_key["connector"].allowed_values or []
+            )
+
+            power = await get_category_record(db, "power_cable")
+            power_by_key = {
+                attribute.key: attribute for attribute in power.attributes
+            }
+            assert power_by_key["conductor_count"].data_type == (
+                AttributeDataType.INTEGER
+            )
+            assert power_by_key["conductor_count"].required is False
+            assert power_by_key["conductor_cross_section_mm2"].data_type == (
+                AttributeDataType.DECIMAL
+            )
+            assert power_by_key["conductor_cross_section_mm2"].unit == "mm2"
+
+            copper = await get_category_record(db, "copper_network_cable")
+            assert copper.category.default_accounting_mode == (
+                AccountingMode.QUANTITY
+            )
+            assert copper.category.is_system is True
+            copper_by_key = {
+                attribute.key: attribute for attribute in copper.attributes
+            }
+            assert {
+                "connector_a",
+                "connector_b",
+                "length_m",
+                "cable_category",
+                "shielding",
+            } <= set(copper_by_key)
+            assert copper_by_key["length_m"].data_type == (
+                AttributeDataType.DECIMAL
+            )
+            assert copper_by_key["length_m"].unit == "m"
+            assert copper_by_key["cable_category"].data_type == (
+                AttributeDataType.TEXT
+            )
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_catalog_database_constraints_and_restrictive_foreign_keys() -> None:
     engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
     category_one_id = uuid.uuid4()
@@ -407,7 +460,7 @@ async def test_orm_delete_manufacturer_is_restricted_when_item_references_it() -
 
 
 @pytest.mark.asyncio
-async def test_catalog_service_handles_all_five_categories_and_item_lifecycle() -> None:
+async def test_catalog_service_handles_all_versioned_categories_and_item_lifecycle() -> None:
     engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
     marker = uuid.uuid4().hex
 
@@ -477,6 +530,20 @@ async def test_catalog_service_handles_all_five_categories_and_item_lifecycle() 
                         },
                     ),
                 )
+                copper_id = await create_item(
+                    db,
+                    ItemCreate(
+                        category_key="copper_network_cable",
+                        name=f"Copper network cable {marker}",
+                        attributes={
+                            "connector_a": "RJ45",
+                            "connector_b": "RJ45",
+                            "length_m": "2.5",
+                            "cable_category": "Cat 5e",
+                            "shielding": "UTP",
+                        },
+                    ),
+                )
                 nic_id = await create_item(
                     db,
                     ItemCreate(
@@ -512,16 +579,19 @@ async def test_catalog_service_handles_all_five_categories_and_item_lifecycle() 
                 sfp = await get_item_record(db, sfp_id)
                 optics = await get_item_record(db, optics_id)
                 power = await get_item_record(db, power_id)
+                copper = await get_item_record(db, copper_id)
                 nic = await get_item_record(db, nic_id)
                 disk = await get_item_record(db, disk_id)
 
                 assert sfp.item.accounting_mode == AccountingMode.QUANTITY
                 assert optics.item.accounting_mode == AccountingMode.QUANTITY
                 assert power.item.accounting_mode == AccountingMode.QUANTITY
+                assert copper.item.accounting_mode == AccountingMode.QUANTITY
                 assert nic.item.accounting_mode == AccountingMode.SERIAL
                 assert disk.item.accounting_mode == AccountingMode.SERIAL
                 assert sfp.attributes["tx_wavelength_nm"] == Decimal("1310.125")
                 assert optics.attributes["length_m"] == Decimal("2.500")
+                assert copper.attributes["length_m"] == Decimal("2.5")
                 assert disk.attributes["capacity_bytes"] == 1_920_383_410_176
 
                 await update_item(

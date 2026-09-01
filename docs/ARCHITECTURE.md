@@ -195,10 +195,11 @@ Alembic использует тот же async PostgreSQL driver `asyncpg`, чт
     c4d8f2a1b903  server-side AuthSession
     e8f1a2b3c4d5  NotificationOutbox / TelegramUpdate / AccessDecisionCallback
     f4a5b6c7d8e9  Catalog foundation + five system category schemas
+    a6b7c8d9e0f1  Source-backed catalog metadata refinement
 
-Миграция, фиксирующая Stage 5 Catalog Foundation:
+Текущий migration head после source-backed Stage 5 refinement:
 
-    f4a5b6c7d8e9
+    a6b7c8d9e0f1
 
 Следующие предметные схемы добавляются отдельными миграциями.
 
@@ -341,17 +342,22 @@ JSON specification и category-specific nullable columns не использую
 - read API использует существующую `Approved` boundary, mutation API —
   существующую `Admin` boundary.
 
-Пять первых system schemas:
+Текущие versioned system schemas:
 
 - SFP;
 - optical cabling;
+- copper network cabling;
 - power cables;
 - network interface cards;
 - disks/drives.
 
-Source Excel/CSV в текущем Stage 5 workspace отсутствовал. Поэтому часть
-controlled vocabularies остаётся provisional до реальной source reconciliation,
-но schema definitions уже являются deterministic versioned reference data.
+Три локальных source workbook сверены как reference examples. Они не являются
+inventory database или import source: quantity/balance/placement state не
+переносится в catalog. Reference review добавил отдельную recurring copper
+network cable Category, два power conductor attributes и два SFP vocabulary
+tokens через migration `a6b7c8d9e0f1`. Неоднозначные connector/model/MPN и
+multi-rate notations остаются manual decisions, а schema definitions —
+deterministic versioned reference data.
 
 ## Конкурентность
 

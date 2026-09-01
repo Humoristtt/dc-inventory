@@ -8,7 +8,9 @@
 > **Последнее обновление:** 2026-09-01
 > **Production runtime code baseline:** `08aa052d2af3e9c7e9cb9a2bce670cf6674b6c97` — Stage 4 close; последующие docs-only commits не требуют rebuild runtime.
 > **Production:** Stage 4 Telegram/auth/access foundation завершён 2026-09-01; Stage 5 в production ещё не развёрнут.
-> **Current source:** Stage 5 Catalog Foundation реализован с provisional versioned schemas; source inventory reconciliation остаётся обязательным closeout, Stage 6 не начат.
+> **Current source:** Stage 5 Catalog Foundation реализован; три source workbook
+> сверены как reference examples. Source-backed metadata refinement подготовлен
+> к независимому review, Stage 6 не начат.
 
 ---
 
@@ -27,6 +29,7 @@ Telegram Mini App для внутренней инвентаризации об�
 
 - SFP / оптические трансиверы;
 - оптику;
+- медные сетевые кабели;
 - кабели питания;
 - сетевые карты;
 - диски.
@@ -385,6 +388,8 @@ else if (category === "disk") ...
 - [ ] Frontend фильтры строятся из metadata.
 - [ ] Excel-колонки строятся из metadata.
 - [x] Первые 5 схем version-controlled.
+- [x] Source-backed refinement добавляет шестую schema без category-specific
+  application code.
 - [x] Обычный ADMIN не может случайно удалить системный атрибут и сломать данные.
 
 ---
@@ -475,11 +480,11 @@ Detail card:
 
 # 8. Категория «Оптика»
 
-> Version-controlled provisional schema уже создана миграцией Stage 5 и
-> ориентирована на оптические патч-корды / пигтейлы / аналогичные позиции.
-> Финальный словарь нужно сверить с реальными Excel/CSV и складом до полного
-> закрытия Stage 5 и канонического initial inventory import. Требуемые изменения
-> оформляются новой Alembic migration; историческая `f4a5b6c7d8e9` не меняется.
+> Version-controlled schema создана миграцией Stage 5 и ориентирована на
+> оптические патч-корды / пигтейлы / аналогичные позиции. Source reference
+> review подтвердил границу Category, но не подтвердил закрытый connector/color/
+> polarity vocabulary. Эти поля остаются TEXT; историческая `f4a5b6c7d8e9` не
+> меняется.
 
 Планируемые поля:
 
@@ -516,11 +521,11 @@ Detail card:
 Normalization:
 
 - [x] Длина хранится в базовой единице.
-- [~] Разъёмы имеют controlled vocabulary: schema готова, реальные значения
-  требуют source reconciliation.
+- [x] Connector и polish хранятся раздельно; connector остаётся normalized
+  TEXT из-за неоднородных LC/MPO/LCHD/gender notations в reference examples.
 - [x] Полировка не смешивается со строкой connector.
-- [~] Цвет не является свободным хаотичным текстом, если возможно: остаётся
-  provisional TEXT до сверки источника.
+- [x] Цвет остаётся normalized TEXT: reference examples не доказывают полный
+  controlled vocabulary.
 
 ---
 
@@ -534,6 +539,8 @@ Normalization:
 - цвет;
 - номинальный ток — optional;
 - напряжение — optional;
+- количество проводников — optional;
+- сечение проводника — optional;
 - бренд — optional;
 - part number — optional;
 - комментарий.
@@ -554,6 +561,7 @@ IEC C13 → IEC C14
 - [ ] Длина.
 - [ ] Цвет.
 - [ ] Номинальный ток.
+- [ ] Количество проводников / сечение.
 - [ ] Наличие.
 - [ ] Локация.
 
@@ -562,6 +570,31 @@ UX:
 - [ ] Поиск `C13 C14` находит нужную позицию без обязательного открытия filters.
 - [ ] Цвет заметен в карточке, но не заменяет текстовое название.
 - [ ] Длина форматируется единообразно.
+
+---
+
+# 9.5. Категория «Медные сетевые кабели»
+
+Recurring source examples подтверждают отдельную category boundary: RJ45 patch
+cords не соответствуют fiber-required `optics` и не являются кабелями питания.
+
+Поля:
+
+- connector A;
+- connector B;
+- длина;
+- категория кабеля;
+- shielding — optional;
+- бренд / model / part number — общие Item fields.
+
+Normalization:
+
+- [x] Добавлена versioned system Category `copper_network_cable`.
+- [x] Default accounting — `QUANTITY`.
+- [x] Длина хранится в metres как DECIMAL.
+- [x] Cable category и shielding остаются TEXT: один observed value не
+  доказывает полный controlled vocabulary.
+- [ ] Search/facets/UI реализуются только в соответствующих будущих stages.
 
 ---
 
@@ -969,6 +1002,11 @@ Audit events:
 ---
 
 # 23. Excel initial import
+
+Текущие файлы `data/source/` не являются import input и не содержат
+авторитетных opening balances. Этот future workflow применяется только к
+отдельно согласованному dataset; quantity/serial/location должны быть проверены
+владельцем, а не унаследованы из reference examples.
 
 Импорт не пишет сразу в production tables.
 
@@ -1577,15 +1615,21 @@ Viewport profiles:
 - [x] Initial power cable schema.
 - [x] Initial NIC schema.
 - [x] Initial disk schema.
+- [x] Source reference review: 3 workbook / 6 sheets / 176 non-empty data rows.
+- [x] Source-backed copper network cable schema.
+- [x] Source-backed power conductor attributes и SFP vocabulary refinement.
+- [x] Explicit no-import decision для reference quantities/balances/operational state.
 - [x] Admin catalog API.
 - [x] Migrations.
 - [x] Domain/API tests.
 - [x] Update `docs/CATALOG_SCHEMA.md`.
 
-**GATE:** можно корректно создать и прочитать позиции всех пяти категорий без category-specific schema hacks.
+**GATE:** можно корректно создать и прочитать позиции всех versioned system
+categories без category-specific schema hacks.
 
-Технический gate выполнен. Stage 5 остаётся текущим до реальной сверки source
-inventory; в production не развёрнут, Stage 6 не начат.
+Foundation gate выполнен. Source reference reconciliation и metadata refinement
+реализованы локально; Stage 5 остаётся текущим до независимого review и CI этого
+change set. В production refinement не развёрнут, Stage 6 не начат.
 
 ## Stage 6 — Inventory Ledger
 
@@ -1870,7 +1914,9 @@ Import:
 
 Ближайшая последовательность:
 
-- [~] Сверить реальную складскую номенклатуру и исходные Excel с требованиями Stage 5.
+- [x] Сверить source workbook как reference examples с требованиями Stage 5.
+- [x] Зафиксировать source-to-canonical mapping и A–F decisions в
+  `docs/CATALOG_SOURCE_REFERENCE.md`.
 - [x] Зафиксировать первую каноническую модель каталога в `docs/CATALOG_SCHEMA.md`.
 - [x] Спроектировать `Category`, `Item` и Brand/Manufacturer contract.
 - [x] Спроектировать `CategoryAttribute` и typed attribute values.
@@ -1881,7 +1927,9 @@ Import:
 - [x] Добавить PostgreSQL/domain/API tests.
 - [x] Провести технический Stage 5 gate: пять категорий создаются и читаются без
   category-specific schema hacks.
+- [x] Добавить source-backed metadata migration без backend contract changes.
+- [~] Провести независимый review refinement change set и получить CI gate.
 
-Следующий фактический шаг внутри Stage 5: получить реальные source Excel/CSV,
-сверить provisional vocabularies и решить, нужны ли новые versioned data
-migrations. До этой сверки roadmap не переходит к Stage 6.
+Следующий фактический шаг внутри Stage 5: independent source review текущего
+refinement и GitHub CI после отдельного разрешения на commit/push/PR. До этого
+Stage 5 не помечается DONE и roadmap не переходит к Stage 6.

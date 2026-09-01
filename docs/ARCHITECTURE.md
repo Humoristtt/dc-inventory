@@ -104,6 +104,23 @@ Backend использует `pydantic-settings`.
 
     APP_ENV
     DATABASE_CONNECT_TIMEOUT_SECONDS
+    DATABASE_POOL_SIZE
+    DATABASE_MAX_OVERFLOW
+    DATABASE_POOL_TIMEOUT_SECONDS
+    DATABASE_STATEMENT_TIMEOUT_SECONDS
+    DATABASE_LOCK_TIMEOUT_SECONDS
+
+Telegram authentication использует отдельные backend-only настройки:
+
+    TELEGRAM_BOT_TOKEN
+    TELEGRAM_INIT_DATA_MAX_AGE_SECONDS
+    ADMIN_TELEGRAM_USER_ID
+    SUPPORT_TELEGRAM_USERNAME
+    AUTH_SESSION_TTL_SECONDS
+    AUTH_COOKIE_NAME
+
+`TELEGRAM_BOT_TOKEN` нужен backend для серверной проверки подписи Telegram
+`initData`. Он не передаётся frontend и не нужен migration container.
 
 Секреты не имеют production-default значений и не хранятся в Git.
 
@@ -129,9 +146,14 @@ Runtime backend использует:
 
     127.0.0.1:55432 -> PostgreSQL:5432
 
-Это development-механизм.
+Это исключительно development-механизм. В `compose.dev.yaml` PostgreSQL
+остаётся участником внутренней `db_net`, но дополнительно подключён к
+`dev_host_net`, предназначенной только для loopback-публикации БД на
+development host. `web` к `dev_host_net` не подключается и прямого доступа к
+PostgreSQL не получает.
 
-Production PostgreSQL не должен публиковаться на host/public interface без отдельной необходимости.
+Production PostgreSQL host-порта не имеет и остаётся только во внутренней
+`db_net`.
 
 ## Миграции
 
@@ -151,7 +173,12 @@ Alembic использует тот же async PostgreSQL driver `asyncpg`, чт
 
 Первая baseline-миграция намеренно не создаёт предметных таблиц и фиксирует начало migration history.
 
-Предметная схема будет добавлена отдельными миграциями после утверждения модели данных.
+После baseline уже существуют foundation-миграции:
+
+    7b0e3f6a9c21  User / TelegramIdentity / AccessRequest
+    c4d8f2a1b903  server-side AuthSession
+
+Следующие предметные схемы добавляются отдельными миграциями.
 
 ## Health checks
 
@@ -187,13 +214,58 @@ Backend предоставляет два различных endpoint.
     DB DOWN -> live 200 / ready 503
     DB BACK -> live 200 / ready 200
 
+## Identity, authentication и access control
+
+Уже реализованные сущности:
+
+    User
+      ├── TelegramIdentity (1:1)
+      ├── AccessRequest (1:N)
+      └── AuthSession (1:N)
+
+Внутренняя идентичность пользователя основана на UUID `User.id`.
+Telegram является внешним identity provider. Пользователь сопоставляется по
+числовому `telegram_user_id`; username не является идентификатором.
+
+Первый ADMIN задаётся только явным `ADMIN_TELEGRAM_USER_ID`.
+
+`AccessRequest` хранит историю отдельных запросов. Допустима ровно одна
+активная запись `PENDING` на пользователя. `REJECTED` означает отказ по
+конкретному запросу и допускает новый запрос. `BLOCKED` запрещает повторный
+запрос.
+
+Если configured bootstrap ADMIN уже существовал как обычный пользователь,
+повторная Telegram-аутентификация восстанавливает `ADMIN + APPROVED` и
+атомарно закрывает оставшийся `PENDING` access request.
+
+Telegram WebApp authentication:
+
+    original initData
+        -> HMAC + auth_date validation
+        -> TelegramIdentity upsert
+        -> random server session token
+        -> HttpOnly cookie
+
+В PostgreSQL хранится только SHA-256 hash session token. Сессия имеет expiry и
+может быть отозвана.
+
+Backend различает:
+
+    Authenticated -> валидная session
+    Approved      -> Authenticated + APPROVED
+    Admin         -> Approved + ADMIN
+
+`Authenticated` нужен для собственного access-status API. Будущие складские
+и административные endpoints обязаны использовать `Approved` или `Admin`.
+
 ## Планируемая предметная модель
 
 До первой бизнес-миграции точная схема ещё не зафиксирована.
 
-Предварительные сущности:
+Уже реализованные identity/auth сущности описаны выше.
 
-- User;
+Планируемые предметные сущности:
+
 - Category;
 - CategoryAttribute;
 - Item;
@@ -278,3 +350,49 @@ Gateway необходим из-за недоступности `api.telegram.or
 `StockBalance`, если он используется, должен рассматриваться как транзакционно поддерживаемая проекция для быстрых чтений, а не как независимый источник истины. Любое изменение `StockBalance` должно происходить в той же транзакции, которая фиксирует соответствующее движение.
 
 Историческая операция после проведения не редактируется. Исправления выполняются компенсирующим движением. Если системе понадобится черновик операции, состояние `draft` должно быть явно отделено от проведённого неизменяемого события.
+
+
+## Frontend access-state authority
+
+Frontend cache не является authorization boundary: backend `Approved` / `Admin`
+остаётся обязательным для защищённых API.
+
+Для access-gate закреплены дополнительные инварианты:
+
+- access query key включает `user.id`, поэтому состояние разных Telegram users не
+  переиспользуется;
+- данные `/api/access-requests/me` имеют право уточнять UI-state только пока
+  актуальный `/api/auth/me` сообщает `PENDING`;
+- свежие `REJECTED` / `BLOCKED` / `APPROVED` из auth-state не могут быть
+  перезаписаны старым access cache;
+- переход `REJECTED -> PENDING` после успешного повторного запроса синхронизируется
+  в auth cache явно;
+- polling останавливается после выхода из `PENDING`.
+\n
+
+## Telegram delivery и access decisions
+
+Stage 4 использует transactional outbox: доменная транзакция сохраняет Telegram
+command в PostgreSQL, а отдельный worker выполняет сетевую доставку после commit.
+
+`telegram-worker` claim-ит rows через `FOR UPDATE SKIP LOCKED`, использует lease
+(`claimed_at` + `claim_token`) и at-least-once semantics. Incoming webhook
+защищён Telegram secret token и persistent `telegram_updates.update_id` dedupe.
+
+Inline callback содержит только opaque token. Request/user/action разрешаются
+сервером, а решение может выполнять только Telegram identity с
+`ADMIN + APPROVED`. AccessRequest и User блокируются `FOR UPDATE`.
+
+Исходящая доставка идёт через Cloudflare Telegram Gateway. Bot token хранится
+как Cloudflare Worker Secret; production `telegram-worker` получает только
+gateway URL и отдельный gateway secret. Gateway имеет фиксированный allowlist
+Bot API methods.
+
+
+Telegram `update_id` является внешним natural key и не генерируется PostgreSQL:
+для `telegram_updates.update_id` отключён autoincrement/sequence.
+
+Terminal user access state является server-authoritative: stale PENDING request
+или callback не может понизить/переписать `APPROVED`, `REJECTED` или `BLOCKED`.
+Frontend также не применяет поздний `POST /api/access-requests -> PENDING`
+поверх уже полученного `APPROVED`/`BLOCKED`.

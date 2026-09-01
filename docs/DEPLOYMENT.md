@@ -68,18 +68,40 @@ Uvicorn доверяет proxy headers, потому что production backend �
 
 Production `.env` создаётся непосредственно на VM и не хранится в Git.
 
-Минимально необходимы:
+Для базового runtime необходимы:
 
     POSTGRES_DB
     POSTGRES_USER
     POSTGRES_PASSWORD
     DATABASE_URL
 
+Для рабочего Telegram authentication дополнительно обязательны:
+
+    TELEGRAM_BOT_TOKEN
+    ADMIN_TELEGRAM_USER_ID
+
+Настраиваются также `TELEGRAM_INIT_DATA_MAX_AGE_SECONDS`,
+`SUPPORT_TELEGRAM_USERNAME`, `AUTH_SESSION_TTL_SECONDS` и
+`AUTH_COOKIE_NAME`.
+
+Telegram auth settings передаются только `backend`; migration container
+получает только DB-конфигурацию.
+
 `DATABASE_URL` внутри Docker network должен использовать hostname `postgres`.
 
 Пример формы:
 
     postgresql+asyncpg://USER:PASSWORD@postgres:5432/DATABASE
+
+## Telegram runtime boundary
+
+Backend уже проверяет Telegram `initData` и выдаёт server-side session.
+Production `.env` поэтому должен содержать реальный bot token и numeric
+bootstrap ADMIN ID.
+
+Прямой outbound к Telegram Bot API с production VM не используется.
+Notification worker и Cloudflare Telegram Gateway вводятся следующим
+Telegram checkpoint.
 
 ## Миграции
 

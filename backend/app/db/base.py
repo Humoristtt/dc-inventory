@@ -1,4 +1,5 @@
 from sqlalchemy import MetaData
+from sqlalchemy.orm import DeclarativeBase
 
 NAMING_CONVENTION = {
     "ix": "ix_%(table_name)s_%(column_0_N_name)s",
@@ -8,4 +9,11 @@ NAMING_CONVENTION = {
     "pk": "pk_%(table_name)s",
 }
 
-metadata = MetaData(naming_convention=NAMING_CONVENTION)
+
+class Base(DeclarativeBase):
+    """Общая declarative base для ORM-моделей приложения."""
+
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)
+
+
+metadata = Base.metadata

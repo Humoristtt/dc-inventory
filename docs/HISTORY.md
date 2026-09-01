@@ -65,3 +65,28 @@
 - PostgreSQL изолирован от web отдельной internal Docker network.
 - CI расширен production-shaped runtime smoke test через Nginx, FastAPI, Alembic и PostgreSQL.
 - Обновлена canonical документация frontend/runtime/deployment.
+
+## 2026-09-01 — Telegram identity, auth и access foundation
+
+- `533a7b5` — User / TelegramIdentity / AccessRequest persistence.
+- `c13f030` — Telegram initData validation, server-side AuthSession и auth API.
+- `93490cd` — frontend auth gate, кликабельный `@Humoristttt`, access request и
+  pending flow.
+- Post-checkpoint audit выделил Stage 4.3a до outbox/webhook: retry после
+  `REJECTED`, backend `Approved`/`Admin` boundary, bootstrap ADMIN consistency,
+  PostgreSQL integration tests, Compose secret boundary и синхронизация docs.
+- Повторный source audit Stage 4.3a выявил stale access-cache риск во frontend:
+  access-state одного пользователя не должен иметь приоритет над свежим auth-state
+  и не должен переиспользоваться между user ID.
+- Stage 4.3b закрывает user-scoped access cache, PENDING-only frontend authority,
+  реальный PostgreSQL race первого Telegram login и CI runtime network boundaries.
+- Stage 4.4 начинается после полного gate Stage 4.3b.
+\n
+
+## 2026-09-01 — Stage 4.4 — Telegram delivery
+
+- Stage 4.3b source audit завершён.
+- Начата реализация transactional outbox, Telegram webhook/update dedupe,
+  opaque ADMIN approve/reject callbacks и отдельного delivery worker.
+- Добавлен Cloudflare Telegram Gateway Worker с отдельным gateway secret.
+- Stage 4.4 остаётся `[~]` до focused/full gate и production verification.

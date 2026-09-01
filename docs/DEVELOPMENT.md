@@ -55,6 +55,10 @@ Development-порт публикуется только на loopback:
 
     127.0.0.1:55432
 
+Для этого `postgres` дополнительно подключён к development-only
+`dev_host_net`. Основной backend-доступ к БД по-прежнему идёт через
+внутреннюю `db_net`; `web` к сети публикации PostgreSQL не подключён.
+
 ## Alembic
 
 При запуске Alembic с development-машины используется host-порт PostgreSQL:
@@ -157,3 +161,31 @@ Production VM не используется как development-машина.
       -> production VM
 
 Production VM имеет read-only GitHub Deploy Key.
+
+## Telegram authentication в development
+
+Для реального Telegram login backend нужны `TELEGRAM_BOT_TOKEN` и числовой
+`ADMIN_TELEGRAM_USER_ID` из локального `.env`. Bot token никогда не передаётся
+frontend.
+
+`POSTGRES_DEV_PORT` позволяет поднять изолированную test DB на другом
+loopback-порту, например `55433`.
+
+## PostgreSQL integration tests
+
+Обычный локальный `pytest` пропускает PostgreSQL integration tests. Полный
+gate запускает их явно против уже мигрированной PostgreSQL 18:
+
+    RUN_POSTGRES_INTEGRATION=1     DATABASE_URL=postgresql+asyncpg://...@127.0.0.1:PORT/dc_inventory     pytest -q
+
+CI всегда включает этот режим.
+
+## Checkpoint и повторный source audit
+
+Обязательный цикл:
+
+    CODE -> FULL GATE -> COMMIT -> SOURCE ARCHIVE -> INDEPENDENT AUDIT
+
+Следующий Stage не начинается до `AUDIT=PASS`. Если audit находит изъян,
+исправление проходит новый gate и новый архив. Документация и roadmap
+обновляются вместе с кодом.

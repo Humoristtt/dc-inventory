@@ -20,7 +20,8 @@
 
 ## Текущее состояние
 
-Реализованы и развёрнуты runtime foundation и Telegram/access foundation:
+В production развёрнуты runtime foundation и Stage 4 Telegram/access
+foundation:
 
 - Python 3.12 + FastAPI;
 - SQLAlchemy 2 async + asyncpg;
@@ -57,7 +58,18 @@ Stage 4 Telegram/auth/access foundation закрыт production smoke 2026-09-01
 неизвестный пользователь запросил доступ, ADMIN получил Telegram-уведомление,
 одобрил запрос inline-кнопкой, пользователь получил уведомление и вошёл в Mini App.
 
-Следующий предметный этап — каталог оборудования.
+В текущем исходном коде реализован Stage 5 Catalog Foundation, но он ещё не
+развёрнут в production:
+
+- Category, Manufacturer и Item;
+- metadata-driven CategoryAttribute и typed ItemAttributeValue;
+- Approved read API и Admin mutation API;
+- пять initial versioned schemas: SFP, оптика, кабели питания, NIC и диски.
+
+Item является каталожной позицией; физические serial units относятся к будущему
+InventoryUnit и в Stage 5 не реализованы. Реальная складская номенклатура и
+исходные Excel/CSV ещё не сверены с provisional vocabularies. Эта сверка
+остаётся следующим шагом закрытия Stage 5; Stage 6 не начат.
 
 ## Номенклатура
 

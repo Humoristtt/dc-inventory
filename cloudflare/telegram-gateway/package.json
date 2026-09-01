@@ -1,0 +1,8 @@
+{
+  "name": "dc-inventory-telegram-gateway",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test worker.test.mjs"
+  }
+}

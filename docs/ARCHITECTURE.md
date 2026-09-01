@@ -368,3 +368,31 @@ Frontend cache не является authorization boundary: backend `Approved` 
 - переход `REJECTED -> PENDING` после успешного повторного запроса синхронизируется
   в auth cache явно;
 - polling останавливается после выхода из `PENDING`.
+\n
+
+## Telegram delivery и access decisions
+
+Stage 4 использует transactional outbox: доменная транзакция сохраняет Telegram
+command в PostgreSQL, а отдельный worker выполняет сетевую доставку после commit.
+
+`telegram-worker` claim-ит rows через `FOR UPDATE SKIP LOCKED`, использует lease
+(`claimed_at` + `claim_token`) и at-least-once semantics. Incoming webhook
+защищён Telegram secret token и persistent `telegram_updates.update_id` dedupe.
+
+Inline callback содержит только opaque token. Request/user/action разрешаются
+сервером, а решение может выполнять только Telegram identity с
+`ADMIN + APPROVED`. AccessRequest и User блокируются `FOR UPDATE`.
+
+Исходящая доставка идёт через Cloudflare Telegram Gateway. Bot token хранится
+как Cloudflare Worker Secret; production `telegram-worker` получает только
+gateway URL и отдельный gateway secret. Gateway имеет фиксированный allowlist
+Bot API methods.
+
+
+Telegram `update_id` является внешним natural key и не генерируется PostgreSQL:
+для `telegram_updates.update_id` отключён autoincrement/sequence.
+
+Terminal user access state является server-authoritative: stale PENDING request
+или callback не может понизить/переписать `APPROVED`, `REJECTED` или `BLOCKED`.
+Frontend также не применяет поздний `POST /api/access-requests -> PENDING`
+поверх уже полученного `APPROVED`/`BLOCKED`.

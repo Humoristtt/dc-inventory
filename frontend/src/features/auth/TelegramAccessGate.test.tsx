@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
 } from "@testing-library/react";
 import {
   afterEach,
@@ -363,4 +364,104 @@ it("access cache одного пользователя не применяетс
     await screen.findByRole("heading", { name: "Запрос отправлен" }),
   ).toBeInTheDocument();
   expect(screen.queryByText("Каталог доступен")).not.toBeInTheDocument();
+});
+
+it("late PENDING request response не понижает свежий APPROVED auth state", async () => {
+  const userId = "00000000-0000-0000-0000-000000000007";
+  const queryClient = createTestQueryClient();
+  let resolveRequest: ((response: Response) => void) | undefined;
+  const requestResponse = new Promise<Response>((resolve) => {
+    resolveRequest = resolve;
+  });
+
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+
+      if (url === "/api/auth/me") {
+        return new Response(
+          JSON.stringify({
+            user: {
+              id: userId,
+              telegram_user_id: 1007,
+              username: "late-response",
+              first_name: "Late",
+              last_name: null,
+              role: "USER",
+              access_status: "REJECTED",
+            },
+            support,
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      }
+
+      if (
+        url === "/api/access-requests"
+        && init?.method === "POST"
+      ) {
+        return requestResponse;
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    },
+  );
+  vi.stubGlobal("fetch", fetchMock);
+
+  renderGate(queryClient);
+
+  fireEvent.click(
+    await screen.findByRole(
+      "button",
+      { name: "Запросить доступ снова" },
+    ),
+  );
+
+  await waitFor(() => {
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/access-requests",
+      expect.objectContaining({ method: "POST" }),
+    );
+  });
+
+  await act(async () => {
+    queryClient.setQueryData(["auth", "state"], {
+      user: {
+        id: userId,
+        telegram_user_id: 1007,
+        username: "late-response",
+        first_name: "Late",
+        last_name: null,
+        role: "USER",
+        access_status: "APPROVED",
+      },
+      support,
+    });
+  });
+
+  expect(await screen.findByText("Каталог доступен")).toBeInTheDocument();
+
+  const completeRequest = resolveRequest;
+  if (completeRequest === undefined) {
+    throw new Error("request resolver was not initialized");
+  }
+
+  await act(async () => {
+    completeRequest(
+      new Response(
+        JSON.stringify({
+          access_status: "PENDING",
+          request: {
+            id: "00000000-0000-0000-0000-000000000013",
+            status: "PENDING",
+            requested_at: "2026-09-01T07:00:00Z",
+          },
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    await requestResponse;
+  });
+
+  expect(await screen.findByText("Каталог доступен")).toBeInTheDocument();
 });

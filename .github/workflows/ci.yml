@@ -99,6 +99,20 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+  telegram-gateway:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Worker tests
+        working-directory: cloudflare/telegram-gateway
+        run: npm test
+
   runtime:
     runs-on: ubuntu-latest
 
@@ -121,10 +135,14 @@ jobs:
           TELEGRAM_BOT_TOKEN=ci-runtime-only-token
           ADMIN_TELEGRAM_USER_ID=42424242
           SUPPORT_TELEGRAM_USERNAME=Humoristttt
+          TELEGRAM_WEBHOOK_SECRET=ci-runtime-webhook-secret
+          TELEGRAM_WEB_APP_URL=https://app.spik-inventory.ru
+          TELEGRAM_GATEWAY_URL=https://gateway.invalid
+          TELEGRAM_GATEWAY_SECRET=ci-runtime-gateway-secret
           EOF
 
       - name: Start production-shaped runtime
-        run: docker compose --env-file .env.ci -f compose.yaml up -d --build --wait web
+        run: docker compose --env-file .env.ci -f compose.yaml up -d --build --wait web telegram-worker
 
       - name: Verify runtime
         run: |
@@ -133,8 +151,9 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1:8080/api/health/ready | grep -q '"status":"ready"'
           docker compose --env-file .env.ci -f compose.yaml exec -T backend id | grep -q 'uid=10001(app)'
           docker compose --env-file .env.ci -f compose.yaml exec -T web id | grep -q 'uid=101(nginx)'
-          docker compose --env-file .env.ci -f compose.yaml exec -T backend sh -c 'test "$TELEGRAM_BOT_TOKEN" = "ci-runtime-only-token"'
-          docker compose --env-file .env.ci -f compose.yaml run --rm --no-deps migrate sh -c 'test -z "${TELEGRAM_BOT_TOKEN:-}" && test -z "${ADMIN_TELEGRAM_USER_ID:-}"'
+          docker compose --env-file .env.ci -f compose.yaml exec -T backend sh -c 'test "$TELEGRAM_BOT_TOKEN" = "ci-runtime-only-token" && test "$TELEGRAM_WEBHOOK_SECRET" = "ci-runtime-webhook-secret" && test -z "${TELEGRAM_GATEWAY_SECRET:-}"'
+          docker compose --env-file .env.ci -f compose.yaml exec -T telegram-worker sh -c 'test "$TELEGRAM_GATEWAY_SECRET" = "ci-runtime-gateway-secret" && test -z "${TELEGRAM_BOT_TOKEN:-}" && test -z "${TELEGRAM_WEBHOOK_SECRET:-}"'
+          docker compose --env-file .env.ci -f compose.yaml run --rm --no-deps migrate sh -c 'test -z "${TELEGRAM_BOT_TOKEN:-}" && test -z "${ADMIN_TELEGRAM_USER_ID:-}" && test -z "${TELEGRAM_WEBHOOK_SECRET:-}" && test -z "${TELEGRAM_GATEWAY_SECRET:-}"'
 
           backend_cid="$(docker compose --env-file .env.ci -f compose.yaml ps -q backend)"
           postgres_cid="$(docker compose --env-file .env.ci -f compose.yaml ps -q postgres)"
@@ -174,6 +193,17 @@ jobs:
           PY
 
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/api/docs)" = "404"
+
+      - name: Verify Telegram worker boundary
+        run: |
+          worker_cid="$(docker compose --env-file .env.ci -f compose.yaml ps -q telegram-worker)"
+          test -n "$worker_cid"
+          test "$(docker inspect -f '{{json .HostConfig.PortBindings}}' "$worker_cid")" = '{}'
+          worker_networks="$(docker inspect -f '{{range $k, $_ := .NetworkSettings.Networks}}{{$k}} {{end}}' "$worker_cid")"
+          test "$(printf '%s\n' "$worker_networks" | wc -w | tr -d ' ')" = "2"
+          printf '%s\n' "$worker_networks" | grep -q '_db_net'
+          printf '%s\n' "$worker_networks" | grep -q '_egress_net'
+          ! printf '%s\n' "$worker_networks" | grep -q '_app_net'
 
       - name: Runtime state
         if: always()

@@ -81,3 +81,12 @@
 - Stage 4.3b закрывает user-scoped access cache, PENDING-only frontend authority,
   реальный PostgreSQL race первого Telegram login и CI runtime network boundaries.
 - Stage 4.4 начинается после полного gate Stage 4.3b.
+\n
+
+## 2026-09-01 — Stage 4.4 — Telegram delivery
+
+- Stage 4.3b source audit завершён.
+- Начата реализация transactional outbox, Telegram webhook/update dedupe,
+  opaque ADMIN approve/reject callbacks и отдельного delivery worker.
+- Добавлен Cloudflare Telegram Gateway Worker с отдельным gateway secret.
+- Stage 4.4 остаётся `[~]` до focused/full gate и production verification.

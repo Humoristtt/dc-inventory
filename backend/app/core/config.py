@@ -28,6 +28,16 @@ class Settings(BaseSettings):
         pattern=r"^[A-Za-z0-9_-]{1,64}$",
     )
 
+    telegram_webhook_secret: SecretStr | None = None
+    telegram_web_app_url: str = "https://app.spik-inventory.ru"
+    telegram_gateway_url: str | None = None
+    telegram_gateway_secret: SecretStr | None = None
+    telegram_gateway_timeout_seconds: int = Field(default=10, ge=1, le=60)
+    notification_worker_poll_seconds: int = Field(default=2, ge=1, le=60)
+    notification_worker_claim_ttl_seconds: int = Field(default=60, ge=10, le=600)
+    notification_worker_batch_size: int = Field(default=10, ge=1, le=100)
+    notification_worker_max_attempts: int = Field(default=8, ge=1, le=20)
+
     @field_validator("admin_telegram_user_id", mode="before")
     @classmethod
     def empty_admin_telegram_user_id_is_none(cls, value: object) -> object:
@@ -38,6 +48,27 @@ class Settings(BaseSettings):
         if self.telegram_bot_token is None:
             return None
         value = self.telegram_bot_token.get_secret_value().strip()
+        return value or None
+
+    @property
+    def telegram_webhook_secret_value(self) -> str | None:
+        if self.telegram_webhook_secret is None:
+            return None
+        value = self.telegram_webhook_secret.get_secret_value().strip()
+        return value or None
+
+    @property
+    def telegram_gateway_url_value(self) -> str | None:
+        if self.telegram_gateway_url is None:
+            return None
+        value = self.telegram_gateway_url.strip().rstrip("/")
+        return value or None
+
+    @property
+    def telegram_gateway_secret_value(self) -> str | None:
+        if self.telegram_gateway_secret is None:
+            return None
+        value = self.telegram_gateway_secret.get_secret_value().strip()
         return value or None
 
     @property

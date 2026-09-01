@@ -65,6 +65,8 @@ services:
       SUPPORT_TELEGRAM_USERNAME: ${SUPPORT_TELEGRAM_USERNAME:-Humoristttt}
       AUTH_SESSION_TTL_SECONDS: ${AUTH_SESSION_TTL_SECONDS:-43200}
       AUTH_COOKIE_NAME: ${AUTH_COOKIE_NAME:-dc_inventory_session}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      TELEGRAM_WEB_APP_URL: ${TELEGRAM_WEB_APP_URL:-https://app.spik-inventory.ru}
     depends_on:
       postgres:
         condition: service_healthy
@@ -83,6 +85,37 @@ services:
     networks:
       - app_net
       - db_net
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    init: true
+    stop_grace_period: 20s
+    restart: unless-stopped
+
+  telegram-worker:
+    <<: *backend-image
+    command: ["python", "-m", "app.modules.notifications.worker"]
+    environment:
+      <<: *backend-environment
+      TELEGRAM_GATEWAY_URL: ${TELEGRAM_GATEWAY_URL:-}
+      TELEGRAM_GATEWAY_SECRET: ${TELEGRAM_GATEWAY_SECRET:-}
+      TELEGRAM_GATEWAY_TIMEOUT_SECONDS: ${TELEGRAM_GATEWAY_TIMEOUT_SECONDS:-10}
+      NOTIFICATION_WORKER_POLL_SECONDS: ${NOTIFICATION_WORKER_POLL_SECONDS:-2}
+      NOTIFICATION_WORKER_CLAIM_TTL_SECONDS: ${NOTIFICATION_WORKER_CLAIM_TTL_SECONDS:-60}
+      NOTIFICATION_WORKER_BATCH_SIZE: ${NOTIFICATION_WORKER_BATCH_SIZE:-10}
+      NOTIFICATION_WORKER_MAX_ATTEMPTS: ${NOTIFICATION_WORKER_MAX_ATTEMPTS:-8}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks:
+      - db_net
+      - egress_net
     read_only: true
     tmpfs:
       - /tmp
@@ -128,5 +161,6 @@ volumes:
 
 networks:
   app_net:
+  egress_net:
   db_net:
     internal: true

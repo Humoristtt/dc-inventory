@@ -1,5 +1,6 @@
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 
+from app.core.config import Settings
 from app.modules.access.schemas import AccessRequestOut, AccessStateOut
 from app.modules.access.service import (
     AccessAlreadyApprovedError,
@@ -9,6 +10,10 @@ from app.modules.access.service import (
 )
 from app.modules.auth.dependencies import Authenticated, DbSession
 from app.modules.identity.models import AccessRequest
+from app.modules.telegram_bot.service import (
+    TelegramDeliveryConfigurationError,
+    enqueue_access_request_admin_notification,
+)
 
 router = APIRouter(prefix="/api/access-requests", tags=["access"])
 
@@ -39,6 +44,7 @@ async def get_my_access_request(
 
 @router.post("", response_model=AccessStateOut)
 async def request_access(
+    request: Request,
     response: Response,
     db: DbSession,
     authenticated: Authenticated,
@@ -55,6 +61,22 @@ async def request_access(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="access blocked",
         ) from exc
+
+    if result.created:
+        settings: Settings = request.app.state.settings
+        try:
+            await enqueue_access_request_admin_notification(
+                db,
+                access_request=result.request,
+                identity=authenticated.identity,
+                settings=settings,
+            )
+        except TelegramDeliveryConfigurationError as exc:
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="access notification unavailable",
+            ) from exc
 
     await db.commit()
     await db.refresh(result.request)

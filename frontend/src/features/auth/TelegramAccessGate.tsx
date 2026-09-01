@@ -355,6 +355,7 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
           if (
             current === undefined
             || current.user.id !== userId
+            || current.user.access_status === "APPROVED"
             || current.user.access_status === "BLOCKED"
           ) {
             return current;

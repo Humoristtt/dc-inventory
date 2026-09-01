@@ -1853,25 +1853,17 @@ Import:
 
 # 42. Следующий фактический шаг
 
-**CURRENT: Stage 4 — Telegram Foundation + Access Control**
+**CURRENT: Stage 5 — Catalog Foundation**
 
 Ближайшая последовательность:
 
-- [x] Спроектировать User / TelegramIdentity / AccessRequest.
-- [x] Реализовать User / TelegramIdentity / AccessRequest persistence + migration.
-- [x] Спроектировать session/auth contract.
-- [x] Реализовать Telegram initData validator + auth session API + security tests.
-- [x] Реализовать `/start` webhook.
-- [x] Развернуть Telegram Gateway Worker.
-- [x] Проверить outbound `sendMessage`.
-- [x] Реализовать request access + кликабельный `@Humoristttt` + pending screen.
-- [x] Stage 4.3a hardening + полный gate.
-- [x] Провести повторный source audit Stage 4.3a.
-- [x] Закрыть Stage 4.3b final access-state hardening.
-- [x] Закрыть Stage 4.4 Telegram delivery/access decisions.
-- [x] Реализовать ADMIN approve/reject.
-- [x] Уведомить ADMIN.
-- [x] Уведомить USER.
-- [x] Сделать production Telegram smoke.
-- [x] Обновить `docs/HISTORY.md`.
-- [x] Отметить Stage 4 DONE только после acceptance gate.
+- [~] Сверить реальную складскую номенклатуру и исходные Excel с требованиями Stage 5.
+- [ ] Зафиксировать первую каноническую модель каталога в `docs/CATALOG_SCHEMA.md`.
+- [ ] Спроектировать `Category`, `Item` и Brand/Manufacturer contract.
+- [ ] Спроектировать `CategoryAttribute` и typed attribute values.
+- [ ] Зафиксировать duplicate-detection и archive/unarchive invariants до миграции.
+- [ ] Зафиксировать initial schemas для SFP, оптики, кабелей питания, NIC и дисков.
+- [ ] Реализовать catalog persistence + Alembic migration.
+- [ ] Реализовать ADMIN catalog API.
+- [ ] Добавить PostgreSQL/domain/API tests.
+- [ ] Провести Stage 5 gate перед следующим складским этапом.

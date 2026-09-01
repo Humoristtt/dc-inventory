@@ -6,8 +6,8 @@
 > Если решение меняется, старый пункт не удаляется бесследно: он переносится в раздел «Изменённые / отложенные решения» с короткой причиной.
 >
 > **Последнее обновление:** 2026-09-01
-> **Production baseline:** `ef0eefb096e2fada46394c8b969b9e7cf6dd13fc`
-> **База Stage 4.3a:** `93490cdb0f7a3aa178fd6ac3e204d40877646c47`
+> **Production runtime code baseline:** `08aa052d2af3e9c7e9cb9a2bce670cf6674b6c97` — Stage 4 close; последующие docs-only commits не требуют rebuild runtime.
+> **Stage 4 Telegram/auth/access foundation:** завершён в production 2026-09-01. Следующий предметный этап — Stage 5 Catalog Foundation.
 
 ---
 
@@ -186,22 +186,22 @@ CUSTODY  → у конкретного пользователя
 Если доступ нужен срочно, свяжитесь с @Humoristttt.
 ```
 
-- [x] Неизвестный пользователь не получает доступ к каталогу на frontend gate; production smoke ещё впереди.
+- [x] Неизвестный пользователь не получает доступ к каталогу на frontend gate; production smoke пройден 2026-09-01.
 - [x] Пользователь сначала видит понятный экран доступа и кликабельный контакт ADMIN.
 - [x] Пользователь подтверждает запрос кнопкой «ОК, запросить доступ».
 - [x] Создание запроса идемпотентно на уровне service + partial unique DB invariant.
 - [x] `REJECTED` допускает новый запрос; `BLOCKED` запрещает повторный запрос.
 - [x] Backend security boundary не полагается на frontend gate.
 - [x] Bootstrap ADMIN recovery закрывает оставшийся `PENDING` AccessRequest.
-- [ ] ADMIN получает Telegram-уведомление.
-- [ ] Основной approve/reject workflow выполняется inline-кнопками **в чате с ботом**, а не в Mini App.
-- [ ] В сообщении ADMIN есть `[ ✅ Разрешить ]` и `[ ❌ Отклонить ]`.
-- [ ] Callback может выполнить только ADMIN.
-- [ ] Повторное нажатие уже обработанного callback безопасно.
-- [ ] После решения inline-кнопки убираются / сообщение помечается обработанным.
-- [ ] Пользователь получает Telegram-уведомление об одобрении + кнопку «Открыть приложение».
-- [ ] Пользователь получает уведомление об отказе + кликабельный контакт `@Humoristttt`.
-- [ ] Отозванный доступ немедленно блокирует новые защищённые запросы.
+- [x] ADMIN получает Telegram-уведомление.
+- [x] Основной approve/reject workflow выполняется inline-кнопками **в чате с ботом**, а не в Mini App.
+- [x] В сообщении ADMIN есть `[ ✅ Разрешить ]` и `[ ❌ Отклонить ]`.
+- [x] Callback может выполнить только ADMIN.
+- [x] Повторное нажатие уже обработанного callback безопасно.
+- [x] После решения inline-кнопки убираются / сообщение помечается обработанным.
+- [x] Пользователь получает Telegram-уведомление об одобрении + кнопку «Открыть приложение».
+- [x] Пользователь получает уведомление об отказе + кликабельный контакт `@Humoristttt`.
+- [x] Отозванный доступ немедленно блокирует новые защищённые запросы.
 
 ---
 
@@ -217,12 +217,15 @@ CUSTODY  → у конкретного пользователя
 
 ## 4.2. `/start`
 
-- [ ] Реализовать webhook handler `/start`.
-- [ ] Отправлять брендированное приветствие.
-- [ ] Кратко описывать назначение приложения.
-- [ ] Добавить кнопку «Открыть приложение».
-- [ ] Добавить «Запросить доступ», если пользователь не APPROVED.
-- [ ] Не дублировать бессмысленно приветствие при повторном `/start`.
+- [x] Реализовать webhook handler `/start`.
+- [x] Отправлять брендированное приветствие.
+- [x] Кратко описывать назначение приложения.
+- [x] Добавить кнопку «Открыть приложение».
+- [ ] UX polish: добавить в `/start` отдельную кнопку «Запросить доступ», если пользователь не APPROVED.
+- [ ] UX polish: не дублировать бессмысленно приветствие при повторном `/start`.
+
+Эти два UX-пункта не блокируют закрытие Stage 4 production MVP и остаются
+явным backlog без изменения backend access/security boundary.
 
 Ожидаемый смысл сообщения:
 
@@ -253,16 +256,16 @@ Spikatel Inventory
 - [x] `/api/auth/telegram` после validation создаёт/обновляет Telegram identity.
 - [x] `/api/auth/telegram` выдаёт защищённую `HttpOnly` session cookie; в production `Secure`.
 - [x] Bearer token не используется и не хранится в `localStorage`.
-- [x] Frontend gate не пропускает браузер без валидной session/Telegram initData; production smoke ещё впереди.
+- [x] Frontend gate не пропускает браузер без валидной session/Telegram initData; production smoke пройден 2026-09-01.
 
 ## 4.4. Telegram webhook
 
-- [ ] Реализовать отдельный Telegram module.
-- [ ] Webhook принимает только ожидаемые Telegram updates.
-- [ ] Проверяется `X-Telegram-Bot-Api-Secret-Token`.
-- [ ] Повторный `update_id` дедуплицируется.
-- [ ] Обработчики идемпотентны.
-- [ ] Webhook не выполняет долгие операции внутри HTTP request.
+- [x] Реализовать отдельный Telegram module.
+- [x] Webhook принимает только ожидаемые Telegram updates.
+- [x] Проверяется `X-Telegram-Bot-Api-Secret-Token`.
+- [x] Повторный `update_id` дедуплицируется.
+- [x] Обработчики идемпотентны.
+- [x] Webhook не выполняет долгие операции внутри HTTP request.
 
 ## 4.5. Telegram Gateway через Cloudflare Worker
 
@@ -276,23 +279,38 @@ Cloudflare Worker Telegram Gateway
 api.telegram.org
 ```
 
-- [ ] Создать отдельный Worker Gateway.
-- [ ] Worker хранит Telegram bot token как Cloudflare Secret для Bot API.
-- [ ] Backend получает тот же bot token только через production secret/env для HMAC-проверки initData; frontend/Git/logs его не получают.
-- [ ] Backend → Worker защищён отдельным gateway secret.
-- [ ] Worker не является универсальным open proxy.
-- [ ] Разрешён whitelist Bot API методов.
-- [ ] Нормализованы timeout/retry/error mapping.
-- [ ] Логи не содержат bot token.
-- [ ] Проверен реальный `sendMessage`.
+- [x] Создать отдельный Worker Gateway.
+- [x] Worker хранит Telegram bot token как Cloudflare Secret для Bot API.
+- [x] Backend получает тот же bot token только через production secret/env для HMAC-проверки initData; frontend/Git/logs его не получают.
+- [x] Backend → Worker защищён отдельным gateway secret.
+- [x] Worker не является универсальным open proxy.
+- [x] Разрешён whitelist Bot API методов.
+- [x] Нормализованы timeout/retry/error mapping.
+- [x] Логи не содержат bot token.
+- [x] Проверен реальный `sendMessage`.
 
-Начальный whitelist:
+Production Stage 4 whitelist:
 
 - `sendMessage`
-- `sendPhoto`
 - `editMessageText`
 - `editMessageReplyMarkup`
 - `answerCallbackQuery`
+
+`sendPhoto` не требуется Stage 4 и добавляется вместе с media workflow,
+когда появится реальный consumer.
+
+## 4.6. Production acceptance
+
+- [x] Cloudflare Worker Gateway развёрнут и реальный `sendMessage` проверен.
+- [x] Telegram webhook зарегистрирован на production hostname.
+- [x] `/start` проходит полный маршрут Telegram → webhook → FastAPI → outbox → worker → Gateway → Telegram.
+- [x] Cloudflare `1010` для стандартного Python urllib устранён явным service `User-Agent`.
+- [x] Новый пользователь проходит access gate и создаёт запрос.
+- [x] ADMIN получает запрос в Telegram и одобряет его inline-кнопкой.
+- [x] Пользователь получает «Доступ предоставлен» и кнопку открытия Mini App.
+- [x] После одобрения пользователь входит в Mini App.
+- [x] Production VM имеет чистый worktree, только локальную ветку `main` и не содержит untracked project files.
+- [x] Stage 4 production MVP закрыт 2026-09-01.
 
 ---
 
@@ -1182,14 +1200,14 @@ request B → взять 1
 
 ## 28.4. Telegram security tests
 
-- [ ] Valid initData → PASS.
-- [ ] Modified username → FAIL.
-- [ ] Modified user id → FAIL.
-- [ ] Modified hash → FAIL.
-- [ ] Expired auth_date → FAIL.
-- [ ] Invalid webhook secret → FAIL.
-- [ ] Duplicate update_id → exactly-once logical processing.
-- [ ] User access revoked → protected API denied.
+- [x] Valid initData → PASS.
+- [x] Modified username → FAIL.
+- [x] Modified user id → FAIL.
+- [x] Modified hash → FAIL.
+- [x] Expired auth_date → FAIL.
+- [x] Invalid webhook secret → FAIL.
+- [x] Duplicate update_id → exactly-once logical processing.
+- [x] User access revoked → protected API denied.
 
 ## 28.5. Outbox tests
 
@@ -1389,7 +1407,7 @@ Viewport profiles:
 - [x] Health live.
 - [x] Health ready.
 - [x] DB timeout boundaries.
-- [ ] Telegram gateway timeout boundaries.
+- [x] Telegram gateway timeout boundaries.
 - [ ] Media operation timeout/limits.
 - [ ] Outbox diagnostics.
 - [ ] Backup diagnostics.
@@ -1505,14 +1523,14 @@ Viewport profiles:
 - [x] Mini App enabled.
 - [x] Menu button configured.
 - [x] First Mini App launch PASS.
-- [~] Telegram backend foundation: Stage 4.4 webhook/outbox/access decisions.
-- [ ] Cloudflare Telegram Gateway.
-- [ ] `/start`.
-- [ ] Webhook.
-- [ ] Webhook secret.
-- [ ] Telegram update dedupe.
-- [~] initData validation — backend + frontend integration implemented, production Telegram smoke pending.
-- [~] Auth session — persistence/API + frontend session reuse implemented, production Telegram smoke pending.
+- [x] Telegram backend foundation: webhook/outbox/access decisions.
+- [x] Cloudflare Telegram Gateway.
+- [x] `/start`.
+- [x] Webhook.
+- [x] Webhook secret.
+- [x] Telegram update dedupe.
+- [x] initData validation — backend + frontend integration + production Telegram smoke.
+- [x] Auth session — persistence/API + frontend session reuse + production Telegram smoke.
 - [x] User entity persistence.
 - [x] ADMIN/USER persistence.
 - [x] AccessStatus persistence.
@@ -1520,16 +1538,18 @@ Viewport profiles:
 - [x] Stage 4.3a: rejected retry, polling sync, backend authz boundary, bootstrap consistency, PostgreSQL/CI coverage, docs.
 - [x] Повторный source audit Stage 4.3a выполнен; stale frontend access-cache вынесен в Stage 4.3b.
 - [x] Stage 4.3b: user-scoped access cache, PENDING-only authority, identity race test, CI topology regression.
-- [~] Stage 4.4: transactional outbox, Telegram webhook/update dedupe, ADMIN decisions, worker и Cloudflare gateway.
-- [ ] Admin approve через inline callback в Telegram-чате.
-- [ ] Admin reject через inline callback в Telegram-чате.
-- [ ] Admin Telegram notification.
-- [ ] User approval notification.
-- [ ] User rejection notification.
-- [ ] Security tests.
-- [ ] Production smoke.
+- [x] Stage 4.4: transactional outbox, Telegram webhook/update dedupe, ADMIN decisions, worker и Cloudflare gateway.
+- [x] Admin approve через inline callback в Telegram-чате.
+- [x] Admin reject через inline callback в Telegram-чате.
+- [x] Admin Telegram notification.
+- [x] User approval notification.
+- [x] User rejection notification.
+- [x] Security tests.
+- [x] Production smoke.
 
 **GATE:** неизвестный пользователь не получает каталог; после approval получает доступ; поддельный initData не принимается.
+
+**STATUS: DONE — production acceptance пройден 2026-09-01.**
 
 ## Stage 5 — Catalog Foundation
 
@@ -1841,17 +1861,17 @@ Import:
 - [x] Реализовать User / TelegramIdentity / AccessRequest persistence + migration.
 - [x] Спроектировать session/auth contract.
 - [x] Реализовать Telegram initData validator + auth session API + security tests.
-- [ ] Реализовать `/start` webhook.
-- [ ] Развернуть Telegram Gateway Worker.
-- [ ] Проверить outbound `sendMessage`.
+- [x] Реализовать `/start` webhook.
+- [x] Развернуть Telegram Gateway Worker.
+- [x] Проверить outbound `sendMessage`.
 - [x] Реализовать request access + кликабельный `@Humoristttt` + pending screen.
 - [x] Stage 4.3a hardening + полный gate.
 - [x] Провести повторный source audit Stage 4.3a.
 - [x] Закрыть Stage 4.3b final access-state hardening.
-- [~] Закрыть Stage 4.4 Telegram delivery/access decisions.
-- [ ] Реализовать ADMIN approve/reject.
-- [ ] Уведомить ADMIN.
-- [ ] Уведомить USER.
-- [ ] Сделать production Telegram smoke.
-- [ ] Обновить `docs/HISTORY.md`.
-- [ ] Отметить Stage 4 DONE только после acceptance gate.
+- [x] Закрыть Stage 4.4 Telegram delivery/access decisions.
+- [x] Реализовать ADMIN approve/reject.
+- [x] Уведомить ADMIN.
+- [x] Уведомить USER.
+- [x] Сделать production Telegram smoke.
+- [x] Обновить `docs/HISTORY.md`.
+- [x] Отметить Stage 4 DONE только после acceptance gate.

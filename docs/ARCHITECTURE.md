@@ -87,7 +87,7 @@
     ├── identity/
     ├── notifications/
     ├── telegram_bot/
-    ├── catalog/        # следующий предметный этап
+    ├── catalog/        # Category / Manufacturer / Item / typed attributes
     └── inventory/      # последующий складской core
 
 Внутри предметного модуля API, schemas, service/repository и модели разделяются тогда, когда возникает соответствующая ответственность.
@@ -194,10 +194,11 @@ Alembic использует тот же async PostgreSQL driver `asyncpg`, чт
     7b0e3f6a9c21  User / TelegramIdentity / AccessRequest
     c4d8f2a1b903  server-side AuthSession
     e8f1a2b3c4d5  NotificationOutbox / TelegramUpdate / AccessDecisionCallback
+    f4a5b6c7d8e9  Catalog foundation + five system category schemas
 
-Текущий Alembic head после Stage 4:
+Текущий Alembic head после реализации Stage 5:
 
-    e8f1a2b3c4d5
+    f4a5b6c7d8e9
 
 Следующие предметные схемы добавляются отдельными миграциями.
 
@@ -279,23 +280,30 @@ Backend различает:
 `Authenticated` нужен для собственного access-status API. Будущие складские
 и административные endpoints обязаны использовать `Approved` или `Admin`.
 
-## Планируемая предметная модель
+## Предметная модель
 
-До первой бизнес-миграции точная схема ещё не зафиксирована.
+Реализованные identity/auth и Telegram delivery сущности описаны выше.
 
-Уже реализованные identity/auth и Telegram delivery сущности описаны выше.
-
-Реализованные инфраструктурные Stage 4 сущности:
+Инфраструктурные Stage 4 сущности:
 
 - NotificationOutbox;
 - TelegramUpdate;
 - AccessDecisionCallback.
 
-Планируемые предметные сущности:
+Stage 5 фиксирует каталог:
 
 - Category;
+- Manufacturer;
 - CategoryAttribute;
 - Item;
+- ItemAttributeValue.
+
+`Item` является каталожной позицией, а не физическим serial unit. Технические
+характеристики хранятся typed rows, управляемыми Category metadata; uncontrolled
+JSON specification и category-specific nullable columns не используются.
+
+Планируемые сущности следующих этапов:
+
 - InventoryUnit;
 - Location;
 - StockBalance;
@@ -303,8 +311,43 @@ Backend различает:
 - MovementLine;
 - AuditEvent.
 
-Список предметных сущностей является архитектурным направлением, а не уже
-существующей складской схемой базы данных.
+Точный inventory contract будет зафиксирован отдельной Stage 6 migration.
+
+## Catalog foundation
+
+Канонический contract описан в `docs/CATALOG_SCHEMA.md`.
+
+Основные решения:
+
+- system Category и CategoryAttribute version-controlled через Alembic, без
+  startup schema synchronization;
+- Category machine key не зависит от локализованного display name;
+- Manufacturer identity нормализуется через trim, whitespace collapse и
+  `casefold`;
+- Item имеет `QUANTITY/SERIAL` mode и `ACTIVE/ARCHIVED` lifecycle;
+- category и accounting mode Item неизменяемы после создания;
+- обычного hard-delete Item API нет;
+- dynamic values хранятся в `ItemAttributeValue` с отдельными typed columns;
+- PostgreSQL требует ровно одно populated typed value;
+- redundant category ID и composite foreign keys запрещают cross-category
+  attribute assignment на DB-level;
+- DECIMAL хранится как `NUMERIC`, API принимает exact decimal strings;
+- duplicate detection возвращает candidates и не является destructive unique
+  heuristic;
+- read API использует существующую `Approved` boundary, mutation API —
+  существующую `Admin` boundary.
+
+Пять первых system schemas:
+
+- SFP;
+- optical cabling;
+- power cables;
+- network interface cards;
+- disks/drives.
+
+Source Excel/CSV в текущем Stage 5 workspace отсутствовал. Поэтому часть
+controlled vocabularies остаётся provisional до реальной source reconciliation,
+но schema definitions уже являются deterministic versioned reference data.
 
 ## Конкурентность
 

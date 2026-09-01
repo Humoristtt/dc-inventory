@@ -76,9 +76,9 @@ Baseline Alembic:
 
     48c2f07f01a0
 
-Текущий migration head после Stage 4:
+Текущий migration head после реализации Stage 5:
 
-    e8f1a2b3c4d5
+    f4a5b6c7d8e9
 
 ## Локальный backend
 
@@ -183,6 +183,12 @@ gate запускает их явно против уже мигрированн
     RUN_POSTGRES_INTEGRATION=1     DATABASE_URL=postgresql+asyncpg://...@127.0.0.1:PORT/dc_inventory     pytest -q
 
 CI всегда включает этот режим.
+
+Catalog PostgreSQL checks можно запускать сфокусированно:
+
+    RUN_POSTGRES_INTEGRATION=1 \
+    DATABASE_URL=postgresql+asyncpg://...@127.0.0.1:PORT/dc_inventory \
+    pytest -q tests/test_catalog_postgres.py tests/test_catalog_api_postgres.py
 
 ## Checkpoint и source audit
 

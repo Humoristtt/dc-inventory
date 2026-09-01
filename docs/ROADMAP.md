@@ -333,14 +333,15 @@ Production Stage 4 whitelist:
 - 0..N фотографий;
 - primary photo.
 
-- [ ] Category.
-- [ ] Item.
-- [ ] Item archive вместо hard delete.
-- [ ] Manufacturer / brand.
-- [ ] Manufacturer part number.
-- [ ] Уникальность / duplicate detection продумана до миграции.
-- [ ] Datasheet/source metadata.
-- [ ] Нельзя удалить Item, если это ломает исторические movement references.
+- [x] Category.
+- [x] Item.
+- [x] Item archive вместо hard delete.
+- [x] Manufacturer / brand.
+- [x] Manufacturer part number.
+- [x] Уникальность / duplicate detection продумана до миграции.
+- [x] Datasheet/source metadata.
+- [~] Нельзя удалить Item, если это ломает исторические movement references:
+  публичного hard-delete API нет; future Movement FK должен сохранить RESTRICT.
 - [ ] Исторические movement snapshots остаются читаемыми после rename Item.
 
 ---
@@ -373,17 +374,17 @@ else if (category === "disk") ...
 - filter type;
 - allowed values / validation.
 
-- [ ] CategoryAttribute schema.
-- [ ] Typed attribute values.
-- [ ] Типы минимум: text, integer, decimal, boolean, enum.
-- [ ] Нормализация единиц измерения.
-- [ ] Backend валидирует атрибуты по схеме категории.
+- [x] CategoryAttribute schema.
+- [x] Typed attribute values.
+- [x] Типы минимум: text, integer, decimal, boolean, enum.
+- [x] Нормализация единиц измерения.
+- [x] Backend валидирует атрибуты по схеме категории.
 - [ ] Frontend формы строятся из metadata.
 - [ ] Frontend карточки строятся из metadata.
 - [ ] Frontend фильтры строятся из metadata.
 - [ ] Excel-колонки строятся из metadata.
-- [ ] Первые 5 схем version-controlled.
-- [ ] Обычный ADMIN не может случайно удалить системный атрибут и сломать данные.
+- [x] Первые 5 схем version-controlled.
+- [x] Обычный ADMIN не может случайно удалить системный атрибут и сломать данные.
 
 ---
 
@@ -409,13 +410,13 @@ else if (category === "disk") ...
 - datasheet URL;
 - примечание.
 
-- [ ] Скорость хранится в нормализованном виде.
-- [ ] Дальность хранится в метрах, UI форматирует м/км.
-- [ ] Wavelength хранится в нормализованном виде.
-- [ ] Form factor — enum/controlled vocabulary.
-- [ ] Medium — controlled vocabulary.
-- [ ] Connector — controlled vocabulary.
-- [ ] Compatibility допускает несколько значений / текстовую спецификацию по выбранной модели данных.
+- [x] Скорость хранится в нормализованном виде.
+- [x] Дальность хранится в метрах, UI форматирует м/км.
+- [x] Wavelength хранится в нормализованном виде.
+- [x] Form factor — enum/controlled vocabulary.
+- [x] Medium — controlled vocabulary.
+- [x] Connector — controlled vocabulary.
+- [x] Compatibility допускает текстовую спецификацию по выбранной модели данных.
 
 ## 7.2. Фильтры SFP
 
@@ -509,10 +510,12 @@ Detail card:
 
 Normalization:
 
-- [ ] Длина хранится в базовой единице.
-- [ ] Разъёмы имеют controlled vocabulary.
-- [ ] Полировка не смешивается со строкой connector.
-- [ ] Цвет не является свободным хаотичным текстом, если возможно.
+- [x] Длина хранится в базовой единице.
+- [~] Разъёмы имеют controlled vocabulary: schema готова, реальные значения
+  требуют source reconciliation.
+- [x] Полировка не смешивается со строкой connector.
+- [~] Цвет не является свободным хаотичным текстом, если возможно: остаётся
+  provisional TEXT до сверки источника.
 
 ---
 
@@ -590,7 +593,7 @@ UX:
 
 Default accounting:
 
-- [ ] SERIAL по умолчанию.
+- [x] SERIAL по умолчанию.
 - [ ] Serial number обязателен для отслеживаемой единицы либо вводится по согласованным правилам.
 - [ ] Есть текущий holder конкретной карты.
 
@@ -637,7 +640,7 @@ Default accounting:
 
 Default accounting:
 
-- [ ] SERIAL.
+- [x] SERIAL.
 - [ ] Один serial только в одной позиции.
 - [ ] Глобальный поиск по SN.
 - [ ] Глобальный поиск по WWN при наличии.
@@ -1553,24 +1556,24 @@ Viewport profiles:
 
 ## Stage 5 — Catalog Foundation
 
-- [ ] Category.
-- [ ] Item.
-- [ ] Brand/manufacturer.
-- [ ] CategoryAttribute.
-- [ ] Typed attribute values.
-- [ ] Archive/unarchive.
-- [ ] Technical data source.
-- [ ] Datasheet.
-- [ ] Duplicate detection.
-- [ ] Initial SFP schema.
-- [ ] Initial optics schema.
-- [ ] Initial power cable schema.
-- [ ] Initial NIC schema.
-- [ ] Initial disk schema.
-- [ ] Admin catalog API.
-- [ ] Migrations.
-- [ ] Domain/API tests.
-- [ ] Update `docs/CATALOG_SCHEMA.md`.
+- [x] Category.
+- [x] Item.
+- [x] Brand/manufacturer.
+- [x] CategoryAttribute.
+- [x] Typed attribute values.
+- [x] Archive/unarchive.
+- [x] Technical data source.
+- [x] Datasheet.
+- [x] Duplicate detection.
+- [x] Initial SFP schema.
+- [x] Initial optics schema.
+- [x] Initial power cable schema.
+- [x] Initial NIC schema.
+- [x] Initial disk schema.
+- [x] Admin catalog API.
+- [x] Migrations.
+- [x] Domain/API tests.
+- [x] Update `docs/CATALOG_SCHEMA.md`.
 
 **GATE:** можно корректно создать и прочитать позиции всех пяти категорий без category-specific schema hacks.
 
@@ -1858,12 +1861,17 @@ Import:
 Ближайшая последовательность:
 
 - [~] Сверить реальную складскую номенклатуру и исходные Excel с требованиями Stage 5.
-- [ ] Зафиксировать первую каноническую модель каталога в `docs/CATALOG_SCHEMA.md`.
-- [ ] Спроектировать `Category`, `Item` и Brand/Manufacturer contract.
-- [ ] Спроектировать `CategoryAttribute` и typed attribute values.
-- [ ] Зафиксировать duplicate-detection и archive/unarchive invariants до миграции.
-- [ ] Зафиксировать initial schemas для SFP, оптики, кабелей питания, NIC и дисков.
-- [ ] Реализовать catalog persistence + Alembic migration.
-- [ ] Реализовать ADMIN catalog API.
-- [ ] Добавить PostgreSQL/domain/API tests.
-- [ ] Провести Stage 5 gate перед следующим складским этапом.
+- [x] Зафиксировать первую каноническую модель каталога в `docs/CATALOG_SCHEMA.md`.
+- [x] Спроектировать `Category`, `Item` и Brand/Manufacturer contract.
+- [x] Спроектировать `CategoryAttribute` и typed attribute values.
+- [x] Зафиксировать duplicate-detection и archive/unarchive invariants до миграции.
+- [x] Зафиксировать initial schemas для SFP, оптики, кабелей питания, NIC и дисков.
+- [x] Реализовать catalog persistence + Alembic migration.
+- [x] Реализовать APPROVED read API и ADMIN mutation API.
+- [x] Добавить PostgreSQL/domain/API tests.
+- [x] Провести технический Stage 5 gate: пять категорий создаются и читаются без
+  category-specific schema hacks.
+
+Следующий фактический шаг внутри Stage 5: получить реальные source Excel/CSV,
+сверить provisional vocabularies и решить, нужны ли новые versioned data
+migrations. До этой сверки roadmap не переходит к Stage 6.

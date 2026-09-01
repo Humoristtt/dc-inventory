@@ -76,9 +76,9 @@ Baseline Alembic:
 
     48c2f07f01a0
 
-Текущий migration head после реализации Stage 5:
+Текущий migration head после source-backed Stage 5 refinement:
 
-    f4a5b6c7d8e9
+    a6b7c8d9e0f1
 
 ## Локальный backend
 

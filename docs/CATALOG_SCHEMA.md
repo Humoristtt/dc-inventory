@@ -6,12 +6,14 @@
 
 Каталог хранится в PostgreSQL и не синхронизируется из Excel при старте
 приложения. Первая версия пяти системных категорий создаётся Alembic-миграцией
-`f4a5b6c7d8e9`.
+`f4a5b6c7d8e9`; source-backed refinement создаётся следующей миграцией
+`a6b7c8d9e0f1`.
 
-Исходные Excel/CSV-файлы в текущем локальном workspace отсутствовали. Поэтому
-структура категорий version-controlled и пригодна для работы, но часть
-controlled vocabularies, отмеченная ниже, остаётся предварительной до сверки с
-реальной складской номенклатурой.
+Три локальных reference workbook сверены с contract. Они являются примерами
+для проектирования каталога, а не авторитетной inventory database или import
+source. Существующие количества/остатки не импортируются; фактический stock
+проверяется владельцем вручную при вводе оборудования. Подробное сопоставление
+зафиксировано в `docs/CATALOG_SOURCE_REFERENCE.md`.
 
 ## Предметные сущности
 
@@ -31,10 +33,11 @@ controlled vocabularies, отмеченная ниже, остаётся пре�
 
 Бизнес-логика использует `key`, а не локализованный `display_name`.
 
-Системные keys первой версии:
+Текущие system keys:
 
 - `sfp`;
 - `optics`;
+- `copper_network_cable`;
 - `power_cable`;
 - `nic`;
 - `disk`.
@@ -138,6 +141,7 @@ Defaults:
 
 - `sfp` — `QUANTITY`;
 - `optics` — `QUANTITY`;
+- `copper_network_cable` — `QUANTITY`;
 - `power_cable` — `QUANTITY`;
 - `nic` — `SERIAL`;
 - `disk` — `SERIAL`.
@@ -284,13 +288,14 @@ Create Item и его attribute rows фиксируются одной тран�
 - `tx_wavelength_nm`, `rx_wavelength_nm` — nanometres как Decimal;
 - `rated_current_a` — amperes как Decimal;
 - `rated_voltage_v` — volts;
+- `conductor_cross_section_mm2` — square millimetres (`mm2`);
 - `capacity_bytes` — bytes как signed 64-bit integer;
 - `rpm` — revolutions per minute.
 
 Presentation strings вроде `10G`, `10 km` и `1.92 TB` будут формироваться
 будущим UI/export layer.
 
-## Initial system schemas
+## Versioned system schemas
 
 ### SFP / optical transceivers
 
@@ -298,19 +303,22 @@ Default accounting: `QUANTITY`.
 
 | Key | Type | Required | Unit / controlled values |
 |---|---|---:|---|
-| `form_factor` | ENUM | no | SFP, SFP+, SFP28, QSFP+, QSFP28, QSFP56, QSFP-DD |
+| `form_factor` | ENUM | no | SFP, SFP+, SFP28, XFP, QSFP+, QSFP28, QSFP56, QSFP-DD |
 | `speed_mbps` | INTEGER | yes | Mbps, min 1 |
 | `medium` | ENUM | no | SMF, MMF, Copper, DAC, AOC |
 | `reach_class` | ENUM | no | SR, LR, ER, ZR, BiDi, CWDM, DWDM |
 | `reach_m` | INTEGER | no | m, min 0 |
-| `connector` | ENUM | no | LC Duplex, LC Simplex, MPO/MTP, RJ45 |
+| `connector` | ENUM | no | LC Duplex, LC Simplex, SC Simplex, MPO/MTP, RJ45 |
 | `tx_wavelength_nm` | DECIMAL | no | nm, min 0 |
 | `rx_wavelength_nm` | DECIMAL | no | nm, min 0 |
 | `dom_ddm` | BOOLEAN | no | — |
 | `vendor_compatibility` | TEXT | no | max length 2000 |
 
-Списки form factor, medium, reach class и connector являются первой
-расширяемой версией, а не заявлением о глобальной полноте.
+Списки form factor, medium, reach class и connector являются расширяемой
+versioned metadata, а не заявлением о глобальной полноте. `XFP` и `SC Simplex`
+добавлены после source reference review. Multi-rate speed, conditional reach и
+multi-channel wavelength требуют проверки product specs и не нормализуются
+догадкой.
 
 ### Optical cabling
 
@@ -348,8 +356,30 @@ Default accounting: `QUANTITY`.
 | `color` | TEXT | no | provisional vocabulary |
 | `rated_current_a` | DECIMAL | no | A, min 0 |
 | `rated_voltage_v` | INTEGER | no | V, min 0 |
+| `conductor_count` | INTEGER | no | min 1 |
+| `conductor_cross_section_mm2` | DECIMAL | no | mm2, min 0 |
 
 Stage 5 не реализует global search по строке `C13 C14`.
+
+Два conductor attributes добавлены после reference review повторяющихся
+product specifications вида `3×... mm²`. Они optional: отсутствие маркировки
+не должно превращаться в выдуманное значение.
+
+### Copper network cables
+
+Default accounting: `QUANTITY`.
+
+| Key | Type | Required | Unit / notes |
+|---|---|---:|---|
+| `connector_a` | TEXT | yes | provisional canonical text |
+| `connector_b` | TEXT | yes | provisional canonical text |
+| `length_m` | DECIMAL | yes | m, min 0 |
+| `cable_category` | TEXT | yes | e.g. observed Cat notation; not a closed ENUM |
+| `shielding` | TEXT | no | provisional vocabulary |
+
+Категория отделяет медные сетевые patch cords от fiber-specific `optics` и
+электрических `power_cable`. Connector/category/shielding остаются TEXT:
+reference подтверждает стабильные field semantics, но не полный vocabulary.
 
 ### Network interface cards
 
@@ -510,6 +540,14 @@ Scalar changes и attribute replacement входят в одну API-owned trans
 Будущие изменения system schema выполняются только новыми Alembic revisions.
 Старая migration остаётся исторически неизменной.
 
+Миграция `a6b7c8d9e0f1`:
+
+1. добавляет system Category `copper_network_cable` и пять metadata attributes;
+2. добавляет два optional power-cable conductor attributes;
+3. расширяет SFP form-factor/connector ENUM metadata значениями `XFP` и
+   `SC Simplex`;
+4. не читает `data/source/` и не импортирует Item или inventory state.
+
 ## Database integrity and delete policy
 
 DB-level invariants:
@@ -558,26 +596,31 @@ Stage 5 не реализует:
 - global search и faceted filters;
 - media;
 - Excel import/export;
+- source quantities, balances или opening-balance import;
 - frontend catalog UI;
 - Redis, Elasticsearch, queues или новые services.
 
-## Source inventory reconciliation
+## Source reference reconciliation
 
-В текущем workspace не найдено Excel/CSV source inventory, поэтому фактическая
-сверка не выполнена.
+Source reference review выполнен для трёх workbook, шести sheets и 176
+непустых data rows. Результат и классификация A–F находятся в
+`docs/CATALOG_SOURCE_REFERENCE.md`.
 
-Остаются provisional:
+Подтверждены current Item/Manufacturer/identifier semantics, четыре
+представленные initial category boundaries и metadata-driven typed EAV.
+Recurring copper network cables потребовали отдельной system Category;
+power-conductor semantics и два SFP tokens потребовали versioned metadata
+refinement. Backend domain contract не менялся.
 
-- optics `product_type`;
-- optics/power connector vocabularies;
-- optics/power color vocabulary;
-- optics polarity;
-- NIC PCIe generation notation;
+Остаются provisional или требуют human verification:
+
+- optics connector/product-type/color/polarity vocabularies;
+- power connector/color vocabularies;
+- NIC PCIe/media notation, поскольку прямых NIC examples нет;
 - disk sector format/endurance notation;
-- полнота перечислений SFP connector/reach/form factor;
-- дополнительные реальные category variants.
+- multi-rate SFP speed, conditional reach и multi-channel wavelength;
+- ambiguous disk vendor/model/MPN strings.
 
-Следующий Stage 5 шаг — предоставить реальные source files, сопоставить source
-values с canonical keys/units и оформить source-to-canonical mapping новой
-документированной migration при необходимости. Excel при этом не становится
-runtime source of truth.
+Reference files не становятся runtime source of truth и не предназначены для
+импорта существующего inventory. Quantity, balance, server placement, serial,
+location и holder fields относятся к будущему inventory domain.

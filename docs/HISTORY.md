@@ -147,3 +147,22 @@
 - Source Excel/CSV в текущем workspace отсутствовал; соответствующие
   vocabularies оставлены provisional, production/source reconciliation не
   заявлена выполненной.
+
+## 2026-09-01 — Stage 5 — Source reference refinement
+
+- Проанализированы три локальных reference workbook: шесть sheets и 176
+  непустых data rows.
+- Зафиксировано продуктовое решение: source spreadsheets используются только
+  для catalog design, не являются inventory database/import source; quantities,
+  balances и operational state не переносятся.
+- Подтверждены Item/Manufacturer/identifier boundaries, typed EAV и
+  deterministic duplicate candidates без backend contract changes.
+- Recurring RJ45 patch-cord examples выделены в system Category
+  `copper_network_cable` с metadata-driven attributes.
+- Для кабелей питания добавлены optional conductor count/cross-section fields;
+  SFP vocabularies дополнены `XFP` и `SC Simplex`.
+- Изменения versioned metadata оформлены новой migration `a6b7c8d9e0f1`;
+  историческая `f4a5b6c7d8e9` не изменялась.
+- Ambiguous multi-rate/reach/wavelength и disk model/MPN/source formatting
+  задокументированы как manual decisions без fuzzy/import logic.
+- Stage 6, quantity tracking, StockBalance и InventoryUnit не начинались.

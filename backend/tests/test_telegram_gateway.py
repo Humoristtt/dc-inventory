@@ -6,7 +6,7 @@ from app.modules.notifications.gateway import TelegramGatewayClient
 
 
 class _Response:
-    def __enter__(self) -> "_Response":
+    def __enter__(self) -> _Response:
         return self
 
     def __exit__(self, *args: object) -> None:

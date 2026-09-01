@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import urllib.request
 
+import pytest
+
 from app.modules.notifications.gateway import TelegramGatewayClient
 
 
@@ -16,7 +18,9 @@ class _Response:
         return b'{"ok":true}'
 
 
-def test_gateway_client_sets_service_user_agent(monkeypatch) -> None:
+def test_gateway_client_sets_service_user_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     captured: dict[str, str | None] = {}
 
     def fake_urlopen(

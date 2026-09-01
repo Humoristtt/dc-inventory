@@ -1456,7 +1456,7 @@ Viewport profiles:
 - [x] Production Swagger/OpenAPI отключён.
 - [x] app/db Docker networks разделены.
 - [x] CI backend/frontend/runtime зелёный.
-- [x] Production source guard на `ef0eefb096e2fada46394c8b969b9e7cf6dd13fc`.
+- [x] Production source guard на `08aa052d2af3e9c7e9cb9a2bce670cf6674b6c97`.
 
 До реальных данных:
 

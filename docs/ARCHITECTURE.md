@@ -196,7 +196,7 @@ Alembic использует тот же async PostgreSQL driver `asyncpg`, чт
     e8f1a2b3c4d5  NotificationOutbox / TelegramUpdate / AccessDecisionCallback
     f4a5b6c7d8e9  Catalog foundation + five system category schemas
 
-Текущий Alembic head после реализации Stage 5:
+Миграция, фиксирующая Stage 5 Catalog Foundation:
 
     f4a5b6c7d8e9
 
@@ -331,7 +331,11 @@ JSON specification и category-specific nullable columns не использую
 - PostgreSQL требует ровно одно populated typed value;
 - redundant category ID и composite foreign keys запрещают cross-category
   attribute assignment на DB-level;
-- DECIMAL хранится как `NUMERIC`, API принимает exact decimal strings;
+- DECIMAL хранится как `NUMERIC(30,10)`, API принимает exact decimal strings и
+  до persistence ограничивает значение 20 integral и 10 fractional digits;
+- ORM delete Manufacturer не обнуляет optional `Item.manufacturer_id`:
+  `passive_deletes="all"` оставляет PostgreSQL `ON DELETE RESTRICT`
+  авторитетным;
 - duplicate detection возвращает candidates и не является destructive unique
   heuristic;
 - read API использует существующую `Approved` boundary, mutation API —

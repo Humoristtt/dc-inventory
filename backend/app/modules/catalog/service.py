@@ -28,6 +28,7 @@ from app.modules.catalog.schemas import (
 
 MAX_DECIMAL_PRECISION = 30
 MAX_DECIMAL_SCALE = 10
+MAX_DECIMAL_INTEGRAL_DIGITS = MAX_DECIMAL_PRECISION - MAX_DECIMAL_SCALE
 MIN_BIGINT = -(2**63)
 MAX_BIGINT = 2**63 - 1
 
@@ -193,16 +194,17 @@ def _validate_decimal_storage(attribute: CategoryAttribute, value: Decimal) -> N
     _, digits, exponent = value.as_tuple()
     exponent = cast(int, exponent)
     fractional_digits = max(-exponent, 0)
-    integer_digits = max(len(digits) + exponent, 0)
+    integer_digits = 0 if value.is_zero() else max(len(digits) + exponent, 0)
     if fractional_digits > MAX_DECIMAL_SCALE:
         raise CatalogValidationError(
             "decimal_scale_exceeded",
             f"attribute {attribute.key} supports at most {MAX_DECIMAL_SCALE} decimal places",
         )
-    if integer_digits + fractional_digits > MAX_DECIMAL_PRECISION:
+    if integer_digits > MAX_DECIMAL_INTEGRAL_DIGITS:
         raise CatalogValidationError(
             "decimal_precision_exceeded",
-            f"attribute {attribute.key} exceeds supported decimal precision",
+            f"attribute {attribute.key} supports at most "
+            f"{MAX_DECIMAL_INTEGRAL_DIGITS} integral digits",
         )
 
 

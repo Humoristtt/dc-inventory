@@ -136,6 +136,13 @@
 - Alembic revision `f4a5b6c7d8e9` version-controls пять system categories и их
   initial attributes.
 - Добавлены focused domain, PostgreSQL 18, API и authorization tests.
+- После независимого аудита Stage 5 regression tests отвязаны от глобального
+  Alembic head и точного общего числа Category: они проверяют устойчивые
+  свойства пяти initial system schemas и допускают будущие migrations/categories.
+- DECIMAL validation приведена в точное соответствие `NUMERIC(30,10)`:
+  максимум 20 integral и 10 fractional digits до persistence.
+- ORM delete Manufacturer передан PostgreSQL `ON DELETE RESTRICT` через
+  `passive_deletes="all"`; добавлен real-PostgreSQL regression test.
 - Канонический contract зафиксирован в `docs/CATALOG_SCHEMA.md`.
 - Source Excel/CSV в текущем workspace отсутствовал; соответствующие
   vocabularies оставлены provisional, production/source reconciliation не

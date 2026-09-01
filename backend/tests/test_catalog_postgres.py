@@ -52,32 +52,24 @@ async def test_stage5_migration_seeded_five_system_category_schemas() -> None:
     engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
     try:
         async with AsyncSession(engine, expire_on_commit=False) as db:
-            assert (
-                await db.scalar(text("SELECT version_num FROM alembic_version"))
-                == "f4a5b6c7d8e9"
-            )
-
+            expected_modes = {
+                "sfp": AccountingMode.QUANTITY,
+                "optics": AccountingMode.QUANTITY,
+                "power_cable": AccountingMode.QUANTITY,
+                "nic": AccountingMode.SERIAL,
+                "disk": AccountingMode.SERIAL,
+            }
             categories = list(
                 (
                     await db.scalars(
-                        select(Category).order_by(Category.sort_order)
+                        select(Category).where(Category.key.in_(expected_modes))
                     )
                 ).all()
             )
-            assert [category.key for category in categories] == [
-                "sfp",
-                "optics",
-                "power_cable",
-                "nic",
-                "disk",
-            ]
-            assert [category.default_accounting_mode for category in categories] == [
-                AccountingMode.QUANTITY,
-                AccountingMode.QUANTITY,
-                AccountingMode.QUANTITY,
-                AccountingMode.SERIAL,
-                AccountingMode.SERIAL,
-            ]
+            assert {
+                category.key: category.default_accounting_mode
+                for category in categories
+            } == expected_modes
             assert all(category.is_system for category in categories)
 
             sfp = await get_category_record(db, "sfp")
@@ -363,6 +355,51 @@ async def test_catalog_database_constraints_and_restrictive_foreign_keys() -> No
                                 CategoryAttribute.id == attribute_one_id
                             )
                         )
+            finally:
+                await transaction.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_orm_delete_manufacturer_is_restricted_when_item_references_it() -> None:
+    engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
+    manufacturer_id = uuid.uuid4()
+
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            transaction = await db.begin()
+            try:
+                category_id = await db.scalar(
+                    select(Category.id).where(Category.key == "sfp")
+                )
+                assert category_id is not None
+
+                manufacturer = Manufacturer(
+                    id=manufacturer_id,
+                    name="ORM Restrict Manufacturer",
+                    normalized_name=f"orm restrict manufacturer {manufacturer_id}",
+                )
+                db.add_all(
+                    [
+                        manufacturer,
+                        Item(
+                            id=uuid.uuid4(),
+                            category_id=category_id,
+                            manufacturer_id=manufacturer_id,
+                            name="ORM restrict item",
+                            normalized_name=f"orm restrict item {manufacturer_id}",
+                            accounting_mode=AccountingMode.QUANTITY,
+                            status=ItemStatus.ACTIVE,
+                        ),
+                    ]
+                )
+                await db.flush()
+
+                with pytest.raises(IntegrityError):
+                    async with db.begin_nested():
+                        await db.delete(manufacturer)
+                        await db.flush()
             finally:
                 await transaction.rollback()
     finally:

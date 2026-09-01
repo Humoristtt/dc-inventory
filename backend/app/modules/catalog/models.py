@@ -129,7 +129,10 @@ class Manufacturer(Base):
         onupdate=func.now(),
     )
 
-    items: Mapped[list[Item]] = relationship(back_populates="manufacturer")
+    items: Mapped[list[Item]] = relationship(
+        back_populates="manufacturer",
+        passive_deletes="all",
+    )
 
 
 class CategoryAttribute(Base):

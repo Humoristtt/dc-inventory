@@ -7,7 +7,8 @@
 >
 > **Последнее обновление:** 2026-09-01
 > **Production runtime code baseline:** `08aa052d2af3e9c7e9cb9a2bce670cf6674b6c97` — Stage 4 close; последующие docs-only commits не требуют rebuild runtime.
-> **Stage 4 Telegram/auth/access foundation:** завершён в production 2026-09-01. Следующий предметный этап — Stage 5 Catalog Foundation.
+> **Production:** Stage 4 Telegram/auth/access foundation завершён 2026-09-01; Stage 5 в production ещё не развёрнут.
+> **Current source:** Stage 5 Catalog Foundation реализован с provisional versioned schemas; source inventory reconciliation остаётся обязательным closeout, Stage 6 не начат.
 
 ---
 
@@ -474,7 +475,11 @@ Detail card:
 
 # 8. Категория «Оптика»
 
-> Начальная модель ориентирована на оптические патч-корды / пигтейлы / аналогичные позиции. Финальный словарь сверить по реальному Excel и складу до предметной миграции.
+> Version-controlled provisional schema уже создана миграцией Stage 5 и
+> ориентирована на оптические патч-корды / пигтейлы / аналогичные позиции.
+> Финальный словарь нужно сверить с реальными Excel/CSV и складом до полного
+> закрытия Stage 5 и канонического initial inventory import. Требуемые изменения
+> оформляются новой Alembic migration; историческая `f4a5b6c7d8e9` не меняется.
 
 Планируемые поля:
 
@@ -784,9 +789,10 @@ S3MediaStorage / R2MediaStorage
 - `IMPORT`
 - `MANUAL`
 
-- [ ] Datasheet URL.
-- [ ] Source type.
-- [ ] Optional source note.
+- [x] Базовые поля `Item.datasheet_url` и free-text
+  `Item.technical_data_source` реализованы в Stage 5.
+- [ ] Structured source type (`MANUFACTURER` / `LABEL` / `IMPORT` / `MANUAL`).
+- [ ] Optional отдельная source note.
 - [ ] Дата последней проверки / обновления, если нужна.
 - [ ] UI показывает, что данные взяты из manufacturer datasheet, а не «угаданы системой».
 - [ ] Изменение характеристик попадает в administrative audit.
@@ -1045,21 +1051,22 @@ Outbox Worker
 Telegram Gateway
 ```
 
-- [ ] Transactional NotificationOutbox.
-- [ ] Worker.
-- [ ] Retry.
-- [ ] Backoff.
-- [ ] Max attempts.
-- [ ] Failed state.
-- [ ] Diagnostics.
-- [ ] Duplicate delivery prevention / idempotency where possible.
-- [ ] Telegram failure не откатывает уже подтверждённую складскую операцию.
+- [x] Transactional NotificationOutbox.
+- [x] Worker.
+- [x] Retry.
+- [x] Exponential bounded backoff.
+- [x] Max attempts.
+- [x] `DEAD` failed state.
+- [ ] Diagnostics UI / operational tooling для failed delivery.
+- [x] Dedupe-key based enqueue idempotency.
+- [ ] Telegram failure не откатывает уже подтверждённую складскую операцию:
+  требуется inventory-specific coupling после появления Movement.
 
 Первые уведомления:
 
-- [ ] ADMIN: новый access request.
-- [ ] USER: access approved.
-- [ ] USER: access rejected.
+- [x] ADMIN: новый access request.
+- [x] USER: access approved.
+- [x] USER: access rejected.
 - [ ] ADMIN: оборудование выдано.
 - [ ] В notification выдачи: кому.
 - [ ] В notification выдачи: кто оформил.
@@ -1577,6 +1584,9 @@ Viewport profiles:
 
 **GATE:** можно корректно создать и прочитать позиции всех пяти категорий без category-specific schema hacks.
 
+Технический gate выполнен. Stage 5 остаётся текущим до реальной сверки source
+inventory; в production не развёрнут, Stage 6 не начат.
+
 ## Stage 6 — Inventory Ledger
 
 - [ ] Location.
@@ -1605,9 +1615,9 @@ Viewport profiles:
 
 ## Stage 7 — Catalog Read API / Search / Filters
 
-- [ ] Category listing.
-- [ ] Item listing.
-- [ ] Pagination.
+- [x] Базовый Category listing реализован в Stage 5.
+- [x] Базовый Item listing реализован в Stage 5.
+- [x] Детерминированная limit/offset pagination foundation реализована в Stage 5.
 - [ ] Sorting.
 - [ ] Global search.
 - [ ] Category search.
@@ -1728,14 +1738,14 @@ Import:
 
 ## Stage 13 — Notifications / Outbox Expansion
 
-- [ ] Transactional outbox.
-- [ ] Worker.
-- [ ] Retry policy.
-- [ ] Failed diagnostics.
+- [x] Transactional outbox foundation реализован в Stage 4.
+- [x] Worker foundation реализован в Stage 4.
+- [x] Bounded retry/backoff/max-attempts policy реализована в Stage 4.
+- [ ] Failed diagnostics UI / operations.
 - [ ] Issue notification.
-- [ ] Access notifications productionized.
+- [x] Access notifications productionized в Stage 4.
 - [ ] No alert spam.
-- [ ] Tests.
+- [ ] Inventory-notification tests; Stage 4 outbox/access tests уже реализованы.
 
 **GATE:** Telegram outage не влияет на достоверность складской операции.
 

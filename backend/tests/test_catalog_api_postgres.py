@@ -106,13 +106,13 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
             )
             assert approved_user.status_code == 200
             assert approved_admin.status_code == 200
-            assert [item["key"] for item in approved_user.json()] == [
+            assert {
                 "sfp",
                 "optics",
                 "power_cable",
                 "nic",
                 "disk",
-            ]
+            } <= {item["key"] for item in approved_user.json()}
 
             user_mutation = await client.post(
                 "/api/admin/catalog/manufacturers",

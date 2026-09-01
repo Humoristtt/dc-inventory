@@ -263,7 +263,8 @@ Create Item и полная замена attributes выполняют metadata-
 9. DECIMAL не принимает binary float.
 10. DECIMAL принимается как exact decimal string, integer либо `Decimal` во
     внутренних Python-вызовах.
-11. DECIMAL ограничен precision 30 и scale 10 без скрытого округления.
+11. DECIMAL ограничен storage contract `NUMERIC(30,10)`: не более 20 цифр в
+    целой и 10 цифр в дробной части, без скрытого округления.
 12. `min`, `max` и `max_length` применяются при наличии.
 13. Optional blank TEXT/ENUM нормализуется как отсутствующее значение.
 
@@ -534,6 +535,11 @@ Delete policy:
 
 Последний cascade предназначен для migration/test/internal teardown. Публичного
 hard-delete Item API нет.
+
+На ORM relationship `Manufacturer.items` установлен `passive_deletes="all"`:
+`session.delete(manufacturer)` не обнуляет nullable `Item.manufacturer_id`, а
+передаёт решение PostgreSQL, где действующий reference блокирует DELETE через
+`ON DELETE RESTRICT`.
 
 Indexes ограничены текущими Stage 5 query patterns: category/status listing,
 manufacturer FK, duplicate MPN, duplicate normalized name/model и FK/unique

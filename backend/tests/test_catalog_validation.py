@@ -198,3 +198,58 @@ def test_numeric_validation_metadata_is_applied() -> None:
     with pytest.raises(CatalogValidationError) as too_large:
         validate_attribute_values(category_id, [attribute], {"positive": "11"})
     assert too_large.value.code == "attribute_above_maximum"
+
+
+@pytest.mark.parametrize(
+    "raw_value",
+    [
+        "99999999999999999999.1234567890",
+        Decimal("1E+19"),
+        Decimal("0E+100"),
+    ],
+)
+def test_decimal_values_within_numeric_30_10_storage_bounds_are_accepted(
+    raw_value: str | Decimal,
+) -> None:
+    category_id = uuid.uuid4()
+    attribute = _attribute(
+        "decimal",
+        AttributeDataType.DECIMAL,
+        category_id=category_id,
+    )
+
+    result = validate_attribute_values(
+        category_id,
+        [attribute],
+        {"decimal": raw_value},
+    )
+
+    assert result[0].decimal_value == Decimal(raw_value)
+
+
+@pytest.mark.parametrize(
+    ("raw_value", "error_code"),
+    [
+        ("100000000000000000000", "decimal_precision_exceeded"),
+        ("0.12345678901", "decimal_scale_exceeded"),
+    ],
+)
+def test_decimal_values_outside_numeric_30_10_storage_bounds_are_rejected(
+    raw_value: str,
+    error_code: str,
+) -> None:
+    category_id = uuid.uuid4()
+    attribute = _attribute(
+        "decimal",
+        AttributeDataType.DECIMAL,
+        category_id=category_id,
+    )
+
+    with pytest.raises(CatalogValidationError) as exc_info:
+        validate_attribute_values(
+            category_id,
+            [attribute],
+            {"decimal": raw_value},
+        )
+
+    assert exc_info.value.code == error_code

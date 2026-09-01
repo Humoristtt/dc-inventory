@@ -81,12 +81,36 @@
 - Stage 4.3b закрывает user-scoped access cache, PENDING-only frontend authority,
   реальный PostgreSQL race первого Telegram login и CI runtime network boundaries.
 - Stage 4.4 начинается после полного gate Stage 4.3b.
-\n
+## 2026-09-01 — Stage 4.4 — Telegram delivery и production access
 
-## 2026-09-01 — Stage 4.4 — Telegram delivery
-
-- Stage 4.3b source audit завершён.
-- Начата реализация transactional outbox, Telegram webhook/update dedupe,
-  opaque ADMIN approve/reject callbacks и отдельного delivery worker.
-- Добавлен Cloudflare Telegram Gateway Worker с отдельным gateway secret.
-- Stage 4.4 остаётся `[~]` до focused/full gate и production verification.
+- Реализован transactional `NotificationOutbox`.
+- Добавлен отдельный `telegram-worker` с PostgreSQL claim/lease,
+  `FOR UPDATE SKIP LOCKED`, bounded retry и `PENDING/SENT/DEAD` lifecycle.
+- Реализован Telegram webhook с secret-token validation и persistent
+  `TelegramUpdate.update_id` dedupe.
+- Реализованы opaque ADMIN approve/reject callbacks.
+- Решение доступа выполняется только `ADMIN + APPROVED`, транзакционно и
+  идемпотентно; terminal user state не может быть переписан stale callback.
+- После решения ADMIN inline-кнопки очищаются, пользователь получает
+  Telegram-уведомление.
+- Развёрнут отдельный Cloudflare Worker Telegram Gateway с gateway secret и
+  фиксированным Bot API allowlist.
+- Telegram webhook зарегистрирован на
+  `https://app.spik-inventory.ru/api/telegram/webhook`.
+- Реальный `sendMessage` через Gateway проверен.
+- Production `/start` выявил Cloudflare `403 / 1010` для стандартного
+  `Python-urllib` User-Agent до выполнения Worker.
+- PR #6 добавил явный service User-Agent
+  `dc-inventory-telegram-worker/1.0`; PR #7 исправил typing regression test,
+  после чего полный CI прошёл успешно.
+- Production runtime code обновлён до
+  `08aa052d2af3e9c7e9cb9a2bce670cf6674b6c97`.
+- Реальный `/start` проходит полный Telegram → webhook → FastAPI → outbox →
+  worker → Cloudflare Gateway → Telegram маршрут.
+- Production access smoke со вторым Telegram account завершён:
+  request access → ADMIN notification → approve → user notification →
+  успешный вход в Mini App.
+- Production VM после закрытия runtime-этапа имеет чистый worktree, только
+  локальную ветку `main` и не содержит untracked project files.
+- Stage 4 production MVP завершён.
+- Следующий предметный этап — Stage 5 Catalog Foundation.

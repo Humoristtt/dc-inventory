@@ -72,9 +72,13 @@ Development-порт публикуется только на loopback:
     cd backend
     DATABASE_URL="$HOST_DATABASE_URL" alembic upgrade head
 
-Текущий baseline Alembic:
+Baseline Alembic:
 
     48c2f07f01a0
+
+Текущий migration head после Stage 4:
+
+    e8f1a2b3c4d5
 
 ## Локальный backend
 
@@ -180,12 +184,22 @@ gate запускает их явно против уже мигрированн
 
 CI всегда включает этот режим.
 
-## Checkpoint и повторный source audit
+## Checkpoint и source audit
 
-Обязательный цикл:
+Рабочий цикл для логического change set:
 
-    CODE -> FULL GATE -> COMMIT -> SOURCE ARCHIVE -> INDEPENDENT AUDIT
+    CODE
+      -> focused local checks
+      -> commit / push
+      -> GitHub PR + CI
+      -> source audit
+      -> merge
+      -> production deploy / smoke при необходимости
 
-Следующий Stage не начинается до `AUDIT=PASS`. Если audit находит изъян,
-исправление проходит новый gate и новый архив. Документация и roadmap
-обновляются вместе с кодом.
+Репозиторий доступен для прямого source review через GitHub, поэтому архив
+исходников не является обязательным checkpoint. Архив создаётся только когда
+он действительно нужен для конкретного независимого анализа.
+
+Полный gate не запускается после каждого мелкого редактирования: он выполняется
+на границе логического change set. Документация и roadmap обновляются вместе
+с фактическим состоянием реализации.

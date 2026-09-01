@@ -75,17 +75,41 @@ Production `.env` создаётся непосредственно на VM и �
     POSTGRES_PASSWORD
     DATABASE_URL
 
-Для рабочего Telegram authentication дополнительно обязательны:
+Backend Telegram/auth boundary использует:
 
     TELEGRAM_BOT_TOKEN
+    TELEGRAM_INIT_DATA_MAX_AGE_SECONDS
     ADMIN_TELEGRAM_USER_ID
+    SUPPORT_TELEGRAM_USERNAME
+    AUTH_SESSION_TTL_SECONDS
+    AUTH_COOKIE_NAME
+    TELEGRAM_WEBHOOK_SECRET
+    TELEGRAM_WEB_APP_URL
 
-Настраиваются также `TELEGRAM_INIT_DATA_MAX_AGE_SECONDS`,
-`SUPPORT_TELEGRAM_USERNAME`, `AUTH_SESSION_TTL_SECONDS` и
-`AUTH_COOKIE_NAME`.
+`TELEGRAM_BOT_TOKEN` нужен backend для server-side HMAC-проверки Telegram
+`initData`. Frontend его никогда не получает.
 
-Telegram auth settings передаются только `backend`; migration container
-получает только DB-конфигурацию.
+Отдельный `telegram-worker` использует:
+
+    TELEGRAM_GATEWAY_URL
+    TELEGRAM_GATEWAY_SECRET
+    TELEGRAM_GATEWAY_TIMEOUT_SECONDS
+    NOTIFICATION_WORKER_POLL_SECONDS
+    NOTIFICATION_WORKER_CLAIM_TTL_SECONDS
+    NOTIFICATION_WORKER_BATCH_SIZE
+    NOTIFICATION_WORKER_MAX_ATTEMPTS
+
+`telegram-worker` не получает bot token, webhook secret или ADMIN ID.
+
+Cloudflare Worker имеет собственные secrets:
+
+    BOT_TOKEN
+    GATEWAY_SECRET
+
+Значение `GATEWAY_SECRET` является отдельным shared secret между production
+worker и Cloudflare Worker. Секреты Cloudflare не хранятся в Git.
+
+Migration container получает только DB-конфигурацию.
 
 `DATABASE_URL` внутри Docker network должен использовать hostname `postgres`.
 
@@ -95,13 +119,42 @@ Telegram auth settings передаются только `backend`; migration co
 
 ## Telegram runtime boundary
 
-Backend уже проверяет Telegram `initData` и выдаёт server-side session.
-Production `.env` поэтому должен содержать реальный bot token и numeric
-bootstrap ADMIN ID.
+Входящий маршрут:
+
+    Telegram
+      -> https://app.spik-inventory.ru/api/telegram/webhook
+      -> Cloudflare
+      -> Tunnel
+      -> Nginx
+      -> FastAPI
+
+Webhook проверяет `X-Telegram-Bot-Api-Secret-Token`, а обработанные
+`update_id` дедуплицируются в PostgreSQL.
+
+Исходящий маршрут:
+
+    application DB transaction
+      -> notification_outbox
+      -> telegram-worker
+      -> Cloudflare Worker Telegram Gateway
+      -> Telegram Bot API
 
 Прямой outbound к Telegram Bot API с production VM не используется.
-Notification worker и Cloudflare Telegram Gateway вводятся следующим
-Telegram checkpoint.
+
+Cloudflare Gateway принимает Stage 4 allowlist:
+
+    sendMessage
+    editMessageText
+    editMessageReplyMarkup
+    answerCallbackQuery
+
+Запросы `telegram-worker` защищены отдельным gateway secret.
+HTTP-клиент использует явный service `User-Agent`, чтобы Cloudflare edge
+не блокировал стандартный Python urllib client кодом `1010`.
+
+На чистой БД bootstrap ADMIN должен хотя бы один раз открыть Mini App и пройти
+Telegram authentication до первого approve/reject callback: auth flow создаёт
+`TelegramIdentity`, по которой callback подтверждает ADMIN identity.
 
 ## Миграции
 
@@ -124,11 +177,18 @@ Backend запускается только после успешного зав
 Также проверяются:
 
 - `postgres`, `backend`, `web` — healthy;
+- `telegram-worker` — `Up`;
 - `migrate` — `Exited (0)`;
 - на host отсутствуют listen-порты `8000` и `5432`;
 - backend работает от UID 10001;
 - web работает от пользователя `nginx`;
-- SHA production worktree совпадает с утверждённым deploy SHA.
+- для runtime-changing deploy production worktree соответствует утверждённому deploy commit;
+- docs-only sync может продвигать worktree вперёд без rebuild/restart контейнеров, если runtime source не менялся.
+
+Для Telegram delivery после runtime-changing deploy выполняется минимальный live
+smoke: `/start` должен пройти webhook/outbox/worker/Gateway и вернуться
+сообщением в Telegram. Для access acceptance используется отдельный пользователь:
+request → ADMIN approve → user notification → вход в Mini App.
 
 ## Backup
 

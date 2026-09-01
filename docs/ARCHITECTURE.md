@@ -83,10 +83,12 @@
 По мере реализации ожидаются отдельные предметные области, например:
 
     modules/
+    ├── auth/
     ├── identity/
-    ├── catalog/
-    ├── inventory/
-    └── notifications/
+    ├── notifications/
+    ├── telegram_bot/
+    ├── catalog/        # следующий предметный этап
+    └── inventory/      # последующий складской core
 
 Внутри предметного модуля API, schemas, service/repository и модели разделяются тогда, когда возникает соответствующая ответственность.
 
@@ -110,7 +112,7 @@ Backend использует `pydantic-settings`.
     DATABASE_STATEMENT_TIMEOUT_SECONDS
     DATABASE_LOCK_TIMEOUT_SECONDS
 
-Telegram authentication использует отдельные backend-only настройки:
+Telegram authentication и webhook используют backend-only настройки:
 
     TELEGRAM_BOT_TOKEN
     TELEGRAM_INIT_DATA_MAX_AGE_SECONDS
@@ -118,9 +120,23 @@ Telegram authentication использует отдельные backend-only н�
     SUPPORT_TELEGRAM_USERNAME
     AUTH_SESSION_TTL_SECONDS
     AUTH_COOKIE_NAME
+    TELEGRAM_WEBHOOK_SECRET
+    TELEGRAM_WEB_APP_URL
+
+Отдельный notification worker использует:
+
+    TELEGRAM_GATEWAY_URL
+    TELEGRAM_GATEWAY_SECRET
+    TELEGRAM_GATEWAY_TIMEOUT_SECONDS
+    NOTIFICATION_WORKER_POLL_SECONDS
+    NOTIFICATION_WORKER_CLAIM_TTL_SECONDS
+    NOTIFICATION_WORKER_BATCH_SIZE
+    NOTIFICATION_WORKER_MAX_ATTEMPTS
 
 `TELEGRAM_BOT_TOKEN` нужен backend для серверной проверки подписи Telegram
 `initData`. Он не передаётся frontend и не нужен migration container.
+`telegram-worker` bot token также не получает: Bot API token хранится
+Cloudflare Worker Secret.
 
 Секреты не имеют production-default значений и не хранятся в Git.
 
@@ -177,6 +193,11 @@ Alembic использует тот же async PostgreSQL driver `asyncpg`, чт
 
     7b0e3f6a9c21  User / TelegramIdentity / AccessRequest
     c4d8f2a1b903  server-side AuthSession
+    e8f1a2b3c4d5  NotificationOutbox / TelegramUpdate / AccessDecisionCallback
+
+Текущий Alembic head после Stage 4:
+
+    e8f1a2b3c4d5
 
 Следующие предметные схемы добавляются отдельными миграциями.
 
@@ -262,7 +283,13 @@ Backend различает:
 
 До первой бизнес-миграции точная схема ещё не зафиксирована.
 
-Уже реализованные identity/auth сущности описаны выше.
+Уже реализованные identity/auth и Telegram delivery сущности описаны выше.
+
+Реализованные инфраструктурные Stage 4 сущности:
+
+- NotificationOutbox;
+- TelegramUpdate;
+- AccessDecisionCallback.
 
 Планируемые предметные сущности:
 
@@ -274,10 +301,10 @@ Backend различает:
 - StockBalance;
 - Movement;
 - MovementLine;
-- AuditEvent;
-- NotificationOutbox.
+- AuditEvent.
 
-Список является архитектурным направлением, а не уже существующей схемой базы данных.
+Список предметных сущностей является архитектурным направлением, а не уже
+существующей складской схемой базы данных.
 
 ## Конкурентность
 
@@ -368,7 +395,7 @@ Frontend cache не является authorization boundary: backend `Approved` 
 - переход `REJECTED -> PENDING` после успешного повторного запроса синхронизируется
   в auth cache явно;
 - polling останавливается после выхода из `PENDING`.
-\n
+
 
 ## Telegram delivery и access decisions
 

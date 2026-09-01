@@ -20,7 +20,7 @@
 
 ## Текущее состояние
 
-Реализован и развёрнут runtime foundation:
+Реализованы и развёрнуты runtime foundation и Telegram/access foundation:
 
 - Python 3.12 + FastAPI;
 - SQLAlchemy 2 async + asyncpg;
@@ -30,6 +30,15 @@
 - Nginx как единая точка входа;
 - production-shaped Docker Compose;
 - `/api/health/live` и `/api/health/ready`;
+- Telegram `initData` HMAC validation;
+- server-side `HttpOnly` sessions;
+- `ADMIN` / `USER` и access-state foundation;
+- frontend access gate и запрос доступа;
+- Telegram webhook с secret-token validation и persistent `update_id` dedupe;
+- transactional notification outbox;
+- отдельный `telegram-worker`;
+- Cloudflare Worker Telegram Gateway;
+- ADMIN approve/reject через inline-кнопки;
 - Ruff, mypy strict, Pytest, Oxlint, TypeScript, Vitest;
 - GitHub Actions CI;
 - Cloudflare Tunnel для публикации Mini App.
@@ -43,6 +52,12 @@ Production runtime публикует на host только `127.0.0.1:8080`; b
     DB BACK -> live 200 / ready 200
 
 Readiness восстанавливается после возврата PostgreSQL без рестарта backend.
+
+Stage 4 Telegram/auth/access foundation закрыт production smoke 2026-09-01:
+неизвестный пользователь запросил доступ, ADMIN получил Telegram-уведомление,
+одобрил запрос inline-кнопкой, пользователь получил уведомление и вошёл в Mini App.
+
+Следующий предметный этап — каталог оборудования.
 
 ## Номенклатура
 
@@ -65,14 +80,14 @@ Readiness восстанавливается после возврата Postgre
 - ORM: SQLAlchemy 2
 - Миграции: Alembic
 - База данных: PostgreSQL
-- Telegram Bot: aiogram
+- Telegram integration: FastAPI webhook + transactional outbox + delivery worker
 - Контейнеризация: Docker Compose
 - Reverse proxy: Nginx
 - Публикация Mini App: Cloudflare Tunnel
 - CI: GitHub Actions
 - Backend tests: Pytest
 - Frontend tests: Vitest
-- E2E: Playwright
+- E2E: Playwright — запланирован roadmap, не текущий runtime dependency
 
 ## Инфраструктура
 
@@ -85,7 +100,7 @@ Production VM:
 - приложение публикуется через Cloudflare
 - PostgreSQL не публикуется наружу
 
-Прямой доступ production VM к `api.telegram.org` в текущей сети блокируется на TCP/443. Для Telegram Bot API будет предусмотрен отдельный безопасный gateway через Cloudflare.
+Прямой доступ production VM к `api.telegram.org` в текущей сети блокируется на TCP/443. Исходящие Bot API вызовы production выполняются через отдельный Cloudflare Worker Telegram Gateway; bot token не передаётся `telegram-worker`.
 
 ## Документация
 

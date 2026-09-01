@@ -1814,7 +1814,7 @@ Import:
 - [x] `docs/HISTORY.md`
 - [~] `docs/ROADMAP.md` — этот файл.
 - [ ] `docs/PRODUCT_REQUIREMENTS.md` — пользовательские сценарии, роли, бизнес-правила.
-- [ ] `docs/CATALOG_SCHEMA.md` — точные поля/enum/filter/card/export definitions 5 категорий.
+- [x] `docs/CATALOG_SCHEMA.md` — точные поля/enum/filter/card/export definitions 5 категорий.
 - [ ] `docs/OPERATIONS.md` — backup/restore/deploy/rollback/runbook по мере появления.
 - [ ] API contract docs остаются генерируемыми, production Swagger наружу не включать.
 

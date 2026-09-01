@@ -7,6 +7,7 @@ from app.modules.catalog.enums import AttributeDataType, FilterType
 from app.modules.catalog.models import CategoryAttribute
 from app.modules.catalog.service import (
     CatalogValidationError,
+    normalize_comparison,
     validate_attribute_values,
 )
 
@@ -253,3 +254,21 @@ def test_decimal_values_outside_numeric_30_10_storage_bounds_are_rejected(
         )
 
     assert exc_info.value.code == error_code
+
+
+def test_normalize_comparison_checks_casefolded_storage_length() -> None:
+    within_limit = "ß" * 64
+    assert normalize_comparison(
+        within_limit,
+        field="internal_code",
+        max_length=128,
+    ) == "ss" * 64
+
+    with pytest.raises(CatalogValidationError) as exc_info:
+        normalize_comparison(
+            "ß" * 65,
+            field="internal_code",
+            max_length=128,
+        )
+
+    assert exc_info.value.code == "internal_code_too_long"

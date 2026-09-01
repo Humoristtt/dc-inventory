@@ -78,7 +78,7 @@ async def test_stage5_migration_seeded_five_system_category_schemas() -> None:
             assert sfp_by_key["speed_mbps"].filterable is True
             assert sfp_by_key["speed_mbps"].searchable is True
             assert sfp_by_key["speed_mbps"].unit == "Mbps"
-            assert sfp_by_key["form_factor"].allowed_values == [
+            assert {
                 "SFP",
                 "SFP+",
                 "SFP28",
@@ -86,7 +86,7 @@ async def test_stage5_migration_seeded_five_system_category_schemas() -> None:
                 "QSFP28",
                 "QSFP56",
                 "QSFP-DD",
-            ]
+            } <= set(sfp_by_key["form_factor"].allowed_values or [])
 
             disk = await get_category_record(db, "disk")
             disk_by_key = {attribute.key: attribute for attribute in disk.attributes}

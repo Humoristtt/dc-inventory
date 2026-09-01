@@ -139,8 +139,20 @@ def normalize_optional_text(value: str | None) -> str | None:
     return normalized or None
 
 
-def normalize_comparison(value: str) -> str:
-    return " ".join(value.split()).casefold()
+def normalize_comparison(
+    value: str,
+    *,
+    field: str | None = None,
+    max_length: int | None = None,
+) -> str:
+    normalized = " ".join(value.split()).casefold()
+    if max_length is not None and len(normalized) > max_length:
+        error_field = field or "normalized_value"
+        raise CatalogValidationError(
+            f"{error_field}_too_long",
+            f"{error_field} normalized value exceeds {max_length} characters",
+        )
+    return normalized
 
 
 def _normalize_category_key(value: str) -> str:
@@ -442,7 +454,11 @@ async def create_manufacturer(
     payload: ManufacturerCreate,
 ) -> Manufacturer:
     name = normalize_inline_text(payload.name, field="manufacturer_name", max_length=255)
-    normalized_name = normalize_comparison(name)
+    normalized_name = normalize_comparison(
+        name,
+        field="manufacturer_name",
+        max_length=255,
+    )
     existing = await db.scalar(
         select(Manufacturer.id).where(
             Manufacturer.normalized_name == normalized_name
@@ -536,7 +552,13 @@ async def create_item(db: AsyncSession, payload: ItemCreate) -> uuid.UUID:
         max_length=128,
     )
     normalized_internal_code = (
-        normalize_comparison(internal_code) if internal_code is not None else None
+        normalize_comparison(
+            internal_code,
+            field="internal_code",
+            max_length=128,
+        )
+        if internal_code is not None
+        else None
     )
     await _ensure_internal_code_available(db, normalized_internal_code)
 
@@ -546,12 +568,28 @@ async def create_item(db: AsyncSession, payload: ItemCreate) -> uuid.UUID:
         category_id=category.id,
         manufacturer_id=payload.manufacturer_id,
         name=name,
-        normalized_name=normalize_comparison(name),
+        normalized_name=normalize_comparison(
+            name,
+            field="name",
+            max_length=255,
+        ),
         model=model,
-        normalized_model=normalize_comparison(model) if model is not None else None,
+        normalized_model=(
+            normalize_comparison(
+                model,
+                field="model",
+                max_length=255,
+            )
+            if model is not None
+            else None
+        ),
         manufacturer_part_number=manufacturer_part_number,
         normalized_manufacturer_part_number=(
-            normalize_comparison(manufacturer_part_number)
+            normalize_comparison(
+                manufacturer_part_number,
+                field="manufacturer_part_number",
+                max_length=255,
+            )
             if manufacturer_part_number is not None
             else None
         ),
@@ -607,7 +645,11 @@ async def update_item(
         if payload.name is None:
             raise CatalogValidationError("name_required", "name must not be null")
         item.name = normalize_inline_text(payload.name, field="name", max_length=255)
-        item.normalized_name = normalize_comparison(item.name)
+        item.normalized_name = normalize_comparison(
+            item.name,
+            field="name",
+            max_length=255,
+        )
     if "model" in fields_set:
         item.model = normalize_optional_inline_text(
             payload.model,
@@ -615,7 +657,13 @@ async def update_item(
             max_length=255,
         )
         item.normalized_model = (
-            normalize_comparison(item.model) if item.model is not None else None
+            normalize_comparison(
+                item.model,
+                field="model",
+                max_length=255,
+            )
+            if item.model is not None
+            else None
         )
     if "manufacturer_part_number" in fields_set:
         item.manufacturer_part_number = normalize_optional_inline_text(
@@ -624,7 +672,11 @@ async def update_item(
             max_length=255,
         )
         item.normalized_manufacturer_part_number = (
-            normalize_comparison(item.manufacturer_part_number)
+            normalize_comparison(
+                item.manufacturer_part_number,
+                field="manufacturer_part_number",
+                max_length=255,
+            )
             if item.manufacturer_part_number is not None
             else None
         )
@@ -635,7 +687,11 @@ async def update_item(
             max_length=128,
         )
         item.normalized_internal_code = (
-            normalize_comparison(item.internal_code)
+            normalize_comparison(
+                item.internal_code,
+                field="internal_code",
+                max_length=128,
+            )
             if item.internal_code is not None
             else None
         )
@@ -884,17 +940,31 @@ async def check_duplicate_candidates(
     if manufacturer_part_number is not None:
         filters.append(
             Item.normalized_manufacturer_part_number
-            == normalize_comparison(manufacturer_part_number)
+            == normalize_comparison(
+                manufacturer_part_number,
+                field="manufacturer_part_number",
+                max_length=255,
+            )
         )
         reason = "same_category_manufacturer_mpn"
     else:
         filters.extend(
             [
-                Item.normalized_name == normalize_comparison(name),
+                Item.normalized_name
+                == normalize_comparison(
+                    name,
+                    field="name",
+                    max_length=255,
+                ),
                 (
                     Item.normalized_model.is_(None)
                     if model is None
-                    else Item.normalized_model == normalize_comparison(model)
+                    else Item.normalized_model
+                    == normalize_comparison(
+                        model,
+                        field="model",
+                        max_length=255,
+                    )
                 ),
             ]
         )

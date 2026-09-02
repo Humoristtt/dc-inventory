@@ -91,6 +91,10 @@ Manufacturer не заменяет `Item.manufacturer_part_number`. Произв
 - `archived_at`;
 - timestamps.
 
+Non-null `datasheet_url` проходит URL parsing и допускает только валидную
+`http`/`https` semantics; arbitrary schemes вроде `javascript:`/`ftp:` и
+невалидные link strings отклоняются до persistence.
+
 Для deterministic comparison дополнительно хранятся normalized values имени,
 модели, manufacturer part number и internal code.
 
@@ -102,7 +106,7 @@ SQL NULL допускает несколько Item без internal code.
 `manufacturer_part_number` не является hard unique. Для него используется
 domain-level duplicate candidate check.
 
-### Item и будущий InventoryUnit
+### Item и физический InventoryUnit Stage 6
 
 `Item` описывает модель/позицию каталога:
 
@@ -110,8 +114,7 @@ domain-level duplicate candidate check.
 - его общие технические характеристики;
 - какой режим учёта применяется.
 
-Будущий `InventoryUnit` будет описывать конкретный физический экземпляр при
-SERIAL-учёте. В Stage 5 в Item намеренно не добавлены:
+Stage 5 намеренно исключил physical inventory из catalog и не добавлял в Item:
 
 - serial number;
 - WWN;
@@ -120,8 +123,15 @@ SERIAL-учёте. В Stage 5 в Item намеренно не добавлены
 - текущая физическая location;
 - состояние конкретного экземпляра.
 
-Архивирование или rename Item не меняет его UUID, поэтому будущие исторические
-ссылки смогут продолжать разрешаться.
+Stage 6 теперь реализует конкретный SERIAL-экземпляр как `InventoryUnit`, а
+quantity/current positions и canonical movement journal — в отдельном warehouse
+domain, описанном `docs/WAREHOUSE_DOMAIN.md`. Архивирование или rename Item не
+меняет UUID и не переписывает historical/current inventory references.
+
+Archived Item не принимает новый receipt и не может быть newly issued, но
+существующий stock не блокируется: warehouse policy разрешает return, transfer,
+write-off и допустимый reversal. Эта policy находится в inventory module;
+catalog service не импортирует warehouse models.
 
 ## Structural enums
 
@@ -414,8 +424,9 @@ Default accounting: `SERIAL`.
 | `sector_format` | TEXT | no | provisional text |
 | `endurance` | TEXT | no | provisional text |
 
-Serial number, WWN, firmware, holder, location и состояние физического диска
-относятся к будущему InventoryUnit.
+Serial number, WWN, holder, location и состояние физического диска относятся к
+Stage 6 `InventoryUnit`; firmware пока не входит в implemented warehouse unit
+contract.
 
 ## Duplicate detection
 
@@ -586,13 +597,15 @@ lookups. Индексы для будущих faceted queries откладыва
 
 ## Deliberately deferred
 
-Stage 5 не реализует:
+Stage 5 намеренно не реализовывал перечисленное ниже. Stage 6 теперь реализует
+первые три группы в отдельном `WAREHOUSE_DOMAIN`; остальные пункты остаются
+deferred:
 
-- Movement/MovementLine;
-- StockBalance и quantity;
-- InventoryUnit/serial lifecycle;
-- location, holder и custody;
-- receiving/issuing/return/transfer/write-off;
+- Movement/MovementLine (реализовано Stage 6);
+- StockBalance и quantity positions (реализовано Stage 6);
+- InventoryUnit/serial lifecycle (реализовано Stage 6);
+- location, holder и custody (реализовано Stage 6);
+- receiving/issuing/return/transfer/write-off (реализовано Stage 6);
 - global search и faceted filters;
 - media;
 - Excel import/export;
@@ -623,4 +636,5 @@ refinement. Backend domain contract не менялся.
 
 Reference files не становятся runtime source of truth и не предназначены для
 импорта существующего inventory. Quantity, balance, server placement, serial,
-location и holder fields относятся к будущему inventory domain.
+location и holder относятся к отдельному Stage 6 inventory domain, но source
+workbooks по-прежнему не импортируются в него.

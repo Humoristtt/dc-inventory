@@ -299,6 +299,11 @@ class Item(Base):
             "category_id",
             name="uq_items_id_category_id",
         ),
+        UniqueConstraint(
+            "id",
+            "accounting_mode",
+            name="uq_items_id_accounting_mode",
+        ),
         CheckConstraint("btrim(name) <> ''", name="name_not_blank"),
         CheckConstraint(
             "btrim(normalized_name) <> ''",

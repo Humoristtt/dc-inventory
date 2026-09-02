@@ -88,7 +88,7 @@
     ├── notifications/
     ├── telegram_bot/
     ├── catalog/        # Category / Manufacturer / Item / typed attributes
-    └── inventory/      # последующий складской core
+    └── inventory/      # Location / ledger / balances / serial custody
 
 Внутри предметного модуля API, schemas, service/repository и модели разделяются тогда, когда возникает соответствующая ответственность.
 
@@ -196,10 +196,11 @@ Alembic использует тот же async PostgreSQL driver `asyncpg`, чт
     e8f1a2b3c4d5  NotificationOutbox / TelegramUpdate / AccessDecisionCallback
     f4a5b6c7d8e9  Catalog foundation + five system category schemas
     a6b7c8d9e0f1  Source-backed catalog metadata refinement
+    b7c8d9e0f1a2  Warehouse ledger + current-state projections
 
-Текущий migration head после source-backed Stage 5 refinement:
+Текущий migration head после Stage 6 warehouse core:
 
-    a6b7c8d9e0f1
+    b7c8d9e0f1a2
 
 Следующие предметные схемы добавляются отдельными миграциями.
 
@@ -303,16 +304,23 @@ Stage 5 фиксирует каталог:
 характеристики хранятся typed rows, управляемыми Category metadata; uncontrolled
 JSON specification и category-specific nullable columns не используются.
 
-Планируемые сущности следующих этапов:
+Stage 6 фиксирует warehouse accounting core:
 
-- InventoryUnit;
 - Location;
-- StockBalance;
+- InventoryUnit;
 - Movement;
 - MovementLine;
-- AuditEvent.
+- StockBalance.
 
-Точный inventory contract будет зафиксирован отдельной Stage 6 migration.
+`Movement`/`MovementLine` — append-only canonical history. `StockBalance`
+существует только для quantity current positions, а mutable current state serial
+unit хранится на `InventoryUnit`. Обе projections меняются только в одной
+transaction с journal. Actor и physical source/destination holder представлены
+разными User FK. Полный contract и deliberately deferred scope описаны в
+`docs/WAREHOUSE_DOMAIN.md`.
+
+Будущий administrative `AuditEvent` не смешивается с физическим movement
+ledger и остаётся отдельной задачей.
 
 ## Catalog foundation
 
@@ -361,13 +369,31 @@ deterministic versioned reference data.
 
 ## Конкурентность
 
-Складские операции должны выполняться транзакционно.
+Складские операции выполняются транзакционно в PostgreSQL. Idempotency retries
+сериализуются transaction-scoped advisory lock по `(actor, client_request_id)`.
+Reversal затем блокирует immutable original Movement; все Location rows берутся
+в UUID order, после них User rows. Затем serial/WWN identity advisory locks
+берутся единым sorted order; reusable UUID обнаруживаются без row lock; затем все
+InventoryUnit rows блокируются в UUID order, после них все Item rows, затем
+source StockBalance rows по Item UUID. Destination quantity balances изменяются
+atomic PostgreSQL upsert с guard от `BIGINT` overflow. Existing-unit и
+new/reusable-unit paths используют один порядок `InventoryUnit -> Item`.
+
+Archived Item не является dependency catalog -> inventory: warehouse service
+сам запрещает новый receipt/issue, но разрешает existing return/transfer/
+write-off и допустимый reversal. Destination Location любого movement, включая
+reversal, обязана быть ACTIVE. Non-null normalized WWN глобально уникален среди
+InventoryUnit; serial остаётся уникальным в Item scope.
 
 Критический acceptance-инвариант:
 
 Если два пользователя одновременно пытаются получить последнюю доступную единицу оборудования, успешно завершиться должна только одна операция.
 
-Точный механизм блокировок будет закреплён вместе с реализацией Inventory Core.
+Real PostgreSQL regression tests одновременно выдают последний quantity balance
+и один serial unit двумя независимыми sessions. В обоих случаях ровно одна
+transaction commits, вторая получает controlled domain conflict. Дополнительная
+race regression сталкивает VOIDED-unit reactivation с reversal того же unit и
+подтверждает отсутствие mixed lock-order deadlock.
 
 ## Целевая runtime-схема
 
@@ -430,6 +456,22 @@ Gateway необходим из-за недоступности `api.telegram.or
 `StockBalance`, если он используется, должен рассматриваться как транзакционно поддерживаемая проекция для быстрых чтений, а не как независимый источник истины. Любое изменение `StockBalance` должно происходить в той же транзакции, которая фиксирует соответствующее движение.
 
 Историческая операция после проведения не редактируется. Исправления выполняются компенсирующим движением. Если системе понадобится черновик операции, состояние `draft` должно быть явно отделено от проведённого неизменяемого события.
+
+Stage 6 реализует это как positive-integer `StockBalance` row ровно для одной
+Location либо holder User. Partial unique indexes запрещают duplicate positions,
+а check constraints запрещают zero/negative persisted rows. `Movement` и
+`MovementLine` защищены PostgreSQL triggers от `UPDATE/DELETE`; immutable
+`Movement.line_count` и deferred constraint triggers дополнительно требуют на
+commit ровно полный contiguous набор `MovementLine.line_no = 1..line_count`.
+Поэтому после commit к существующему movement нельзя дописать новую line.
+Reversal создаёт новый movement, ссылается на original и ограничен одним partial
+unique index. Immutable `MovementLine.line_no` сохраняет request order; correction link
+дополнительно обязан иметь общую original position и только original Items.
+
+Перед реальными production inventory данными read-only reconciliation
+`backend/scripts/reconcile_inventory_projections.sql` должен вернуть zero drift
+для quantity и serial projections. Сам ввод остаётся заблокирован до готового
+PostgreSQL backup и успешного real restore test в отдельное окружение.
 
 
 ## Frontend access-state authority

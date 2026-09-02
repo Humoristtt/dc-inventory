@@ -76,9 +76,9 @@ Baseline Alembic:
 
     48c2f07f01a0
 
-Текущий migration head после source-backed Stage 5 refinement:
+Текущий migration head после Stage 6 warehouse core:
 
-    a6b7c8d9e0f1
+    b7c8d9e0f1a2
 
 ## Локальный backend
 
@@ -189,6 +189,36 @@ Catalog PostgreSQL checks можно запускать сфокусирован
     RUN_POSTGRES_INTEGRATION=1 \
     DATABASE_URL=postgresql+asyncpg://...@127.0.0.1:PORT/dc_inventory \
     pytest -q tests/test_catalog_postgres.py tests/test_catalog_api_postgres.py
+
+Warehouse PostgreSQL checks, включая allocation и reactivation/reversal races:
+
+    RUN_POSTGRES_INTEGRATION=1 \
+    DATABASE_URL=postgresql+asyncpg://...@127.0.0.1:PORT/dc_inventory \
+    pytest -q tests/test_inventory_postgres.py tests/test_inventory_api_postgres.py
+
+## Warehouse projection reconciliation
+
+Stage 6 содержит небольшой read-only drift check без repair/rebuild framework.
+После migrations, перед первым реальным inventory вводом и после любого restore
+запустить из корня репозитория:
+
+    set -a
+    source .env
+    set +a
+
+    PSQL_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_DEV_PORT:-55432}/${POSTGRES_DB}"
+    psql "$PSQL_DATABASE_URL" -v ON_ERROR_STOP=1 \
+      -f backend/scripts/reconcile_inventory_projections.sql
+
+Скрипт пересчитывает quantity positions и latest serial state из immutable
+Movement/MovementLine journal. Оба result set должны содержать zero rows. Любая
+строка означает data-integrity blocker: остановить inventory mutations,
+сохранить backup artifact и расследовать причину; скрипт сам ничего не чинит.
+
+Это не снимает production-data gate. Реальные inventory данные запрещено
+вводить, пока PostgreSQL automated backup не реализован и реальный restore этого
+artifact не прошёл в отдельном окружении. Stage 6 deployment сам по себе не
+разрешает production stock entry.
 
 ## Checkpoint и source audit
 

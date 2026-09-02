@@ -9,6 +9,10 @@ def test_api_docs_are_disabled_in_production() -> None:
         Settings(
             app_env="production",
             database_url=DATABASE_URL,
+            telegram_bot_token="123456789:test-token",
+            admin_telegram_user_id=123456789,
+            telegram_webhook_secret="webhook-secret",
+            telegram_web_app_url="https://app.spik-inventory.ru",
         )
     )
 

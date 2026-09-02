@@ -4,6 +4,11 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
+from app.db.errors import (
+    POSTGRES_UNIQUE_VIOLATION_SQLSTATE,
+    RETRYABLE_POSTGRES_SQLSTATES,
+    postgres_sqlstate,
+)
 from app.modules.auth.dependencies import Admin, Approved, DbSession
 from app.modules.inventory.enums import (
     InventoryUnitState,
@@ -66,8 +71,14 @@ def _raise_inventory_error(error: InventoryError) -> NoReturn:
 
 
 def _raise_integrity_conflict(error: IntegrityError) -> NoReturn:
-    if _postgres_sqlstate(error) in RETRYABLE_POSTGRES_SQLSTATES:
+    sqlstate = postgres_sqlstate(error)
+
+    if sqlstate in RETRYABLE_POSTGRES_SQLSTATES:
         _raise_retryable_db_conflict(error)
+
+    if sqlstate != POSTGRES_UNIQUE_VIOLATION_SQLSTATE:
+        raise error
+
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
         detail={
@@ -77,31 +88,8 @@ def _raise_integrity_conflict(error: IntegrityError) -> NoReturn:
     ) from error
 
 
-RETRYABLE_POSTGRES_SQLSTATES = frozenset({"40P01", "55P03", "40001"})
-
-
-def _postgres_sqlstate(error: DBAPIError) -> str | None:
-    candidate: object | None = error.orig
-    seen: set[int] = set()
-    while candidate is not None and id(candidate) not in seen:
-        seen.add(id(candidate))
-        sqlstate = getattr(candidate, "sqlstate", None) or getattr(
-            candidate,
-            "pgcode",
-            None,
-        )
-        if isinstance(sqlstate, str):
-            return sqlstate
-        candidate = getattr(candidate, "__cause__", None) or getattr(
-            candidate,
-            "__context__",
-            None,
-        )
-    return None
-
-
 def _raise_retryable_db_conflict(error: DBAPIError) -> NoReturn:
-    if _postgres_sqlstate(error) not in RETRYABLE_POSTGRES_SQLSTATES:
+    if postgres_sqlstate(error) not in RETRYABLE_POSTGRES_SQLSTATES:
         raise error
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,

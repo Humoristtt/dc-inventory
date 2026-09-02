@@ -52,6 +52,8 @@ ORDER BY item_id, location_id, holder_user_id;
 WITH latest_serial_line AS (
     SELECT
         ml.inventory_unit_id,
+        ml.serial_number_snapshot,
+        ml.wwn_snapshot,
         m.movement_type,
         m.destination_location_id,
         m.destination_holder_user_id,
@@ -73,7 +75,9 @@ expected AS (
             ELSE 'VOIDED'
         END AS state,
         destination_location_id AS location_id,
-        destination_holder_user_id AS holder_user_id
+        destination_holder_user_id AS holder_user_id,
+        serial_number_snapshot AS serial_number,
+        wwn_snapshot AS wwn
     FROM latest_serial_line
     WHERE latest_rank = 1
 )
@@ -84,7 +88,11 @@ SELECT
     expected.location_id AS journal_location_id,
     unit.current_location_id AS projection_location_id,
     expected.holder_user_id AS journal_holder_user_id,
-    unit.current_holder_user_id AS projection_holder_user_id
+    unit.current_holder_user_id AS projection_holder_user_id,
+    expected.serial_number AS journal_serial_number,
+    unit.serial_number AS projection_serial_number,
+    expected.wwn AS journal_wwn,
+    unit.wwn AS projection_wwn
 FROM inventory_units AS unit
 FULL OUTER JOIN expected ON expected.inventory_unit_id = unit.id
 WHERE expected.inventory_unit_id IS NULL
@@ -92,4 +100,6 @@ WHERE expected.inventory_unit_id IS NULL
    OR expected.state IS DISTINCT FROM unit.state
    OR expected.location_id IS DISTINCT FROM unit.current_location_id
    OR expected.holder_user_id IS DISTINCT FROM unit.current_holder_user_id
+   OR expected.serial_number IS DISTINCT FROM unit.serial_number
+   OR expected.wwn IS DISTINCT FROM unit.wwn
 ORDER BY inventory_unit_id;

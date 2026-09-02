@@ -23,14 +23,18 @@ class StrictRequestModel(BaseModel):
 _HTTP_URL_ADAPTER = TypeAdapter(AnyHttpUrl)
 
 
-def _validate_optional_http_url(value: str | None) -> str | None:
-    if value is None or not value.strip():
+def _canonicalize_optional_http_url(value: object) -> object:
+    if value is None or not isinstance(value, str):
         return value
+
+    stripped = value.strip()
+    if not stripped:
+        return None
+
     try:
-        _HTTP_URL_ADAPTER.validate_python(value)
+        return str(_HTTP_URL_ADAPTER.validate_python(stripped))
     except ValueError as error:
         raise ValueError("datasheet_url must be a valid http/https URL") from error
-    return value
 
 
 class ManufacturerCreate(StrictRequestModel):
@@ -99,7 +103,10 @@ class ItemCreate(StrictRequestModel):
     technical_data_source: str | None = None
     attributes: dict[str, AttributeInputValue] = Field(default_factory=dict)
 
-    _validate_datasheet_url = field_validator("datasheet_url")(_validate_optional_http_url)
+    _canonicalize_datasheet_url = field_validator(
+        "datasheet_url",
+        mode="before",
+    )(_canonicalize_optional_http_url)
 
 
 class ItemPatch(StrictRequestModel):
@@ -116,7 +123,10 @@ class ItemPatch(StrictRequestModel):
     technical_data_source: str | None = None
     attributes: dict[str, AttributeInputValue] | None = None
 
-    _validate_datasheet_url = field_validator("datasheet_url")(_validate_optional_http_url)
+    _canonicalize_datasheet_url = field_validator(
+        "datasheet_url",
+        mode="before",
+    )(_canonicalize_optional_http_url)
 
 
 class ItemCategoryOut(BaseModel):

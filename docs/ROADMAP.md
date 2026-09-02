@@ -5,14 +5,15 @@
 > **Правило:** завершённые пункты отмечаются `[x]`, текущие — `[~]`, запланированные — `[ ]`.
 > Если решение меняется, старый пункт не удаляется бесследно: он переносится в раздел «Изменённые / отложенные решения» с короткой причиной.
 >
-> **Последнее обновление:** 2026-09-01
+> **Последнее обновление:** 2026-09-02
 > **Production runtime code baseline:** `08aa052d2af3e9c7e9cb9a2bce670cf6674b6c97` — Stage 4 close; последующие docs-only commits не требуют rebuild runtime.
 > **Production:** Stage 4 Telegram/auth/access foundation завершён 2026-09-01;
 > Stage 5 и Stage 6 в production ещё не развёрнуты, real inventory entry
 > заблокирован до backup + successful restore gate.
 > **Current source:** Stage 5 Catalog Foundation и source-backed refinement
-> merged в `main`. Stage 6 Warehouse Core реализован в текущем feature branch;
-> local backend gate пройден, independent review ещё не завершён.
+> merged в `main`. Stage 6 Warehouse Core и independent remediation review
+> завершены локально в `audit/stage6-full-review`; перед merge/deployment остаются
+> единый final local gate и Pull Request CI.
 
 ---
 
@@ -44,17 +45,17 @@ Telegram Mini App для внутренней инвентаризации об�
 
 ## 1.1. Складской учёт
 
-- [ ] Источник истины — append-only журнал движений оборудования.
-- [ ] Текущий остаток нельзя исправлять прямым редактированием числа.
-- [ ] Любое изменение остатка создаётся через движение.
-- [ ] Ошибочное движение исправляется компенсирующим движением / reversal.
-- [ ] Исторические движения нельзя удалять через обычный API.
-- [ ] Исторические движения нельзя редактировать задним числом.
-- [ ] Остаток является транзакционной проекцией журнала.
-- [ ] Отрицательные остатки запрещены.
-- [ ] Одновременная выдача последней единицы должна завершиться успешно только у одного пользователя.
-- [ ] Все связанные строки движения записываются атомарно одной DB-транзакцией.
-- [ ] Повтор одного и того же клиентского запроса не должен создавать дубль движения — idempotency.
+- [x] Источник истины — append-only журнал движений оборудования.
+- [x] Текущий остаток нельзя исправлять прямым редактированием числа.
+- [x] Любое изменение остатка создаётся через движение.
+- [x] Ошибочное движение исправляется компенсирующим движением / reversal.
+- [x] Исторические движения нельзя удалять через обычный API.
+- [x] Исторические движения нельзя редактировать задним числом.
+- [x] Остаток является транзакционной проекцией журнала.
+- [x] Отрицательные остатки запрещены.
+- [x] Одновременная выдача последней единицы должна завершиться успешно только у одного пользователя.
+- [x] Все связанные строки движения записываются атомарно одной DB-транзакцией.
+- [x] Повтор одного и того же клиентского запроса не должен создавать дубль движения — idempotency.
 
 ## 1.2. Кто физически получил и кто оформил
 
@@ -112,10 +113,10 @@ CUSTODY  → у конкретного пользователя
 
 Примеры: кабели питания, оптика, большинство SFP.
 
-- [ ] Поддержан количественный режим.
-- [ ] Нельзя выдать количество > доступного.
-- [ ] Нельзя создать движение с `quantity <= 0`.
-- [ ] Остаток по каждой позиции и локации согласован с журналом.
+- [x] Поддержан количественный режим.
+- [x] Нельзя выдать количество > доступного.
+- [x] Нельзя создать движение с `quantity <= 0`.
+- [x] Остаток по каждой позиции и локации согласован с журналом.
 
 ## 2.2. SERIAL
 
@@ -1668,12 +1669,13 @@ merged в `main` через PR #10. В production Stage 5 ещё не развё
 - [x] Stable MovementLine order and WWN snapshots.
 - [x] Retryable PostgreSQL conflict mapping and BIGINT bounds.
 - [x] Read-only projection reconciliation runbook.
-- [~] Independent remediation review and CI.
+- [x] Independent remediation review и remediation.
+- [ ] Pull Request CI после commit/push.
 
 **GATE:** journal mathematically consistent; last-unit race passes; historical movement immutable.
 
-**STATUS: IN REVIEW — remediation реализована локально; Stage 6 не становится
-DONE до повторного independent review и CI.**
+**STATUS: REMEDIATION COMPLETE — independent review закрыт локально.
+До merge/deployment остаются final local gate и Pull Request CI.**
 
 ## Stage 7 — Catalog Read API / Search / Filters
 
@@ -1937,7 +1939,7 @@ PostgreSQL automated backup + verified artifact + real restore test в отде�
 
 # 42. Следующий фактический шаг
 
-**CURRENT: Stage 6 — Inventory Ledger independent review**
+**CURRENT: Stage 6 — audit closeout / final local gate**
 
 Завершено:
 
@@ -1966,7 +1968,8 @@ PostgreSQL automated backup + verified artifact + real restore test в отде�
   PostgreSQL lifecycle/integrity/concurrency regressions.
 - [x] Выполнить remediation final backend gate: diff-check, Ruff, strict mypy и
   полный PostgreSQL pytest.
-- [~] Провести independent review/CI Stage 6.
+- [x] Провести independent remediation review Stage 6.
+- [ ] Выполнить Pull Request CI после commit/push.
 
-Следующий фактический шаг: повторный independent Stage 6 source review/CI после
-отдельного разрешения на commit/push/PR. Stage 7 не начинается в этом change set.
+Следующий фактический шаг: единый final local gate, затем commit/push,
+Pull Request CI и merge. Stage 7 не начинается в этом change set.

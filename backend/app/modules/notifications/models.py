@@ -39,6 +39,11 @@ class NotificationOutbox(Base):
             "available_at",
             "claimed_at",
         ),
+        Index(
+            "ix_notification_outbox_status_updated_at",
+            "status",
+            "updated_at",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

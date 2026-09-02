@@ -15,6 +15,17 @@ class Settings(BaseSettings):
     database_statement_timeout_seconds: int = Field(default=30, ge=1, le=300)
     database_lock_timeout_seconds: int = Field(default=5, ge=1, le=60)
 
+    migration_statement_timeout_seconds: int = Field(
+        default=300,
+        ge=30,
+        le=3600,
+    )
+    migration_lock_timeout_seconds: int = Field(
+        default=5,
+        ge=1,
+        le=60,
+    )
+
     telegram_bot_token: SecretStr | None = None
     telegram_init_data_max_age_seconds: int = Field(default=300, ge=30, le=3600)
     admin_telegram_user_id: int | None = Field(default=None, gt=0, le=2**52)
@@ -37,6 +48,37 @@ class Settings(BaseSettings):
     notification_worker_claim_ttl_seconds: int = Field(default=60, ge=10, le=600)
     notification_worker_batch_size: int = Field(default=10, ge=1, le=100)
     notification_worker_max_attempts: int = Field(default=8, ge=1, le=20)
+
+    maintenance_worker_poll_seconds: int = Field(
+        default=3600,
+        ge=60,
+        le=86400,
+    )
+    maintenance_retention_batch_size: int = Field(
+        default=1000,
+        ge=1,
+        le=5000,
+    )
+    auth_session_retention_days: int = Field(
+        default=7,
+        ge=1,
+        le=365,
+    )
+    telegram_update_retention_days: int = Field(
+        default=30,
+        ge=1,
+        le=365,
+    )
+    notification_outbox_retention_days: int = Field(
+        default=90,
+        ge=1,
+        le=730,
+    )
+    access_callback_retention_days: int = Field(
+        default=30,
+        ge=1,
+        le=365,
+    )
 
     @field_validator("admin_telegram_user_id", mode="before")
     @classmethod

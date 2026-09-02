@@ -1343,6 +1343,7 @@ async def create_movement(
             select(Movement)
             .where(Movement.id == payload.original_movement_id)
             .options(selectinload(Movement.lines))
+            .with_for_update(read=True, key_share=True)
         )
         if original is None:
             raise InventoryNotFoundError(

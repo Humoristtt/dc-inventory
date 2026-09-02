@@ -78,8 +78,9 @@ Warehouse Core, но они ещё не развёрнуты в production:
 Item остаётся каталожной позицией; физические serial units и balances существуют
 только в warehouse domain. Три локальных workbook сверены только как reference
 examples для catalog design. Quantities, balances и serial identities из них не
-импортируются. Stage 6 не добавляет frontend warehouse UI и ожидает независимый
-review/CI до commit/push/deployment.
+импортируются. Stage 6 не добавляет frontend warehouse UI. Independent remediation review
+закрыт локально; перед merge/deployment обязательны единый final local gate и
+Pull Request CI.
 
 Ввод реальных inventory данных в production заблокирован до автоматизированного
 PostgreSQL backup и успешного real restore test в отдельное окружение. После

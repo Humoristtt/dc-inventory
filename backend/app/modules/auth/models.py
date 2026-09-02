@@ -30,6 +30,14 @@ class AuthSession(Base):
             "user_id",
             "expires_at",
         ),
+        Index(
+            "ix_auth_sessions_expires_at",
+            "expires_at",
+        ),
+        Index(
+            "ix_auth_sessions_revoked_at",
+            "revoked_at",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

@@ -125,6 +125,12 @@ jobs:
           POSTGRES_DB=dc_inventory
           POSTGRES_USER=dc_inventory
           POSTGRES_PASSWORD=ci-runtime-only-password
+          POSTGRES_RUNTIME_USER=dc_inventory_app_ci
+          POSTGRES_RUNTIME_PASSWORD=ci-runtime-role-password
+          POSTGRES_WORKER_USER=dc_inventory_worker_ci
+          POSTGRES_WORKER_PASSWORD=ci-worker-role-password
+          POSTGRES_MAINTENANCE_USER=dc_inventory_maintenance_ci
+          POSTGRES_MAINTENANCE_PASSWORD=ci-maintenance-role-password
           DATABASE_URL=postgresql+asyncpg://dc_inventory:ci-runtime-only-password@postgres:5432/dc_inventory
           DATABASE_CONNECT_TIMEOUT_SECONDS=5
           DATABASE_POOL_SIZE=5
@@ -142,7 +148,7 @@ jobs:
           EOF
 
       - name: Start production-shaped runtime
-        run: docker compose --env-file .env.ci -f compose.yaml up -d --build --wait web telegram-worker
+        run: docker compose --env-file .env.ci -f compose.yaml up -d --build --wait web telegram-worker maintenance-worker
 
       - name: Verify runtime
         run: |
@@ -204,6 +210,51 @@ jobs:
           printf '%s\n' "$worker_networks" | grep -q '_db_net'
           printf '%s\n' "$worker_networks" | grep -q '_egress_net'
           ! printf '%s\n' "$worker_networks" | grep -q '_app_net'
+
+      - name: Verify maintenance worker boundary
+        run: |
+          maintenance_cid="$(docker compose --env-file .env.ci -f compose.yaml ps -q maintenance-worker)"
+          test -n "$maintenance_cid"
+          test "$(docker inspect -f '{{json .HostConfig.PortBindings}}' "$maintenance_cid")" = '{}'
+
+          maintenance_networks="$(docker inspect -f '{{range $k, $_ := .NetworkSettings.Networks}}{{$k}} {{end}}' "$maintenance_cid")"
+          test "$(printf '%s\n' "$maintenance_networks" | wc -w | tr -d ' ')" = "1"
+          printf '%s\n' "$maintenance_networks" | grep -q '_db_net'
+          ! printf '%s\n' "$maintenance_networks" | grep -q '_app_net'
+          ! printf '%s\n' "$maintenance_networks" | grep -q '_egress_net'
+
+          docker compose --env-file .env.ci -f compose.yaml exec -T maintenance-worker sh -c '
+            case "$DATABASE_URL" in
+              postgresql+asyncpg://dc_inventory_maintenance_ci:*) ;;
+              *) exit 1 ;;
+            esac
+            test -z "${TELEGRAM_BOT_TOKEN:-}"
+            test -z "${TELEGRAM_WEBHOOK_SECRET:-}"
+            test -z "${TELEGRAM_GATEWAY_SECRET:-}"
+          '
+
+          privilege_matrix="$(
+            docker compose --env-file .env.ci -f compose.yaml exec -T postgres \
+              psql -U dc_inventory -d dc_inventory -AtF '|' -c "
+                SELECT
+                  has_table_privilege('dc_inventory_maintenance_ci', 'auth_sessions', 'SELECT'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'auth_sessions', 'DELETE'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'telegram_updates', 'SELECT'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'telegram_updates', 'DELETE'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'notification_outbox', 'SELECT'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'notification_outbox', 'DELETE'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'access_decision_callbacks', 'SELECT'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'access_decision_callbacks', 'DELETE'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'access_requests', 'SELECT'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'movements', 'SELECT'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'movements', 'DELETE'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'access_requests', 'DELETE'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'notification_outbox', 'UPDATE'),
+                  has_schema_privilege('dc_inventory_maintenance_ci', 'public', 'CREATE');
+              "
+          )"
+
+          test "$privilege_matrix" = "t|t|t|t|t|t|t|t|t|f|f|f|f|f"
 
       - name: Runtime state
         if: always()

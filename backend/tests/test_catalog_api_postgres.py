@@ -138,6 +138,9 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
                     "manufacturer_id": manufacturer_id,
                     "name": f"API SFP {marker}",
                     "manufacturer_part_number": " API-PN-1 ",
+                    "datasheet_url": (
+                        "  https://Example.COM/docs?q=a  b  "
+                    ),
                     "attributes": {
                         "form_factor": "SFP+",
                         "speed_mbps": 10000,
@@ -149,9 +152,26 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
             assert item_response.status_code == 201
             item_id = item_response.json()["id"]
             assert item_response.json()["accounting_mode"] == "QUANTITY"
+            assert item_response.json()["datasheet_url"] == (
+                "https://example.com/docs?q=a%20%20b"
+            )
             assert item_response.json()["attributes"]["speed_mbps"] == 10000
             assert item_response.json()["attributes"]["tx_wavelength_nm"] == (
                 "1310.1250000000"
+            )
+
+            canonical_url_patch = await client.patch(
+                f"/api/admin/catalog/items/{item_id}",
+                cookies={settings.auth_cookie_name: tokens["admin"]},
+                json={
+                    "datasheet_url": (
+                        "  HTTPS://Example.COM/updated path  "
+                    )
+                },
+            )
+            assert canonical_url_patch.status_code == 200
+            assert canonical_url_patch.json()["datasheet_url"] == (
+                "https://example.com/updated%20path"
             )
 
             user_item_mutation = await client.patch(

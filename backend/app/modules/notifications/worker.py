@@ -31,6 +31,22 @@ def configured_gateway_client(settings: Settings) -> TelegramGatewayClient:
     )
 
 
+def validate_notification_worker_lease(settings: Settings) -> None:
+    minimum_ttl_seconds = (
+        settings.telegram_gateway_timeout_seconds * 2 + 5
+    )
+
+    if (
+        settings.notification_worker_claim_ttl_seconds
+        < minimum_ttl_seconds
+    ):
+        raise RuntimeError(
+            "NOTIFICATION_WORKER_CLAIM_TTL_SECONDS must be at least "
+            f"{minimum_ttl_seconds} seconds for the configured "
+            "TELEGRAM_GATEWAY_TIMEOUT_SECONDS"
+        )
+
+
 async def _finalize_success(
     engine: AsyncEngine,
     claim: ClaimedNotification,
@@ -60,15 +76,29 @@ async def run_worker_once(
     client: TelegramGatewayClient,
     settings: Settings,
 ) -> int:
-    async with AsyncSession(engine, expire_on_commit=False) as db, db.begin():
-        claims = await claim_notification_batch(
-            db,
-            batch_size=settings.notification_worker_batch_size,
-            claim_ttl_seconds=settings.notification_worker_claim_ttl_seconds,
-            max_attempts=settings.notification_worker_max_attempts,
-        )
+    validate_notification_worker_lease(settings)
 
-    for claim in claims:
+    processed = 0
+
+    for _ in range(settings.notification_worker_batch_size):
+        async with (
+            AsyncSession(engine, expire_on_commit=False) as db,
+            db.begin(),
+        ):
+            claims = await claim_notification_batch(
+                db,
+                batch_size=1,
+                claim_ttl_seconds=(
+                    settings.notification_worker_claim_ttl_seconds
+                ),
+                max_attempts=settings.notification_worker_max_attempts,
+            )
+
+        if not claims:
+            break
+
+        claim = claims[0]
+
         try:
             await client.send(claim.method, claim.payload)
         except Exception as exc:
@@ -86,11 +116,14 @@ async def run_worker_once(
         else:
             await _finalize_success(engine, claim)
 
-    return len(claims)
+        processed += 1
+
+    return processed
 
 
 async def run_worker() -> None:
     settings = get_settings()
+    validate_notification_worker_lease(settings)
     client = configured_gateway_client(settings)
     engine = create_engine(settings)
 

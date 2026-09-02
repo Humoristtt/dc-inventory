@@ -23,6 +23,10 @@ class TelegramUpdate(Base):
     __tablename__ = "telegram_updates"
     __table_args__ = (
         CheckConstraint("update_id >= 0", name="update_id_non_negative"),
+        Index(
+            "ix_telegram_updates_processed_at",
+            "processed_at",
+        ),
     )
 
     update_id: Mapped[int] = mapped_column(

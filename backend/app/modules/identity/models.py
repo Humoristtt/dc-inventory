@@ -170,6 +170,11 @@ class AccessRequest(Base):
             "status",
             "requested_at",
         ),
+        Index(
+            "ix_access_requests_status_decided_at",
+            "status",
+            "decided_at",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

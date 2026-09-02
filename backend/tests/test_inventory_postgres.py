@@ -3,9 +3,10 @@ import os
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
-from sqlalchemy import delete, func, select, text, update
+from sqlalchemy import delete, func, insert, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
@@ -1970,5 +1971,347 @@ async def test_movement_line_cardinality_is_sealed_at_commit() -> None:
 
         async with AsyncSession(engine) as db:
             assert await db.get(Movement, orphan_id) is None
+    finally:
+        await engine.dispose()
+
+@pytest.mark.asyncio
+async def test_movement_line_accounting_shape_rejects_null_required_values() -> None:
+    engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            scenario = await _create_scenario(db)
+
+            quantity_receipt_id = await _create_and_commit(
+                db,
+                MovementCreate(
+                    movement_type=MovementType.RECEIPT,
+                    destination_location_id=scenario.location_one_id,
+                    client_request_id=f"null-shape-quantity-{scenario.marker}",
+                    lines=[
+                        MovementLineCreate(
+                            item_id=scenario.quantity_item_id,
+                            quantity=1,
+                        )
+                    ],
+                ),
+                scenario,
+            )
+
+            serial_receipt_id = await _create_and_commit(
+                db,
+                MovementCreate(
+                    movement_type=MovementType.RECEIPT,
+                    destination_location_id=scenario.location_one_id,
+                    client_request_id=f"null-shape-serial-{scenario.marker}",
+                    lines=[
+                        MovementLineCreate(
+                            item_id=scenario.serial_item_id,
+                            serial_number=f"NULL-SHAPE-{scenario.marker}",
+                        )
+                    ],
+                ),
+                scenario,
+            )
+
+            serial_receipt = await get_movement_record(db, serial_receipt_id)
+            serial_unit_id = serial_receipt.lines[0].inventory_unit_id
+            assert serial_unit_id is not None
+
+        async with AsyncSession(engine) as db:
+            with pytest.raises(IntegrityError):
+                await db.execute(
+                    insert(MovementLine).values(
+                        id=uuid.uuid4(),
+                        movement_id=quantity_receipt_id,
+                        line_no=2,
+                        item_id=scenario.quantity_item_id,
+                        item_accounting_mode=AccountingMode.QUANTITY,
+                        inventory_unit_id=None,
+                        quantity=None,
+                        item_name_snapshot="Malformed quantity line",
+                        serial_number_snapshot=None,
+                        wwn_snapshot=None,
+                    )
+                )
+                await db.flush()
+            await db.rollback()
+
+        async with AsyncSession(engine) as db:
+            with pytest.raises(IntegrityError):
+                await db.execute(
+                    insert(MovementLine).values(
+                        id=uuid.uuid4(),
+                        movement_id=quantity_receipt_id,
+                        line_no=2,
+                        item_id=scenario.serial_item_id,
+                        item_accounting_mode=AccountingMode.SERIAL,
+                        inventory_unit_id=serial_unit_id,
+                        quantity=None,
+                        item_name_snapshot="Malformed serial line",
+                        serial_number_snapshot=None,
+                        wwn_snapshot=None,
+                    )
+                )
+                await db.flush()
+            await db.rollback()
+    finally:
+        await engine.dispose()
+
+@pytest.mark.asyncio
+async def test_correction_racing_original_reversal_has_no_lock_order_deadlock() -> None:
+    engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            scenario = await _create_scenario(db)
+            receipt_id = await _create_and_commit(
+                db,
+                MovementCreate(
+                    movement_type=MovementType.RECEIPT,
+                    destination_location_id=scenario.location_one_id,
+                    client_request_id=f"correction-reversal-race-receipt-{scenario.marker}",
+                    lines=[
+                        MovementLineCreate(
+                            item_id=scenario.quantity_item_id,
+                            quantity=1,
+                        )
+                    ],
+                ),
+                scenario,
+            )
+
+        correction_started = asyncio.Event()
+
+        async def run_correction() -> str:
+            try:
+                async with (
+                    AsyncSession(
+                        engine,
+                        expire_on_commit=False,
+                    ) as db,
+                    db.begin(),
+                ):
+                    correction_started.set()
+                    await create_movement(
+                        db,
+                        MovementCreate(
+                            movement_type=MovementType.CORRECTION,
+                            source_location_id=scenario.location_one_id,
+                            original_movement_id=receipt_id,
+                            client_request_id=(
+                                f"correction-reversal-race-correction-"
+                                f"{scenario.marker}"
+                            ),
+                            lines=[
+                                MovementLineCreate(
+                                    item_id=scenario.quantity_item_id,
+                                    quantity=1,
+                                )
+                            ],
+                        ),
+                        actor_user_id=scenario.actor_id,
+                        actor_display_name="Warehouse Admin (@admin)",
+                    )
+                return "corrected"
+            except InventoryConflictError as error:
+                assert error.code == "insufficient_stock"
+                return "correction_conflict"
+
+        async with AsyncSession(engine, expire_on_commit=False) as reversal_db:
+            async with reversal_db.begin():
+                locked_original = await reversal_db.scalar(
+                    select(Movement)
+                    .where(Movement.id == receipt_id)
+                    .with_for_update()
+                )
+                assert locked_original is not None
+
+                correction_task = asyncio.create_task(run_correction())
+                await correction_started.wait()
+
+                # Give the correction transaction an opportunity to reach
+                # its original-Movement lock. With the correct lock graph
+                # it must block there and must NOT hold Location/balance
+                # locks needed by this reversal.
+                await asyncio.sleep(0.25)
+
+                reversal = await reverse_movement(
+                    reversal_db,
+                    receipt_id,
+                    MovementReversalCreate(
+                        client_request_id=(
+                            f"correction-reversal-race-reversal-"
+                            f"{scenario.marker}"
+                        )
+                    ),
+                    actor_user_id=scenario.actor_id,
+                    actor_display_name="Warehouse Admin (@admin)",
+                )
+                assert reversal.record.movement.movement_type == MovementType.REVERSAL
+
+            correction_outcome = await asyncio.wait_for(
+                correction_task,
+                timeout=10,
+            )
+
+        assert correction_outcome == "correction_conflict"
+
+        async with AsyncSession(engine) as db:
+            assert (
+                await _quantity_at(
+                    db,
+                    scenario.quantity_item_id,
+                    location_id=scenario.location_one_id,
+                )
+                == 0
+            )
+
+            correction_count = await db.scalar(
+                select(func.count())
+                .select_from(Movement)
+                .where(
+                    Movement.movement_type == MovementType.CORRECTION,
+                    Movement.original_movement_id == receipt_id,
+                )
+            )
+            reversal_count = await db.scalar(
+                select(func.count())
+                .select_from(Movement)
+                .where(
+                    Movement.movement_type == MovementType.REVERSAL,
+                    Movement.original_movement_id == receipt_id,
+                )
+            )
+
+            assert correction_count == 0
+            assert reversal_count == 1
+    finally:
+        await engine.dispose()
+
+@pytest.mark.asyncio
+async def test_warehouse_history_rejects_truncate() -> None:
+    engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
+    try:
+        async with AsyncSession(engine) as db:
+            trigger_names = set(
+                (
+                    await db.scalars(
+                        text(
+                            """
+                            SELECT tgname
+                            FROM pg_trigger
+                            WHERE NOT tgisinternal
+                              AND tgrelid IN (
+                                  'movements'::regclass,
+                                  'movement_lines'::regclass
+                              )
+                            """
+                        )
+                    )
+                ).all()
+            )
+
+            assert {
+                "trg_movements_append_only_truncate",
+                "trg_movement_lines_append_only_truncate",
+            } <= trigger_names
+
+            with pytest.raises(DBAPIError) as exc_info:
+                await db.execute(
+                    text("TRUNCATE TABLE movements, movement_lines")
+                )
+
+            sqlstate = (
+                getattr(exc_info.value.orig, "sqlstate", None)
+                or getattr(exc_info.value.orig, "pgcode", None)
+            )
+            assert sqlstate == "55000"
+
+            await db.rollback()
+    finally:
+        await engine.dispose()
+@pytest.mark.asyncio
+async def test_serial_reconciliation_detects_identity_drift() -> None:
+    engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            scenario = await _create_scenario(db)
+
+            serial_number = f"RECON-{scenario.marker}"
+            wwn = f"WWN-{scenario.marker}"
+
+            receipt_id = await _create_and_commit(
+                db,
+                MovementCreate(
+                    movement_type=MovementType.RECEIPT,
+                    destination_location_id=scenario.location_one_id,
+                    client_request_id=f"reconciliation-identity-{scenario.marker}",
+                    lines=[
+                        MovementLineCreate(
+                            item_id=scenario.serial_item_id,
+                            serial_number=serial_number,
+                            wwn=wwn,
+                        )
+                    ],
+                ),
+                scenario,
+            )
+
+            receipt = await get_movement_record(db, receipt_id)
+            unit_id = receipt.lines[0].inventory_unit_id
+            assert unit_id is not None
+
+        tampered_serial = f"TAMPERED-{scenario.marker}"
+        tampered_wwn = f"TAMPERED-WWN-{scenario.marker}"
+
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            unit = await db.get(InventoryUnit, unit_id)
+            assert unit is not None
+
+            # Keep projection state and position completely valid.
+            # Corrupt only the mutable identity projection.
+            unit.serial_number = tampered_serial
+            unit.normalized_serial_number = tampered_serial.casefold()
+            unit.wwn = tampered_wwn
+            unit.normalized_wwn = tampered_wwn.casefold()
+
+            await db.commit()
+
+        reconciliation_path = (
+            Path(__file__).resolve().parents[1]
+            / "scripts"
+            / "reconcile_inventory_projections.sql"
+        )
+        reconciliation_sql = reconciliation_path.read_text()
+
+        serial_marker = "WITH latest_serial_line AS ("
+        assert serial_marker in reconciliation_sql
+
+        serial_reconciliation_sql = (
+            serial_marker
+            + reconciliation_sql.split(serial_marker, 1)[1]
+        )
+
+        async with AsyncSession(engine) as db:
+            result = await db.execute(text(serial_reconciliation_sql))
+            rows = result.mappings().all()
+
+        matching = [
+            row
+            for row in rows
+            if row["inventory_unit_id"] == unit_id
+        ]
+
+        assert len(matching) == 1
+        drift = matching[0]
+
+        assert drift["journal_state"] == InventoryUnitState.STORED.value
+        assert drift["projection_state"] == InventoryUnitState.STORED.value
+        assert drift["journal_location_id"] == scenario.location_one_id
+        assert drift["projection_location_id"] == scenario.location_one_id
+
+        assert drift["journal_serial_number"] == serial_number
+        assert drift["projection_serial_number"] == tampered_serial
+        assert drift["journal_wwn"] == wwn
+        assert drift["projection_wwn"] == tampered_wwn
     finally:
         await engine.dispose()

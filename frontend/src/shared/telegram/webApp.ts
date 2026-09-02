@@ -13,7 +13,9 @@ declare global {
   }
 }
 
-const TELEGRAM_WEB_APP_SDK = "https://telegram.org/js/telegram-web-app.js";
+export const TELEGRAM_WEB_APP_SDK_PATH =
+  "/vendor/telegram/telegram-web-app.js";
+
 let sdkLoadPromise: Promise<void> | null = null;
 
 export function getTelegramWebApp(): TelegramWebApp | null {
@@ -30,7 +32,7 @@ export function loadTelegramWebAppSdk(): Promise<void> {
 
   sdkLoadPromise = new Promise((resolve) => {
     const existing = document.querySelector<HTMLScriptElement>(
-      `script[src="${TELEGRAM_WEB_APP_SDK}"]`,
+      `script[src="${TELEGRAM_WEB_APP_SDK_PATH}"]`,
     );
     const script = existing ?? document.createElement("script");
     let settled = false;
@@ -47,7 +49,7 @@ export function loadTelegramWebAppSdk(): Promise<void> {
     script.addEventListener("error", finish, { once: true });
 
     if (existing === null) {
-      script.src = TELEGRAM_WEB_APP_SDK;
+      script.src = TELEGRAM_WEB_APP_SDK_PATH;
       script.async = true;
       document.head.append(script);
     }

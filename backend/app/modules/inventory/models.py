@@ -440,11 +440,13 @@ class MovementLine(Base):
             name="item_accounting_mode",
         ),
         CheckConstraint(
-            "(item_accounting_mode = 'QUANTITY' AND quantity > 0 "
+            "(item_accounting_mode = 'QUANTITY' "
+            "AND quantity IS NOT NULL AND quantity > 0 "
             "AND inventory_unit_id IS NULL AND serial_number_snapshot IS NULL "
             "AND wwn_snapshot IS NULL) "
             "OR (item_accounting_mode = 'SERIAL' AND quantity IS NULL "
             "AND inventory_unit_id IS NOT NULL "
+            "AND serial_number_snapshot IS NOT NULL "
             "AND btrim(serial_number_snapshot) <> '' "
             "AND (wwn_snapshot IS NULL OR btrim(wwn_snapshot) <> ''))",
             name="accounting_shape",

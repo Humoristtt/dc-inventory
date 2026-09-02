@@ -4,6 +4,10 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query, status
 from sqlalchemy.exc import IntegrityError
 
+from app.db.errors import (
+    POSTGRES_UNIQUE_VIOLATION_SQLSTATE,
+    postgres_sqlstate,
+)
 from app.modules.auth.dependencies import Admin, Approved, DbSession
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Category, CategoryAttribute, Manufacturer
@@ -66,6 +70,9 @@ def _raise_catalog_error(error: CatalogError) -> NoReturn:
 
 
 def _raise_integrity_conflict(error: IntegrityError) -> NoReturn:
+    if postgres_sqlstate(error) != POSTGRES_UNIQUE_VIOLATION_SQLSTATE:
+        raise error
+
     raise HTTPException(
         status_code=status.HTTP_409_CONFLICT,
         detail={

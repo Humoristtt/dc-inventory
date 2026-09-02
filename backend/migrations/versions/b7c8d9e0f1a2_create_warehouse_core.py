@@ -461,11 +461,13 @@ def upgrade() -> None:
             name=op.f("ck_movement_lines_item_accounting_mode"),
         ),
         sa.CheckConstraint(
-            "(item_accounting_mode = 'QUANTITY' AND quantity > 0 "
+            "(item_accounting_mode = 'QUANTITY' "
+            "AND quantity IS NOT NULL AND quantity > 0 "
             "AND inventory_unit_id IS NULL AND serial_number_snapshot IS NULL "
             "AND wwn_snapshot IS NULL) "
             "OR (item_accounting_mode = 'SERIAL' AND quantity IS NULL "
             "AND inventory_unit_id IS NOT NULL "
+            "AND serial_number_snapshot IS NOT NULL "
             "AND btrim(serial_number_snapshot) <> '' "
             "AND (wwn_snapshot IS NULL OR btrim(wwn_snapshot) <> ''))",
             name=op.f("ck_movement_lines_accounting_shape"),
@@ -790,6 +792,20 @@ def upgrade() -> None:
         FOR EACH ROW EXECUTE FUNCTION reject_warehouse_history_mutation()
         """
     )
+    op.execute(
+        """
+        CREATE TRIGGER trg_movements_append_only_truncate
+        BEFORE TRUNCATE ON movements
+        FOR EACH STATEMENT EXECUTE FUNCTION reject_warehouse_history_mutation()
+        """
+    )
+    op.execute(
+        """
+        CREATE TRIGGER trg_movement_lines_append_only_truncate
+        BEFORE TRUNCATE ON movement_lines
+        FOR EACH STATEMENT EXECUTE FUNCTION reject_warehouse_history_mutation()
+        """
+    )
 
 
 def downgrade() -> None:
@@ -812,6 +828,12 @@ def downgrade() -> None:
         "DROP TRIGGER IF EXISTS trg_movements_validate_correction ON movements"
     )
     op.execute("DROP FUNCTION IF EXISTS validate_warehouse_correction_header()")
+    op.execute(
+        "DROP TRIGGER trg_movement_lines_append_only_truncate ON movement_lines"
+    )
+    op.execute(
+        "DROP TRIGGER trg_movements_append_only_truncate ON movements"
+    )
     op.execute("DROP TRIGGER trg_movement_lines_append_only ON movement_lines")
     op.execute("DROP TRIGGER trg_movements_append_only ON movements")
     op.execute("DROP FUNCTION reject_warehouse_history_mutation()")

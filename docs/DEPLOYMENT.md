@@ -164,7 +164,18 @@ Telegram authentication до первого approve/reject callback: auth flow �
 
 Backend запускается только после успешного завершения migration container.
 
-Предметные миграции должны быть безопасны для последовательного deploy. Для потенциально разрушительных изменений обязателен backup и заранее определённый rollback/forward-fix план.
+Migration connection имеет отдельный bounded timeout budget:
+
+    MIGRATION_STATEMENT_TIMEOUT_SECONDS=300
+    MIGRATION_LOCK_TIMEOUT_SECONDS=5
+
+`statement_timeout` ограничивает максимальную длительность одного SQL statement
+миграции, а `lock_timeout` не позволяет Alembic бесконечно ждать занятый
+PostgreSQL lock. Эти значения отделены от runtime
+`DATABASE_STATEMENT_TIMEOUT_SECONDS` / `DATABASE_LOCK_TIMEOUT_SECONDS`, потому
+что DDL-миграции и обычные API-транзакции имеют разный профиль выполнения.
+
+Предметные миграции должны быть безопасны для последовательного deploy. Для потенциально разрушительных изменений обязателен backup и заранее определённый rollback/forward-fix plan.
 
 ## Проверка после deploy
 
@@ -193,3 +204,26 @@ request → ADMIN approve → user notification → вход в Mini App.
 ## Backup
 
 До загрузки первых канонических складских данных должен быть реализован PostgreSQL backup/restore runbook и выполнен хотя бы один тест восстановления.
+## Technical data retention
+
+Production uses a dedicated `maintenance-worker` and a separate
+least-privilege PostgreSQL login. The maintenance role is not the backend
+runtime role and is not the Telegram delivery-worker role.
+
+One maintenance iteration runs at most the configured batch size against each
+technical table. Defaults:
+
+- expired or revoked `auth_sessions`: retain for 7 days;
+- processed `telegram_updates`: retain for 30 days;
+- terminal `notification_outbox` rows: retain for 90 days;
+- callbacks belonging to terminal access decisions: retain for 30 days;
+- batch limit: 1000 rows per target per iteration;
+- worker interval: 3600 seconds.
+
+The maintenance role has `SELECT, DELETE` only on the four technical targets
+and read-only `SELECT` on `access_requests`, which is needed to determine
+whether callback state is terminal.
+
+`movements`, `movement_lines`, `inventory_units`, `stock_balances` and other
+warehouse state are outside the retention target set. The canonical warehouse
+movement journal remains immutable and is never pruned by this worker.

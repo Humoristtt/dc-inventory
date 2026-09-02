@@ -88,6 +88,20 @@ def test_inventory_constraints_have_stable_names() -> None:
     } <= _constraint_names("stock_balances")
 
 
+
+def test_movement_line_accounting_shape_is_null_safe() -> None:
+    constraint = next(
+        constraint
+        for constraint in metadata.tables["movement_lines"].constraints
+        if (
+            isinstance(constraint, CheckConstraint)
+            and constraint.name == "ck_movement_lines_accounting_shape"
+        )
+    )
+    sql = str(constraint.sqltext)
+    assert "quantity IS NOT NULL" in sql
+    assert "serial_number_snapshot IS NOT NULL" in sql
+
 def test_stock_and_serial_position_checks_use_postgresql_num_nonnulls() -> None:
     for table_name, constraint_name in (
         ("stock_balances", "ck_stock_balances_single_position"),

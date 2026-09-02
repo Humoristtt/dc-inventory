@@ -288,3 +288,29 @@
 - Реальные inventory data не вводились; backup/restore gate остаётся deferred до
   canonical inventory entry.
 - Статус: implemented locally; focused review, PR CI и production deploy pending.
+
+## 2026-09-03 — Stage 7 production close и переход к Stage 8
+
+- Focused review Stage 7 закрыт без P0/P1/P2 findings; повторная реализация Stage 7 не потребовалась.
+- PR #13 `Stage 7: catalog search, filters and facets` прошёл четыре required checks:
+  backend, frontend, runtime и telegram-gateway.
+- PR #13 merged в `main`; production source SHA:
+  `50d013feb04d13d0976fc196ced99b589a95af6b`.
+- Перед миграцией создан локальный rollback checkpoint
+  `/home/install/.dc-inventory-db-backups/pre-stage7-50d013f.dump`,
+  размер 92K, SHA-256
+  `516f8647bfd173b87f7ecf845ebff0c9ddb432ad52d8438a90cd11ff4dbb1952`;
+  artifact успешно читается `pg_restore --list`.
+- Production PostgreSQL upgraded с `c8d9e0f1a2b3` до `d9e0f1a2b3c4`.
+- DB least-privilege permissions повторно применены после migration.
+- Backend, Telegram worker и maintenance worker пересозданы на Stage 7 backend image.
+- Production runtime после deploy: backend healthy, PostgreSQL healthy, web healthy,
+  Telegram worker и maintenance worker running.
+- Local Nginx health/live/ready PASS.
+- Public Cloudflare HTTPS health/live/ready PASS.
+- `GET /api/catalog/items` и `GET /api/catalog/items/facets` в production
+  подтверждены через существующую authorization boundary: без session возвращают
+  `401 authentication required`, а не `404/500`.
+- Реальные canonical inventory data не вводились; automated off-VM backup +
+  verified real restore остаются обязательным Stage 15 production-data gate.
+- Stage 7 завершён. Текущий продуктовый этап — Stage 8 Working Mini App UX.

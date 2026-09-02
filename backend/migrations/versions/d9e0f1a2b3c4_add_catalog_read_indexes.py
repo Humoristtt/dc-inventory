@@ -111,4 +111,3 @@ def downgrade() -> None:
         "ix_manufacturers_normalized_name_trgm",
     ):
         op.drop_index(name)
-    op.execute("DROP EXTENSION IF EXISTS pg_trgm")

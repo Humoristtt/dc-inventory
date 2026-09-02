@@ -538,6 +538,106 @@ async def test_stage7_search_filters_inventory_facets_and_pagination() -> None:
                 assert await ids(availability="IN_STOCK", q=f"Seagate SSD {marker}") == []
                 assert await ids(item_status=ItemStatus.ARCHIVED, q=marker) == [archived]
 
+                default_name_page = await query_catalog_items(
+                    db, await build_catalog_query_spec(db, q=marker), limit=100, offset=0
+                )
+                explicit_name_page = await query_catalog_items(
+                    db,
+                    await build_catalog_query_spec(db, q=marker, sort="name", order="asc"),
+                    limit=100,
+                    offset=0,
+                )
+                name_desc_page = await query_catalog_items(
+                    db,
+                    await build_catalog_query_spec(db, q=marker, sort="name", order="desc"),
+                    limit=100,
+                    offset=0,
+                )
+                default_name_ids = [entry.record.item.id for entry in default_name_page.items]
+                explicit_name_ids = [entry.record.item.id for entry in explicit_name_page.items]
+                name_desc_ids = [entry.record.item.id for entry in name_desc_page.items]
+                assert default_name_ids == explicit_name_ids
+                assert name_desc_ids == list(reversed(default_name_ids))
+
+                manufacturer_asc = await query_catalog_items(
+                    db,
+                    await build_catalog_query_spec(
+                        db,
+                        q=marker,
+                        manufacturer_ids=[cisco.id, finisar.id, seagate.id],
+                        sort="manufacturer",
+                        order="asc",
+                    ),
+                    limit=100,
+                    offset=0,
+                )
+                assert [entry.record.item.id for entry in manufacturer_asc.items] == [
+                    sfp_cisco_10g,
+                    sfp_cisco_1g,
+                    sfp_finisar_10g,
+                    sfp_finisar_25g,
+                    disk,
+                ]
+
+                manufacturer_desc = await query_catalog_items(
+                    db,
+                    await build_catalog_query_spec(
+                        db,
+                        q=marker,
+                        manufacturer_ids=[cisco.id, finisar.id, seagate.id],
+                        sort="manufacturer",
+                        order="desc",
+                    ),
+                    limit=100,
+                    offset=0,
+                )
+                assert [entry.record.item.id for entry in manufacturer_desc.items] == [
+                    disk,
+                    sfp_finisar_25g,
+                    sfp_finisar_10g,
+                    sfp_cisco_1g,
+                    sfp_cisco_10g,
+                ]
+
+                manufacturer_with_nulls = await query_catalog_items(
+                    db,
+                    await build_catalog_query_spec(
+                        db, q=marker, sort="manufacturer", order="asc"
+                    ),
+                    limit=100,
+                    offset=0,
+                )
+                null_seen = False
+                for entry in manufacturer_with_nulls.items:
+                    if entry.record.manufacturer is None:
+                        null_seen = True
+                    else:
+                        assert not null_seen
+
+                total_desc = await query_catalog_items(
+                    db,
+                    await build_catalog_query_spec(db, q=marker, sort="total", order="desc"),
+                    limit=100,
+                    offset=0,
+                )
+                assert [entry.record.item.id for entry in total_desc.items[:3]] == [
+                    sfp_cisco_10g,
+                    nic,
+                    power,
+                ]
+
+                total_asc = await query_catalog_items(
+                    db,
+                    await build_catalog_query_spec(db, q=marker, sort="total", order="asc"),
+                    limit=100,
+                    offset=0,
+                )
+                assert [entry.record.item.id for entry in total_asc.items[-3:]] == [
+                    power,
+                    nic,
+                    sfp_cisco_10g,
+                ]
+
                 all_spec = await build_catalog_query_spec(
                     db, q=marker, sort="available", order="desc"
                 )

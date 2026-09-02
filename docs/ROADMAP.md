@@ -1287,7 +1287,7 @@ request B → взять 1
 Fixture минимум:
 
 ```text
-Cisco   1G   LX  10 km
+Cisco   1G   LR  10 km
 Cisco   10G  LR  10 km
 Finisar 10G  SR  300 m
 Finisar 25G  LR  10 km

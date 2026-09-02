@@ -480,6 +480,7 @@ ADMIN, но не запрещает создать неоднозначную л
 - `GET /api/catalog/categories/{category_key}`;
 - `GET /api/catalog/manufacturers`;
 - `GET /api/catalog/items`;
+- `GET /api/catalog/items/facets`;
 - `GET /api/catalog/items/{item_id}`.
 
 PENDING, REJECTED и BLOCKED получают 403; отсутствие валидной session — 401.

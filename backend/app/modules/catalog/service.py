@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import uuid
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -355,6 +356,61 @@ def _prepare_attribute_value(
             enum_value=enum_value,
         )
 
+    raise CatalogSchemaError(f"attribute {attribute.key} has unsupported data type")
+
+
+def prepare_attribute_filter_value(
+    attribute: CategoryAttribute,
+    raw_value: str,
+) -> str | int | Decimal | bool:
+    """Parse one query-string value through the canonical attribute validator."""
+    candidate: object
+    if attribute.data_type == AttributeDataType.INTEGER:
+        stripped = raw_value.strip()
+        if re.fullmatch(r"[+-]?\d+", stripped) is None:
+            raise CatalogValidationError(
+                "attribute_type_mismatch",
+                f"attribute {attribute.key} requires INTEGER",
+            )
+        try:
+            candidate = int(stripped)
+        except ValueError as error:
+            raise CatalogValidationError(
+                "attribute_type_mismatch",
+                f"attribute {attribute.key} requires INTEGER",
+            ) from error
+    elif attribute.data_type == AttributeDataType.BOOLEAN:
+        normalized = raw_value.strip().casefold()
+        if normalized not in {"true", "false"}:
+            raise CatalogValidationError(
+                "attribute_type_mismatch",
+                f"attribute {attribute.key} requires true or false",
+            )
+        candidate = normalized == "true"
+    else:
+        candidate = raw_value
+
+    prepared = _prepare_attribute_value(attribute, candidate)
+    if prepared is None:
+        raise CatalogValidationError(
+            "attribute_type_mismatch",
+            f"attribute {attribute.key} requires a value",
+        )
+    if attribute.data_type == AttributeDataType.TEXT:
+        assert prepared.text_value is not None
+        return prepared.text_value
+    if attribute.data_type == AttributeDataType.INTEGER:
+        assert prepared.integer_value is not None
+        return prepared.integer_value
+    if attribute.data_type == AttributeDataType.DECIMAL:
+        assert prepared.decimal_value is not None
+        return prepared.decimal_value
+    if attribute.data_type == AttributeDataType.BOOLEAN:
+        assert prepared.boolean_value is not None
+        return prepared.boolean_value
+    if attribute.data_type == AttributeDataType.ENUM:
+        assert prepared.enum_value is not None
+        return prepared.enum_value
     raise CatalogSchemaError(f"attribute {attribute.key} has unsupported data type")
 
 

@@ -271,3 +271,20 @@
 - `main` защищён: PR required, strict required CI, admin enforcement, force-push/delete запрещены.
 - Automated off-VM PostgreSQL backup и real restore test сознательно отложены. До их выполнения запрещён только ввод настоящих канонических складских остатков; product development продолжается на synthetic/test data.
 - Текущий продуктовый этап: Stage 7 — Catalog Read API / Search / Filters.
+
+## 2026-09-02 — Stage 7 Catalog Read API — local implementation
+
+- `GET /api/catalog/items` получил tokenized global/category search,
+  manufacturer/location/availability filters, metadata-driven exact/range
+  filters, deterministic sorting/pagination и set-based inventory summary.
+- Serial/WWN identity search возвращает parent Item для всех lifecycle states;
+  WRITTEN_OFF/VOIDED не входят в current totals.
+- Добавлен `GET /api/catalog/items/facets` с common/dynamic facets, real range
+  bounds и self-excluding counts.
+- Все шесть versioned categories проходят один generic query path; category
+  branches в production code не добавлены.
+- Migration `d9e0f1a2b3c4` добавляет `pg_trgm` и Stage 7 search/typed EAV/current
+  inventory indexes поверх `c8d9e0f1a2b3`.
+- Реальные inventory data не вводились; backup/restore gate остаётся deferred до
+  canonical inventory entry.
+- Статус: implemented locally; focused review, PR CI и production deploy pending.

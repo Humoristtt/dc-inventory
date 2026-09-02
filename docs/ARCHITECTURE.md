@@ -381,6 +381,22 @@ tokens через migration `a6b7c8d9e0f1`. Неоднозначные connector
 multi-rate notations остаются manual decisions, а schema definitions —
 deterministic versioned reference data.
 
+## Catalog read/query layer
+
+Stage 7 сохраняет `Item` root relation и не строит один размножающий строки JOIN
+catalog EAV + StockBalance + InventoryUnit. Search, location и dynamic filters
+используют correlated EXISTS. QUANTITY/SERIAL current counts собираются одним
+aggregate subquery и используются list response, availability и sorting.
+Pagination и total поэтому работают по unique Item rows; attributes выбранной
+страницы загружаются существующим set-based loader.
+
+Immutable `CatalogQuerySpec` является единым validated input для item list и
+facets. Category behavior определяется CategoryAttribute metadata. Facet base
+query переиспользует тот же predicate builder и исключает только predicate
+вычисляемого facet. Contains search использует escaped bound LIKE/ILIKE values;
+`pg_trgm` GIN indexes и typed EAV indexes добавлены migration
+`d9e0f1a2b3c4`. Warehouse journal/projection write path Stage 6 не изменён.
+
 ## Конкурентность
 
 Складские операции выполняются транзакционно в PostgreSQL. Idempotency retries

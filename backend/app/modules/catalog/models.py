@@ -21,6 +21,7 @@ from sqlalchemy import (
     UniqueConstraint,
     Uuid,
     func,
+    text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -103,6 +104,12 @@ class Manufacturer(Base):
         CheckConstraint(
             "btrim(normalized_name) <> ''",
             name="normalized_name_not_blank",
+        ),
+        Index(
+            "ix_manufacturers_normalized_name_trgm",
+            "normalized_name",
+            postgresql_using="gin",
+            postgresql_ops={"normalized_name": "gin_trgm_ops"},
         ),
     )
 
@@ -346,6 +353,32 @@ class Item(Base):
             "normalized_name",
             "normalized_model",
         ),
+        Index(
+            "ix_items_normalized_name_trgm",
+            "normalized_name",
+            postgresql_using="gin",
+            postgresql_ops={"normalized_name": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_items_normalized_model_trgm",
+            "normalized_model",
+            postgresql_using="gin",
+            postgresql_ops={"normalized_model": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_items_normalized_mpn_trgm",
+            "normalized_manufacturer_part_number",
+            postgresql_using="gin",
+            postgresql_ops={
+                "normalized_manufacturer_part_number": "gin_trgm_ops"
+            },
+        ),
+        Index(
+            "ix_items_normalized_internal_code_trgm",
+            "normalized_internal_code",
+            postgresql_using="gin",
+            postgresql_ops={"normalized_internal_code": "gin_trgm_ops"},
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -455,6 +488,46 @@ class ItemAttributeValue(Base):
         Index(
             "ix_item_attribute_values_category_attribute_id",
             "category_attribute_id",
+        ),
+        Index(
+            "ix_item_attribute_values_text_trgm",
+            "text_value",
+            postgresql_using="gin",
+            postgresql_ops={"text_value": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_item_attribute_values_enum_trgm",
+            "enum_value",
+            postgresql_using="gin",
+            postgresql_ops={"enum_value": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_item_attribute_values_integer_filter",
+            "category_attribute_id",
+            "integer_value",
+            "item_id",
+            postgresql_where=text("integer_value IS NOT NULL"),
+        ),
+        Index(
+            "ix_item_attribute_values_decimal_filter",
+            "category_attribute_id",
+            "decimal_value",
+            "item_id",
+            postgresql_where=text("decimal_value IS NOT NULL"),
+        ),
+        Index(
+            "ix_item_attribute_values_boolean_filter",
+            "category_attribute_id",
+            "boolean_value",
+            "item_id",
+            postgresql_where=text("boolean_value IS NOT NULL"),
+        ),
+        Index(
+            "ix_item_attribute_values_enum_filter",
+            "category_attribute_id",
+            "enum_value",
+            "item_id",
+            postgresql_where=text("enum_value IS NOT NULL"),
         ),
     )
 

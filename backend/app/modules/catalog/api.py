@@ -11,6 +11,14 @@ from app.db.errors import (
 from app.modules.auth.dependencies import Admin, Approved, DbSession
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Category, CategoryAttribute, Manufacturer
+from app.modules.catalog.query import (
+    CatalogListRecord,
+    CatalogQuerySpec,
+    FacetRecord,
+    build_catalog_query_spec,
+    query_catalog_facets,
+    query_catalog_items,
+)
 from app.modules.catalog.schemas import (
     CategoryAttributeOut,
     CategoryDetailOut,
@@ -18,8 +26,13 @@ from app.modules.catalog.schemas import (
     DuplicateCandidateOut,
     DuplicateCheckOut,
     DuplicateCheckRequest,
+    FacetListOut,
+    FacetOut,
+    FacetValueOut,
+    InventorySummaryOut,
     ItemCategoryOut,
     ItemCreate,
+    ItemListEntryOut,
     ItemListOut,
     ItemManufacturerOut,
     ItemOut,
@@ -40,7 +53,6 @@ from app.modules.catalog.service import (
     get_category_record,
     get_item_record,
     list_categories,
-    list_items,
     list_manufacturers,
     set_item_archived,
     update_item,
@@ -160,6 +172,67 @@ def _item_out(record: ItemRecord) -> ItemOut:
     )
 
 
+def _item_list_out(record: CatalogListRecord) -> ItemListEntryOut:
+    item = _item_out(record.record)
+    return ItemListEntryOut(
+        **item.model_dump(),
+        inventory=InventorySummaryOut(
+            available_count=record.inventory.available_count,
+            custody_count=record.inventory.custody_count,
+            total_count=record.inventory.total_count,
+        ),
+    )
+
+
+def _facet_out(facet: FacetRecord) -> FacetOut:
+    return FacetOut(
+        key=facet.key,
+        label=facet.label,
+        data_type=facet.data_type,
+        unit=facet.unit,
+        filter_type=facet.filter_type,
+        values=[
+            FacetValueOut(
+                value=value.value,
+                label=value.label,
+                code=value.code,
+                name=value.name,
+                count=value.count,
+            )
+            for value in facet.values
+        ],
+        min=facet.minimum,
+        max=facet.maximum,
+    )
+
+
+async def _query_spec(
+    db: DbSession,
+    *,
+    q: str | None,
+    category: str | None,
+    item_status: ItemStatus,
+    manufacturer_ids: list[UUID] | None,
+    availability: str,
+    location_ids: list[UUID] | None,
+    attribute_filters: list[str] | None,
+    sort: str = "name",
+    order: str = "asc",
+) -> CatalogQuerySpec:
+    return await build_catalog_query_spec(
+        db,
+        q=q,
+        category_key=category,
+        item_status=item_status,
+        manufacturer_ids=manufacturer_ids or (),
+        availability=availability,
+        location_ids=location_ids or (),
+        sort=sort,
+        order=order,
+        filter_expressions=attribute_filters or (),
+    )
+
+
 async def _load_item_out(db: DbSession, item_id: UUID) -> ItemOut:
     try:
         return _item_out(await get_item_record(db, item_id))
@@ -217,27 +290,80 @@ async def get_manufacturers(
 async def get_items(
     db: DbSession,
     _approved: Approved,
+    q: Annotated[str | None, Query(max_length=200)] = None,
     category: Annotated[str | None, Query(max_length=64)] = None,
     item_status: Annotated[ItemStatus, Query(alias="status")] = ItemStatus.ACTIVE,
+    manufacturer_id: Annotated[list[UUID] | None, Query()] = None,
+    availability: Annotated[str, Query(max_length=32)] = "ANY",
+    location_id: Annotated[list[UUID] | None, Query()] = None,
+    sort: Annotated[str, Query(max_length=32)] = "name",
+    order: Annotated[str, Query(max_length=8)] = "asc",
+    attribute_filter: Annotated[
+        list[str] | None,
+        Query(alias="filter", max_length=2300),
+    ] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> ItemListOut:
     try:
-        page = await list_items(
+        spec = await _query_spec(
             db,
-            category_key=category,
+            q=q,
+            category=category,
             item_status=item_status,
+            manufacturer_ids=manufacturer_id,
+            availability=availability,
+            location_ids=location_id,
+            attribute_filters=attribute_filter,
+            sort=sort,
+            order=order,
+        )
+        page = await query_catalog_items(
+            db,
+            spec,
             limit=limit,
             offset=offset,
         )
     except CatalogError as error:
         _raise_catalog_error(error)
     return ItemListOut(
-        items=[_item_out(item) for item in page.items],
+        items=[_item_list_out(item) for item in page.items],
         total=page.total,
         limit=limit,
         offset=offset,
     )
+
+
+@read_router.get("/items/facets", response_model=FacetListOut)
+async def get_item_facets(
+    db: DbSession,
+    _approved: Approved,
+    q: Annotated[str | None, Query(max_length=200)] = None,
+    category: Annotated[str | None, Query(max_length=64)] = None,
+    item_status: Annotated[ItemStatus, Query(alias="status")] = ItemStatus.ACTIVE,
+    manufacturer_id: Annotated[list[UUID] | None, Query()] = None,
+    availability: Annotated[str, Query(max_length=32)] = "ANY",
+    location_id: Annotated[list[UUID] | None, Query()] = None,
+    attribute_filter: Annotated[
+        list[str] | None,
+        Query(alias="filter", max_length=2300),
+    ] = None,
+) -> FacetListOut:
+    try:
+        spec = await _query_spec(
+            db,
+            q=q,
+            category=category,
+            item_status=item_status,
+            manufacturer_ids=manufacturer_id,
+            availability=availability,
+            location_ids=location_id,
+            attribute_filters=attribute_filter,
+        )
+        facets = await query_catalog_facets(db, spec)
+    except CatalogError as error:
+        _raise_catalog_error(error)
+    return FacetListOut(facets=[_facet_out(facet) for facet in facets])
 
 
 @read_router.get("/items/{item_id}", response_model=ItemOut)

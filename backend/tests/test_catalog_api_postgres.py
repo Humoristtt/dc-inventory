@@ -160,6 +160,55 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
                 "1310.1250000000"
             )
 
+            stage7_listing = await client.get(
+                "/api/catalog/items",
+                params={"q": "api-pn-1", "category": "sfp"},
+                cookies={settings.auth_cookie_name: tokens["user"]},
+            )
+            assert stage7_listing.status_code == 200
+            listed = next(item for item in stage7_listing.json()["items"] if item["id"] == item_id)
+            assert listed["inventory"] == {
+                "available_count": 0,
+                "custody_count": 0,
+                "total_count": 0,
+            }
+
+            stage7_facets = await client.get(
+                "/api/catalog/items/facets",
+                params=[
+                    ("category", "sfp"),
+                    ("manufacturer_id", manufacturer_id),
+                    ("filter", "speed_mbps:eq:10000"),
+                ],
+                cookies={settings.auth_cookie_name: tokens["admin"]},
+            )
+            assert stage7_facets.status_code == 200
+            facet_keys = {facet["key"] for facet in stage7_facets.json()["facets"]}
+            assert {"manufacturer", "availability", "location", "speed_mbps"} <= facet_keys
+            assert "vendor_compatibility" not in facet_keys
+
+            pending_facets = await client.get(
+                "/api/catalog/items/facets",
+                cookies={settings.auth_cookie_name: tokens["pending"]},
+            )
+            assert pending_facets.status_code == 403
+
+            controlled_errors = [
+                ({"filter": "speed_mbps:eq:10000"}, "filter_category_required"),
+                ({"category": "sfp", "filter": "missing:eq:value"}, "filter_unknown_attribute"),
+                ({"availability": "maybe"}, "availability_invalid"),
+                ({"sort": "random"}, "sort_invalid"),
+                ({"order": "random"}, "order_invalid"),
+            ]
+            for params, expected_code in controlled_errors:
+                invalid = await client.get(
+                    "/api/catalog/items",
+                    params=params,
+                    cookies={settings.auth_cookie_name: tokens["user"]},
+                )
+                assert invalid.status_code == 422
+                assert invalid.json()["detail"]["code"] == expected_code
+
             canonical_url_patch = await client.patch(
                 f"/api/admin/catalog/items/{item_id}",
                 cookies={settings.auth_cookie_name: tokens["admin"]},

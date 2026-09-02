@@ -146,6 +146,24 @@ class InventoryUnit(Base):
             "ix_inventory_units_current_holder_user_id",
             "current_holder_user_id",
         ),
+        Index(
+            "ix_inventory_units_item_state_location",
+            "item_id",
+            "state",
+            "current_location_id",
+        ),
+        Index(
+            "ix_inventory_units_normalized_serial_trgm",
+            "normalized_serial_number",
+            postgresql_using="gin",
+            postgresql_ops={"normalized_serial_number": "gin_trgm_ops"},
+        ),
+        Index(
+            "ix_inventory_units_normalized_wwn_trgm",
+            "normalized_wwn",
+            postgresql_using="gin",
+            postgresql_ops={"normalized_wwn": "gin_trgm_ops"},
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

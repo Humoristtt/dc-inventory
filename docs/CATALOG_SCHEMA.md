@@ -2,7 +2,8 @@
 
 ## Статус документа
 
-Этот документ фиксирует backend/domain contract Stage 5 — Catalog Foundation.
+Этот документ фиксирует backend/domain contract Stage 5 — Catalog Foundation и
+Stage 7 — Catalog Read API / Search / Filters.
 
 Каталог хранится в PostgreSQL и не синхронизируется из Excel при старте
 приложения. Первая версия пяти системных категорий создаётся Alembic-миграцией
@@ -490,11 +491,112 @@ columns.
 
 Item list:
 
-- deterministic order по normalized name и UUID;
+- deterministic order по normalized name и UUID по умолчанию;
 - default limit 50, max 100;
 - offset pagination;
 - optional Category filter;
 - default status ACTIVE.
+
+#### Stage 7 item query
+
+`GET /api/catalog/items` принимает:
+
+- optional `q`, максимум 200 characters;
+- optional `category` key и `status=ACTIVE|ARCHIVED`;
+- repeated `manufacturer_id=<uuid>` и `location_id=<uuid>`;
+- `availability=ANY|IN_STOCK|OUT_OF_STOCK`, default `ANY`;
+- `sort=name|manufacturer|available|total`, default `name`;
+- `order=asc|desc`, default `asc`;
+- repeated `filter=<attribute_key>:<operator>:<value>`;
+- `limit=1..100`, default 50, и `offset>=0`.
+
+Whitespace-only `q` не добавляет search predicate. Иначе outer whitespace
+удаляется, repeated whitespace схлопывается, строка делится на tokens. Между
+tokens действует AND, внутри одного token — OR по searchable domain Item. Common
+fields: name, model, manufacturer part number, internal code и Manufacturer
+name. Description, comment, datasheet URL и technical source не searchable.
+User `%` и `_` экранируются как literal symbols и не становятся LIKE wildcard.
+
+Searchable EAV определяется только `CategoryAttribute.searchable`. TEXT/ENUM
+используют case-insensitive contains; INTEGER/DECIMAL участвуют только при safe
+typed equality; BOOLEAN понимает только explicit `true`/`false`. Engineering
+unit conversion (`10G`, `1.92TB`, `10km`) не выполняется. Token может совпасть с
+другим field/attribute, чем соседний token: поэтому `C13 C14` может совпасть с
+двумя разными searchable connector attributes.
+
+InventoryUnit serial и WWN ищутся по existing normalized identity semantics.
+Parent Item возвращается один раз независимо от числа matching units. Identity
+видима для STORED, ISSUED, WRITTEN_OFF и VOIDED units; состояние ограничивает
+availability totals, но не historical identity search.
+
+Attribute filters требуют `category`. Expression делится только по первым двум
+`:`. Metadata выбирается по key и обязана иметь `filterable=true`. EXACT
+разрешает `eq`; numeric RANGE metadata разрешает `eq`, `gte`, `lte`, чтобы одна
+versioned engineering characteristic поддерживала exact и bounds requests.
+Repeated `eq` одного key объединяются OR, разные keys — AND. `gte` и `lte`
+одного key образуют inclusive range; duplicate boundary одного направления —
+422, а не last-one-wins. TEXT equality нормализует whitespace и игнорирует
+case; ENUM принимает только canonical `allowed_values`; INTEGER — signed BIGINT
+без bool coercion; DECIMAL — exact NUMERIC(30,10); BOOLEAN — только
+`true`/`false`.
+
+Repeated manufacturer/location values имеют OR внутри facet и AND с другими
+dimensions. Location совпадает только с positive QUANTITY StockBalance в этой
+Location либо STORED SERIAL unit. Archived Location с legitimate current stock
+не скрывается. Availability основана только на warehouse stock:
+
+- QUANTITY available = sum Location balances, custody = sum holder balances;
+- SERIAL available = STORED count, custody = ISSUED count;
+- WRITTEN_OFF/VOIDED дают zero current count;
+- total = available + custody;
+- IN_STOCK означает available > 0, OUT_OF_STOCK — available = 0.
+
+Каждая list entry дополнительно возвращает:
+
+```json
+{
+  "inventory": {
+    "available_count": 8,
+    "custody_count": 2,
+    "total_count": 10
+  }
+}
+```
+
+Item detail contract не получает эту list-specific projection. Counts не
+persist-ятся в Item и загружаются set-wise вместе со страницей.
+
+Sorting всегда имеет tie-breakers. `name`: normalized item name, Item UUID;
+`manufacturer`: normalized manufacturer name, normalized item name, Item UUID,
+при этом NULL manufacturer всегда last; `available`/`total`: соответствующий
+count, normalized item name, Item UUID. `order` применяется ко всем ключам;
+pagination идёт по unique Item rows. `total` считается после всех predicates и
+до limit/offset.
+
+#### Stage 7 facets
+
+`GET /api/catalog/items/facets` имеет ту же Approved boundary и принимает тот же
+query context (`q`, `category`, `status`, repeated manufacturer/location,
+availability, repeated filter), но не pagination/sorting.
+
+Без Category response содержит category, manufacturer, availability и location.
+С Category category facet убирается и metadata-driven facets добавляются для
+каждого `filterable=true` CategoryAttribute. Exact facet сообщает key, label,
+data type, unit/filter type и non-zero values/counts. Manufacturer содержит UUID
+и display name; Location — UUID, code и name. ENUM идёт в metadata order,
+BOOLEAN в deterministic false/true order, TEXT — в normalized display order.
+RANGE не создаёт buckets: возвращает real `min`/`max`; empty dataset возвращает
+оба bounds как null, без fabricated `0..0`. Decimal сериализуется точно.
+
+Каждый facet self-excluding: применяются все active predicates кроме predicate
+этого facet. Search и status при этом сохраняются. Это одинаково действует для
+common, exact dynamic и range dynamic facets.
+
+Malformed expressions, missing Category, unknown/non-filterable attribute,
+forbidden operator, invalid typed value, duplicate range boundary и invalid
+availability/sort/order возвращают controlled HTTP 422 через CatalogError
+contract. Invalid Category остаётся 404; broken versioned metadata остаётся
+server-side CatalogSchemaError/500 без SQL details.
 
 Manufacturer list использует limit/offset pagination.
 

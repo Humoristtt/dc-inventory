@@ -160,11 +160,48 @@ class ItemOut(BaseModel):
     attributes: dict[str, AttributeOutputValue]
 
 
+class InventorySummaryOut(BaseModel):
+    available_count: int = Field(ge=0)
+    custody_count: int = Field(ge=0)
+    total_count: int = Field(ge=0)
+
+
+class ItemListEntryOut(ItemOut):
+    inventory: InventorySummaryOut
+
+
 class ItemListOut(BaseModel):
-    items: list[ItemOut]
+    items: list[ItemListEntryOut]
     total: int
     limit: int
     offset: int
+
+
+type FacetMachineValue = UUID | bool | int | Decimal | str
+type FacetBoundValue = int | Decimal
+
+
+class FacetValueOut(BaseModel):
+    value: FacetMachineValue
+    count: int = Field(ge=1)
+    label: str | None = None
+    code: str | None = None
+    name: str | None = None
+
+
+class FacetOut(BaseModel):
+    key: str
+    label: str
+    data_type: AttributeDataType
+    unit: str | None
+    filter_type: FilterType
+    values: list[FacetValueOut] = Field(default_factory=list)
+    min: FacetBoundValue | None = None
+    max: FacetBoundValue | None = None
+
+
+class FacetListOut(BaseModel):
+    facets: list[FacetOut]
 
 
 class DuplicateCheckRequest(StrictRequestModel):

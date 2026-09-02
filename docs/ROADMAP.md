@@ -431,19 +431,19 @@ else if (category === "disk") ...
 
 ## 7.2. Фильтры SFP
 
-- [ ] Бренд.
-- [ ] Форм-фактор.
-- [ ] Скорость.
-- [ ] Дальность.
-- [ ] Тип волокна / среда.
-- [ ] Разъём.
-- [ ] SR/LR/ER/ZR/BiDi и т. п.
-- [ ] Длина волны.
-- [ ] DOM/DDM.
+- [x] Бренд.
+- [x] Форм-фактор.
+- [x] Скорость.
+- [x] Дальность.
+- [x] Тип волокна / среда.
+- [x] Разъём.
+- [x] SR/LR/ER/ZR/BiDi и т. п.
+- [x] Длина волны.
+- [x] DOM/DDM.
 - [ ] Совместимость.
-- [ ] Только в наличии.
-- [ ] Локация.
-- [ ] У пользователя / на складе — если это полезно в выбранном UX.
+- [x] Только в наличии.
+- [x] Локация.
+- [x] Backend summary «у пользователя / на складе».
 
 ## 7.3. Карточка SFP
 
@@ -510,18 +510,18 @@ Detail card:
 
 Фильтры:
 
-- [ ] Тип изделия.
-- [ ] Бренд.
-- [ ] SM/MM.
-- [ ] OS2/OM2/OM3/OM4/OM5.
-- [ ] Разъём A.
-- [ ] Разъём B.
-- [ ] UPC/APC.
-- [ ] Длина.
-- [ ] Количество волокон / simplex-duplex.
-- [ ] Цвет.
-- [ ] Наличие.
-- [ ] Локация.
+- [x] Тип изделия.
+- [x] Бренд.
+- [x] SM/MM.
+- [x] OS2/OM2/OM3/OM4/OM5.
+- [x] Разъём A.
+- [x] Разъём B.
+- [x] UPC/APC.
+- [x] Длина.
+- [x] Количество волокон / simplex-duplex.
+- [x] Цвет.
+- [x] Наличие.
+- [x] Локация.
 
 Normalization:
 
@@ -561,18 +561,18 @@ IEC C13 → IEC C14
 
 Фильтры:
 
-- [ ] Connector A.
-- [ ] Connector B.
-- [ ] Длина.
-- [ ] Цвет.
-- [ ] Номинальный ток.
-- [ ] Количество проводников / сечение.
-- [ ] Наличие.
-- [ ] Локация.
+- [x] Connector A.
+- [x] Connector B.
+- [x] Длина.
+- [x] Цвет.
+- [x] Номинальный ток.
+- [x] Количество проводников / сечение.
+- [x] Наличие.
+- [x] Локация.
 
 UX:
 
-- [ ] Поиск `C13 C14` находит нужную позицию без обязательного открытия filters.
+- [x] Backend search `C13 C14` находит позицию по двум searchable attributes.
 - [ ] Цвет заметен в карточке, но не заменяет текстовое название.
 - [ ] Длина форматируется единообразно.
 
@@ -599,7 +599,8 @@ Normalization:
 - [x] Длина хранится в metres как DECIMAL.
 - [x] Cable category и shielding остаются TEXT: один observed value не
   доказывает полный controlled vocabulary.
-- [ ] Search/facets/UI реализуются только в соответствующих будущих stages.
+- [x] Metadata-driven backend search/filters/facets реализованы в Stage 7.
+- [ ] Catalog UI реализуется в Stage 8.
 
 ---
 
@@ -623,16 +624,16 @@ Normalization:
 
 Фильтры:
 
-- [ ] Бренд.
-- [ ] Количество портов.
-- [ ] Скорость.
-- [ ] Media / port type.
-- [ ] PCIe generation.
-- [ ] PCIe lanes.
-- [ ] Protocol.
-- [ ] Bracket.
-- [ ] Наличие.
-- [ ] Локация.
+- [x] Бренд.
+- [x] Количество портов.
+- [x] Скорость.
+- [x] Media / port type.
+- [x] PCIe generation.
+- [x] PCIe lanes.
+- [x] Protocol.
+- [x] Bracket.
+- [x] Наличие.
+- [x] Локация.
 
 Default accounting:
 
@@ -671,22 +672,22 @@ Default accounting:
 
 Фильтры:
 
-- [ ] Бренд.
-- [ ] HDD/SSD/NVMe.
-- [ ] Ёмкость.
-- [ ] SATA/SAS/NVMe.
-- [ ] Форм-фактор.
-- [ ] RPM.
+- [x] Бренд.
+- [x] HDD/SSD/NVMe.
+- [x] Ёмкость.
+- [x] SATA/SAS/NVMe.
+- [x] Форм-фактор.
+- [x] RPM.
 - [ ] Состояние.
-- [ ] Наличие.
-- [ ] Локация.
+- [x] Наличие.
+- [x] Локация.
 
 Default accounting:
 
 - [x] SERIAL.
 - [ ] Один serial только в одной позиции.
-- [ ] Глобальный поиск по SN.
-- [ ] Глобальный поиск по WWN при наличии.
+- [x] Глобальный поиск по SN.
+- [x] Глобальный поиск по WWN при наличии.
 
 ---
 
@@ -715,19 +716,19 @@ C13
 ABC12345
 ```
 
-- [ ] Поиск нечувствителен к разумным различиям регистра.
-- [ ] Нормализация пробелов.
-- [ ] Поиск part number.
-- [ ] Поиск serial.
-- [ ] Поиск по техническим searchable fields.
-- [ ] Нет неконтролируемого wildcard/full scan на больших данных.
-- [ ] Pagination.
+- [x] Поиск нечувствителен к разумным различиям регистра.
+- [x] Нормализация пробелов.
+- [x] Поиск part number.
+- [x] Поиск serial/WWN.
+- [x] Поиск по техническим searchable fields.
+- [x] User wildcard экранирован; contains expressions покрыты pg_trgm indexes.
+- [x] Pagination.
 
 ## 12.2. Поиск внутри категории
 
-- [ ] Совмещается с category filters.
-- [ ] Совмещается с sorting.
-- [ ] Совмещается с availability.
+- [x] Совмещается с category filters.
+- [x] Совмещается с sorting.
+- [x] Совмещается с availability.
 - [ ] Фильтры сохраняются при возврате из карточки.
 - [ ] Можно быстро очистить все фильтры.
 
@@ -749,25 +750,25 @@ Intel       3
 25G         3
 ```
 
-- [ ] Backend возвращает facet counts.
-- [ ] Counts пересчитываются корректно при выбранных фильтрах.
-- [ ] Не показываются бессмысленные пустые значения.
-- [ ] Multi-select semantics определены и протестированы.
-- [ ] Range filters определены и протестированы.
-- [ ] «Только в наличии».
-- [ ] Фильтр по локации.
+- [x] Backend возвращает facet counts.
+- [x] Counts пересчитываются с self-excluding semantics.
+- [x] Не показываются бессмысленные пустые значения.
+- [x] Multi-select semantics определены и протестированы.
+- [x] Range filters определены и протестированы.
+- [x] «Только в наличии».
+- [x] Фильтр по локации.
 - [ ] Filter metadata не захардкожен в каждом React screen.
 
 ---
 
 # 14. Сортировка
 
-- [ ] По названию.
-- [ ] По бренду.
-- [ ] По наличию.
-- [ ] По количеству.
+- [x] По названию.
+- [x] По бренду.
+- [x] По наличию.
+- [x] По количеству.
 - [ ] Категорийные варианты, если инженерно полезны.
-- [ ] Стабильная сортировка при pagination.
+- [x] Стабильная сортировка при pagination.
 
 ---
 
@@ -1292,64 +1293,72 @@ Finisar 10G  SR  300 m
 Finisar 25G  LR  10 km
 ```
 
-- [ ] `brand=Finisar` → 2.
-- [ ] `speed=10G` → 2.
-- [ ] `brand=Finisar + speed=10G` → 1.
-- [ ] `reach>=10km` → ожидаемый набор.
-- [ ] connector filter.
-- [ ] medium filter.
-- [ ] DOM filter.
-- [ ] availability filter.
-- [ ] location filter.
-- [ ] facet counts.
+- [x] `brand=Finisar` → 2.
+- [x] `speed=10G` → 2 через canonical `speed_mbps=10000`.
+- [x] `brand=Finisar + speed=10G` → 1.
+- [x] `reach>=10km` → ожидаемый набор через `reach_m>=10000`.
+- [x] connector filter.
+- [x] medium filter.
+- [x] DOM filter.
+- [x] availability filter.
+- [x] location filter.
+- [x] facet counts и self-exclusion.
 
 ## 29.2. Оптика
 
-- [ ] SM/MM filter.
-- [ ] OS/OM filter.
-- [ ] connector A/B.
-- [ ] UPC/APC.
-- [ ] length.
-- [ ] color.
-- [ ] availability/location.
-- [ ] combined filters.
+- [x] SM/MM filter.
+- [x] OS/OM filter.
+- [x] connector A/B.
+- [x] UPC/APC.
+- [x] length.
+- [x] color.
+- [x] availability/location.
+- [x] combined filters.
 
 ## 29.3. Кабели питания
 
-- [ ] connector A.
-- [ ] connector B.
-- [ ] `C13 C14` text search.
-- [ ] length.
-- [ ] color.
-- [ ] current.
-- [ ] availability/location.
-- [ ] combined filters.
+- [x] connector A.
+- [x] connector B.
+- [x] `C13 C14` text search.
+- [x] length.
+- [x] color.
+- [x] current.
+- [x] availability/location.
+- [x] combined filters.
+
+## 29.3.5. Медные сетевые кабели
+
+- [x] connector A/B.
+- [x] length.
+- [x] cable category.
+- [x] shielding.
+- [x] search и metadata-driven facets.
 
 ## 29.4. Сетевые карты
 
-- [ ] brand.
-- [ ] port count.
-- [ ] speed.
-- [ ] media.
-- [ ] PCIe generation.
-- [ ] lanes.
-- [ ] protocol.
-- [ ] bracket.
-- [ ] availability/location.
-- [ ] serial search.
+- [x] brand.
+- [x] port count.
+- [x] speed.
+- [x] media.
+- [x] PCIe generation.
+- [x] lanes.
+- [x] protocol.
+- [x] bracket.
+- [x] availability/location.
+- [x] serial search.
 
 ## 29.5. Диски
 
-- [ ] HDD/SSD/NVMe.
-- [ ] capacity.
-- [ ] interface.
-- [ ] form factor.
-- [ ] RPM.
+- [x] HDD/SSD/NVMe.
+- [x] capacity.
+- [x] interface.
+- [x] form factor.
+- [x] RPM.
 - [ ] condition.
-- [ ] location.
-- [ ] serial search.
-- [ ] WWN search.
-- [ ] combined filters.
+- [x] location.
+- [x] serial search.
+- [x] WWN search.
+- [x] combined filters.
 
 ---
 
@@ -1688,23 +1697,24 @@ Backup/restore остаётся отдельным production-data gate и не 
 
 ## Stage 7 — Catalog Read API / Search / Filters
 
-**STATUS: CURRENT PRODUCT STAGE.**
+**STATUS: IMPLEMENTED LOCALLY — awaiting focused review / PR CI / production deploy.**
 
 - [x] Базовый Category listing реализован в Stage 5.
 - [x] Базовый Item listing реализован в Stage 5.
 - [x] Детерминированная limit/offset pagination foundation реализована в Stage 5.
-- [ ] Sorting.
-- [ ] Global search.
-- [ ] Category search.
-- [ ] Facets.
-- [ ] Availability.
-- [ ] Location.
-- [ ] SFP filters.
-- [ ] Optics filters.
-- [ ] Power cable filters.
-- [ ] NIC filters.
-- [ ] Disk filters.
-- [ ] Filter fixture matrices.
+- [x] Sorting.
+- [x] Global search, включая serial/WWN и literal wildcard safety.
+- [x] Category search.
+- [x] Metadata-driven facets и self-excluding counts.
+- [x] Availability для QUANTITY/SERIAL.
+- [x] Location для QUANTITY/SERIAL.
+- [x] SFP filters.
+- [x] Optics filters.
+- [x] Power cable filters.
+- [x] Copper network cable filters.
+- [x] NIC filters.
+- [x] Disk filters.
+- [x] PostgreSQL filter/search/inventory/facet fixture matrices.
 
 **GATE:** every filter combination returns exact expected fixtures; frontend does not contain category-branch spaghetti.
 
@@ -1957,7 +1967,7 @@ Stage 7–14 feature development, production deploy и synthetic/test data не
 
 # 42. Следующий фактический шаг
 
-**CURRENT: Stage 7 — Catalog Read API / Search / Filters**
+**CURRENT: Stage 7 — implemented locally; focused review / PR CI / deploy pending**
 
 Stage 6 полностью закрыт: source → review → CI → merge → production deploy → Telegram smoke → Git cleanup → branch protection.
 

@@ -6,19 +6,12 @@
 > Если решение меняется, старый пункт не удаляется бесследно: он переносится в раздел «Изменённые / отложенные решения» с короткой причиной.
 >
 > **Последнее обновление:** 2026-09-02
-> **Production runtime code baseline:** `08aa052d2af3e9c7e9cb9a2bce670cf6674b6c97` — Stage 4 close; последующие docs-only commits не требуют rebuild runtime.
-> **Production:** Stage 4 Telegram/auth/access foundation завершён 2026-09-01;
-> Stage 5 и Stage 6 в production ещё не развёрнуты, real inventory entry
-> заблокирован до backup + successful restore gate.
-> **Current source:** Stage 5 Catalog Foundation и source-backed refinement
-> merged в `main`. Stage 6 Warehouse Core находится в
-> `audit/stage6-final-review-20260902`; исходный final-audit checkpoint:
-> `bb76b4b4a12e6986dfdbadc086562a53d1d2ad96`.
-> Полный source audit завершён с `P0=0`, `P1=0`; application-level
-> remediation, production-role regressions, notification recovery,
-> Telegram SDK hardening и canonical documentation закрыты локально.
-> До merge/deployment остаются один final local gate, final remediation
-> commit/push и Pull Request CI.
+> **Production runtime code baseline:** `7e04c8da72d3b12bd78184f323a984ea6a86618c` — merge PR #11, Stage 6 production close.
+> **Production:** Stage 4 Telegram/auth/access, Stage 5 Catalog Foundation и Stage 6 Inventory Ledger развёрнуты в production. Production migration head: `c8d9e0f1a2b3`.
+> **Git/GitHub:** local и remote очищены до `main`; `main` protected; обязательны PR и четыре CI checks: `CI/backend`, `CI/frontend`, `CI/runtime`, `CI/telegram-gateway`.
+> **Current product stage:** Stage 7 — Catalog Read API / Search / Filters.
+> **Production-data gate:** automated off-VM PostgreSQL backup + real restore test намеренно отложены до подготовки к вводу настоящих складских остатков. Это блокирует только real inventory entry, но не дальнейшую feature-разработку, deploy и synthetic/test data.
+> **Repository visibility:** repository остаётся public до последнего GitHub-dependent шага; перевод в private выполняется отдельно в конце.
 
 ---
 
@@ -1511,7 +1504,7 @@ Viewport profiles:
 - [x] Production Swagger/OpenAPI отключён.
 - [x] app/db Docker networks разделены.
 - [x] CI backend/frontend/runtime зелёный.
-- [x] Production source guard на `08aa052d2af3e9c7e9cb9a2bce670cf6674b6c97`.
+- [x] Production source guard на `7e04c8da72d3b12bd78184f323a984ea6a86618c`.
 
 До реальных данных:
 
@@ -1645,7 +1638,9 @@ Viewport profiles:
 categories без category-specific schema hacks.
 
 Foundation gate выполнен. Source reference reconciliation и metadata refinement
-merged в `main` через PR #10. В production Stage 5 ещё не развёрнут.
+merged в `main` через PR #10.
+
+**STATUS: DONE — Stage 5 deployed в production как часть release, закрытого Stage 6 / PR #11 2026-09-02.**
 
 ## Stage 6 — Inventory Ledger
 
@@ -1655,46 +1650,45 @@ merged в `main` через PR #10. В production Stage 5 ещё не развё
 - [x] Movement.
 - [x] MovementLine.
 - [x] Balance projection.
-- [x] Explicit no-opening-balance/no-import decision; real stock entry отдельно
-  заблокирован до backup/restore production-data gate.
-- [x] Receipt.
-- [x] Issue.
-- [x] Return.
-- [x] Transfer.
-- [x] Write-off.
-- [x] Correction.
-- [x] Reversal.
+- [x] Receipt / Issue / Return / Transfer / Write-off / Correction / Reversal.
 - [x] Idempotency.
-- [x] Locks.
-- [x] Serial invariants.
-- [x] Quantity invariants.
-- [x] Actor/recipient semantics.
-- [x] Movement snapshots.
-- [x] Concurrency tests.
-- [x] Archived Location reversal invariant.
-- [x] Archived Item QUANTITY/SERIAL lifecycle policy.
+- [x] Locks and concurrency tests.
+- [x] Serial and quantity invariants.
+- [x] Actor/recipient semantics and movement snapshots.
+- [x] Archived Location / archived Item lifecycle invariants.
 - [x] Global WWN identity and deterministic lock graph.
 - [x] Stable MovementLine order and WWN snapshots.
 - [x] Retryable PostgreSQL conflict mapping and BIGINT bounds.
 - [x] Read-only projection reconciliation runbook.
-- [x] Independent remediation review и remediation.
-- [x] Final full source audit: `P0=0`, `P1=0`.
+- [x] Independent remediation review and final full source audit.
 - [x] Production DB-role regression coverage.
 - [x] Controlled DEAD access-notification recovery.
 - [x] Production Telegram Gateway HTTPS validation.
 - [x] Same-origin Telegram SDK integrity/failure hardening.
 - [x] Canonical documentation synchronization.
-- [ ] Единый final local gate всего change set.
-- [ ] Commit/push final remediation.
-- [ ] Pull Request CI.
+- [x] Final local gate.
+- [x] Final remediation commit/push.
+- [x] Pull Request CI: backend/frontend/runtime/telegram-gateway PASS.
+- [x] PR #11 merged в `main`.
+- [x] Production migration `e8f1a2b3c4d5 -> c8d9e0f1a2b3`.
+- [x] Production deploy `7e04c8da72d3b12bd78184f323a984ea6a86618c`.
+- [x] Runtime DB identities / host ports / internal DB network verified.
+- [x] Technical retention production iteration PASS.
+- [x] Projection reconciliation: QUANTITY drift = 0, SERIAL drift = 0.
+- [x] Public Cloudflare HTTPS health/live/ready PASS.
+- [x] Live Telegram `/start` smoke PASS.
+- [x] Git branch cleanup выполнен.
+- [x] `main` branch protection + required CI включены.
 
 **GATE:** journal mathematically consistent; last-unit race passes; historical movement immutable.
 
-**STATUS: FINAL REMEDIATION COMPLETE LOCALLY — application-level blockers
-закрыты. До merge/deployment остаются final local gate, commit/push и
-Pull Request CI.**
+**STATUS: DONE — PR #11 merged и Stage 6 production acceptance пройден 2026-09-02. Production SHA: `7e04c8da72d3b12bd78184f323a984ea6a86618c`.**
+
+Backup/restore остаётся отдельным production-data gate и не блокирует дальнейшую продуктовую разработку на synthetic/test data.
 
 ## Stage 7 — Catalog Read API / Search / Filters
+
+**STATUS: CURRENT PRODUCT STAGE.**
 
 - [x] Базовый Category listing реализован в Stage 5.
 - [x] Базовый Item listing реализован в Stage 5.
@@ -1853,7 +1847,12 @@ Import:
 
 **BLOCKING POLICY:** real inventory entry остаётся запрещён до выполненных
 PostgreSQL automated backup + verified artifact + real restore test в отдельное
-окружение. Deploy Stage 5/6 не снимает этот gate.
+окружение.
+
+**CURRENT PRIORITY POLICY:** Stage 15 backup/restore сейчас намеренно отложен.
+Stage 7–14 feature development, production deploy и synthetic/test data не
+блокируются. Gate возвращается в active work перед первым вводом настоящих
+канонических складских остатков.
 
 - [ ] PostgreSQL automated backup.
 - [ ] Media backup.
@@ -1958,48 +1957,126 @@ PostgreSQL automated backup + verified artifact + real restore test в отде�
 
 # 42. Следующий фактический шаг
 
-**CURRENT: Stage 6 — final full local gate / PR preparation**
+**CURRENT: Stage 7 — Catalog Read API / Search / Filters**
 
-Завершено:
+Stage 6 полностью закрыт: source → review → CI → merge → production deploy → Telegram smoke → Git cleanup → branch protection.
 
-- [x] Сверить source workbook как reference examples с требованиями Stage 5.
-- [x] Зафиксировать source-to-canonical mapping и A–F decisions в
-  `docs/CATALOG_SOURCE_REFERENCE.md`.
-- [x] Зафиксировать первую каноническую модель каталога в `docs/CATALOG_SCHEMA.md`.
-- [x] Спроектировать `Category`, `Item` и Brand/Manufacturer contract.
-- [x] Спроектировать `CategoryAttribute` и typed attribute values.
-- [x] Зафиксировать duplicate-detection и archive/unarchive invariants до миграции.
-- [x] Зафиксировать initial schemas для SFP, оптики, кабелей питания, NIC и дисков.
-- [x] Реализовать catalog persistence + Alembic migration.
-- [x] Реализовать APPROVED read API и ADMIN mutation API.
-- [x] Добавить PostgreSQL/domain/API tests.
-- [x] Провести технический Stage 5 gate: пять категорий создаются и читаются без
-  category-specific schema hacks.
-- [x] Добавить source-backed metadata migration без backend contract changes.
-- [x] Source-reference refinement merged в `main` через PR #10.
-- [x] Спроектировать Stage 6 invariants в `docs/WAREHOUSE_DOMAIN.md`.
-- [x] Добавить migration `b7c8d9e0f1a2` поверх `a6b7c8d9e0f1`.
-- [x] Реализовать Location, InventoryUnit, Movement/Line и StockBalance.
-- [x] Реализовать Approved read/Admin mutation API.
-- [x] Добавить quantity/serial/idempotency/authorization/PostgreSQL tests.
-- [x] Добавить real last-quantity и serial-allocation concurrency tests.
-- [x] Исправить independent-review P1/P2 findings Stage 6 и добавить focused
-  PostgreSQL lifecycle/integrity/concurrency regressions.
-- [x] Выполнить remediation final backend gate: diff-check, Ruff, strict mypy и
-  полный PostgreSQL pytest.
-- [x] Провести independent remediation review Stage 6.
-- [x] Провести final full source audit ветки
-  `audit/stage6-final-review-20260902`.
-- [x] Закрыть production-role permission gaps и regression gates.
-- [x] Закрыть Telegram Gateway HTTPS validation.
-- [x] Закрыть DEAD access-notification recovery.
-- [x] Закрыть Telegram SDK integrity/failure UX.
-- [x] Синхронизировать canonical documentation и ROADMAP.
-- [ ] Выполнить единый final local gate всего актуального working tree.
-- [ ] Commit/push final remediation.
-- [ ] Выполнить Pull Request CI.
-- [ ] Merge Stage 6 в `main`.
+Backup/restore не забыты, но сознательно вынесены из текущего критического пути: они обязательны перед real inventory entry, а не перед разработкой рабочего UI.
 
-Следующий фактический шаг: **один final local gate всего change set**.
-При PASS: commit/push → Pull Request CI → merge.
-Stage 7 в этот change set не входит.
+## 42.1. Product-first execution order
+
+1. **Stage 7 — Search / Filters / Sorting / Facets**
+   - global/category search;
+   - serial / WWN search;
+   - sorting;
+   - availability;
+   - location / custody;
+   - metadata-driven category filters;
+   - facet counts;
+   - deterministic pagination;
+   - filter fixture matrices.
+
+2. **Stage 8 — Working Mini App UX**
+   - Home / Catalog / global search;
+   - category lists;
+   - compact cards / Item detail;
+   - stock by location / holder summary;
+   - «Моё»;
+   - Telegram BackButton, safe areas, loading/error/empty states;
+   - Desktop narrow + mobile acceptance.
+
+3. **Stage 9 — Warehouse Operations UI**
+   - receipt;
+   - issue to self / another user;
+   - return;
+   - transfer;
+   - write-off;
+   - batch cart;
+   - quantity / serial selection;
+   - confirmation;
+   - double-submit protection;
+   - ADMIN correction/reversal flow where appropriate.
+
+4. **Stage 9 + Stage 13 pull-forward — Inventory Telegram notifications**
+   - ADMIN notification after issue;
+   - recipient / actor / source location;
+   - lines / quantities / serials;
+   - reuse transactional outbox;
+   - Telegram failure must never roll back committed movement.
+
+5. **Stage 10 — History + Admin**
+   - movement history/detail UI;
+   - correction relationship;
+   - users / access requests / roles;
+   - holdings by user;
+   - «У сотрудников»;
+   - ADMIN correction workflow.
+
+6. **Stage 11 — Media**
+   - LocalMediaStorage first;
+   - upload/validation;
+   - primary image;
+   - thumbnails/gallery;
+   - category placeholders;
+   - S3/R2 remains replaceable adapter, not a prerequisite.
+
+7. **Stage 12 — Excel**
+   - export first;
+   - current filtered export;
+   - category-specific workbooks;
+   - serial sheets;
+   - then staging/preview/validation import;
+   - opening balances only through controlled movement workflow.
+
+8. **Stage 14 — Physical Stocktake**
+   - stocktake session;
+   - expected / actual / difference;
+   - review;
+   - STOCKTAKE_ADJUSTMENT;
+   - immutable history.
+
+9. **Stage 15 — Production-data hardening before real inventory**
+   - automated PostgreSQL backup;
+   - off-VM artifact;
+   - retention;
+   - real isolated restore;
+   - Alembic/schema verification;
+   - projection reconciliation;
+   - media backup when media becomes canonical;
+   - rollback/security/full E2E;
+   - only then `REAL_INVENTORY_ENTRY=ALLOWED`.
+
+## 42.2. Feature delivery workflow
+
+Начиная со Stage 7:
+
+```text
+protected main
+  ↓
+feature/<stage>
+  ↓
+implementation
+  ↓
+targeted domain/integration/frontend tests
+  ↓
+one focused source review
+  ↓
+PR
+  ↓
+required CI
+  ↓
+merge
+  ↓
+production deploy
+```
+
+Не проводить бесконечный full-source audit после каждой продуктовой фичи.
+Большой end-to-end/security/data-integrity review возвращается перед снятием production-data gate.
+
+## 42.3. Следующая ветка
+
+`feature/stage7-search-filters`
+
+Stage 7 не должен тянуть в change set: Warehouse Operations UI, media, Excel, stocktake, S3 backup, QR/barcode, NetBox integration или новые микросервисы.
+
+Следующий фактический шаг: передать Codex детальное ТЗ Stage 7, реализовать backend search/filter/facet contract и regression tests.

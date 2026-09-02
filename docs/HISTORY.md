@@ -252,3 +252,22 @@
 - Merge/deploy ещё не выполнены.
 - Следующий gate:
   final local gate -> commit/push -> Pull Request CI -> merge.
+
+## 2026-09-02 — Stage 6 production close и переход к Stage 7
+
+- Final local gate Stage 6 завершён с `P0=0`, `P1=0`, `P2=0`.
+- Final remediation commit: `1c4c803a09e872fdcbc4069e159c486b2bd16ba2`.
+- CI harness fixes: `d38417e6d14822c55884cbabebd9cf375f29afc0` и `3c882d56d8d8065c1c885c2694fc1ced9d3f135b`.
+- PR #11 прошёл четыре required checks: backend, frontend, runtime и telegram-gateway.
+- PR #11 merged в `main`; production source SHA: `7e04c8da72d3b12bd78184f323a984ea6a86618c`.
+- Production PostgreSQL upgraded с `e8f1a2b3c4d5` до `c8d9e0f1a2b3`.
+- Runtime работает с отдельными least-privilege DB identities для backend, Telegram worker и maintenance worker.
+- Technical retention production iteration PASS.
+- Host публикует только `127.0.0.1:8080`; backend/PostgreSQL host ports отсутствуют; DB network internal.
+- Projection reconciliation завершён с zero QUANTITY drift и zero SERIAL drift.
+- Public Cloudflare health/live/ready PASS.
+- Реальный Telegram `/start` production smoke PASS.
+- Local и remote Stage 6 branches удалены; source приведён к `main`.
+- `main` защищён: PR required, strict required CI, admin enforcement, force-push/delete запрещены.
+- Automated off-VM PostgreSQL backup и real restore test сознательно отложены. До их выполнения запрещён только ввод настоящих канонических складских остатков; product development продолжается на synthetic/test data.
+- Текущий продуктовый этап: Stage 7 — Catalog Read API / Search / Filters.

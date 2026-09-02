@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 import app.db.models  # noqa: F401  # регистрирует ORM-модели в metadata
 from app.core.config import get_settings
 from app.db.base import metadata
+from app.db.migration_settings import migration_server_settings
 
 config = context.config
 
@@ -55,10 +56,7 @@ async def run_async_migrations() -> None:
         poolclass=pool.NullPool,
         connect_args={
             "timeout": settings.database_connect_timeout_seconds,
-            "server_settings": {
-                "application_name": "dc-inventory-migrations",
-                "timezone": "UTC",
-            },
+            "server_settings": migration_server_settings(settings),
         },
     )
 

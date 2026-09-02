@@ -83,6 +83,15 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Verify vendored Telegram SDK
+        working-directory: frontend
+        run: |
+          printf '%s  %s\n' \
+            '3549138a7934039fe7dfd1291a4ee739bd2b705a614308053a8b08a87d85c451' \
+            'public/vendor/telegram/telegram-web-app.js' \
+            | sha256sum --check -
+          test "$(wc -c < public/vendor/telegram/telegram-web-app.js | tr -d ' ')" = "116510"
+
       - name: Lint
         working-directory: frontend
         run: npm run lint
@@ -125,6 +134,12 @@ jobs:
           POSTGRES_DB=dc_inventory
           POSTGRES_USER=dc_inventory
           POSTGRES_PASSWORD=ci-runtime-only-password
+          POSTGRES_RUNTIME_USER=dc_inventory_app_ci
+          POSTGRES_RUNTIME_PASSWORD=ci-runtime-role-password
+          POSTGRES_WORKER_USER=dc_inventory_worker_ci
+          POSTGRES_WORKER_PASSWORD=ci-worker-role-password
+          POSTGRES_MAINTENANCE_USER=dc_inventory_maintenance_ci
+          POSTGRES_MAINTENANCE_PASSWORD=ci-maintenance-role-password
           DATABASE_URL=postgresql+asyncpg://dc_inventory:ci-runtime-only-password@postgres:5432/dc_inventory
           DATABASE_CONNECT_TIMEOUT_SECONDS=5
           DATABASE_POOL_SIZE=5
@@ -142,7 +157,7 @@ jobs:
           EOF
 
       - name: Start production-shaped runtime
-        run: docker compose --env-file .env.ci -f compose.yaml up -d --build --wait web telegram-worker
+        run: docker compose --env-file .env.ci -f compose.yaml up -d --build --wait web telegram-worker maintenance-worker
 
       - name: Verify runtime
         run: |
@@ -204,6 +219,309 @@ jobs:
           printf '%s\n' "$worker_networks" | grep -q '_db_net'
           printf '%s\n' "$worker_networks" | grep -q '_egress_net'
           ! printf '%s\n' "$worker_networks" | grep -q '_app_net'
+
+      - name: Verify backend database role
+        run: |
+          owner_psql() {
+            docker compose --env-file .env.ci -f compose.yaml exec -T postgres \
+              psql -U dc_inventory -d dc_inventory -v ON_ERROR_STOP=1 "$@"
+          }
+
+          runtime_psql() {
+            docker compose --env-file .env.ci -f compose.yaml exec -T \
+              -e PGPASSWORD=ci-runtime-role-password \
+              postgres \
+              psql \
+              -h 127.0.0.1 \
+              -U dc_inventory_app_ci \
+              -d dc_inventory \
+              -v ON_ERROR_STOP=1 \
+              "$@"
+          }
+
+          privilege_matrix="$(
+            owner_psql -AtF '|' -c "
+              SELECT
+                has_table_privilege(
+                  'dc_inventory_app_ci',
+                  'telegram_updates',
+                  'SELECT'
+                ),
+                has_table_privilege(
+                  'dc_inventory_app_ci',
+                  'telegram_updates',
+                  'INSERT'
+                ),
+                has_column_privilege(
+                  'dc_inventory_app_ci',
+                  'telegram_updates',
+                  'processed_at',
+                  'UPDATE'
+                ),
+                has_table_privilege(
+                  'dc_inventory_app_ci',
+                  'telegram_updates',
+                  'UPDATE'
+                ),
+                has_table_privilege(
+                  'dc_inventory_app_ci',
+                  'auth_sessions',
+                  'DELETE'
+                ),
+                has_table_privilege(
+                  'dc_inventory_app_ci',
+                  'movements',
+                  'UPDATE'
+                ),
+                has_table_privilege(
+                  'dc_inventory_app_ci',
+                  'movement_lines',
+                  'UPDATE'
+                ),
+                has_schema_privilege(
+                  'dc_inventory_app_ci',
+                  'public',
+                  'CREATE'
+                );
+            "
+          )"
+
+          test "$privilege_matrix" = "t|t|t|f|f|f|f|f"
+
+          outbox_update_columns="$(
+            owner_psql -At -c "
+              SELECT string_agg(
+                column_name,
+                ','
+                ORDER BY column_name
+              )
+              FROM information_schema.column_privileges
+              WHERE grantee = 'dc_inventory_app_ci'
+                AND table_schema = 'public'
+                AND table_name = 'notification_outbox'
+                AND privilege_type = 'UPDATE';
+            "
+          )"
+
+          test "$outbox_update_columns" = \
+            "attempts,available_at,claim_token,claimed_at,last_error,status,updated_at"
+
+          test "$(
+            owner_psql -At -c "
+              SELECT has_table_privilege(
+                'dc_inventory_app_ci',
+                'notification_outbox',
+                'UPDATE'
+              );
+            "
+          )" = "f"
+
+          recovery_key="ci-access-recovery"
+          recovery_id="77777777-7777-4777-8777-777777777777"
+          conflicting_id="88888888-8888-4888-8888-888888888888"
+
+          recovery_result="$(
+            runtime_psql -qAtF '|' -c "
+              BEGIN;
+
+              INSERT INTO notification_outbox(
+                id,
+                method,
+                payload,
+                dedupe_key,
+                status,
+                attempts,
+                last_error
+              )
+              VALUES (
+                '$recovery_id'::uuid,
+                'sendMessage',
+                '{\"chat_id\":1,\"text\":\"recovery\"}'::jsonb,
+                '$recovery_key',
+                'DEAD',
+                8,
+                'test'
+              );
+
+              WITH recovered AS (
+                INSERT INTO notification_outbox(
+                  id,
+                  method,
+                  payload,
+                  dedupe_key
+                )
+                VALUES (
+                  '$conflicting_id'::uuid,
+                  'sendMessage',
+                  '{\"chat_id\":1,\"text\":\"recovery\"}'::jsonb,
+                  '$recovery_key'
+                )
+                ON CONFLICT (dedupe_key)
+                DO UPDATE SET
+                  status = 'PENDING',
+                  attempts = 0,
+                  available_at = now(),
+                  claimed_at = NULL,
+                  claim_token = NULL,
+                  last_error = NULL,
+                  updated_at = now()
+                WHERE notification_outbox.status = 'DEAD'
+                RETURNING
+                  id,
+                  status,
+                  attempts,
+                  last_error IS NULL AS last_error_is_null
+              )
+              SELECT
+                id,
+                status,
+                attempts,
+                last_error_is_null
+              FROM recovered;
+
+              ROLLBACK;
+            "
+          )"
+
+          test "$recovery_result" = "$recovery_id|PENDING|0|t"
+
+          journal_sequence="$(
+            owner_psql -At -c "
+              SELECT pg_get_serial_sequence(
+                'public.movements',
+                'journal_seq'
+              );
+            "
+          )"
+
+          test -n "$journal_sequence"
+
+          test "$(
+            owner_psql -At -c "
+              SELECT has_sequence_privilege(
+                'dc_inventory_app_ci',
+                '$journal_sequence',
+                'USAGE'
+              );
+            "
+          )" = "t"
+
+          sequence_count="$(
+            owner_psql -At -c "
+              SELECT count(*)
+              FROM pg_class AS c
+              JOIN pg_namespace AS n
+                ON n.oid = c.relnamespace
+              WHERE c.relkind = 'S'
+                AND n.nspname = 'public'
+                AND has_sequence_privilege(
+                  'dc_inventory_app_ci',
+                  format(
+                    '%I.%I',
+                    n.nspname,
+                    c.relname
+                  ),
+                  'USAGE'
+                );
+            "
+          )"
+
+          test "$sequence_count" = "1"
+
+          update_id=900000000000000001
+
+          runtime_psql -c "
+            INSERT INTO telegram_updates(update_id)
+            VALUES ($update_id);
+          "
+
+          runtime_psql -c "
+            UPDATE telegram_updates
+            SET processed_at = now()
+            WHERE update_id = $update_id;
+          "
+
+          test "$(
+            runtime_psql -At -c "
+              SELECT processed_at IS NOT NULL
+              FROM telegram_updates
+              WHERE update_id = $update_id;
+            "
+          )" = "t"
+
+          if runtime_psql -c "
+            UPDATE telegram_updates
+            SET received_at = received_at
+            WHERE update_id = $update_id;
+          " >/tmp/runtime-role-denied.log 2>&1
+          then
+            echo "unexpected broad telegram_updates UPDATE"
+            exit 1
+          fi
+
+          grep -qi 'permission denied' \
+            /tmp/runtime-role-denied.log
+
+      - name: Verify maintenance worker boundary
+        run: |
+          maintenance_cid="$(docker compose --env-file .env.ci -f compose.yaml ps -q maintenance-worker)"
+          test -n "$maintenance_cid"
+          test "$(docker inspect -f '{{json .HostConfig.PortBindings}}' "$maintenance_cid")" = '{}'
+
+          maintenance_networks="$(docker inspect -f '{{range $k, $_ := .NetworkSettings.Networks}}{{$k}} {{end}}' "$maintenance_cid")"
+          test "$(printf '%s\n' "$maintenance_networks" | wc -w | tr -d ' ')" = "1"
+          printf '%s\n' "$maintenance_networks" | grep -q '_db_net'
+          ! printf '%s\n' "$maintenance_networks" | grep -q '_app_net'
+          ! printf '%s\n' "$maintenance_networks" | grep -q '_egress_net'
+
+          docker compose --env-file .env.ci -f compose.yaml exec -T maintenance-worker sh -c '
+            case "$DATABASE_URL" in
+              postgresql+asyncpg://dc_inventory_maintenance_ci:*) ;;
+              *) exit 1 ;;
+            esac
+            test -z "${TELEGRAM_BOT_TOKEN:-}"
+            test -z "${TELEGRAM_WEBHOOK_SECRET:-}"
+            test -z "${TELEGRAM_GATEWAY_SECRET:-}"
+          '
+
+          privilege_matrix="$(
+            docker compose --env-file .env.ci -f compose.yaml exec -T postgres \
+              psql -U dc_inventory -d dc_inventory -AtF '|' -c "
+                SELECT
+                  has_table_privilege('dc_inventory_maintenance_ci', 'auth_sessions', 'SELECT'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'auth_sessions', 'DELETE'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'telegram_updates', 'SELECT'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'telegram_updates', 'DELETE'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'notification_outbox', 'SELECT'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'notification_outbox', 'DELETE'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'access_decision_callbacks', 'SELECT'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'access_decision_callbacks', 'DELETE'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'access_requests', 'SELECT'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'movements', 'SELECT'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'movements', 'DELETE'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'access_requests', 'DELETE'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'notification_outbox', 'UPDATE'),
+                  has_schema_privilege('dc_inventory_maintenance_ci', 'public', 'CREATE');
+              "
+          )"
+
+          test "$privilege_matrix" = "t|t|t|t|t|t|t|t|t|f|f|f|f|f"
+
+          retention_ran=0
+
+          for attempt in $(seq 1 20); do
+            if docker compose --env-file .env.ci -f compose.yaml \
+              logs --no-color maintenance-worker 2>&1 \
+              | grep -q 'technical retention:'
+            then
+              retention_ran=1
+              break
+            fi
+
+            sleep 1
+          done
+
+          test "$retention_ran" = "1"
 
       - name: Runtime state
         if: always()

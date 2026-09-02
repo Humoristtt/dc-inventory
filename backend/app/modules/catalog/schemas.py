@@ -2,7 +2,7 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, TypeAdapter, field_validator
 
 from app.modules.catalog.enums import (
     AccountingMode,
@@ -18,6 +18,23 @@ type MetadataValue = str | int | Decimal | bool
 
 class StrictRequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+
+_HTTP_URL_ADAPTER = TypeAdapter(AnyHttpUrl)
+
+
+def _canonicalize_optional_http_url(value: object) -> object:
+    if value is None or not isinstance(value, str):
+        return value
+
+    stripped = value.strip()
+    if not stripped:
+        return None
+
+    try:
+        return str(_HTTP_URL_ADAPTER.validate_python(stripped))
+    except ValueError as error:
+        raise ValueError("datasheet_url must be a valid http/https URL") from error
 
 
 class ManufacturerCreate(StrictRequestModel):
@@ -86,6 +103,11 @@ class ItemCreate(StrictRequestModel):
     technical_data_source: str | None = None
     attributes: dict[str, AttributeInputValue] = Field(default_factory=dict)
 
+    _canonicalize_datasheet_url = field_validator(
+        "datasheet_url",
+        mode="before",
+    )(_canonicalize_optional_http_url)
+
 
 class ItemPatch(StrictRequestModel):
     category_key: str | None = Field(default=None, max_length=64)
@@ -100,6 +122,11 @@ class ItemPatch(StrictRequestModel):
     datasheet_url: str | None = Field(default=None, max_length=2048)
     technical_data_source: str | None = None
     attributes: dict[str, AttributeInputValue] | None = None
+
+    _canonicalize_datasheet_url = field_validator(
+        "datasheet_url",
+        mode="before",
+    )(_canonicalize_optional_http_url)
 
 
 class ItemCategoryOut(BaseModel):

@@ -62,21 +62,20 @@ async def request_access(
             detail="access blocked",
         ) from exc
 
-    if result.created:
-        settings: Settings = request.app.state.settings
-        try:
-            await enqueue_access_request_admin_notification(
-                db,
-                access_request=result.request,
-                identity=authenticated.identity,
-                settings=settings,
-            )
-        except TelegramDeliveryConfigurationError as exc:
-            await db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="access notification unavailable",
-            ) from exc
+    settings: Settings = request.app.state.settings
+    try:
+        await enqueue_access_request_admin_notification(
+            db,
+            access_request=result.request,
+            identity=authenticated.identity,
+            settings=settings,
+        )
+    except TelegramDeliveryConfigurationError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="access notification unavailable",
+        ) from exc
 
     await db.commit()
     await db.refresh(result.request)

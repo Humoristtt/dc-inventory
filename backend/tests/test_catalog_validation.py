@@ -2,9 +2,11 @@ import uuid
 from decimal import Decimal
 
 import pytest
+from pydantic import ValidationError
 
 from app.modules.catalog.enums import AttributeDataType, FilterType
 from app.modules.catalog.models import CategoryAttribute
+from app.modules.catalog.schemas import ItemCreate
 from app.modules.catalog.service import (
     CatalogValidationError,
     normalize_comparison,
@@ -258,11 +260,14 @@ def test_decimal_values_outside_numeric_30_10_storage_bounds_are_rejected(
 
 def test_normalize_comparison_checks_casefolded_storage_length() -> None:
     within_limit = "ß" * 64
-    assert normalize_comparison(
-        within_limit,
-        field="internal_code",
-        max_length=128,
-    ) == "ss" * 64
+    assert (
+        normalize_comparison(
+            within_limit,
+            field="internal_code",
+            max_length=128,
+        )
+        == "ss" * 64
+    )
 
     with pytest.raises(CatalogValidationError) as exc_info:
         normalize_comparison(
@@ -272,3 +277,35 @@ def test_normalize_comparison_checks_casefolded_storage_length() -> None:
         )
 
     assert exc_info.value.code == "internal_code_too_long"
+
+
+@pytest.mark.parametrize(
+    "datasheet_url",
+    [
+        "javascript:alert(1)",
+        "ftp://example.com/spec.pdf",
+        "not a URL",
+    ],
+)
+def test_item_datasheet_url_rejects_non_http_link_semantics(
+    datasheet_url: str,
+) -> None:
+    with pytest.raises(ValidationError):
+        ItemCreate(
+            category_key="nic",
+            name="Network adapter",
+            datasheet_url=datasheet_url,
+        )
+
+
+def test_item_datasheet_url_accepts_valid_http_and_https_links() -> None:
+    for datasheet_url in (
+        "http://example.com/spec",
+        "https://example.com/spec.pdf?revision=2#details",
+    ):
+        payload = ItemCreate(
+            category_key="nic",
+            name="Network adapter",
+            datasheet_url=datasheet_url,
+        )
+        assert payload.datasheet_url == datasheet_url

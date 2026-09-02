@@ -5,7 +5,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -46,6 +46,7 @@ async def enqueue_telegram_call(
     payload: dict[str, object],
     dedupe_key: str,
     available_at: datetime | None = None,
+    requeue_dead: bool = False,
 ) -> None:
     if method not in ALLOWED_TELEGRAM_METHODS:
         raise UnsupportedTelegramMethodError(method)
@@ -60,11 +61,35 @@ async def enqueue_telegram_call(
     if available_at is not None:
         values["available_at"] = available_at
 
-    statement = (
-        pg_insert(NotificationOutbox)
-        .values(**values)
-        .on_conflict_do_nothing(index_elements=[NotificationOutbox.dedupe_key])
+    statement = pg_insert(NotificationOutbox).values(
+        **values
     )
+
+    if requeue_dead:
+        statement = statement.on_conflict_do_update(
+            index_elements=[
+                NotificationOutbox.dedupe_key
+            ],
+            set_={
+                "status": "PENDING",
+                "attempts": 0,
+                "available_at": func.now(),
+                "claimed_at": None,
+                "claim_token": None,
+                "last_error": None,
+                "updated_at": func.now(),
+            },
+            where=(
+                NotificationOutbox.status == "DEAD"
+            ),
+        )
+    else:
+        statement = statement.on_conflict_do_nothing(
+            index_elements=[
+                NotificationOutbox.dedupe_key
+            ]
+        )
+
     await db.execute(statement)
 
 

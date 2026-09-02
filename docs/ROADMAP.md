@@ -5,12 +5,20 @@
 > **Правило:** завершённые пункты отмечаются `[x]`, текущие — `[~]`, запланированные — `[ ]`.
 > Если решение меняется, старый пункт не удаляется бесследно: он переносится в раздел «Изменённые / отложенные решения» с короткой причиной.
 >
-> **Последнее обновление:** 2026-09-01
+> **Последнее обновление:** 2026-09-02
 > **Production runtime code baseline:** `08aa052d2af3e9c7e9cb9a2bce670cf6674b6c97` — Stage 4 close; последующие docs-only commits не требуют rebuild runtime.
-> **Production:** Stage 4 Telegram/auth/access foundation завершён 2026-09-01; Stage 5 в production ещё не развёрнут.
-> **Current source:** Stage 5 Catalog Foundation реализован; три source workbook
-> сверены как reference examples. Source-backed metadata refinement подготовлен
-> к независимому review, Stage 6 не начат.
+> **Production:** Stage 4 Telegram/auth/access foundation завершён 2026-09-01;
+> Stage 5 и Stage 6 в production ещё не развёрнуты, real inventory entry
+> заблокирован до backup + successful restore gate.
+> **Current source:** Stage 5 Catalog Foundation и source-backed refinement
+> merged в `main`. Stage 6 Warehouse Core находится в
+> `audit/stage6-final-review-20260902`; исходный final-audit checkpoint:
+> `bb76b4b4a12e6986dfdbadc086562a53d1d2ad96`.
+> Полный source audit завершён с `P0=0`, `P1=0`; application-level
+> remediation, production-role regressions, notification recovery,
+> Telegram SDK hardening и canonical documentation закрыты локально.
+> До merge/deployment остаются один final local gate, final remediation
+> commit/push и Pull Request CI.
 
 ---
 
@@ -42,17 +50,17 @@ Telegram Mini App для внутренней инвентаризации об�
 
 ## 1.1. Складской учёт
 
-- [ ] Источник истины — append-only журнал движений оборудования.
-- [ ] Текущий остаток нельзя исправлять прямым редактированием числа.
-- [ ] Любое изменение остатка создаётся через движение.
-- [ ] Ошибочное движение исправляется компенсирующим движением / reversal.
-- [ ] Исторические движения нельзя удалять через обычный API.
-- [ ] Исторические движения нельзя редактировать задним числом.
-- [ ] Остаток является транзакционной проекцией журнала.
-- [ ] Отрицательные остатки запрещены.
-- [ ] Одновременная выдача последней единицы должна завершиться успешно только у одного пользователя.
-- [ ] Все связанные строки движения записываются атомарно одной DB-транзакцией.
-- [ ] Повтор одного и того же клиентского запроса не должен создавать дубль движения — idempotency.
+- [x] Источник истины — append-only журнал движений оборудования.
+- [x] Текущий остаток нельзя исправлять прямым редактированием числа.
+- [x] Любое изменение остатка создаётся через движение.
+- [x] Ошибочное движение исправляется компенсирующим движением / reversal.
+- [x] Исторические движения нельзя удалять через обычный API.
+- [x] Исторические движения нельзя редактировать задним числом.
+- [x] Остаток является транзакционной проекцией журнала.
+- [x] Отрицательные остатки запрещены.
+- [x] Одновременная выдача последней единицы должна завершиться успешно только у одного пользователя.
+- [x] Все связанные строки движения записываются атомарно одной DB-транзакцией.
+- [x] Повтор одного и того же клиентского запроса не должен создавать дубль движения — idempotency.
 
 ## 1.2. Кто физически получил и кто оформил
 
@@ -69,11 +77,11 @@ Telegram Mini App для внутренней инвентаризации об�
 Операцию оформил: Вячеслав
 ```
 
-- [ ] В movement хранится actor.
-- [ ] В movement хранится фактический получатель / источник, если применимо.
-- [ ] В истории показываются оба.
-- [ ] Сохраняется snapshot отображаемого имени на момент операции.
-- [ ] Изменение Telegram username позже не переписывает историю задним числом.
+- [x] В movement хранится actor.
+- [x] В movement хранится фактический получатель / источник, если применимо.
+- [x] Backend history возвращает оба.
+- [x] Сохраняется snapshot отображаемого имени на момент операции.
+- [x] Изменение Telegram username позже не переписывает историю задним числом.
 
 ## 1.3. Локации и хранение у сотрудников
 
@@ -84,15 +92,15 @@ LOCATION → физическая складская локация
 CUSTODY  → у конкретного пользователя
 ```
 
-- [ ] Локации являются first-class сущностями.
-- [ ] «На руках у пользователя» является полноценным состоянием учёта.
-- [ ] Выдача: склад → пользователь.
-- [ ] Возврат: пользователь → склад.
-- [ ] Перемещение: склад → склад.
-- [ ] Приход: внешний источник → склад.
-- [ ] Списание: склад / пользователь → write-off.
-- [ ] Коррекция: только отдельное adjustment movement.
-- [ ] Админ видит, у кого сейчас находится каждая позиция.
+- [x] Локации являются first-class сущностями.
+- [x] «На руках у пользователя» является полноценным состоянием учёта.
+- [x] Backend выдача: склад → пользователь.
+- [x] Backend возврат: пользователь → склад.
+- [x] Backend перемещение: склад → склад.
+- [x] Backend приход: внешний источник → склад.
+- [x] Backend списание: склад / пользователь → write-off.
+- [x] Коррекция: только отдельное linked movement.
+- [x] Approved/Admin API показывает current positions/holders.
 - [ ] Пользователь видит экран «Моё оборудование».
 
 ---
@@ -110,21 +118,24 @@ CUSTODY  → у конкретного пользователя
 
 Примеры: кабели питания, оптика, большинство SFP.
 
-- [ ] Поддержан количественный режим.
-- [ ] Нельзя выдать количество > доступного.
-- [ ] Нельзя создать движение с `quantity <= 0`.
-- [ ] Остаток по каждой позиции и локации согласован с журналом.
+- [x] Поддержан количественный режим.
+- [x] Нельзя выдать количество > доступного.
+- [x] Нельзя создать движение с `quantity <= 0`.
+- [x] Остаток по каждой позиции и локации согласован с журналом.
 
 ## 2.2. SERIAL
 
-Для индивидуально отслеживаемых единиц:
+Для индивидуально отслеживаемых единиц Stage 6:
 
 - serial number;
-- optional asset tag;
 - состояние;
 - текущее местонахождение;
 - текущий holder;
-- optional WWN / firmware и т. п.
+- optional WWN;
+- optional physical-unit comment.
+
+`asset_tag`, firmware и другие расширенные physical-unit metadata отложены и
+не входят в Stage 6.
 
 Предварительно:
 
@@ -136,11 +147,11 @@ CUSTODY  → у конкретного пользователя
 | Сетевые карты | SERIAL |
 | Диски | SERIAL |
 
-- [ ] Поддержан serial mode.
-- [ ] Один serial не может находиться одновременно в двух местах.
-- [ ] Уже выданный serial нельзя выдать повторно.
+- [x] Поддержан serial mode.
+- [x] Один serial не может находиться одновременно в двух местах.
+- [x] Уже выданный serial нельзя выдать повторно.
 - [ ] Serial можно искать глобальным поиском.
-- [ ] Для serial-позиций отображается история конкретного экземпляра.
+- [x] Backend history фильтруется по конкретному InventoryUnit.
 
 ---
 
@@ -156,7 +167,8 @@ CUSTODY  → у конкретного пользователя
 - [ ] ADMIN имеет полный доступ к административным операциям.
 - [ ] USER может работать только в разрешённом пользовательском сценарии.
 - [x] Общий backend authorization foundation различает `Authenticated`, `Approved` и `Admin`.
-- [ ] Каждый будущий предметный endpoint использует `Approved` / `Admin` согласно policy.
+- [x] Реализованные catalog/warehouse endpoints используют `Approved` / `Admin`
+  согласно policy; future endpoints сохраняют тот же acceptance invariant.
 - [x] Bootstrap первого ADMIN задаётся явно numeric Telegram ID, а не правилом «первый вошедший становится админом».
 
 ## 3.2. Статусы доступа
@@ -834,9 +846,8 @@ S3MediaStorage / R2MediaStorage
 
 # 17. Рабочие операции
 
-Типы movements первой версии:
+Реализованные Stage 6 movement types:
 
-- `OPENING_BALANCE`
 - `RECEIPT`
 - `ISSUE`
 - `RETURN`
@@ -844,14 +855,20 @@ S3MediaStorage / R2MediaStorage
 - `WRITE_OFF`
 - `CORRECTION` / `ADJUSTMENT`
 - `REVERSAL`
+
+Future controlled workflows, не реализованные generic Stage 6 movement API:
+
+- `OPENING_BALANCE`
 - `STOCKTAKE_ADJUSTMENT`
 
-- [ ] Все типы имеют чёткие domain invariants.
-- [ ] Movement может содержать несколько MovementLine.
-- [ ] Каждая MovementLine хранит Item / InventoryUnit и количество.
-- [ ] SERIAL и QUANTITY корректно сосуществуют в одном movement.
-- [ ] Причина / комментарий доступна там, где нужна.
-- [ ] Optional purpose/reference: сервер, стойка, тикет и т. п.
+- [x] Все реализованные Stage 6 types имеют чёткие domain invariants.
+- [x] Movement может содержать несколько ordered MovementLine.
+- [x] Каждая MovementLine хранит Item / InventoryUnit и quantity согласно mode.
+- [x] SERIAL и QUANTITY корректно сосуществуют в одном movement.
+- [x] Optional comment хранится в movement history.
+- [x] Optional purpose/reference хранится в movement history.
+- [ ] Спроектировать отдельный `OPENING_BALANCE` workflow после production-data gate.
+- [ ] Реализовать `STOCKTAKE_ADJUSTMENT` только вместе со Stage 14 workflow.
 
 ---
 
@@ -1628,34 +1645,54 @@ Viewport profiles:
 categories без category-specific schema hacks.
 
 Foundation gate выполнен. Source reference reconciliation и metadata refinement
-реализованы локально; Stage 5 остаётся текущим до независимого review и CI этого
-change set. В production refinement не развёрнут, Stage 6 не начат.
+merged в `main` через PR #10. В production Stage 5 ещё не развёрнут.
 
 ## Stage 6 — Inventory Ledger
 
-- [ ] Location.
-- [ ] InventoryPosition / custody model.
-- [ ] InventoryUnit.
-- [ ] Movement.
-- [ ] MovementLine.
-- [ ] Balance projection.
-- [ ] Opening balance.
-- [ ] Receipt.
-- [ ] Issue.
-- [ ] Return.
-- [ ] Transfer.
-- [ ] Write-off.
-- [ ] Correction.
-- [ ] Reversal.
-- [ ] Idempotency.
-- [ ] Locks.
-- [ ] Serial invariants.
-- [ ] Quantity invariants.
-- [ ] Actor/recipient semantics.
-- [ ] Movement snapshots.
-- [ ] Concurrency tests.
+- [x] Location.
+- [x] Normalized Location/holder custody positions.
+- [x] InventoryUnit.
+- [x] Movement.
+- [x] MovementLine.
+- [x] Balance projection.
+- [x] Explicit no-opening-balance/no-import decision; real stock entry отдельно
+  заблокирован до backup/restore production-data gate.
+- [x] Receipt.
+- [x] Issue.
+- [x] Return.
+- [x] Transfer.
+- [x] Write-off.
+- [x] Correction.
+- [x] Reversal.
+- [x] Idempotency.
+- [x] Locks.
+- [x] Serial invariants.
+- [x] Quantity invariants.
+- [x] Actor/recipient semantics.
+- [x] Movement snapshots.
+- [x] Concurrency tests.
+- [x] Archived Location reversal invariant.
+- [x] Archived Item QUANTITY/SERIAL lifecycle policy.
+- [x] Global WWN identity and deterministic lock graph.
+- [x] Stable MovementLine order and WWN snapshots.
+- [x] Retryable PostgreSQL conflict mapping and BIGINT bounds.
+- [x] Read-only projection reconciliation runbook.
+- [x] Independent remediation review и remediation.
+- [x] Final full source audit: `P0=0`, `P1=0`.
+- [x] Production DB-role regression coverage.
+- [x] Controlled DEAD access-notification recovery.
+- [x] Production Telegram Gateway HTTPS validation.
+- [x] Same-origin Telegram SDK integrity/failure hardening.
+- [x] Canonical documentation synchronization.
+- [ ] Единый final local gate всего change set.
+- [ ] Commit/push final remediation.
+- [ ] Pull Request CI.
 
 **GATE:** journal mathematically consistent; last-unit race passes; historical movement immutable.
+
+**STATUS: FINAL REMEDIATION COMPLETE LOCALLY — application-level blockers
+закрыты. До merge/deployment остаются final local gate, commit/push и
+Pull Request CI.**
 
 ## Stage 7 — Catalog Read API / Search / Filters
 
@@ -1720,10 +1757,15 @@ change set. В production refinement не развёрнут, Stage 6 не на�
 
 ## Stage 10 — History + Admin
 
-- [ ] History list.
-- [ ] History filters.
-- [ ] Movement detail.
-- [ ] Correction relationship.
+- [x] Backend history list с stable database-generated `journal_seq` ordering и pagination.
+- [x] Backend filters по movement type, Item и InventoryUnit.
+- [x] Backend movement detail с ordered lines, actor/recipient, positions,
+  purpose/comment и original link.
+- [x] Backend correction relationship имеет Item + position invariants.
+- [ ] History list UI.
+- [ ] History presentation filters UI.
+- [ ] Movement detail UI.
+- [ ] Correction relationship UI.
 - [ ] Users.
 - [ ] Access request admin screen.
 - [ ] Roles.
@@ -1809,10 +1851,15 @@ Import:
 
 ## Stage 15 — Production Hardening Before Real Inventory
 
+**BLOCKING POLICY:** real inventory entry остаётся запрещён до выполненных
+PostgreSQL automated backup + verified artifact + real restore test в отдельное
+окружение. Deploy Stage 5/6 не снимает этот gate.
+
 - [ ] PostgreSQL automated backup.
 - [ ] Media backup.
 - [ ] Off-VM storage.
-- [ ] Retention.
+- [x] Technical runtime-data retention worker.
+- [ ] Backup artifact retention policy.
 - [ ] Real restore test.
 - [ ] Restore runbook.
 - [ ] Image pinning / immutable deployment decision.
@@ -1844,6 +1891,7 @@ Import:
 - [ ] Redis без фактической необходимости.
 - [ ] Microservices.
 - [ ] Полный S3/R2 migration до появления потребности.
+- [ ] `asset_tag`, firmware и расширенные physical-unit metadata для SERIAL.
 
 Эти пункты допускаются позже, но текущая архитектура не должна делать их невозможными.
 
@@ -1856,10 +1904,10 @@ Import:
 - [x] `docs/DEVELOPMENT.md`
 - [x] `docs/DEPLOYMENT.md`
 - [x] `docs/HISTORY.md`
-- [~] `docs/ROADMAP.md` — этот файл.
-- [ ] `docs/PRODUCT_REQUIREMENTS.md` — пользовательские сценарии, роли, бизнес-правила.
+- [x] `docs/ROADMAP.md` — этот файл.
+- [x] `docs/PRODUCT_REQUIREMENTS.md` — пользовательские сценарии, роли, бизнес-правила.
 - [x] `docs/CATALOG_SCHEMA.md` — точные поля/enum/filter/card/export definitions 5 категорий.
-- [ ] `docs/OPERATIONS.md` — backup/restore/deploy/rollback/runbook по мере появления.
+- [x] `docs/OPERATIONS.md` — deploy/runtime/reconciliation/backup-restore gate/runbook.
 - [ ] API contract docs остаются генерируемыми, production Swagger наружу не включать.
 
 Правило:
@@ -1910,9 +1958,9 @@ Import:
 
 # 42. Следующий фактический шаг
 
-**CURRENT: Stage 5 — Catalog Foundation**
+**CURRENT: Stage 6 — final full local gate / PR preparation**
 
-Ближайшая последовательность:
+Завершено:
 
 - [x] Сверить source workbook как reference examples с требованиями Stage 5.
 - [x] Зафиксировать source-to-canonical mapping и A–F decisions в
@@ -1928,8 +1976,30 @@ Import:
 - [x] Провести технический Stage 5 gate: пять категорий создаются и читаются без
   category-specific schema hacks.
 - [x] Добавить source-backed metadata migration без backend contract changes.
-- [~] Провести независимый review refinement change set и получить CI gate.
+- [x] Source-reference refinement merged в `main` через PR #10.
+- [x] Спроектировать Stage 6 invariants в `docs/WAREHOUSE_DOMAIN.md`.
+- [x] Добавить migration `b7c8d9e0f1a2` поверх `a6b7c8d9e0f1`.
+- [x] Реализовать Location, InventoryUnit, Movement/Line и StockBalance.
+- [x] Реализовать Approved read/Admin mutation API.
+- [x] Добавить quantity/serial/idempotency/authorization/PostgreSQL tests.
+- [x] Добавить real last-quantity и serial-allocation concurrency tests.
+- [x] Исправить independent-review P1/P2 findings Stage 6 и добавить focused
+  PostgreSQL lifecycle/integrity/concurrency regressions.
+- [x] Выполнить remediation final backend gate: diff-check, Ruff, strict mypy и
+  полный PostgreSQL pytest.
+- [x] Провести independent remediation review Stage 6.
+- [x] Провести final full source audit ветки
+  `audit/stage6-final-review-20260902`.
+- [x] Закрыть production-role permission gaps и regression gates.
+- [x] Закрыть Telegram Gateway HTTPS validation.
+- [x] Закрыть DEAD access-notification recovery.
+- [x] Закрыть Telegram SDK integrity/failure UX.
+- [x] Синхронизировать canonical documentation и ROADMAP.
+- [ ] Выполнить единый final local gate всего актуального working tree.
+- [ ] Commit/push final remediation.
+- [ ] Выполнить Pull Request CI.
+- [ ] Merge Stage 6 в `main`.
 
-Следующий фактический шаг внутри Stage 5: independent source review текущего
-refinement и GitHub CI после отдельного разрешения на commit/push/PR. До этого
-Stage 5 не помечается DONE и roadmap не переходит к Stage 6.
+Следующий фактический шаг: **один final local gate всего change set**.
+При PASS: commit/push → Pull Request CI → merge.
+Stage 7 в этот change set не входит.

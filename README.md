@@ -14,7 +14,7 @@
 - Категории оборудования расширяемы без переделки всей системы.
 - Доступ пользователей осуществляется через Telegram.
 - Базовые роли: `ADMIN` и `USER`.
-- Администратор получает уведомления о выдаче оборудования.
+- Уведомления о складской выдаче запланированы отдельно и ещё не реализованы.
 - Production разворачивается только из зафиксированного Git commit.
 - Production VM имеет только read-only доступ к GitHub-репозиторию.
 
@@ -38,7 +38,12 @@ foundation:
 - Telegram webhook с secret-token validation и persistent `update_id` dedupe;
 - transactional notification outbox;
 - отдельный `telegram-worker`;
+- отдельный least-privilege `maintenance-worker`;
+- разделённые PostgreSQL identities для owner/migrations, backend runtime,
+  Telegram worker и maintenance worker;
+- bounded technical-data retention;
 - Cloudflare Worker Telegram Gateway;
+- production gateway URL требует HTTPS;
 - ADMIN approve/reject через inline-кнопки;
 - Ruff, mypy strict, Pytest, Oxlint, TypeScript, Vitest;
 - GitHub Actions CI;
@@ -58,8 +63,8 @@ Stage 4 Telegram/auth/access foundation закрыт production smoke 2026-09-01
 неизвестный пользователь запросил доступ, ADMIN получил Telegram-уведомление,
 одобрил запрос inline-кнопкой, пользователь получил уведомление и вошёл в Mini App.
 
-В текущем исходном коде реализован Stage 5 Catalog Foundation, но он ещё не
-развёрнут в production:
+В текущем исходном коде реализованы Stage 5 Catalog Foundation и Stage 6
+Warehouse Core, но они ещё не развёрнуты в production:
 
 - Category, Manufacturer и Item;
 - metadata-driven CategoryAttribute и typed ItemAttributeValue;
@@ -67,11 +72,30 @@ Stage 4 Telegram/auth/access foundation закрыт production smoke 2026-09-01
 - пять initial versioned schemas: SFP, оптика, кабели питания, NIC и диски;
 - source-backed refinement: медные сетевые кабели, conductor attributes для
   кабелей питания и уточнённые SFP vocabularies.
+- first-class Location с non-destructive lifecycle;
+- append-only Movement/MovementLine journal: receipt, issue, return, transfer,
+  write-off, correction и reversal;
+- integer StockBalance projection по Location/holder для QUANTITY;
+- physical InventoryUnit state/custody для SERIAL;
+- PostgreSQL row/advisory locking, request idempotency и concurrency regression
+  tests;
+- production-role database permission regressions для Telegram ingress,
+  immutable warehouse journal и controlled DEAD notification recovery;
+- same-origin vendored Telegram Web App SDK с фиксированным SHA-256 и явным
+  frontend failure state.
 
-Item является каталожной позицией; физические serial units относятся к будущему
-InventoryUnit и в Stage 5 не реализованы. Три локальных workbook сверены только
-как reference examples для catalog design. Refinement ожидает независимый
-review/CI; Stage 6 не начат.
+Item остаётся каталожной позицией; физические serial units и balances существуют
+только в warehouse domain. Три локальных workbook сверены только как reference
+examples для catalog design. Quantities, balances и serial identities из них не
+импортируются. Stage 6 не добавляет frontend warehouse UI. Полный independent audit и
+application-level remediation закрыты локально в ветке
+`audit/stage6-final-review-20260902`: `P0=0`, `P1=0`. Перед merge/deployment
+остаётся один общий final local gate, затем commit/push и Pull Request CI.
+
+Ввод реальных inventory данных в production заблокирован до автоматизированного
+PostgreSQL backup и успешного real restore test в отдельное окружение. После
+этого перед вводом stock должен пройти read-only projection reconciliation из
+`backend/scripts/reconcile_inventory_projections.sql`.
 
 ## Номенклатура
 
@@ -126,6 +150,13 @@ Production VM:
 
 История проекта ведётся в [`docs/HISTORY.md`](docs/HISTORY.md).
 
-Развёртывание:
+Основные canonical документы:
 
-[`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+- [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- [`docs/PRODUCT_REQUIREMENTS.md`](docs/PRODUCT_REQUIREMENTS.md)
+- [`docs/CATALOG_SCHEMA.md`](docs/CATALOG_SCHEMA.md)
+- [`docs/WAREHOUSE_DOMAIN.md`](docs/WAREHOUSE_DOMAIN.md)
+- [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
+- [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
+- [`docs/OPERATIONS.md`](docs/OPERATIONS.md)
+- [`docs/ROADMAP.md`](docs/ROADMAP.md)

@@ -47,4 +47,14 @@ it("показывает готовность backend", async () => {
   expect(
     await screen.findByText("Система готова"),
   ).toBeInTheDocument();
+
+  expect(
+    screen.getByText("Backend-контур готов"),
+  ).toBeInTheDocument();
+
+  expect(
+    screen.getByText(
+      /Каталог и складской учёт реализованы на backend/,
+    ),
+  ).toBeInTheDocument();
 });

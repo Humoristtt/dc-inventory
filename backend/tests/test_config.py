@@ -15,6 +15,8 @@ def test_database_runtime_defaults() -> None:
     assert settings.database_pool_timeout_seconds == 5
     assert settings.database_statement_timeout_seconds == 30
     assert settings.database_lock_timeout_seconds == 5
+    assert settings.migration_statement_timeout_seconds == 300
+    assert settings.migration_lock_timeout_seconds == 5
 
 
 @pytest.mark.parametrize(
@@ -26,6 +28,10 @@ def test_database_runtime_defaults() -> None:
         ("database_pool_timeout_seconds", 0),
         ("database_statement_timeout_seconds", 0),
         ("database_lock_timeout_seconds", 0),
+        ("migration_statement_timeout_seconds", 29),
+        ("migration_statement_timeout_seconds", 3601),
+        ("migration_lock_timeout_seconds", 0),
+        ("migration_lock_timeout_seconds", 61),
     ],
 )
 def test_invalid_database_runtime_settings_are_rejected(field: str, value: int) -> None:

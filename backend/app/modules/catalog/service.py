@@ -599,11 +599,7 @@ async def create_item(db: AsyncSession, payload: ItemCreate) -> uuid.UUID:
         accounting_mode=payload.accounting_mode or category.default_accounting_mode,
         status=ItemStatus.ACTIVE,
         comment=normalize_optional_text(payload.comment),
-        datasheet_url=normalize_optional_inline_text(
-            payload.datasheet_url,
-            field="datasheet_url",
-            max_length=2048,
-        ),
+        datasheet_url=payload.datasheet_url,
         technical_data_source=normalize_optional_text(
             payload.technical_data_source
         ),
@@ -705,11 +701,7 @@ async def update_item(
     if "comment" in fields_set:
         item.comment = normalize_optional_text(payload.comment)
     if "datasheet_url" in fields_set:
-        item.datasheet_url = normalize_optional_inline_text(
-            payload.datasheet_url,
-            field="datasheet_url",
-            max_length=2048,
-        )
+        item.datasheet_url = payload.datasheet_url
     if "technical_data_source" in fields_set:
         item.technical_data_source = normalize_optional_text(
             payload.technical_data_source

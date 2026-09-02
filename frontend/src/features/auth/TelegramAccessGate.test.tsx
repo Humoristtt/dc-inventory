@@ -14,6 +14,10 @@ import {
 } from "vitest";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import {
+  TELEGRAM_WEB_APP_SDK_PATH,
+  loadTelegramWebAppSdk,
+} from "../../shared/telegram/webApp";
 import { TelegramAccessGate } from "./TelegramAccessGate";
 
 const support = {
@@ -464,4 +468,47 @@ it("late PENDING request response не понижает свежий APPROVED au
   });
 
   expect(await screen.findByText("Каталог доступен")).toBeInTheDocument();
+});
+
+it("отличает сбой загрузки Telegram SDK от запуска вне Telegram", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "/api/auth/me") {
+        return new Response(null, { status: 401 });
+      }
+
+      throw new Error(`unexpected fetch: ${url}`);
+    }),
+  );
+
+  const sdkPromise = loadTelegramWebAppSdk();
+
+  const script =
+    document.querySelector<HTMLScriptElement>(
+      `script[src="${TELEGRAM_WEB_APP_SDK_PATH}"]`,
+    );
+
+  expect(script).not.toBeNull();
+
+  script?.dispatchEvent(new Event("error"));
+  await sdkPromise;
+
+  renderGate();
+
+  expect(
+    await screen.findByRole(
+      "heading",
+      { name: "Не удалось загрузить Telegram" },
+    ),
+  ).toBeInTheDocument();
+
+  expect(
+    screen.queryByRole(
+      "heading",
+      { name: "Откройте приложение через Telegram" },
+    ),
+  ).not.toBeInTheDocument();
 });

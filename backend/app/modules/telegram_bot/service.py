@@ -120,6 +120,54 @@ async def create_access_decision_callbacks(
     return approve, reject
 
 
+async def get_or_create_access_decision_callbacks(
+    db: AsyncSession,
+    access_request_id: uuid.UUID,
+) -> tuple[
+    AccessDecisionCallback,
+    AccessDecisionCallback,
+]:
+    existing = list(
+        (
+            await db.scalars(
+                select(AccessDecisionCallback)
+                .where(
+                    AccessDecisionCallback.access_request_id
+                    == access_request_id
+                )
+                .order_by(
+                    AccessDecisionCallback.action
+                )
+            )
+        ).all()
+    )
+
+    if not existing:
+        return await create_access_decision_callbacks(
+            db,
+            access_request_id,
+        )
+
+    by_action = {
+        callback.action: callback
+        for callback in existing
+    }
+
+    approve = by_action.get("APPROVE")
+    reject = by_action.get("REJECT")
+
+    if (
+        len(existing) != 2
+        or approve is None
+        or reject is None
+    ):
+        raise RuntimeError(
+            "access decision callback pair is incomplete"
+        )
+
+    return approve, reject
+
+
 def _display_identity(identity: TelegramIdentity) -> str:
     username = f"@{identity.username}" if identity.username else "без username"
     full_name = " ".join(
@@ -145,9 +193,11 @@ async def enqueue_access_request_admin_notification(
             "ADMIN_TELEGRAM_USER_ID is not configured"
         )
 
-    approve, reject = await create_access_decision_callbacks(
-        db,
-        access_request.id,
+    approve, reject = (
+        await get_or_create_access_decision_callbacks(
+            db,
+            access_request.id,
+        )
     )
     await enqueue_telegram_call(
         db,
@@ -178,6 +228,7 @@ async def enqueue_access_request_admin_notification(
             access_request.id,
             "admin",
         ),
+        requeue_dead=True,
     )
 
 

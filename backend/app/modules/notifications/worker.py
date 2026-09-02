@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -18,17 +19,83 @@ from app.modules.notifications.service import (
 logger = logging.getLogger(__name__)
 
 
-def configured_gateway_client(settings: Settings) -> TelegramGatewayClient:
+def validate_notification_worker_config(settings: Settings) -> None:
+    validate_notification_worker_lease(settings)
+
     gateway_url = settings.telegram_gateway_url_value
     gateway_secret = settings.telegram_gateway_secret_value
+
     if gateway_url is None or gateway_secret is None:
         raise RuntimeError("Telegram gateway is not configured")
+
+    raw_gateway_url = settings.telegram_gateway_url
+    if (
+        raw_gateway_url is None
+        or raw_gateway_url != raw_gateway_url.strip()
+    ):
+        raise RuntimeError(
+            "TELEGRAM_GATEWAY_URL must not contain surrounding whitespace"
+        )
+
+    try:
+        parsed = urlsplit(gateway_url)
+        _ = parsed.port
+    except ValueError as error:
+        raise RuntimeError(
+            "TELEGRAM_GATEWAY_URL must be a valid absolute URL"
+        ) from error
+
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or parsed.hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise RuntimeError(
+            "TELEGRAM_GATEWAY_URL must be a valid absolute URL"
+        )
+
+    if (
+        settings.app_env == "production"
+        and parsed.scheme.lower() != "https"
+    ):
+        raise RuntimeError(
+            "TELEGRAM_GATEWAY_URL must use HTTPS in production"
+        )
+
+
+def configured_gateway_client(settings: Settings) -> TelegramGatewayClient:
+    validate_notification_worker_config(settings)
+
+    gateway_url = settings.telegram_gateway_url_value
+    gateway_secret = settings.telegram_gateway_secret_value
+
+    assert gateway_url is not None
+    assert gateway_secret is not None
 
     return TelegramGatewayClient(
         base_url=gateway_url,
         secret=gateway_secret,
         timeout_seconds=settings.telegram_gateway_timeout_seconds,
     )
+
+
+def validate_notification_worker_lease(settings: Settings) -> None:
+    minimum_ttl_seconds = (
+        settings.telegram_gateway_timeout_seconds * 2 + 5
+    )
+
+    if (
+        settings.notification_worker_claim_ttl_seconds
+        < minimum_ttl_seconds
+    ):
+        raise RuntimeError(
+            "NOTIFICATION_WORKER_CLAIM_TTL_SECONDS must be at least "
+            f"{minimum_ttl_seconds} seconds for the configured "
+            "TELEGRAM_GATEWAY_TIMEOUT_SECONDS"
+        )
 
 
 async def _finalize_success(
@@ -60,15 +127,29 @@ async def run_worker_once(
     client: TelegramGatewayClient,
     settings: Settings,
 ) -> int:
-    async with AsyncSession(engine, expire_on_commit=False) as db, db.begin():
-        claims = await claim_notification_batch(
-            db,
-            batch_size=settings.notification_worker_batch_size,
-            claim_ttl_seconds=settings.notification_worker_claim_ttl_seconds,
-            max_attempts=settings.notification_worker_max_attempts,
-        )
+    validate_notification_worker_lease(settings)
 
-    for claim in claims:
+    processed = 0
+
+    for _ in range(settings.notification_worker_batch_size):
+        async with (
+            AsyncSession(engine, expire_on_commit=False) as db,
+            db.begin(),
+        ):
+            claims = await claim_notification_batch(
+                db,
+                batch_size=1,
+                claim_ttl_seconds=(
+                    settings.notification_worker_claim_ttl_seconds
+                ),
+                max_attempts=settings.notification_worker_max_attempts,
+            )
+
+        if not claims:
+            break
+
+        claim = claims[0]
+
         try:
             await client.send(claim.method, claim.payload)
         except Exception as exc:
@@ -86,7 +167,9 @@ async def run_worker_once(
         else:
             await _finalize_success(engine, claim)
 
-    return len(claims)
+        processed += 1
+
+    return processed
 
 
 async def run_worker() -> None:

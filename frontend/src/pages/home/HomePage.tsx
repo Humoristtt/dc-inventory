@@ -63,10 +63,10 @@ export function HomePage() {
           <span className="home__foundation-index">01</span>
 
           <div>
-            <strong>Система подключена</strong>
+            <strong>Backend-контур готов</strong>
             <p>
-              Runtime готов. Каталог и складские операции
-              подключаются следующим этапом.
+              Каталог и складской учёт реализованы на backend.
+              Интерфейс складских операций — следующий продуктовый этап.
             </p>
           </div>
         </div>

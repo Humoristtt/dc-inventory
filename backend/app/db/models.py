@@ -9,6 +9,13 @@ from app.modules.catalog.models import (
     Manufacturer,
 )
 from app.modules.identity.models import AccessRequest, TelegramIdentity, User
+from app.modules.inventory.models import (
+    InventoryUnit,
+    Location,
+    Movement,
+    MovementLine,
+    StockBalance,
+)
 from app.modules.notifications.models import NotificationOutbox
 from app.modules.telegram_bot.models import AccessDecisionCallback, TelegramUpdate
 
@@ -20,8 +27,13 @@ __all__ = [
     "CategoryAttribute",
     "Item",
     "ItemAttributeValue",
+    "InventoryUnit",
+    "Location",
     "Manufacturer",
+    "Movement",
+    "MovementLine",
     "NotificationOutbox",
+    "StockBalance",
     "TelegramIdentity",
     "TelegramUpdate",
     "User",

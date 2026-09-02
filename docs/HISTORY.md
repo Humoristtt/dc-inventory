@@ -165,4 +165,90 @@
   историческая `f4a5b6c7d8e9` не изменялась.
 - Ambiguous multi-rate/reach/wavelength и disk model/MPN/source formatting
   задокументированы как manual decisions без fuzzy/import logic.
-- Stage 6, quantity tracking, StockBalance и InventoryUnit не начинались.
+- Refinement merged в `main` через PR #10; migration стала immutable parent для
+  Stage 6.
+
+## 2026-09-01 — Stage 6 — Warehouse Core / Inventory Ledger
+
+- Добавлен предметный модуль `app/modules/inventory` с Location, InventoryUnit,
+  Movement, MovementLine и StockBalance.
+- Каноническая warehouse history закреплена как append-only journal; PostgreSQL
+  triggers запрещают UPDATE/DELETE movement headers и lines.
+- QUANTITY использует positive integer balances ровно в одной Location/holder
+  position с partial unique indexes и transactional projection updates.
+- SERIAL использует physical InventoryUnit identities, deterministic normalized
+  serial/WWN uniqueness и состояния STORED/ISSUED/WRITTEN_OFF/VOIDED.
+- Реализованы RECEIPT, ISSUE, RETURN, TRANSFER, WRITE_OFF, linked CORRECTION и
+  one-per-original REVERSAL без generic signed-delta API.
+- Actor отделён от physical source/destination holder; history сохраняет display
+  snapshots пользователей, Location, Item/manufacturer/model/MPN и serial.
+- Movement mutations получили PostgreSQL-backed idempotency по `(actor,
+  client_request_id)` и canonical request fingerprint.
+- Детерминированные row locks и transaction-scoped advisory locks закрывают
+  underflow, duplicate serial activation и multi-process allocation races.
+- Добавлены Approved read API и Admin-only mutation API со stable domain errors.
+- Migration `b7c8d9e0f1a2` создана поверх immutable `a6b7c8d9e0f1`; opening
+  balances, spreadsheet quantities и serial units не импортируются.
+- Добавлены focused model, PostgreSQL lifecycle/integrity, API authorization,
+  idempotency и real concurrent last-unit/serial allocation tests.
+- Канонический contract зафиксирован в `docs/WAREHOUSE_DOMAIN.md`.
+
+## 2026-09-02 — Stage 6 independent-review remediation
+
+- Reversal больше не может вернуть current state в archived Location; после
+  explicit ADMIN unarchive тот же reversal снова допустим.
+- Archived Item policy разрешает управлять existing QUANTITY/SERIAL inventory
+  через return/transfer/write-off/reversal, но запрещает новый receipt/issue и
+  external archived correction.
+- Non-null normalized WWN стал глобально уникальным, serial uniqueness остался
+  Item-scoped; multi-line identity locks и row locks приведены к одному
+  детерминированному graph `identity -> InventoryUnit -> Item`.
+- Добавлены safe retryable PostgreSQL conflicts для `40P01`/`55P03`/`40001`,
+  post-casefold length checks и controlled BIGINT input/addition bounds.
+- `MovementLine.line_no` сохраняет request order, `wwn_snapshot` сохраняет
+  physical identity history, а snapshot display capacity согласована с полным
+  Telegram identity contract.
+- Correction link теперь требует original Item и position; correction-to-absent
+  SERIAL означает `VOIDED`, а `WRITTEN_OFF` создаёт только WRITE_OFF.
+- Datasheet URL ограничен valid http/https semantics; schema regression больше
+  не считает `b7` вечным Alembic head.
+- Добавлен read-only projection reconciliation SQL/runbook и явный запрет
+  production inventory entry до automated PostgreSQL backup и успешного real
+  restore test.
+- Повторный independent review выявил зависимость history/reconciliation от wall
+  clock + UUIDv4; добавлен database-generated `Movement.journal_seq`, который
+  теперь задаёт канонический порядок journal даже при rollback clock/NTP.
+- Следующий review pass выявил, что UPDATE/DELETE protection не запрещала
+  post-commit INSERT дополнительной MovementLine. `Movement.line_count` и
+  deferred PostgreSQL constraint triggers теперь запечатывают exact contiguous
+  line set на transaction commit и запрещают неполный header.
+- Stage 6 остаётся на independent review/CI и не помечен DONE; Stage 7 не начат.
+
+## 2026-09-02 — Stage 6 final audit closeout — local, pending PR
+
+- Создан final-audit branch `audit/stage6-final-review-20260902`.
+- Исходный checkpoint:
+  `bb76b4b4a12e6986dfdbadc086562a53d1d2ad96`.
+- Полный final source audit выполнен.
+- Production-blocking P1 findings исправлены и проверены реальными
+  least-privilege PostgreSQL roles.
+- Backend runtime получил narrow `UPDATE(processed_at)` для
+  `telegram_updates`.
+- Correction/reversal original context переведён с row locking immutable
+  Movement на transaction-scoped advisory lock.
+- Runtime sequence access сужен до `movements_journal_seq_seq`.
+- Runtime больше не имеет `DELETE` на `auth_sessions`.
+- Controlled `DEAD -> PENDING` access notification recovery переиспользует
+  существующую callback pair и не даёт backend broad outbox UPDATE.
+- Production notification worker требует HTTPS Telegram Gateway URL.
+- Same-origin vendored Telegram Web App SDK имеет CI SHA-256 verification и
+  отдельные load-error/timeout frontend states.
+- Technical retention использует отдельную least-privilege DB identity и
+  имеет CI execution proof.
+- Full Ruff и strict mypy после remediation проходят.
+- Текущий migration head: `c8d9e0f1a2b3`.
+- Созданы `docs/PRODUCT_REQUIREMENTS.md` и `docs/OPERATIONS.md`.
+- Canonical documentation и ROADMAP синхронизированы.
+- Merge/deploy ещё не выполнены.
+- Следующий gate:
+  final local gate -> commit/push -> Pull Request CI -> merge.

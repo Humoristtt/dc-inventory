@@ -23,6 +23,7 @@ import {
 } from "../../shared/api/auth";
 import {
   getTelegramInitData,
+  getTelegramWebAppSdkLoadStatus,
   openTelegramContact,
   prepareTelegramWebApp,
 } from "../../shared/telegram/webApp";
@@ -40,6 +41,13 @@ class TelegramContextRequiredError extends Error {
   }
 }
 
+class TelegramSdkUnavailableError extends Error {
+  constructor() {
+    super("Telegram Web App SDK unavailable");
+    this.name = "TelegramSdkUnavailableError";
+  }
+}
+
 async function resolveAuthState(signal?: AbortSignal): Promise<AuthState> {
   try {
     return await getAuthState(signal);
@@ -47,6 +55,14 @@ async function resolveAuthState(signal?: AbortSignal): Promise<AuthState> {
     if (!(error instanceof ApiRequestError) || error.status !== 401) {
       throw error;
     }
+  }
+
+  const sdkStatus = getTelegramWebAppSdkLoadStatus();
+  if (
+    sdkStatus === "load-error"
+    || sdkStatus === "timeout"
+  ) {
+    throw new TelegramSdkUnavailableError();
   }
 
   const initData = getTelegramInitData();
@@ -244,11 +260,36 @@ function LoadingScreen() {
 
 function ErrorScreen({
   telegramRequired,
+  telegramSdkUnavailable,
   retry,
 }: {
   telegramRequired: boolean;
+  telegramSdkUnavailable: boolean;
   retry: () => void;
 }) {
+  if (telegramSdkUnavailable) {
+    return (
+      <AccessScreen
+        eyebrow="Spikatel Inventory"
+        title="Не удалось загрузить Telegram"
+        action={
+          <button
+            className="access-gate__button"
+            onClick={retry}
+            type="button"
+          >
+            Повторить
+          </button>
+        }
+      >
+        <p>
+          Компонент Telegram Mini App временно недоступен.
+          Повторите загрузку или переоткройте приложение в Telegram.
+        </p>
+      </AccessScreen>
+    );
+  }
+
   if (telegramRequired) {
     return (
       <AccessScreen
@@ -383,7 +424,12 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
         retry={() => {
           void authQuery.refetch();
         }}
-        telegramRequired={authQuery.error instanceof TelegramContextRequiredError}
+        telegramRequired={
+          authQuery.error instanceof TelegramContextRequiredError
+        }
+        telegramSdkUnavailable={
+          authQuery.error instanceof TelegramSdkUnavailableError
+        }
       />
     );
   }
@@ -427,6 +473,7 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
           void accessQuery.refetch();
         }}
         telegramRequired={false}
+        telegramSdkUnavailable={false}
       />
     );
   }

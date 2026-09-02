@@ -11,8 +11,9 @@
 - они не являются авторитетной inventory database или обязательным import source;
 - существующие количества, остатки и иное operational state не импортируются;
 - фактический stock будет проверен владельцем вручную при вводе оборудования;
-- Stage 5 не создаёт `InventoryUnit`, `StockBalance`, movements, locations или
-  opening balances.
+- Stage 5 не создавал `InventoryUnit`, `StockBalance`, movements, locations или
+  opening balances; Stage 6 реализует первые четыре понятия в отдельном
+  warehouse domain, но эти workbook по-прежнему ничего туда не импортируют.
 
 ## Покрытие анализа
 
@@ -41,7 +42,7 @@ field. Количество строк — coverage metric анализа, а н
 | Дальность | `reach_m` | plain m/km переводится в metres; условные значения требуют ручного решения |
 | Разъём | `connector` | polish/lane suffix не смешивается с canonical connector token |
 | Длина волны | `tx_wavelength_nm`, `rx_wavelength_nm` | split выполняется только когда TX/RX явно указаны или подтверждены specs |
-| Количество | future inventory domain | игнорируется в Stage 5 |
+| Количество | Stage 6 inventory domain | не импортируется из reference source |
 
 Reference подтверждает текущие SFP/SFP+/SFP28/QSFP+/QSFP28 formats и добавляет
 стандартизованные `XFP` и `SC Simplex`. `MPO` и `MPO-12` канонизируются как
@@ -63,7 +64,7 @@ CWDM notation не преобразуются догадкой.
 | Duplex/12F | `fiber_count` | canonical integer 2/12 при однозначной product specification |
 | Длина | `length_m` | DECIMAL metres |
 | Type B | `polarity` | TEXT остаётся корректным: source показывает только один вариант и не доказывает полный vocabulary |
-| Количество | future inventory domain | игнорируется в Stage 5 |
+| Количество | Stage 6 inventory domain | не импортируется из reference source |
 
 Connector vocabulary не переводится в ENUM: reference содержит LC, MPO,
 LCHD, gender и PC/UPC notation в неоднородных комбинациях. Текущий TEXT contract
@@ -79,7 +80,7 @@ typed values.
 | Цвет | `color` | TEXT; четыре reference colors не считаются исчерпывающим ENUM |
 | 10A / 250V | `rated_current_a`, `rated_voltage_v` | существующие canonical units A/V |
 | `3×0.75 mm²`-подобная запись | `conductor_count`, `conductor_cross_section_mm2` | два optional typed attributes добавлены versioned migration |
-| Количество | future inventory domain | игнорируется в Stage 5 |
+| Количество | Stage 6 inventory domain | не импортируется из reference source |
 
 Conductor specification встречается в семи из восьми power-cable examples и
 является повторяющейся характеристикой продукта, а не состоянием inventory.
@@ -110,8 +111,8 @@ Conductor specification встречается в семи из восьми pow
 | marketing capacity | `capacity_bytes` | canonical product capacity берётся с label/datasheet, не из OS-observed capacity |
 | Disk vendor | `Manufacturer` | case variants нормализуются; `ATA` не принимается автоматически как manufacturer |
 | Disk model strings | `model` / `manufacturer_part_number` | значение распределяется только после ручной идентификации; concatenated values не split-ятся догадкой |
-| Hostname/IP/rack/U/server identity | future location/custody context | не относится к Item |
-| Installed/procurement counts | future inventory/procurement domain | не импортируется |
+| Hostname/IP/rack/U/server identity | deployment/location context beyond Stage 6 core | не относится к Item |
+| Installed/procurement counts | inventory/procurement context | не импортируется |
 
 Некоторые source cells с intended form factor `2.5` были сохранены Excel как
 date-like values. Composite product text подтверждает смысл, но сам corrupted

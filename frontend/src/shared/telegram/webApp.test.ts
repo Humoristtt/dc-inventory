@@ -9,8 +9,10 @@ import {
 
 import {
   TELEGRAM_WEB_APP_SDK_PATH,
+  bindTelegramBackButton,
   getTelegramWebAppSdkLoadStatus,
   loadTelegramWebAppSdk,
+  prepareTelegramWebApp,
 } from "./webApp";
 
 function sdkScript(): HTMLScriptElement | null {
@@ -106,5 +108,55 @@ describe("Telegram Web App SDK delivery", () => {
     expect(getTelegramWebAppSdkLoadStatus()).toBe(
       "ready",
     );
+  });
+
+  it("prepares Telegram viewport and applies runtime safe areas", () => {
+    const ready = vi.fn();
+    const expand = vi.fn();
+    window.Telegram = {
+      WebApp: {
+        initData: "query_id=test",
+        ready,
+        expand,
+        contentSafeAreaInset: {
+          top: 12,
+          right: 2,
+          bottom: 18,
+          left: 2,
+        },
+      },
+    };
+
+    prepareTelegramWebApp();
+
+    expect(ready).toHaveBeenCalledTimes(1);
+    expect(expand).toHaveBeenCalledTimes(1);
+    expect(document.documentElement.style.getPropertyValue("--app-safe-area-bottom")).toBe("18px");
+  });
+
+  it("subscribes and unsubscribes Telegram BackButton", () => {
+    const handler = vi.fn();
+    const backButton = {
+      show: vi.fn(),
+      hide: vi.fn(),
+      onClick: vi.fn(),
+      offClick: vi.fn(),
+    };
+    window.Telegram = {
+      WebApp: {
+        initData: "query_id=test",
+        ready: vi.fn(),
+        expand: vi.fn(),
+        BackButton: backButton,
+      },
+    };
+
+    const cleanupBackButton = bindTelegramBackButton(true, handler);
+    expect(backButton.show).toHaveBeenCalledTimes(1);
+    expect(backButton.onClick).toHaveBeenCalledWith(handler);
+
+    cleanupBackButton();
+    expect(backButton.offClick).toHaveBeenCalledWith(handler);
+    expect(backButton.hide).toHaveBeenCalledTimes(1);
   });
 });

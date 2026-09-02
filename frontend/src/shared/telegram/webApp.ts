@@ -1,7 +1,24 @@
+type TelegramBackButton = {
+  show: () => void;
+  hide: () => void;
+  onClick: (handler: () => void) => void;
+  offClick: (handler: () => void) => void;
+};
+
+type TelegramSafeAreaInset = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
 type TelegramWebApp = {
   initData: string;
   ready: () => void;
   expand: () => void;
+  BackButton?: TelegramBackButton;
+  safeAreaInset?: TelegramSafeAreaInset;
+  contentSafeAreaInset?: TelegramSafeAreaInset;
   openTelegramLink?: (url: string) => void;
 };
 
@@ -125,7 +142,45 @@ export function prepareTelegramWebApp(): TelegramWebApp | null {
   const webApp = getTelegramWebApp();
   webApp?.ready();
   webApp?.expand();
+  applyTelegramSafeArea(webApp);
   return webApp;
+}
+
+function applyTelegramSafeArea(webApp: TelegramWebApp | null): void {
+  const inset = webApp?.contentSafeAreaInset ?? webApp?.safeAreaInset;
+  if (inset === undefined) {
+    return;
+  }
+
+  const root = document.documentElement;
+  for (const edge of ["top", "right", "bottom", "left"] as const) {
+    const value = inset[edge];
+    if (Number.isFinite(value) && value >= 0) {
+      root.style.setProperty(`--app-safe-area-${edge}`, `${value}px`);
+    }
+  }
+}
+
+export function bindTelegramBackButton(
+  visible: boolean,
+  handler: () => void,
+): () => void {
+  const backButton = getTelegramWebApp()?.BackButton;
+  if (backButton === undefined) {
+    return () => undefined;
+  }
+
+  if (!visible) {
+    backButton.hide();
+    return () => undefined;
+  }
+
+  backButton.show();
+  backButton.onClick(handler);
+  return () => {
+    backButton.offClick(handler);
+    backButton.hide();
+  };
 }
 
 export function getTelegramInitData(): string {

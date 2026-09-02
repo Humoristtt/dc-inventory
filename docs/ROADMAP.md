@@ -1727,24 +1727,35 @@ Backup/restore остаётся отдельным production-data gate и не 
 
 ## Stage 8 — Working Mini App UX
 
-- [ ] Replace runtime hero.
-- [ ] Telegram viewport integration.
-- [ ] Safe areas.
-- [ ] Home.
-- [ ] Categories.
-- [ ] Global search.
-- [ ] Category listing.
-- [ ] Filters.
-- [ ] Sorting.
-- [ ] Compact cards.
-- [ ] Item detail.
-- [ ] Manufacturer specs.
+**STATUS: IN PROGRESS — Stage 8A catalog UX implemented; Stage 8B/admin and final viewport/E2E gates remain.**
+
+### Stage 8A — Working catalog UX
+
+- [x] Replace runtime hero with the operational application shell.
+- [x] Telegram viewport integration (`ready`, `expand`).
+- [x] Browser/Telegram safe areas.
+- [x] Catalog landing as the authenticated default screen.
+- [x] API-driven categories.
+- [x] Debounced global search.
+- [x] Generic category listing for all metadata-defined categories.
+- [x] Facet- and metadata-driven exact/boolean/range filters.
+- [x] Deterministic sorting and progressive `limit`/`offset` loading.
+- [x] Compact cards with availability/custody/total summaries.
+- [x] Item detail with dynamic attributes, technical source and datasheet link.
+- [x] Intentional placeholders for later navigation sections.
+- [x] Loading/error/empty/retry states.
+- [x] Telegram BackButton and URL-preserving internal navigation.
+- [x] Mobile/narrow-first responsive implementation.
+
+### Remaining Stage 8B / final Stage 8 scope
+
+- [ ] Role-aware Admin catalog create/edit/archive forms.
+- [ ] Inline manufacturer creation and duplicate-check UX.
 - [ ] Stock by location.
 - [ ] Holder summary.
 - [ ] «Моё».
-- [ ] Loading/error/empty states.
-- [ ] Telegram BackButton.
-- [ ] Responsive tests.
+- [ ] Browser viewport acceptance for Telegram Desktop narrow, Android-like,
+  iPhone-like and normal desktop widths.
 - [ ] Playwright visual/E2E.
 
 **GATE:** UI комфортен в Telegram Desktop narrow и mobile viewports; данные отображаются без обрезки.

@@ -529,6 +529,32 @@ Frontend cache не является authorization boundary: backend `Approved` 
   в auth cache явно;
 - polling останавливается после выхода из `PENDING`.
 
+## Frontend catalog navigation and server state
+
+`TelegramAccessGate` остаётся внешней границей всего React-приложения. После
+`APPROVED` внутри неё работает единый application shell с URL routes
+`/catalog`, `/catalog/:categoryKey`, `/catalog/items/:itemId` и placeholder
+routes будущих разделов. Второй auth state или frontend tokens не создаются.
+
+Catalog frontend разделяет два вида состояния:
+
+- search/filter/sort navigation state хранится в нормализованных
+  `URLSearchParams`, поэтому history, reload и возврат из Item detail
+  воспроизводимы;
+- server responses хранятся в TanStack Query cache с детерминированными keys;
+  limit/offset pages добавляются без дублирования Item.
+
+Catalog API encoding централизован в typed same-origin client. Repeated
+`manufacturer_id`, `location_id` и metadata attribute `filter` parameters
+сортируются и кодируются детерминированно. Filter UI получает common/dynamic
+facets от backend и CategoryAttribute metadata; category-specific query logic в
+React не допускается.
+
+Telegram wrapper владеет `ready`/`expand`, runtime safe-area values и полным
+BackButton subscribe/unsubscribe lifecycle. На `/catalog` BackButton скрыт; на
+внутреннем route он возвращает по SPA history, а direct deep link безопасно
+возвращается на `/catalog` без закрытия Mini App.
+
 
 ## Telegram delivery и access decisions
 

@@ -320,63 +320,70 @@ jobs:
           recovery_id="77777777-7777-4777-8777-777777777777"
           conflicting_id="88888888-8888-4888-8888-888888888888"
 
-          runtime_psql -c "
-            INSERT INTO notification_outbox(
-              id,
-              method,
-              payload,
-              dedupe_key,
-              status,
-              attempts,
-              last_error
-            )
-            VALUES (
-              '$recovery_id'::uuid,
-              'sendMessage',
-              '{\"chat_id\":1,\"text\":\"recovery\"}'::jsonb,
-              '$recovery_key',
-              'DEAD',
-              8,
-              'test'
-            );
-          "
+          recovery_result="$(
+            runtime_psql -qAtF '|' -c "
+              BEGIN;
 
-          runtime_psql -c "
-            INSERT INTO notification_outbox(
-              id,
-              method,
-              payload,
-              dedupe_key
-            )
-            VALUES (
-              '$conflicting_id'::uuid,
-              'sendMessage',
-              '{\"chat_id\":1,\"text\":\"recovery\"}'::jsonb,
-              '$recovery_key'
-            )
-            ON CONFLICT (dedupe_key)
-            DO UPDATE SET
-              status = 'PENDING',
-              attempts = 0,
-              available_at = now(),
-              claimed_at = NULL,
-              claim_token = NULL,
-              last_error = NULL,
-              updated_at = now()
-            WHERE notification_outbox.status = 'DEAD';
-          "
+              INSERT INTO notification_outbox(
+                id,
+                method,
+                payload,
+                dedupe_key,
+                status,
+                attempts,
+                last_error
+              )
+              VALUES (
+                '$recovery_id'::uuid,
+                'sendMessage',
+                '{\"chat_id\":1,\"text\":\"recovery\"}'::jsonb,
+                '$recovery_key',
+                'DEAD',
+                8,
+                'test'
+              );
 
-          test "$(
-            runtime_psql -At -F '|' -c "
+              WITH recovered AS (
+                INSERT INTO notification_outbox(
+                  id,
+                  method,
+                  payload,
+                  dedupe_key
+                )
+                VALUES (
+                  '$conflicting_id'::uuid,
+                  'sendMessage',
+                  '{\"chat_id\":1,\"text\":\"recovery\"}'::jsonb,
+                  '$recovery_key'
+                )
+                ON CONFLICT (dedupe_key)
+                DO UPDATE SET
+                  status = 'PENDING',
+                  attempts = 0,
+                  available_at = now(),
+                  claimed_at = NULL,
+                  claim_token = NULL,
+                  last_error = NULL,
+                  updated_at = now()
+                WHERE notification_outbox.status = 'DEAD'
+                RETURNING
+                  id,
+                  status,
+                  attempts,
+                  last_error IS NULL AS last_error_is_null
+              )
               SELECT
                 id,
                 status,
                 attempts,
-                last_error IS NULL
-              FROM notification_outbox
-              WHERE dedupe_key = '$recovery_key';
+                last_error_is_null
+              FROM recovered;
+
+              ROLLBACK;
             "
-          )" = "$recovery_id|PENDING|0|t"
+          )"
+
+          test "$recovery_result" = "$recovery_id|PENDING|0|t"
 
           journal_sequence="$(
             owner_psql -At -c "

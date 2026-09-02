@@ -168,7 +168,7 @@ SELECT format(
 \gexec
 
 SELECT format(
-    'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE auth_sessions TO %I',
+    'GRANT SELECT, INSERT, UPDATE ON TABLE auth_sessions TO %I',
     :'runtime_user'
 )
 \gexec
@@ -176,7 +176,30 @@ SELECT format(
 
 -- Telegram ingress and backend-created delivery work.
 SELECT format(
-    'GRANT SELECT, INSERT ON TABLE telegram_updates, notification_outbox TO %I',
+    'GRANT SELECT, INSERT ON TABLE telegram_updates TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT UPDATE (processed_at) ON TABLE telegram_updates TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT SELECT, INSERT ON TABLE notification_outbox TO %I',
+    :'runtime_user'
+)
+\gexec
+
+-- Backend may only revive a terminal DEAD delivery when the
+-- same business request is explicitly retried. It does not
+-- receive table-level UPDATE on the outbox.
+SELECT format(
+    'GRANT UPDATE '
+    '(status, attempts, available_at, claimed_at, claim_token, last_error, updated_at) '
+    'ON TABLE notification_outbox TO %I',
     :'runtime_user'
 )
 \gexec
@@ -237,11 +260,20 @@ SELECT format(
 )
 \gexec
 
--- Identity sequence used by Movement.journal_seq.
+-- Exact identity sequence used by Movement.journal_seq.
+-- Runtime does not receive blanket access to every sequence in public.
 SELECT format(
-    'GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO %I',
+    'GRANT USAGE ON SEQUENCE %s TO %I',
+    pg_get_serial_sequence(
+        'public.movements',
+        'journal_seq'
+    ),
     :'runtime_user'
 )
+WHERE pg_get_serial_sequence(
+    'public.movements',
+    'journal_seq'
+) IS NOT NULL
 \gexec
 
 

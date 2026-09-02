@@ -50,6 +50,10 @@ Unit-specific поля:
 - current state и current location/holder;
 - timestamps.
 
+`asset_tag`, firmware и другие расширенные physical-unit metadata Stage 6
+не реализует. Они deliberately deferred и при необходимости добавляются
+отдельной versioned migration/API contract.
+
 Serial и WWN нормализуются как trim + whitespace collapse + Unicode casefold,
 без fuzzy matching и без удаления punctuation. Ограничение длины повторно
 проверяется после `casefold`, который может увеличить строку. Уникальность
@@ -224,8 +228,9 @@ lines, balances, units и custody.
 Lock order детерминирован:
 
 1. idempotency advisory lock;
-2. original Movement row для reversal; correction читает immutable original без
-   row lock;
+2. transaction-scoped advisory lock по UUID original Movement для correction /
+   reversal; immutable original читается обычным `SELECT` без row-level UPDATE
+   privilege;
 3. все Location rows по UUID, затем все User rows по UUID;
 4. все необходимые serial `(Item, normalized serial)` и global normalized WWN
    advisory locks единым sorted order;

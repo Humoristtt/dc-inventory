@@ -223,3 +223,32 @@
   deferred PostgreSQL constraint triggers теперь запечатывают exact contiguous
   line set на transaction commit и запрещают неполный header.
 - Stage 6 остаётся на independent review/CI и не помечен DONE; Stage 7 не начат.
+
+## 2026-09-02 — Stage 6 final audit closeout — local, pending PR
+
+- Создан final-audit branch `audit/stage6-final-review-20260902`.
+- Исходный checkpoint:
+  `bb76b4b4a12e6986dfdbadc086562a53d1d2ad96`.
+- Полный final source audit выполнен.
+- Production-blocking P1 findings исправлены и проверены реальными
+  least-privilege PostgreSQL roles.
+- Backend runtime получил narrow `UPDATE(processed_at)` для
+  `telegram_updates`.
+- Correction/reversal original context переведён с row locking immutable
+  Movement на transaction-scoped advisory lock.
+- Runtime sequence access сужен до `movements_journal_seq_seq`.
+- Runtime больше не имеет `DELETE` на `auth_sessions`.
+- Controlled `DEAD -> PENDING` access notification recovery переиспользует
+  существующую callback pair и не даёт backend broad outbox UPDATE.
+- Production notification worker требует HTTPS Telegram Gateway URL.
+- Same-origin vendored Telegram Web App SDK имеет CI SHA-256 verification и
+  отдельные load-error/timeout frontend states.
+- Technical retention использует отдельную least-privilege DB identity и
+  имеет CI execution proof.
+- Full Ruff и strict mypy после remediation проходят.
+- Текущий migration head: `c8d9e0f1a2b3`.
+- Созданы `docs/PRODUCT_REQUIREMENTS.md` и `docs/OPERATIONS.md`.
+- Canonical documentation и ROADMAP синхронизированы.
+- Merge/deploy ещё не выполнены.
+- Следующий gate:
+  final local gate -> commit/push -> Pull Request CI -> merge.

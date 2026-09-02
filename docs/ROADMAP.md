@@ -11,9 +11,14 @@
 > Stage 5 и Stage 6 в production ещё не развёрнуты, real inventory entry
 > заблокирован до backup + successful restore gate.
 > **Current source:** Stage 5 Catalog Foundation и source-backed refinement
-> merged в `main`. Stage 6 Warehouse Core и independent remediation review
-> завершены локально в `audit/stage6-full-review`; перед merge/deployment остаются
-> единый final local gate и Pull Request CI.
+> merged в `main`. Stage 6 Warehouse Core находится в
+> `audit/stage6-final-review-20260902`; исходный final-audit checkpoint:
+> `bb76b4b4a12e6986dfdbadc086562a53d1d2ad96`.
+> Полный source audit завершён с `P0=0`, `P1=0`; application-level
+> remediation, production-role regressions, notification recovery,
+> Telegram SDK hardening и canonical documentation закрыты локально.
+> До merge/deployment остаются один final local gate, final remediation
+> commit/push и Pull Request CI.
 
 ---
 
@@ -120,14 +125,17 @@ CUSTODY  → у конкретного пользователя
 
 ## 2.2. SERIAL
 
-Для индивидуально отслеживаемых единиц:
+Для индивидуально отслеживаемых единиц Stage 6:
 
 - serial number;
-- optional asset tag;
 - состояние;
 - текущее местонахождение;
 - текущий holder;
-- optional WWN / firmware и т. п.
+- optional WWN;
+- optional physical-unit comment.
+
+`asset_tag`, firmware и другие расширенные physical-unit metadata отложены и
+не входят в Stage 6.
 
 Предварительно:
 
@@ -1670,12 +1678,21 @@ merged в `main` через PR #10. В production Stage 5 ещё не развё
 - [x] Retryable PostgreSQL conflict mapping and BIGINT bounds.
 - [x] Read-only projection reconciliation runbook.
 - [x] Independent remediation review и remediation.
-- [ ] Pull Request CI после commit/push.
+- [x] Final full source audit: `P0=0`, `P1=0`.
+- [x] Production DB-role regression coverage.
+- [x] Controlled DEAD access-notification recovery.
+- [x] Production Telegram Gateway HTTPS validation.
+- [x] Same-origin Telegram SDK integrity/failure hardening.
+- [x] Canonical documentation synchronization.
+- [ ] Единый final local gate всего change set.
+- [ ] Commit/push final remediation.
+- [ ] Pull Request CI.
 
 **GATE:** journal mathematically consistent; last-unit race passes; historical movement immutable.
 
-**STATUS: REMEDIATION COMPLETE — independent review закрыт локально.
-До merge/deployment остаются final local gate и Pull Request CI.**
+**STATUS: FINAL REMEDIATION COMPLETE LOCALLY — application-level blockers
+закрыты. До merge/deployment остаются final local gate, commit/push и
+Pull Request CI.**
 
 ## Stage 7 — Catalog Read API / Search / Filters
 
@@ -1841,7 +1858,8 @@ PostgreSQL automated backup + verified artifact + real restore test в отде�
 - [ ] PostgreSQL automated backup.
 - [ ] Media backup.
 - [ ] Off-VM storage.
-- [ ] Retention.
+- [x] Technical runtime-data retention worker.
+- [ ] Backup artifact retention policy.
 - [ ] Real restore test.
 - [ ] Restore runbook.
 - [ ] Image pinning / immutable deployment decision.
@@ -1873,6 +1891,7 @@ PostgreSQL automated backup + verified artifact + real restore test в отде�
 - [ ] Redis без фактической необходимости.
 - [ ] Microservices.
 - [ ] Полный S3/R2 migration до появления потребности.
+- [ ] `asset_tag`, firmware и расширенные physical-unit metadata для SERIAL.
 
 Эти пункты допускаются позже, но текущая архитектура не должна делать их невозможными.
 
@@ -1885,10 +1904,10 @@ PostgreSQL automated backup + verified artifact + real restore test в отде�
 - [x] `docs/DEVELOPMENT.md`
 - [x] `docs/DEPLOYMENT.md`
 - [x] `docs/HISTORY.md`
-- [~] `docs/ROADMAP.md` — этот файл.
-- [ ] `docs/PRODUCT_REQUIREMENTS.md` — пользовательские сценарии, роли, бизнес-правила.
+- [x] `docs/ROADMAP.md` — этот файл.
+- [x] `docs/PRODUCT_REQUIREMENTS.md` — пользовательские сценарии, роли, бизнес-правила.
 - [x] `docs/CATALOG_SCHEMA.md` — точные поля/enum/filter/card/export definitions 5 категорий.
-- [ ] `docs/OPERATIONS.md` — backup/restore/deploy/rollback/runbook по мере появления.
+- [x] `docs/OPERATIONS.md` — deploy/runtime/reconciliation/backup-restore gate/runbook.
 - [ ] API contract docs остаются генерируемыми, production Swagger наружу не включать.
 
 Правило:
@@ -1939,7 +1958,7 @@ PostgreSQL automated backup + verified artifact + real restore test в отде�
 
 # 42. Следующий фактический шаг
 
-**CURRENT: Stage 6 — audit closeout / final local gate**
+**CURRENT: Stage 6 — final full local gate / PR preparation**
 
 Завершено:
 
@@ -1969,7 +1988,18 @@ PostgreSQL automated backup + verified artifact + real restore test в отде�
 - [x] Выполнить remediation final backend gate: diff-check, Ruff, strict mypy и
   полный PostgreSQL pytest.
 - [x] Провести independent remediation review Stage 6.
-- [ ] Выполнить Pull Request CI после commit/push.
+- [x] Провести final full source audit ветки
+  `audit/stage6-final-review-20260902`.
+- [x] Закрыть production-role permission gaps и regression gates.
+- [x] Закрыть Telegram Gateway HTTPS validation.
+- [x] Закрыть DEAD access-notification recovery.
+- [x] Закрыть Telegram SDK integrity/failure UX.
+- [x] Синхронизировать canonical documentation и ROADMAP.
+- [ ] Выполнить единый final local gate всего актуального working tree.
+- [ ] Commit/push final remediation.
+- [ ] Выполнить Pull Request CI.
+- [ ] Merge Stage 6 в `main`.
 
-Следующий фактический шаг: единый final local gate, затем commit/push,
-Pull Request CI и merge. Stage 7 не начинается в этом change set.
+Следующий фактический шаг: **один final local gate всего change set**.
+При PASS: commit/push → Pull Request CI → merge.
+Stage 7 в этот change set не входит.

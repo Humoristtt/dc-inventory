@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
@@ -18,11 +19,61 @@ from app.modules.notifications.service import (
 logger = logging.getLogger(__name__)
 
 
-def configured_gateway_client(settings: Settings) -> TelegramGatewayClient:
+def validate_notification_worker_config(settings: Settings) -> None:
+    validate_notification_worker_lease(settings)
+
     gateway_url = settings.telegram_gateway_url_value
     gateway_secret = settings.telegram_gateway_secret_value
+
     if gateway_url is None or gateway_secret is None:
         raise RuntimeError("Telegram gateway is not configured")
+
+    raw_gateway_url = settings.telegram_gateway_url
+    if (
+        raw_gateway_url is None
+        or raw_gateway_url != raw_gateway_url.strip()
+    ):
+        raise RuntimeError(
+            "TELEGRAM_GATEWAY_URL must not contain surrounding whitespace"
+        )
+
+    try:
+        parsed = urlsplit(gateway_url)
+        _ = parsed.port
+    except ValueError as error:
+        raise RuntimeError(
+            "TELEGRAM_GATEWAY_URL must be a valid absolute URL"
+        ) from error
+
+    if (
+        parsed.scheme.lower() not in {"http", "https"}
+        or parsed.hostname is None
+        or parsed.username is not None
+        or parsed.password is not None
+        or parsed.query
+        or parsed.fragment
+    ):
+        raise RuntimeError(
+            "TELEGRAM_GATEWAY_URL must be a valid absolute URL"
+        )
+
+    if (
+        settings.app_env == "production"
+        and parsed.scheme.lower() != "https"
+    ):
+        raise RuntimeError(
+            "TELEGRAM_GATEWAY_URL must use HTTPS in production"
+        )
+
+
+def configured_gateway_client(settings: Settings) -> TelegramGatewayClient:
+    validate_notification_worker_config(settings)
+
+    gateway_url = settings.telegram_gateway_url_value
+    gateway_secret = settings.telegram_gateway_secret_value
+
+    assert gateway_url is not None
+    assert gateway_secret is not None
 
     return TelegramGatewayClient(
         base_url=gateway_url,
@@ -123,7 +174,6 @@ async def run_worker_once(
 
 async def run_worker() -> None:
     settings = get_settings()
-    validate_notification_worker_lease(settings)
     client = configured_gateway_client(settings)
     engine = create_engine(settings)
 

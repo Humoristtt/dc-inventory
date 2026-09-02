@@ -68,12 +68,24 @@ Uvicorn доверяет proxy headers, потому что production backend �
 
 Production `.env` создаётся непосредственно на VM и не хранится в Git.
 
-Для базового runtime необходимы:
+Production DB bootstrap использует четыре PostgreSQL identity:
 
     POSTGRES_DB
     POSTGRES_USER
     POSTGRES_PASSWORD
-    DATABASE_URL
+
+    POSTGRES_RUNTIME_USER
+    POSTGRES_RUNTIME_PASSWORD
+
+    POSTGRES_WORKER_USER
+    POSTGRES_WORKER_PASSWORD
+
+    POSTGRES_MAINTENANCE_USER
+    POSTGRES_MAINTENANCE_PASSWORD
+
+`POSTGRES_USER` — owner/migrator. Backend, Telegram worker и maintenance worker
+используют отдельные least-privilege логины. Owner credentials runtime services
+не получают.
 
 Backend Telegram/auth boundary использует:
 
@@ -101,6 +113,11 @@ Backend Telegram/auth boundary использует:
 
 `telegram-worker` не получает bot token, webhook secret или ADMIN ID.
 
+В production `TELEGRAM_GATEWAY_URL` обязан быть абсолютным HTTPS URL без
+credentials, query, fragment или surrounding whitespace. HTTP разрешён только
+для development/internal test configuration.
+
+
 Cloudflare Worker имеет собственные secrets:
 
     BOT_TOKEN
@@ -109,7 +126,10 @@ Cloudflare Worker имеет собственные secrets:
 Значение `GATEWAY_SECRET` является отдельным shared secret между production
 worker и Cloudflare Worker. Секреты Cloudflare не хранятся в Git.
 
-Migration container получает только DB-конфигурацию.
+Migration container получает owner/migration DB-конфигурацию.
+После успешного Alembic upgrade одноразовый `db-permissions` container
+идемпотентно применяет runtime/worker/maintenance grants.
+Runtime containers не используют owner role.
 
 `DATABASE_URL` внутри Docker network должен использовать hostname `postgres`.
 
@@ -189,7 +209,10 @@ PostgreSQL lock. Эти значения отделены от runtime
 
 - `postgres`, `backend`, `web` — healthy;
 - `telegram-worker` — `Up`;
+- `maintenance-worker` — `Up`;
+- в maintenance logs есть успешная `technical retention:` iteration;
 - `migrate` — `Exited (0)`;
+- `db-permissions` — `Exited (0)`;
 - на host отсутствуют listen-порты `8000` и `5432`;
 - backend работает от UID 10001;
 - web работает от пользователя `nginx`;
@@ -227,3 +250,18 @@ whether callback state is terminal.
 `movements`, `movement_lines`, `inventory_units`, `stock_balances` and other
 warehouse state are outside the retention target set. The canonical warehouse
 movement journal remains immutable and is never pruned by this worker.
+
+## Production-data gate
+
+Deploy Stage 5/6 сам по себе не разрешает ввод реальных inventory данных.
+
+До первого production stock entry обязательны:
+
+1. automated PostgreSQL backup;
+2. проверяемый backup artifact вне production VM;
+3. real restore test в отдельное окружение;
+4. Alembic/schema verification после restore;
+5. read-only projection reconciliation;
+6. zero drift для QUANTITY и SERIAL.
+
+Operational procedure находится в `docs/OPERATIONS.md`.

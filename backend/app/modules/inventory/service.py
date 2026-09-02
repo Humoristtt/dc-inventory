@@ -324,6 +324,22 @@ async def _lock_idempotency_key(
     )
 
 
+async def _lock_original_movement_context(
+    db: AsyncSession,
+    movement_id: uuid.UUID,
+) -> None:
+    await db.execute(
+        select(
+            func.pg_advisory_xact_lock(
+                _advisory_lock_key(
+                    "warehouse-original-movement",
+                    movement_id,
+                )
+            )
+        )
+    )
+
+
 async def _existing_idempotent_result(
     db: AsyncSession,
     *,
@@ -1339,11 +1355,15 @@ async def create_movement(
     await _lock_idempotency_key(db, actor_user_id, client_request_id)
     original: Movement | None = None
     if payload.movement_type == MovementType.CORRECTION:
+        assert payload.original_movement_id is not None
+        await _lock_original_movement_context(
+            db,
+            payload.original_movement_id,
+        )
         original = await db.scalar(
             select(Movement)
             .where(Movement.id == payload.original_movement_id)
             .options(selectinload(Movement.lines))
-            .with_for_update(read=True, key_share=True)
         )
         if original is None:
             raise InventoryNotFoundError(
@@ -1414,11 +1434,14 @@ async def reverse_movement(
     if existing is not None:
         return existing
 
+    await _lock_original_movement_context(
+        db,
+        original_movement_id,
+    )
     original = await db.scalar(
         select(Movement)
         .where(Movement.id == original_movement_id)
         .options(selectinload(Movement.lines))
-        .with_for_update()
     )
     if original is None:
         raise InventoryNotFoundError(

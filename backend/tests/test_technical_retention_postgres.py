@@ -520,7 +520,8 @@ async def test_retention_is_singleton_per_database_transaction() -> None:
     try:
         async with (
             AsyncSession(engine) as lock_db,
-            AsyncSession(engine) as runner_db,lock_db.begin()
+            AsyncSession(engine) as runner_db,
+            lock_db.begin(),
         ):
             acquired = await lock_db.scalar(
                 text(

@@ -76,9 +76,9 @@ Baseline Alembic:
 
     48c2f07f01a0
 
-Текущий migration head после Stage 6 warehouse core:
+Текущий migration head:
 
-    b7c8d9e0f1a2
+    c8d9e0f1a2b3
 
 ## Локальный backend
 
@@ -195,6 +195,22 @@ Warehouse PostgreSQL checks, включая allocation и reactivation/reversal 
     RUN_POSTGRES_INTEGRATION=1 \
     DATABASE_URL=postgresql+asyncpg://...@127.0.0.1:PORT/dc_inventory \
     pytest -q tests/test_inventory_postgres.py tests/test_inventory_api_postgres.py
+
+## Production-role integration regressions
+
+Полный PostgreSQL gate проверяет не только owner-level domain tests, но и
+production least-privilege identities.
+
+Обязательные regressions:
+
+- backend может `INSERT telegram_updates` и обновить только `processed_at`;
+- backend не имеет broad UPDATE immutable warehouse journal;
+- correction/reversal выполняются без UPDATE privilege на `Movement`;
+- journal sequence access ограничен требуемой identity sequence;
+- controlled `DEAD -> PENDING` access-notification recovery работает под
+  runtime-role;
+- notification payload backend-role изменять не может;
+- maintenance worker выполняет реальную bounded retention iteration.
 
 ## Warehouse projection reconciliation
 

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import uuid
+from typing import cast
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.core.config import Settings
 from app.modules.notifications import worker
+from app.modules.notifications.gateway import TelegramGatewayClient
 from app.modules.notifications.service import ClaimedNotification
 
 DATABASE_URL = (
@@ -148,8 +151,11 @@ async def test_worker_claims_each_notification_just_before_delivery(
     )
 
     processed = await worker.run_worker_once(
-        object(),
-        FakeGatewayClient(events),
+        cast(AsyncEngine, object()),
+        cast(
+            TelegramGatewayClient,
+            FakeGatewayClient(events),
+        ),
         settings,
     )
 

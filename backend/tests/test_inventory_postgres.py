@@ -1750,7 +1750,10 @@ async def test_journal_sequence_is_canonical_when_wall_clock_moves_backward(
             calls = 0
 
             @classmethod
-            def now(cls, tz=None):
+            def now(
+                cls,
+                tz: object | None = None,
+            ) -> datetime:
                 values = (
                     real_datetime(2026, 9, 2, 12, 0, 0, tzinfo=UTC),
                     real_datetime(2026, 9, 2, 11, 0, 0, tzinfo=UTC),
@@ -2059,19 +2062,34 @@ async def test_movement_line_accounting_shape_rejects_null_required_values() -> 
 
 @pytest.mark.asyncio
 async def test_correction_racing_original_reversal_has_no_lock_order_deadlock() -> None:
-    engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
+    engine = create_async_engine(
+        DATABASE_URL,
+        pool_pre_ping=True,
+    )
+
     try:
-        async with AsyncSession(engine, expire_on_commit=False) as db:
+        async with AsyncSession(
+            engine,
+            expire_on_commit=False,
+        ) as db:
             scenario = await _create_scenario(db)
+
             receipt_id = await _create_and_commit(
                 db,
                 MovementCreate(
                     movement_type=MovementType.RECEIPT,
-                    destination_location_id=scenario.location_one_id,
-                    client_request_id=f"correction-reversal-race-receipt-{scenario.marker}",
+                    destination_location_id=(
+                        scenario.location_one_id
+                    ),
+                    client_request_id=(
+                        "correction-reversal-race-receipt-"
+                        f"{scenario.marker}"
+                    ),
                     lines=[
                         MovementLineCreate(
-                            item_id=scenario.quantity_item_id,
+                            item_id=(
+                                scenario.quantity_item_id
+                            ),
                             quantity=1,
                         )
                     ],
@@ -2079,9 +2097,14 @@ async def test_correction_racing_original_reversal_has_no_lock_order_deadlock() 
                 scenario,
             )
 
-        correction_started = asyncio.Event()
+        start_gate = asyncio.Event()
+        correction_ready = asyncio.Event()
+        reversal_ready = asyncio.Event()
 
         async def run_correction() -> str:
+            correction_ready.set()
+            await start_gate.wait()
+
             try:
                 async with (
                     AsyncSession(
@@ -2090,77 +2113,126 @@ async def test_correction_racing_original_reversal_has_no_lock_order_deadlock() 
                     ) as db,
                     db.begin(),
                 ):
-                    correction_started.set()
                     await create_movement(
                         db,
                         MovementCreate(
-                            movement_type=MovementType.CORRECTION,
-                            source_location_id=scenario.location_one_id,
+                            movement_type=(
+                                MovementType.CORRECTION
+                            ),
+                            source_location_id=(
+                                scenario.location_one_id
+                            ),
                             original_movement_id=receipt_id,
                             client_request_id=(
-                                f"correction-reversal-race-correction-"
+                                "correction-reversal-race-"
+                                "correction-"
                                 f"{scenario.marker}"
                             ),
                             lines=[
                                 MovementLineCreate(
-                                    item_id=scenario.quantity_item_id,
+                                    item_id=(
+                                        scenario
+                                        .quantity_item_id
+                                    ),
                                     quantity=1,
                                 )
                             ],
                         ),
                         actor_user_id=scenario.actor_id,
-                        actor_display_name="Warehouse Admin (@admin)",
+                        actor_display_name=(
+                            "Warehouse Admin (@admin)"
+                        ),
                     )
+
                 return "corrected"
+
             except InventoryConflictError as error:
                 assert error.code == "insufficient_stock"
                 return "correction_conflict"
 
-        async with AsyncSession(engine, expire_on_commit=False) as reversal_db:
-            async with reversal_db.begin():
-                locked_original = await reversal_db.scalar(
-                    select(Movement)
-                    .where(Movement.id == receipt_id)
-                    .with_for_update()
-                )
-                assert locked_original is not None
+        async def run_reversal() -> str:
+            reversal_ready.set()
+            await start_gate.wait()
 
-                correction_task = asyncio.create_task(run_correction())
-                await correction_started.wait()
+            try:
+                async with (
+                    AsyncSession(
+                        engine,
+                        expire_on_commit=False,
+                    ) as db,
+                    db.begin(),
+                ):
+                    reversal = await reverse_movement(
+                        db,
+                        receipt_id,
+                        MovementReversalCreate(
+                            client_request_id=(
+                                "correction-reversal-race-"
+                                "reversal-"
+                                f"{scenario.marker}"
+                            )
+                        ),
+                        actor_user_id=scenario.actor_id,
+                        actor_display_name=(
+                            "Warehouse Admin (@admin)"
+                        ),
+                    )
 
-                # Give the correction transaction an opportunity to reach
-                # its original-Movement lock. With the correct lock graph
-                # it must block there and must NOT hold Location/balance
-                # locks needed by this reversal.
-                await asyncio.sleep(0.25)
+                    assert (
+                        reversal.record.movement.movement_type
+                        == MovementType.REVERSAL
+                    )
 
-                reversal = await reverse_movement(
-                    reversal_db,
-                    receipt_id,
-                    MovementReversalCreate(
-                        client_request_id=(
-                            f"correction-reversal-race-reversal-"
-                            f"{scenario.marker}"
-                        )
-                    ),
-                    actor_user_id=scenario.actor_id,
-                    actor_display_name="Warehouse Admin (@admin)",
-                )
-                assert reversal.record.movement.movement_type == MovementType.REVERSAL
+                return "reversed"
 
-            correction_outcome = await asyncio.wait_for(
+            except InventoryConflictError as error:
+                assert error.code == "insufficient_stock"
+                return "reversal_conflict"
+
+        correction_task = asyncio.create_task(
+            run_correction()
+        )
+        reversal_task = asyncio.create_task(
+            run_reversal()
+        )
+
+        await asyncio.wait_for(
+            asyncio.gather(
+                correction_ready.wait(),
+                reversal_ready.wait(),
+            ),
+            timeout=2,
+        )
+
+        start_gate.set()
+
+        outcomes = await asyncio.wait_for(
+            asyncio.gather(
                 correction_task,
-                timeout=10,
-            )
+                reversal_task,
+            ),
+            timeout=10,
+        )
 
-        assert correction_outcome == "correction_conflict"
+        assert set(outcomes) in (
+            {
+                "corrected",
+                "reversal_conflict",
+            },
+            {
+                "correction_conflict",
+                "reversed",
+            },
+        )
 
         async with AsyncSession(engine) as db:
             assert (
                 await _quantity_at(
                     db,
                     scenario.quantity_item_id,
-                    location_id=scenario.location_one_id,
+                    location_id=(
+                        scenario.location_one_id
+                    ),
                 )
                 == 0
             )
@@ -2169,23 +2241,36 @@ async def test_correction_racing_original_reversal_has_no_lock_order_deadlock() 
                 select(func.count())
                 .select_from(Movement)
                 .where(
-                    Movement.movement_type == MovementType.CORRECTION,
-                    Movement.original_movement_id == receipt_id,
+                    Movement.movement_type
+                    == MovementType.CORRECTION,
+                    Movement.original_movement_id
+                    == receipt_id,
                 )
             )
+
             reversal_count = await db.scalar(
                 select(func.count())
                 .select_from(Movement)
                 .where(
-                    Movement.movement_type == MovementType.REVERSAL,
-                    Movement.original_movement_id == receipt_id,
+                    Movement.movement_type
+                    == MovementType.REVERSAL,
+                    Movement.original_movement_id
+                    == receipt_id,
                 )
             )
 
-            assert correction_count == 0
-            assert reversal_count == 1
+            assert correction_count is not None
+            assert reversal_count is not None
+
+            assert (
+                correction_count
+                + reversal_count
+                == 1
+            )
+
     finally:
         await engine.dispose()
+
 
 @pytest.mark.asyncio
 async def test_warehouse_history_rejects_truncate() -> None:

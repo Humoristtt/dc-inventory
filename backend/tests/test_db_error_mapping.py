@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import cast
+
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -57,7 +59,7 @@ def test_inventory_unique_violation_is_safe_conflict() -> None:
         raise_inventory_integrity_conflict(error)
 
     assert exc_info.value.status_code == 409
-    assert exc_info.value.detail == {
+    assert cast(object, exc_info.value.detail) == {
         "code": "inventory_conflict",
         "message": "inventory operation conflicts with current state",
     }
@@ -85,7 +87,7 @@ def test_inventory_retryable_database_error_is_retryable_conflict(
         _raise_retryable_db_conflict(error)
 
     assert exc_info.value.status_code == 409
-    assert exc_info.value.detail == {
+    assert cast(object, exc_info.value.detail) == {
         "code": "inventory_concurrency_conflict",
         "message": (
             "inventory operation conflicted with concurrent activity; retry"
@@ -109,7 +111,7 @@ def test_catalog_unique_violation_is_safe_conflict() -> None:
         raise_catalog_integrity_conflict(error)
 
     assert exc_info.value.status_code == 409
-    assert exc_info.value.detail == {
+    assert cast(object, exc_info.value.detail) == {
         "code": "catalog_conflict",
         "message": "catalog data conflicts with an existing record",
     }

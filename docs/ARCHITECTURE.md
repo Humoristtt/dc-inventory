@@ -171,6 +171,19 @@ PostgreSQL не получает.
 Production PostgreSQL host-порта не имеет и остаётся только во внутренней
 `db_net`.
 
+
+Production использует четыре отдельные PostgreSQL identity:
+
+- owner/migrator — Alembic и permission bootstrap;
+- backend runtime — application reads/writes по least-privilege contract;
+- Telegram worker — notification delivery;
+- maintenance worker — bounded technical retention.
+
+Backend runtime не имеет общего `UPDATE` на immutable warehouse journal.
+Для `telegram_updates` разрешён только `UPDATE(processed_at)`.
+Controlled recovery `notification_outbox` ограничен delivery-state columns;
+payload backend менять не может.
+
 ## Миграции
 
 Миграции управляются Alembic.
@@ -197,10 +210,11 @@ Alembic использует тот же async PostgreSQL driver `asyncpg`, чт
     f4a5b6c7d8e9  Catalog foundation + five system category schemas
     a6b7c8d9e0f1  Source-backed catalog metadata refinement
     b7c8d9e0f1a2  Warehouse ledger + current-state projections
+    c8d9e0f1a2b3  Technical-retention indexes
 
-Текущий migration head после Stage 6 warehouse core:
+Текущий migration head:
 
-    b7c8d9e0f1a2
+    c8d9e0f1a2b3
 
 Следующие предметные схемы добавляются отдельными миграциями.
 
@@ -371,7 +385,10 @@ deterministic versioned reference data.
 
 Складские операции выполняются транзакционно в PostgreSQL. Idempotency retries
 сериализуются transaction-scoped advisory lock по `(actor, client_request_id)`.
-Reversal затем блокирует immutable original Movement; все Location rows берутся
+Correction/reversal дополнительно сериализуют original Movement context через
+transaction-scoped advisory lock по UUID original movement. Сам immutable
+Movement читается обычным `SELECT`, поэтому backend runtime-role не требует
+`UPDATE` privilege для PostgreSQL row locking. Все Location rows затем берутся
 в UUID order, после них User rows. Затем serial/WWN identity advisory locks
 берутся единым sorted order; reusable UUID обнаруживаются без row lock; затем все
 InventoryUnit rows блокируются в UUID order, после них все Item rows, затем
@@ -447,7 +464,12 @@ Gateway необходим из-за недоступности `api.telegram.or
 - PostgreSQL отделён от web отдельной внутренней Docker-сетью;
 - CI поднимает production-shaped Compose и проверяет полный маршрут Nginx -> FastAPI -> PostgreSQL.
 
-`statement_timeout` и `lock_timeout` относятся к runtime-запросам приложения. Alembic намеренно не получает короткий statement timeout, потому что будущие DDL-миграции могут законно выполняться дольше обычного API-запроса.
+Runtime и migration timeout budgets разделены. Обычные backend-запросы
+используют `DATABASE_STATEMENT_TIMEOUT_SECONDS` /
+`DATABASE_LOCK_TIMEOUT_SECONDS`, а Alembic получает отдельные более широкие
+`MIGRATION_STATEMENT_TIMEOUT_SECONDS` / `MIGRATION_LOCK_TIMEOUT_SECONDS`.
+Это ограничивает зависшие DDL/lock waits, не приравнивая миграцию к обычному
+API-запросу.
 
 ## Баланс как проекция журнала
 
@@ -518,3 +540,29 @@ Terminal user access state является server-authoritative: stale PENDING 
 или callback не может понизить/переписать `APPROVED`, `REJECTED` или `BLOCKED`.
 Frontend также не применяет поздний `POST /api/access-requests -> PENDING`
 поверх уже полученного `APPROVED`/`BLOCKED`.
+
+## Access notification recovery и Telegram SDK delivery
+
+Повторный explicit access request при уже существующем `PENDING`
+AccessRequest не создаёт новый request.
+
+Если ADMIN notification с тем же business dedupe key исчерпала retry и стала
+`DEAD`, backend переиспользует существующую approve/reject callback pair и
+controlled-upsert возвращает только terminal `DEAD` outbox row в `PENDING`.
+
+Backend не имеет table-level `UPDATE notification_outbox`: разрешены только
+delivery-state columns. Изменение payload запрещено DB-role contract.
+
+Telegram Web App SDK поставляется same-origin:
+
+    /vendor/telegram/telegram-web-app.js
+
+CI фиксирует ожидаемый SHA-256 и размер vendored SDK. Frontend различает:
+
+- успешную загрузку SDK;
+- `load-error`;
+- timeout;
+- настоящий запуск вне Telegram.
+
+Ошибка доставки SDK не маскируется сообщением «откройте приложение через
+Telegram».

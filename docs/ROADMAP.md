@@ -5,11 +5,11 @@
 > **Правило:** завершённые пункты отмечаются `[x]`, текущие — `[~]`, запланированные — `[ ]`.
 > Если решение меняется, старый пункт не удаляется бесследно: он переносится в раздел «Изменённые / отложенные решения» с короткой причиной.
 >
-> **Последнее обновление:** 2026-09-02
-> **Production runtime code baseline:** `7e04c8da72d3b12bd78184f323a984ea6a86618c` — merge PR #11, Stage 6 production close.
-> **Production:** Stage 4 Telegram/auth/access, Stage 5 Catalog Foundation и Stage 6 Inventory Ledger развёрнуты в production. Production migration head: `c8d9e0f1a2b3`.
+> **Последнее обновление:** 2026-09-03
+> **Production runtime code baseline:** `50d013feb04d13d0976fc196ced99b589a95af6b` — merge PR #13, Stage 7 production close.
+> **Production:** Stage 4 Telegram/auth/access, Stage 5 Catalog Foundation, Stage 6 Inventory Ledger и Stage 7 Catalog Read API / Search / Filters развёрнуты в production. Production migration head: `d9e0f1a2b3c4`.
 > **Git/GitHub:** local и remote очищены до `main`; `main` protected; обязательны PR и четыре CI checks: `CI/backend`, `CI/frontend`, `CI/runtime`, `CI/telegram-gateway`.
-> **Current product stage:** Stage 7 — Catalog Read API / Search / Filters.
+> **Current product stage:** Stage 8 — Working Mini App UX.
 > **Production-data gate:** automated off-VM PostgreSQL backup + real restore test намеренно отложены до подготовки к вводу настоящих складских остатков. Это блокирует только real inventory entry, но не дальнейшую feature-разработку, deploy и synthetic/test data.
 > **Repository visibility:** repository остаётся public до последнего GitHub-dependent шага; перевод в private выполняется отдельно в конце.
 
@@ -1513,7 +1513,7 @@ Viewport profiles:
 - [x] Production Swagger/OpenAPI отключён.
 - [x] app/db Docker networks разделены.
 - [x] CI backend/frontend/runtime зелёный.
-- [x] Production source guard на `7e04c8da72d3b12bd78184f323a984ea6a86618c`.
+- [x] Production source guard на `50d013feb04d13d0976fc196ced99b589a95af6b`.
 
 До реальных данных:
 
@@ -1697,7 +1697,7 @@ Backup/restore остаётся отдельным production-data gate и не 
 
 ## Stage 7 — Catalog Read API / Search / Filters
 
-**STATUS: IMPLEMENTED LOCALLY — awaiting focused review / PR CI / production deploy.**
+**STATUS: DONE — PR #13 merged и Stage 7 production acceptance пройден 2026-09-03. Production SHA: `50d013feb04d13d0976fc196ced99b589a95af6b`; migration head: `d9e0f1a2b3c4`.**
 
 - [x] Базовый Category listing реализован в Stage 5.
 - [x] Базовый Item listing реализован в Stage 5.
@@ -1715,6 +1715,13 @@ Backup/restore остаётся отдельным production-data gate и не 
 - [x] NIC filters.
 - [x] Disk filters.
 - [x] PostgreSQL filter/search/inventory/facet fixture matrices.
+- [x] Focused review закрыт без P0/P1/P2 findings.
+- [x] PR #13 merged в `main`; required CI backend/frontend/runtime/telegram-gateway PASS.
+- [x] Pre-deploy PostgreSQL dump создан и проверен через `pg_restore --list`.
+- [x] Production migration `c8d9e0f1a2b3 -> d9e0f1a2b3c4`.
+- [x] Production backend/telegram-worker/maintenance-worker пересозданы на Stage 7 image.
+- [x] Local и public Cloudflare health/live/ready PASS.
+- [x] Новые catalog items/facets routes подтверждены в production через auth boundary (`401` без session вместо `404/500`).
 
 **GATE:** every filter combination returns exact expected fixtures; frontend does not contain category-branch spaghetti.
 

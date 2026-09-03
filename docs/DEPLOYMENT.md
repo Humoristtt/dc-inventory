@@ -64,6 +64,8 @@ Nginx нормализует эти значения и передаёт backend
 
 Uvicorn доверяет proxy headers, потому что production backend не публикуется на host и доступен только через внутреннюю application-сеть.
 
+Nginx применяет rate limiting после нормализации `CF-Connecting-IP`: общий API ограничен до 30 запросов/с на клиента с burst 60; `POST /api/auth/telegram` и `POST /api/access-requests` дополнительно ограничены до 10 запросов/мин с burst 5. Telegram webhook вынесен в отдельный лимит 50 запросов/с с burst 100, чтобы Telegram delivery burst не конкурировал с пользовательским API. Превышение ingress-лимита возвращает HTTP `429`.
+
 ## Секреты
 
 Production `.env` создаётся непосредственно на VM и не хранится в Git.

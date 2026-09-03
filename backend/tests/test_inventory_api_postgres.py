@@ -22,6 +22,19 @@ pytestmark = pytest.mark.skipif(
     reason="set RUN_POSTGRES_INTEGRATION=1 against a migrated PostgreSQL test DB",
 )
 
+def _auth_headers(
+    settings: Settings,
+    token: str,
+    extra: dict[str, str] | None = None,
+) -> dict[str, str]:
+    headers = {
+        "Cookie": f"{settings.auth_cookie_name}={token}",
+    }
+    if extra is not None:
+        headers.update(extra)
+    return headers
+
+
 
 @pytest.mark.asyncio
 async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
@@ -84,13 +97,13 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
 
             pending_read = await client.get(
                 "/api/inventory/locations",
-                cookies={settings.auth_cookie_name: tokens["pending"]},
+                headers=_auth_headers(settings, tokens["pending"]),
             )
             assert pending_read.status_code == 403
 
             user_read = await client.get(
                 "/api/inventory/locations",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             assert user_read.status_code == 200
             assert str(scenario.location_one_id) in {
@@ -111,14 +124,14 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
             }
             user_mutation = await client.post(
                 "/api/admin/inventory/movements",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
                 json=movement_body,
             )
             assert user_mutation.status_code == 403
 
             location_response = await client.post(
                 "/api/admin/inventory/locations",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json={
                     "code": f"API-{marker[:10]}",
                     "name": "API-created location",
@@ -129,11 +142,11 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
             api_location_id = location_response.json()["id"]
             archived_location = await client.post(
                 f"/api/admin/inventory/locations/{api_location_id}/archive",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
             )
             unarchived_location = await client.post(
                 f"/api/admin/inventory/locations/{api_location_id}/unarchive",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
             )
             assert archived_location.status_code == 200
             assert archived_location.json()["status"] == "ARCHIVED"
@@ -142,12 +155,12 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
 
             admin_movement = await client.post(
                 "/api/admin/inventory/movements",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json=movement_body,
             )
             replayed_movement = await client.post(
                 "/api/admin/inventory/movements",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json=movement_body,
             )
             assert admin_movement.status_code == 201
@@ -168,7 +181,7 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
             }
             idempotency_conflict = await client.post(
                 "/api/admin/inventory/movements",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json=different_payload,
             )
             assert idempotency_conflict.status_code == 409
@@ -186,7 +199,7 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
             }
             validation_response = await client.post(
                 "/api/admin/inventory/movements",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json=invalid_quantity,
             )
             assert validation_response.status_code == 422
@@ -195,7 +208,7 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
             for invalid_value in (True, "1", 1.5):
                 strict_quantity_response = await client.post(
                     "/api/admin/inventory/movements",
-                    cookies={settings.auth_cookie_name: tokens["admin"]},
+                    headers=_auth_headers(settings, tokens["admin"]),
                     json={
                         **movement_body,
                         "client_request_id": (f"api-strict-{invalid_value!s}-{marker}"),
@@ -211,7 +224,7 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
 
             oversized_location_code = await client.post(
                 "/api/admin/inventory/locations",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json={"code": "ß" * 33, "name": "Oversized after casefold"},
             )
             assert oversized_location_code.status_code == 422
@@ -219,7 +232,7 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
 
             foreign_quantity_issue = await client.post(
                 "/api/admin/inventory/movements",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json={
                     "movement_type": "ISSUE",
                     "source_location_id": str(scenario.location_one_id),
@@ -237,7 +250,7 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
 
             stock = await client.get(
                 f"/api/inventory/stock?item_id={scenario.quantity_item_id}",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             assert stock.status_code == 200
             stock_items = stock.json()["items"]
@@ -256,15 +269,15 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
 
             foreign_stock_filter = await client.get(
                 f"/api/inventory/stock?holder_user_id={scenario.holder_two_id}",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             own_stock_filter = await client.get(
                 f"/api/inventory/stock?holder_user_id={scenario.holder_one_id}",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             admin_foreign_stock = await client.get(
                 f"/api/inventory/stock?holder_user_id={scenario.holder_two_id}",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
             )
             assert foreign_stock_filter.status_code == 403
             assert own_stock_filter.status_code == 200
@@ -278,19 +291,19 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
 
             user_history = await client.get(
                 f"/api/inventory/movements?item_id={scenario.quantity_item_id}",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             user_movement_detail = await client.get(
                 f"/api/inventory/movements/{admin_movement.json()['id']}",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             admin_history = await client.get(
                 f"/api/inventory/movements?item_id={scenario.quantity_item_id}",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
             )
             admin_movement_detail = await client.get(
                 f"/api/inventory/movements/{admin_movement.json()['id']}",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
             )
             assert user_history.status_code == 403
             assert user_movement_detail.status_code == 403
@@ -305,7 +318,7 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
 
             serial_receipt = await client.post(
                 "/api/admin/inventory/movements",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json={
                     "movement_type": "RECEIPT",
                     "destination_location_id": str(scenario.location_one_id),
@@ -336,7 +349,7 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
 
             own_serial_issue = await client.post(
                 "/api/admin/inventory/movements",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json={
                     "movement_type": "ISSUE",
                     "source_location_id": str(scenario.location_one_id),
@@ -347,7 +360,7 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
             )
             foreign_serial_issue = await client.post(
                 "/api/admin/inventory/movements",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json={
                     "movement_type": "ISSUE",
                     "source_location_id": str(scenario.location_one_id),
@@ -364,7 +377,7 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
                     f"/api/inventory/units?item_id={scenario.serial_item_id}"
                     "&state=ISSUED"
                 ),
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             assert user_units.status_code == 200
             assert user_units.json()["total"] == 2
@@ -391,15 +404,15 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
 
             foreign_units_filter = await client.get(
                 f"/api/inventory/units?holder_user_id={scenario.holder_two_id}",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             own_units_filter = await client.get(
                 f"/api/inventory/units?holder_user_id={scenario.holder_one_id}",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             admin_foreign_units = await client.get(
                 f"/api/inventory/units?holder_user_id={scenario.holder_two_id}",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
             )
             assert foreign_units_filter.status_code == 403
             assert own_units_filter.status_code == 200
@@ -408,7 +421,7 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
 
             own_quantity_issue = await client.post(
                 "/api/admin/inventory/movements",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json={
                     "movement_type": "ISSUE",
                     "source_location_id": str(scenario.location_one_id),
@@ -426,7 +439,7 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
 
             quantity_summary = await client.get(
                 f"/api/inventory/items/{scenario.quantity_item_id}/summary",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             assert quantity_summary.status_code == 200
             assert quantity_summary.json() == {
@@ -437,7 +450,7 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
 
             serial_summary = await client.get(
                 f"/api/inventory/items/{scenario.serial_item_id}/summary",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             assert serial_summary.status_code == 200
             assert serial_summary.json() == {
@@ -448,18 +461,18 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
 
             mine_first_page = await client.get(
                 "/api/inventory/mine?limit=1&offset=0",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             mine_all = await client.get(
                 "/api/inventory/mine?limit=100&offset=0",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             mine_ignores_foreign_holder = await client.get(
                 (
                     "/api/inventory/mine?limit=100&offset=0"
                     f"&holder_user_id={scenario.holder_two_id}"
                 ),
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
 
             assert mine_first_page.status_code == 200
@@ -513,15 +526,15 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
 
             own_unit_detail = await client.get(
                 f"/api/inventory/units/{own_unit_id}",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             foreign_unit_detail = await client.get(
                 f"/api/inventory/units/{foreign_unit_id}",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             admin_foreign_unit_detail = await client.get(
                 f"/api/inventory/units/{foreign_unit_id}",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
             )
             assert own_unit_detail.status_code == 200
             assert own_unit_detail.json()["serial_number"] == own_serial

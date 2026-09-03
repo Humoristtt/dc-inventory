@@ -33,6 +33,19 @@ pytestmark = pytest.mark.skipif(
     reason="set RUN_POSTGRES_INTEGRATION=1 against a migrated PostgreSQL test DB",
 )
 
+def _auth_headers(
+    settings: Settings,
+    token: str,
+    extra: dict[str, str] | None = None,
+) -> dict[str, str]:
+    headers = {
+        "Cookie": f"{settings.auth_cookie_name}={token}",
+    }
+    if extra is not None:
+        headers.update(extra)
+    return headers
+
+
 
 @pytest.mark.asyncio
 async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
@@ -113,13 +126,12 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
             ) as originless_client:
                 missing_origin = await originless_client.post(
                     "/api/admin/catalog/manufacturers",
-                    cookies={settings.auth_cookie_name: tokens["admin"]},
+                    headers=_auth_headers(settings, tokens["admin"]),
                     json={"name": f"Missing Origin {marker}"},
                 )
                 foreign_origin = await originless_client.post(
                     "/api/admin/catalog/manufacturers",
-                    cookies={settings.auth_cookie_name: tokens["admin"]},
-                    headers={"Origin": "https://evil.example"},
+                    headers=_auth_headers(settings, tokens["admin"], {"Origin": "https://evil.example"}),
                     json={"name": f"Foreign Origin {marker}"},
                 )
 
@@ -135,17 +147,17 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
             for key in ("pending", "rejected", "blocked"):
                 denied = await client.get(
                     "/api/catalog/categories",
-                    cookies={settings.auth_cookie_name: tokens[key]},
+                    headers=_auth_headers(settings, tokens[key]),
                 )
                 assert denied.status_code == 403
 
             approved_user = await client.get(
                 "/api/catalog/categories",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             approved_admin = await client.get(
                 "/api/catalog/categories",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
             )
             assert approved_user.status_code == 200
             assert approved_admin.status_code == 200
@@ -160,14 +172,14 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
 
             user_mutation = await client.post(
                 "/api/admin/catalog/manufacturers",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
                 json={"name": f"API Manufacturer {marker}"},
             )
             assert user_mutation.status_code == 403
 
             manufacturer_response = await client.post(
                 "/api/admin/catalog/manufacturers",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json={"name": f"  API   Manufacturer {marker}  "},
             )
             assert manufacturer_response.status_code == 201
@@ -180,7 +192,7 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
                     "limit": 1,
                     "offset": 0,
                 },
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             assert manufacturer_search.status_code == 200
             assert manufacturer_search.json()["total"] == 1
@@ -192,7 +204,7 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
 
             contradictory_item = await client.post(
                 "/api/admin/catalog/items",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json={
                     "category_key": "sfp",
                     "manufacturer_id": manufacturer_id,
@@ -210,7 +222,7 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
 
             item_response = await client.post(
                 "/api/admin/catalog/items",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json={
                     "category_key": "sfp",
                     "manufacturer_id": manufacturer_id,
@@ -250,7 +262,7 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
 
             privacy_item_response = await client.post(
                 "/api/admin/catalog/items",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json={
                     "category_key": "sfp",
                     "manufacturer_id": manufacturer_id,
@@ -377,7 +389,7 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
                 response = await client.get(
                     "/api/catalog/items",
                     params={"q": query},
-                    cookies={settings.auth_cookie_name: token},
+                    headers=_auth_headers(settings, token),
                 )
                 assert response.status_code == 200
                 return int(response.json()["total"])
@@ -438,12 +450,12 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
             user_foreign_facets = await client.get(
                 "/api/catalog/items/facets",
                 params={"q": foreign_serial},
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             admin_foreign_facets = await client.get(
                 "/api/catalog/items/facets",
                 params={"q": foreign_serial},
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
             )
 
             assert user_foreign_facets.status_code == 200
@@ -524,9 +536,7 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
                     "facet": "manufacturer",
                     "facet_limit": 50,
                 },
-                cookies={
-                    settings.auth_cookie_name: tokens["user"],
-                },
+                headers=_auth_headers(settings, tokens["user"]),
             )
             assert first_facet_page.status_code == 200
 
@@ -547,9 +557,7 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
                     "facet_limit": 50,
                     "facet_offset": 50,
                 },
-                cookies={
-                    settings.auth_cookie_name: tokens["user"],
-                },
+                headers=_auth_headers(settings, tokens["user"]),
             )
             assert second_facet_page.status_code == 200
 
@@ -587,16 +595,14 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
                     "facet": "manufacturer",
                     "facet_limit": 0,
                 },
-                cookies={
-                    settings.auth_cookie_name: tokens["user"],
-                },
+                headers=_auth_headers(settings, tokens["user"]),
             )
             assert invalid_facet_limit.status_code == 422
 
             stage7_listing = await client.get(
                 "/api/catalog/items",
                 params={"q": "api-pn-1", "category": "sfp"},
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             assert stage7_listing.status_code == 200
             listed = next(item for item in stage7_listing.json()["items"] if item["id"] == item_id)
@@ -613,7 +619,7 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
                     ("manufacturer_id", manufacturer_id),
                     ("filter", "speed_mbps:eq:10000"),
                 ],
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
             )
             assert stage7_facets.status_code == 200
             facet_keys = {facet["key"] for facet in stage7_facets.json()["facets"]}
@@ -622,7 +628,7 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
 
             pending_facets = await client.get(
                 "/api/catalog/items/facets",
-                cookies={settings.auth_cookie_name: tokens["pending"]},
+                headers=_auth_headers(settings, tokens["pending"]),
             )
             assert pending_facets.status_code == 403
 
@@ -637,14 +643,14 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
                 invalid = await client.get(
                     "/api/catalog/items",
                     params=params,
-                    cookies={settings.auth_cookie_name: tokens["user"]},
+                    headers=_auth_headers(settings, tokens["user"]),
                 )
                 assert invalid.status_code == 422
                 assert invalid.json()["detail"]["code"] == expected_code
 
             canonical_url_patch = await client.patch(
                 f"/api/admin/catalog/items/{item_id}",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json={
                     "datasheet_url": (
                         "  HTTPS://Example.COM/updated path  "
@@ -658,14 +664,14 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
 
             user_item_mutation = await client.patch(
                 f"/api/admin/catalog/items/{item_id}",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
                 json={"name": "Forbidden"},
             )
             assert user_item_mutation.status_code == 403
 
             immutable_category = await client.patch(
                 f"/api/admin/catalog/items/{item_id}",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json={"category_key": "disk"},
             )
             assert immutable_category.status_code == 422
@@ -673,7 +679,7 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
 
             consistent_attributes_patch = await client.patch(
                 f"/api/admin/catalog/items/{item_id}",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json={
                     "attributes": {
                         "speed_mbps": 10000,
@@ -693,7 +699,7 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
 
             contradictory_attributes_patch = await client.patch(
                 f"/api/admin/catalog/items/{item_id}",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json={
                     "attributes": {
                         "speed_mbps": 10000,
@@ -712,7 +718,7 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
 
             after_failed_patch = await client.get(
                 f"/api/catalog/items/{item_id}",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
             )
             assert after_failed_patch.status_code == 200
             assert after_failed_patch.json()["attributes"]["reach_m"] == 20000
@@ -722,7 +728,7 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
 
             duplicate_response = await client.post(
                 "/api/admin/catalog/items/check-duplicates",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
                 json={
                     "category_key": "sfp",
                     "manufacturer_id": manufacturer_id,
@@ -735,11 +741,11 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
 
             archived = await client.post(
                 f"/api/admin/catalog/items/{item_id}/archive",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
             )
             repeated_archive = await client.post(
                 f"/api/admin/catalog/items/{item_id}/archive",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
             )
             assert archived.status_code == 200
             assert repeated_archive.status_code == 200
@@ -751,15 +757,15 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
 
             active_listing = await client.get(
                 "/api/catalog/items?category=sfp",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             archived_listing = await client.get(
                 "/api/catalog/items?category=sfp&status=ARCHIVED",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             item_detail = await client.get(
                 f"/api/catalog/items/{item_id}",
-                cookies={settings.auth_cookie_name: tokens["user"]},
+                headers=_auth_headers(settings, tokens["user"]),
             )
             assert active_listing.status_code == 200
             assert item_id not in {
@@ -773,11 +779,11 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
 
             unarchived = await client.post(
                 f"/api/admin/catalog/items/{item_id}/unarchive",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
             )
             repeated_unarchive = await client.post(
                 f"/api/admin/catalog/items/{item_id}/unarchive",
-                cookies={settings.auth_cookie_name: tokens["admin"]},
+                headers=_auth_headers(settings, tokens["admin"]),
             )
             assert unarchived.status_code == 200
             assert repeated_unarchive.status_code == 200

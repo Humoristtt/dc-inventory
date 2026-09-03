@@ -66,6 +66,38 @@ test("forwards allowed Telegram method", async () => {
 });
 
 
+test("forwards start welcome photo method", async () => {
+  const originalFetch = globalThis.fetch;
+  let upstreamUrl = "";
+  globalThis.fetch = async (url) => {
+    upstreamUrl = String(url);
+    return new Response(JSON.stringify({ ok: true, result: {} }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    const response = await worker.fetch(
+      makeRequest("/telegram/sendPhoto", env.GATEWAY_SECRET, {
+        chat_id: 42,
+        photo: "https://app.example/telegram/start-welcome.png",
+        caption: "hello",
+      }),
+      env,
+    );
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).ok, true);
+    assert.equal(
+      upstreamUrl,
+      `https://api.telegram.org/bot${env.BOT_TOKEN}/sendPhoto`,
+    );
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+
 test("forwards start cleanup method", async () => {
   const originalFetch = globalThis.fetch;
   const upstreamUrls = [];

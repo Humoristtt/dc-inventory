@@ -1,5 +1,6 @@
 const ALLOWED_METHODS = new Set([
   "sendMessage",
+  "sendPhoto",
   "deleteMessage",
   "editMessageText",
   "editMessageReplyMarkup",

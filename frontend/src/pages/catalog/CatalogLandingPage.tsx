@@ -47,7 +47,7 @@ export function CatalogLandingPage() {
           committedValue={viewState.q}
           label="Поиск по каталогу"
           onCommit={updateSearch}
-          placeholder="Модель, PN, производитель, серийный номер…"
+          placeholder="Найдёт всё, что вам нужно"
         />
       </header>
 

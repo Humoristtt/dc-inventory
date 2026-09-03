@@ -14,7 +14,7 @@
   box-shadow: 0 0 64px rgb(0 0 0 / 24%);
 }
 
-@media (max-width: 1599px) {
+@media (max-width: 1919px) {
   .app-shell__content {
     box-shadow: none;
   }

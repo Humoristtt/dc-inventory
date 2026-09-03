@@ -69,7 +69,8 @@
 
 .catalog-landing-header .search-field,
 .category-header .search-field {
-  max-width: 920px;
+  width: 100%;
+  max-width: none;
 }
 
 .search-field:focus-within {
@@ -852,5 +853,35 @@
 
   .equipment-card {
     padding: 17px;
+  }
+}
+
+@media (max-width: 679px) {
+  .category-tile {
+    min-height: 148px;
+    justify-content: flex-start;
+    padding: 15px;
+  }
+
+  .category-tile__index,
+  .category-tile__glyph,
+  .category-tile__mode,
+  .category-tile > i {
+    display: none;
+  }
+
+  .category-tile strong {
+    padding-right: 0;
+    font-size: 16px;
+    line-height: 1.12;
+  }
+
+  .category-tile p {
+    display: block;
+    margin-top: 9px;
+    overflow: visible;
+    font-size: 11px;
+    line-height: 1.4;
+    -webkit-line-clamp: unset;
   }
 }

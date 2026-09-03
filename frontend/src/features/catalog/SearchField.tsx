@@ -21,9 +21,13 @@ export function SearchField({
       <span className="search-field__icon" aria-hidden="true">⌕</span>
       <input
         aria-label={label}
+        autoCapitalize="none"
+        autoComplete="off"
+        autoCorrect="off"
         enterKeyHint="search"
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
+        spellCheck={false}
         type="search"
         value={value}
       />

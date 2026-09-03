@@ -173,6 +173,49 @@ def test_cookie_origin_guard_rejects_foreign_origin() -> None:
     assert exc_info.value.status_code == 403
 
 
+def test_cookie_origin_guard_normalizes_default_https_port() -> None:
+    settings = Settings(
+        database_url="postgresql+asyncpg://unused",
+        app_env="test",
+        telegram_web_app_url="https://app.spik-inventory.ru:443",
+    )
+
+    _enforce_cookie_mutation_origin(
+        _request(
+            "POST",
+            origin="https://app.spik-inventory.ru",
+        ),
+        settings,
+    )
+
+
+def test_cookie_origin_guard_preserves_non_default_https_port() -> None:
+    settings = Settings(
+        database_url="postgresql+asyncpg://unused",
+        app_env="test",
+        telegram_web_app_url="https://app.spik-inventory.ru:8443",
+    )
+
+    _enforce_cookie_mutation_origin(
+        _request(
+            "POST",
+            origin="https://app.spik-inventory.ru:8443",
+        ),
+        settings,
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _enforce_cookie_mutation_origin(
+            _request(
+                "POST",
+                origin="https://app.spik-inventory.ru",
+            ),
+            settings,
+        )
+
+    assert exc_info.value.status_code == 403
+
+
 def test_cookie_origin_guard_accepts_configured_origin() -> None:
     settings = Settings(
         database_url="postgresql+asyncpg://unused",

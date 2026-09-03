@@ -101,6 +101,13 @@ Backend Telegram/auth boundary использует:
 `TELEGRAM_BOT_TOKEN` нужен backend для server-side HMAC-проверки Telegram
 `initData`. Frontend его никогда не получает.
 
+В production `TELEGRAM_WEB_APP_URL` задаёт ровно публичный HTTPS origin Mini
+App: без credentials, path, query, fragment и surrounding whitespace. Допустим
+корневой `/` и явный TCP port. Стандартный HTTPS port `443` при same-origin
+проверке канонизируется как обычный HTTPS origin без явного порта.
+Этот origin одновременно используется WebApp-кнопками, same-origin asset
+branded `/start` и защитой cookie-authenticated mutations по `Origin`.
+
 Отдельный `telegram-worker` использует:
 
     TELEGRAM_GATEWAY_URL

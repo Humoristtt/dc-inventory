@@ -50,12 +50,15 @@ def validate_backend_runtime_config(settings: Settings) -> None:
         or parsed.hostname is None
         or parsed.username is not None
         or parsed.password is not None
+        or parsed.path not in ("", "/")
+        or parsed.query
         or parsed.fragment
         or port is not None
         and not 1 <= port <= 65535
     ):
         raise RuntimeError(
-            "TELEGRAM_WEB_APP_URL must be a valid absolute HTTPS URL"
+            "TELEGRAM_WEB_APP_URL must be an absolute HTTPS origin URL "
+            "without path, query, or fragment"
         )
 
 

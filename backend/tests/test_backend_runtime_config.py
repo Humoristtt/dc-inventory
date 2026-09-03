@@ -101,6 +101,9 @@ def test_missing_fields_are_reported_together() -> None:
         "app.spik-inventory.ru",
         "https://",
         "https://user:pass@example.com/app",
+        "https://example.com/app",
+        "https://example.com/?source=telegram",
+        "https://example.com/app?source=telegram",
         "https://example.com/app#fragment",
         " https://example.com/app ",
         "https://example.com:99999/app",
@@ -124,11 +127,11 @@ def test_production_backend_rejects_invalid_web_app_url(
     "url",
     [
         "https://example.com",
-        "https://example.com/app",
-        "https://example.com:8443/app?source=telegram",
+        "https://example.com/",
+        "https://example.com:8443",
     ],
 )
-def test_production_backend_accepts_absolute_https_web_app_url(
+def test_production_backend_accepts_https_web_app_origin(
     url: str,
 ) -> None:
     settings = production_settings(

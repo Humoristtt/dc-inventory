@@ -16,8 +16,29 @@ SAFE_METHODS = frozenset({"GET", "HEAD", "OPTIONS"})
 
 def _configured_web_app_origin(settings: Settings) -> str:
     parsed = urlsplit(settings.telegram_web_app_url)
-    return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
+    scheme = parsed.scheme.lower()
+    hostname = parsed.hostname
 
+    if hostname is None:
+        return f"{scheme}://{parsed.netloc.lower()}"
+
+    host = hostname.lower()
+    if ":" in host:
+        host = f"[{host}]"
+
+    port = parsed.port
+    default_port = (
+        443
+        if scheme == "https"
+        else 80
+        if scheme == "http"
+        else None
+    )
+
+    if port is not None and port != default_port:
+        host = f"{host}:{port}"
+
+    return f"{scheme}://{host}"
 
 def _enforce_cookie_mutation_origin(
     request: Request,

@@ -155,13 +155,14 @@ function renderRoute(path: string, role: "USER" | "ADMIN") {
     },
   });
   client.setQueryData(AUTH_QUERY_KEY, authState(role));
-  return render(
+  const view = render(
     <QueryClientProvider client={client}>
       <MemoryRouter initialEntries={[path]}>
         <ApplicationRoutes />
       </MemoryRouter>
     </QueryClientProvider>,
   );
+  return { ...view, client };
 }
 
 afterEach(() => {
@@ -221,7 +222,10 @@ it("ADMIN creates metadata-driven item after inline manufacturer and duplicate w
   });
   vi.stubGlobal("fetch", fetchMock);
 
-  renderRoute("/catalog/new?category=sfp", "ADMIN");
+  const { client } = renderRoute("/catalog/new?category=sfp", "ADMIN");
+  const facetKey = ["catalog", "facets", "f03-create"] as const;
+  client.setQueryData(facetKey, { facets: [] });
+
   fireEvent.change(await screen.findByLabelText(/^Название/), {
     target: { value: "Трансивер 10/25G" },
   });
@@ -256,6 +260,7 @@ it("ADMIN creates metadata-driven item after inline manufacturer and duplicate w
       connector: "MPO/PC",
     },
   });
+  expect(client.getQueryState(facetKey)?.isInvalidated).toBe(true);
 });
 
 it("ignores a stale duplicate-check response when the form changes in flight", async () => {
@@ -425,7 +430,10 @@ it("shows stock by location and custody and lets ADMIN archive without deleting 
     throw new Error(`unexpected fetch ${url}`);
   }));
 
-  renderRoute("/catalog/items/item-1", "ADMIN");
+  const { client } = renderRoute("/catalog/items/item-1", "ADMIN");
+  const facetKey = ["catalog", "facets", "f03-archive"] as const;
+  client.setQueryData(facetKey, { facets: [] });
+
   expect(await screen.findByText("A-01")).toBeInTheDocument();
   expect(screen.getByText("Пётр")).toBeInTheDocument();
   expect(screen.getByText("Основная стойка")).toBeInTheDocument();
@@ -435,6 +443,7 @@ it("shows stock by location and custody and lets ADMIN archive without deleting 
   expect(screen.getByText(/Текущий складской остаток.*не удаляются/)).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Подтвердить" }));
   expect(await screen.findByRole("button", { name: "Вернуть из архива" })).toBeInTheDocument();
+  expect(client.getQueryState(facetKey)?.isInvalidated).toBe(true);
 });
 
 it("USER sees own quantity and serial holdings by internal UUID without Admin controls", async () => {

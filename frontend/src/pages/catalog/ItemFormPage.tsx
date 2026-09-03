@@ -345,6 +345,7 @@ export function ItemFormPage() {
     onSuccess: (item) => {
       queryClient.setQueryData(["catalog", "item", item.id], item);
       void queryClient.invalidateQueries({ queryKey: ["catalog", "items"] });
+      void queryClient.invalidateQueries({ queryKey: ["catalog", "facets"] });
       const from = typeof location.state === "object"
         && location.state !== null
         && typeof (location.state as { from?: unknown }).from === "string"

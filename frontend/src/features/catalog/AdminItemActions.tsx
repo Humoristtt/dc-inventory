@@ -19,6 +19,7 @@ export function AdminItemActions({ item }: { item: CatalogItem }) {
     onSuccess: (updated) => {
       queryClient.setQueryData(["catalog", "item", item.id], updated);
       void queryClient.invalidateQueries({ queryKey: ["catalog", "items"] });
+      void queryClient.invalidateQueries({ queryKey: ["catalog", "facets"] });
       setConfirmationOpen(false);
     },
   });

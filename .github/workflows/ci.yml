@@ -230,9 +230,9 @@ jobs:
         working-directory: frontend
         run: npm run build
 
-      - name: Install Playwright browser
+      - name: Install Playwright browsers
         working-directory: frontend
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium webkit
 
       - name: Build production frontend runtime for Playwright
         run: docker build -t dc-inventory-playwright-web ./frontend

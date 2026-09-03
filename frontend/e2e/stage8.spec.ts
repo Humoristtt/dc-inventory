@@ -572,7 +572,10 @@ test("ADMIN metadata form remains usable in Telegram Desktop narrow", async ({ p
 });
 
 test("My Equipment uses session-scoped grouped holdings", async ({ page }, testInfo) => {
-  test.skip(testInfo.project.name !== "iphone-like", "iPhone-like holdings acceptance");
+  test.skip(
+    !["iphone-like", "iphone-webkit"].includes(testInfo.project.name),
+    "iPhone-like holdings acceptance",
+  );
 
   await installTelegramMock(page);
   const api = await installApiMock(page, { role: "USER" });

@@ -133,6 +133,22 @@ function rangeValue(
   )?.value ?? "";
 }
 
+function facetHasVisibleControls(
+  facet: CatalogFacet,
+  state: CatalogFilterState,
+): boolean {
+  if (facet.filter_type === "RANGE") {
+    return (
+      facet.min !== null
+      || facet.max !== null
+      || rangeValue(state.filters, facet.key, "gte") !== ""
+      || rangeValue(state.filters, facet.key, "lte") !== ""
+    );
+  }
+
+  return facet.values.length > 0 || exactValues(state, facet.key).length > 0;
+}
+
 export function FilterSheet({
   active,
   facets,
@@ -165,6 +181,11 @@ export function FilterSheet({
       return leftOrder - rightOrder;
     });
   }, [attributes, facets]);
+
+  const visibleFacets = useMemo(
+    () => orderedFacets.filter((facet) => facetHasVisibleControls(facet, draft)),
+    [draft, orderedFacets],
+  );
 
   return (
     <div
@@ -214,11 +235,11 @@ export function FilterSheet({
               ) : null}
             </div>
           ) : null}
-          {!loading && !error && orderedFacets.length === 0 ? (
+          {!loading && !error && visibleFacets.length === 0 ? (
             <p className="filter-empty">Для этой выборки фильтры недоступны.</p>
           ) : null}
 
-          {!loading && !error ? orderedFacets.map((facet) => {
+          {!loading && !error ? visibleFacets.map((facet) => {
             const metadata = attributes.find((attribute) => attribute.key === facet.key);
             const label = metadata?.label ?? facet.label;
             const unit = metadata?.unit ?? facet.unit;

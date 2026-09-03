@@ -13,6 +13,7 @@ import {
   bindTelegramBackButton,
   getTelegramWebAppSdkLoadStatus,
   loadTelegramWebAppSdk,
+  exitTelegramFullscreen,
   prepareTelegramWebApp,
   requestTelegramFullscreen,
 } from "./webApp";
@@ -183,6 +184,22 @@ describe("Telegram Web App SDK delivery", () => {
     };
 
     expect(requestTelegramFullscreen()).toBe(false);
+  });
+
+  it("exits fullscreen after explicit user action", () => {
+    const exitFullscreen = vi.fn();
+
+    window.Telegram = {
+      WebApp: {
+        initData: "query_id=test",
+        ready: vi.fn(),
+        expand: vi.fn(),
+        exitFullscreen,
+      },
+    };
+
+    expect(exitTelegramFullscreen()).toBe(true);
+    expect(exitFullscreen).toHaveBeenCalledTimes(1);
   });
 
   it("consumes Escape and dismisses the top internal layer", () => {

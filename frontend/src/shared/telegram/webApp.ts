@@ -16,7 +16,17 @@ type TelegramWebApp = {
   initData: string;
   ready: () => void;
   expand: () => void;
+  isFullscreen?: boolean;
   requestFullscreen?: () => void;
+  exitFullscreen?: () => void;
+  onEvent?: (
+    eventType: string,
+    handler: () => void,
+  ) => void;
+  offEvent?: (
+    eventType: string,
+    handler: () => void,
+  ) => void;
   BackButton?: TelegramBackButton;
   safeAreaInset?: TelegramSafeAreaInset;
   contentSafeAreaInset?: TelegramSafeAreaInset;
@@ -180,6 +190,21 @@ export function requestTelegramFullscreen(): boolean {
 
   try {
     webApp.requestFullscreen();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function exitTelegramFullscreen(): boolean {
+  const webApp = getTelegramWebApp();
+
+  if (webApp?.exitFullscreen === undefined) {
+    return false;
+  }
+
+  try {
+    webApp.exitFullscreen();
     return true;
   } catch {
     return false;

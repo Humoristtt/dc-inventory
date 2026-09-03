@@ -107,9 +107,22 @@ export function validateDraftAttributes(
       continue;
     }
 
-    const maxLength = attribute.validation_metadata?.max_length;
-    if (typeof maxLength === "number" && text.length > maxLength) {
-      errors[attribute.key] = `Не более ${maxLength} символов`;
+    if (attribute.data_type === "TEXT") {
+      const preserveWhitespace =
+        attribute.validation_metadata?.preserve_whitespace === true;
+      const normalizedText = preserveWhitespace
+        ? trimmed
+        : text.trim().replace(/\s+/g, " ");
+      const maxLength = attribute.validation_metadata?.max_length;
+
+      if (
+        typeof maxLength === "number"
+        && normalizedText.length > maxLength
+      ) {
+        errors[attribute.key] = `Не более ${maxLength} символов`;
+      } else {
+        values[attribute.key] = normalizedText;
+      }
       continue;
     }
 
@@ -158,7 +171,7 @@ export function validateDraftAttributes(
       continue;
     }
 
-    values[attribute.key] = text;
+    throw new Error(`Unsupported attribute type: ${attribute.data_type}`);
   }
 
   return { values, errors };

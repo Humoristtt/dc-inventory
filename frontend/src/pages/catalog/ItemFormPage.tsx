@@ -243,7 +243,6 @@ function AttributeControl({
           aria-describedby={error ? errorId : undefined}
           aria-invalid={error !== undefined}
           id={controlId}
-          maxLength={typeof maxLength === "number" ? maxLength : undefined}
           onChange={(event) => onChange(event.target.value)}
           rows={attribute.key === "reach_profile" ? 4 : 2}
           value={inputValue}
@@ -254,7 +253,6 @@ function AttributeControl({
           aria-invalid={error !== undefined}
           id={controlId}
           inputMode={attribute.data_type === "TEXT" ? "text" : inputMode}
-          maxLength={typeof maxLength === "number" ? maxLength : undefined}
           onChange={(event) => onChange(event.target.value)}
           type="text"
           value={inputValue}

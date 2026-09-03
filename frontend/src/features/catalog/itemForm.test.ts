@@ -70,3 +70,58 @@ it("rejects INTEGER values that cannot round-trip exactly through JSON number", 
     "Число слишком велико для безопасной отправки",
   );
 });
+
+const compactTextAttribute: CategoryAttribute = {
+  ...integerAttribute,
+  id: "compact-text",
+  key: "compact_text",
+  label: "Compact text",
+  data_type: "TEXT",
+  filter_type: "NONE",
+  validation_metadata: {
+    max_length: 5,
+  },
+};
+
+const preservedTextAttribute: CategoryAttribute = {
+  ...integerAttribute,
+  id: "preserved-text",
+  key: "preserved_text",
+  label: "Preserved text",
+  data_type: "TEXT",
+  filter_type: "NONE",
+  validation_metadata: {
+    max_length: 4,
+    preserve_whitespace: true,
+  },
+};
+
+it("applies TEXT max_length after compact whitespace normalization", () => {
+  const result = validateDraftAttributes(
+    [compactTextAttribute],
+    { compact_text: "  A   B  " },
+  );
+
+  expect(result.errors).toEqual({});
+  expect(result.values.compact_text).toBe("A B");
+});
+
+it("trims only outer whitespace when preserve_whitespace is enabled", () => {
+  const result = validateDraftAttributes(
+    [preservedTextAttribute],
+    { preserved_text: "  A\n B  " },
+  );
+
+  expect(result.errors).toEqual({});
+  expect(result.values.preserved_text).toBe("A\n B");
+});
+
+it("rejects TEXT when normalized value still exceeds max_length", () => {
+  const result = validateDraftAttributes(
+    [compactTextAttribute],
+    { compact_text: "  ABC   DE  " },
+  );
+
+  expect(result.values).toEqual({});
+  expect(result.errors.compact_text).toBe("Не более 5 символов");
+});

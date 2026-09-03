@@ -168,15 +168,29 @@ async function installTelegramMock(
     const state: {
       callback: (() => void) | null;
       expanded: boolean;
+      fullscreen: boolean;
       fullscreenRequested: boolean;
       ready: boolean;
       visible: boolean;
     } = {
       callback: null,
       expanded: false,
+      fullscreen: false,
       fullscreenRequested: false,
       ready: false,
       visible: false,
+    };
+
+    const webAppEvents =
+      new Map<string, Set<() => void>>();
+
+    const emitWebAppEvent = (name: string) => {
+      for (
+        const handler
+        of webAppEvents.get(name) ?? []
+      ) {
+        handler();
+      }
     };
     Object.defineProperty(window, "__stage8Telegram", { value: state });
     Object.defineProperty(window, "Telegram", {
@@ -185,11 +199,34 @@ async function installTelegramMock(
         WebApp: {
           initData: "synthetic-signed-data",
           platform: telegramPlatform,
-          isFullscreen: false,
           ready: () => { state.ready = true; },
           expand: () => { state.expanded = true; },
+          get isFullscreen() {
+            return state.fullscreen;
+          },
           requestFullscreen: () => {
             state.fullscreenRequested = true;
+            state.fullscreen = true;
+            emitWebAppEvent("fullscreenChanged");
+          },
+          exitFullscreen: () => {
+            state.fullscreen = false;
+            emitWebAppEvent("fullscreenChanged");
+          },
+          onEvent: (
+            name: string,
+            handler: () => void,
+          ) => {
+            const handlers =
+              webAppEvents.get(name) ?? new Set();
+            handlers.add(handler);
+            webAppEvents.set(name, handlers);
+          },
+          offEvent: (
+            name: string,
+            handler: () => void,
+          ) => {
+            webAppEvents.get(name)?.delete(handler);
           },
           BackButton: {
             show: () => { state.visible = true; },
@@ -704,7 +741,7 @@ test(
 
     const fullscreenButton = page.getByRole(
       "button",
-      { name: "Открыть на полный экран" },
+      { name: "На весь экран" },
     );
 
     await expect(fullscreenButton).toBeVisible();
@@ -721,6 +758,21 @@ test(
         ).__stage8Telegram.fullscreenRequested
       )),
     ).toBe(true);
+
+    const exitFullscreenButton = page.getByRole(
+      "button",
+      { name: "Выйти из полного экрана" },
+    );
+
+    await expect(exitFullscreenButton).toBeVisible();
+    await exitFullscreenButton.click();
+
+    await expect(
+      page.getByRole(
+        "button",
+        { name: "На весь экран" },
+      ),
+    ).toBeVisible();
 
     await expect(
       page.getByRole("link", { name: /\+ Новая/ }),

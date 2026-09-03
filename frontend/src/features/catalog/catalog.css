@@ -814,7 +814,6 @@
 }
 
 @media (min-width: 680px) {
-  .catalog-page { border-right: 1px solid var(--color-border); border-left: 1px solid var(--color-border); }
   .category-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .equipment-card { grid-template-columns: 74px minmax(0, 1fr); padding: 15px; }
   .detail-hero { grid-template-columns: 142px minmax(0, 1fr); }
@@ -920,7 +919,7 @@
   flex: 1 1 auto;
 }
 
-@media (min-width: 1100px) {
+@media (min-width: 400px) {
   .telegram-fullscreen-button {
     display: inline-flex;
     min-height: 42px;

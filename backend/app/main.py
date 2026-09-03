@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from urllib.parse import urlsplit
 
 from fastapi import FastAPI
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.router import api_router
 from app.core.config import Settings, get_settings
@@ -62,6 +63,23 @@ def validate_backend_runtime_config(settings: Settings) -> None:
         )
 
 
+def _trusted_hosts(settings: Settings) -> list[str]:
+    if settings.app_env != "production":
+        return ["*"]
+
+    hostname = urlsplit(settings.telegram_web_app_url).hostname
+    if hostname is None:
+        raise RuntimeError(
+            "TELEGRAM_WEB_APP_URL hostname is required for trusted hosts"
+        )
+
+    return [
+        hostname.lower(),
+        "127.0.0.1",
+        "localhost",
+    ]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings: Settings = app.state.settings
@@ -86,6 +104,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         docs_url="/api/docs" if docs_enabled else None,
         openapi_url="/api/openapi.json" if docs_enabled else None,
         redoc_url=None,
+    )
+    application.add_middleware(
+        TrustedHostMiddleware,
+        allowed_hosts=_trusted_hosts(runtime_settings),
+        www_redirect=False,
     )
     application.state.settings = runtime_settings
     application.include_router(api_router)

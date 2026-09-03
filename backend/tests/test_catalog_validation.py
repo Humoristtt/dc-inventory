@@ -159,6 +159,59 @@ def test_boolean_is_not_accepted_as_integer() -> None:
     assert exc_info.value.code == "attribute_type_mismatch"
 
 
+@pytest.mark.parametrize(
+    "raw_value",
+    [
+        -(2**53 - 1),
+        2**53 - 1,
+    ],
+)
+def test_integer_values_within_exact_json_range_are_accepted(
+    raw_value: int,
+) -> None:
+    category_id = uuid.uuid4()
+    attribute = _attribute(
+        "integer",
+        AttributeDataType.INTEGER,
+        category_id=category_id,
+    )
+
+    result = validate_attribute_values(
+        category_id,
+        [attribute],
+        {"integer": raw_value},
+    )
+
+    assert result[0].integer_value == raw_value
+
+
+@pytest.mark.parametrize(
+    "raw_value",
+    [
+        -(2**53),
+        2**53,
+    ],
+)
+def test_integer_values_outside_exact_json_range_are_rejected(
+    raw_value: int,
+) -> None:
+    category_id = uuid.uuid4()
+    attribute = _attribute(
+        "integer",
+        AttributeDataType.INTEGER,
+        category_id=category_id,
+    )
+
+    with pytest.raises(CatalogValidationError) as exc_info:
+        validate_attribute_values(
+            category_id,
+            [attribute],
+            {"integer": raw_value},
+        )
+
+    assert exc_info.value.code == "integer_out_of_range"
+
+
 def test_unknown_and_cross_category_attributes_are_rejected() -> None:
     category_id = uuid.uuid4()
     other_category_id = uuid.uuid4()

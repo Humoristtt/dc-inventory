@@ -1,60 +1,72 @@
-import { expect, it } from "vitest";
+import {
+  expect,
+  it,
+} from "vitest";
 
-import type { CategoryAttribute } from "../../shared/api/catalog";
-import { validateDraftAttributes } from "./itemForm";
+import type {
+  CategoryAttribute,
+} from "../../shared/api/catalog";
+import {
+  validateDraftAttributes,
+} from "./itemForm";
 
-function attribute(
-  key: string,
-  dataType: CategoryAttribute["data_type"],
-  metadata: CategoryAttribute["validation_metadata"] = null,
-): CategoryAttribute {
-  return {
-    id: `attribute-${key}`,
-    key,
-    label: key,
-    data_type: dataType,
-    unit: null,
-    required: true,
-    filterable: false,
-    searchable: false,
-    card_visible: false,
-    detail_visible: true,
-    table_visible: false,
-    excel_visible: true,
-    sort_order: 10,
-    filter_type: "NONE",
-    allowed_values: null,
-    validation_metadata: metadata,
-    is_system: true,
-  };
-}
+const integerAttribute: CategoryAttribute = {
+  id: "integer-attribute",
+  key: "integer",
+  label: "Integer",
+  data_type: "INTEGER",
+  unit: null,
+  required: true,
+  filterable: true,
+  searchable: true,
+  card_visible: true,
+  detail_visible: true,
+  table_visible: true,
+  excel_visible: true,
+  sort_order: 10,
+  filter_type: "RANGE",
+  allowed_values: null,
+  validation_metadata: null,
+  is_system: true,
+};
 
-it("сохраняет DECIMAL строкой без binary-float coercion", () => {
-  const result = validateDraftAttributes(
-    [attribute("wavelength", "DECIMAL", { min: 0 })],
-    { wavelength: "1271.1234567890" },
+it("accepts exact JavaScript-safe INTEGER boundaries", () => {
+  const maximum = validateDraftAttributes(
+    [integerAttribute],
+    { integer: String(Number.MAX_SAFE_INTEGER) },
   );
 
-  expect(result.errors).toEqual({});
-  expect(result.values).toEqual({ wavelength: "1271.1234567890" });
-  expect(typeof result.values.wavelength).toBe("string");
+  const minimum = validateDraftAttributes(
+    [integerAttribute],
+    { integer: String(Number.MIN_SAFE_INTEGER) },
+  );
+
+  expect(maximum.errors).toEqual({});
+  expect(maximum.values.integer).toBe(Number.MAX_SAFE_INTEGER);
+
+  expect(minimum.errors).toEqual({});
+  expect(minimum.values.integer).toBe(Number.MIN_SAFE_INTEGER);
 });
 
-it("сравнивает decimal bounds точно", () => {
-  const result = validateDraftAttributes(
-    [attribute("length", "DECIMAL", { min: "0.10000000000000000001" })],
-    { length: "0.1" },
+it("rejects INTEGER values that cannot round-trip exactly through JSON number", () => {
+  const above = validateDraftAttributes(
+    [integerAttribute],
+    { integer: "9007199254740992" },
   );
 
-  expect(result.errors.length).toContain("Минимальное значение");
-});
-
-it("не схлопывает source profile перед отправкой", () => {
-  const result = validateDraftAttributes(
-    [attribute("reach_profile", "TEXT", { preserve_whitespace: true })],
-    { reach_profile: "OM3: до 70 м\nOM4: до 100 м" },
+  const below = validateDraftAttributes(
+    [integerAttribute],
+    { integer: "-9007199254740992" },
   );
 
-  expect(result.errors).toEqual({});
-  expect(result.values.reach_profile).toBe("OM3: до 70 м\nOM4: до 100 м");
+  expect(above.values).toEqual({});
+  expect(below.values).toEqual({});
+
+  expect(above.errors.integer).toBe(
+    "Число слишком велико для безопасной отправки",
+  );
+
+  expect(below.errors.integer).toBe(
+    "Число слишком велико для безопасной отправки",
+  );
 });

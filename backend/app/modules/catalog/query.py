@@ -30,10 +30,10 @@ from app.modules.catalog.models import (
     Manufacturer,
 )
 from app.modules.catalog.service import (
-    MAX_BIGINT,
     MAX_DECIMAL_INTEGRAL_DIGITS,
     MAX_DECIMAL_SCALE,
-    MIN_BIGINT,
+    MAX_SAFE_INTEGER,
+    MIN_SAFE_INTEGER,
     CatalogSchemaError,
     CatalogValidationError,
     ItemRecord,
@@ -338,7 +338,7 @@ def _safe_integer_token(token: str) -> int | None:
         value = int(token)
     except ValueError:
         return None
-    return value if MIN_BIGINT <= value <= MAX_BIGINT else None
+    return value if MIN_SAFE_INTEGER <= value <= MAX_SAFE_INTEGER else None
 
 
 def _safe_decimal_token(token: str) -> Decimal | None:

@@ -30,8 +30,8 @@ from app.modules.catalog.schemas import (
 MAX_DECIMAL_PRECISION = 30
 MAX_DECIMAL_SCALE = 10
 MAX_DECIMAL_INTEGRAL_DIGITS = MAX_DECIMAL_PRECISION - MAX_DECIMAL_SCALE
-MIN_BIGINT = -(2**63)
-MAX_BIGINT = 2**63 - 1
+MIN_SAFE_INTEGER = -(2**53 - 1)
+MAX_SAFE_INTEGER = 2**53 - 1
 SFP_CATEGORY_ID = uuid.UUID("10000000-0000-4000-8000-000000000001")
 
 SFP_SPEED_PROFILE_SCALARS: dict[str, Decimal | None] = {
@@ -376,10 +376,10 @@ def _prepare_attribute_value(
                 f"attribute {attribute.key} requires INTEGER",
             )
         integer_value = raw_value
-        if not MIN_BIGINT <= integer_value <= MAX_BIGINT:
+        if not MIN_SAFE_INTEGER <= integer_value <= MAX_SAFE_INTEGER:
             raise CatalogValidationError(
                 "integer_out_of_range",
-                f"attribute {attribute.key} is outside signed 64-bit range",
+                f"attribute {attribute.key} is outside the exact JSON integer range",
             )
         _validate_numeric_bounds(attribute, Decimal(integer_value))
         return PreparedAttributeValue(

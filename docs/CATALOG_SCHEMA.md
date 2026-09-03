@@ -241,7 +241,7 @@ Stage 5 сохраняет filter metadata, но не реализует faceted
 - `category_attribute_id`;
 - redundant `category_id` для DB-level cross-category integrity;
 - `text_value`;
-- `integer_value` как signed 64-bit integer;
+- `integer_value` физически хранится как signed PostgreSQL `BIGINT`; application/API INTEGER contract ограничен JavaScript-safe signed range для точного JSON round-trip;
 - `decimal_value` как `NUMERIC(30, 10)`;
 - `boolean_value`;
 - `enum_value`.
@@ -282,7 +282,7 @@ Create Item и полная замена attributes выполняют metadata-
 5. Тип должен совпадать с metadata.
 6. ENUM value должен входить в `allowed_values`.
 7. Python bool не принимается как INTEGER.
-8. INTEGER должен помещаться в signed 64-bit range.
+8. INTEGER application/API value должен помещаться в JavaScript-safe signed range `[-9007199254740991, 9007199254740991]`; физический storage остаётся PostgreSQL `BIGINT`.
 9. DECIMAL не принимает binary float.
 10. DECIMAL принимается как exact decimal string, integer либо `Decimal` во
     внутренних Python-вызовах.
@@ -580,8 +580,8 @@ versioned engineering characteristic поддерживала exact и bounds re
 Repeated `eq` одного key объединяются OR, разные keys — AND. `gte` и `lte`
 одного key образуют inclusive range; duplicate boundary одного направления —
 422, а не last-one-wins. TEXT equality нормализует whitespace и игнорирует
-case; ENUM принимает только canonical `allowed_values`; INTEGER — signed BIGINT
-без bool coercion; DECIMAL — exact NUMERIC(30,10); BOOLEAN — только
+case; ENUM принимает только canonical `allowed_values`; INTEGER — JavaScript-safe signed integer
+без bool coercion; физический storage остаётся PostgreSQL `BIGINT`; DECIMAL — exact NUMERIC(30,10); BOOLEAN — только
 `true`/`false`.
 
 Repeated manufacturer/location values имеют OR внутри facet и AND с другими

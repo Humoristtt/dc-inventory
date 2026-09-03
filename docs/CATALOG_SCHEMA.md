@@ -344,6 +344,16 @@ versioned metadata, а не заявлением о глобальной пол�
 `tx_wavelength_nm`/`rx_wavelength_nm` используются только когда source явно
 различает TX и RX. `reach_class` и Ethernet/FC protocol по model не выводятся.
 
+Для текущего authoritative SFP contract backend проверяет согласованность
+lossless profile и scalar без эвристического разбора текста. Известные
+`speed_profile`, `reach_profile` и `wavelength_profile` сопоставляются с
+явно зафиксированным ожидаемым scalar. Если profile и scalar переданы вместе,
+противоречие отклоняется. Неизвестный profile вместе со scalar также
+отклоняется как непроверяемая комбинация; новый authoritative profile должен
+быть добавлен в contract явно. Optional reach/wavelength profile без scalar
+может храниться losslessly. Multi-channel wavelength profile не допускает
+произвольный `nominal_wavelength_nm`.
+
 ### Optical cabling
 
 Default accounting: `QUANTITY`.

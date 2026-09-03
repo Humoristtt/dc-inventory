@@ -159,6 +159,24 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
             assert manufacturer_response.status_code == 201
             manufacturer_id = manufacturer_response.json()["id"]
 
+            contradictory_item = await client.post(
+                "/api/admin/catalog/items",
+                cookies={settings.auth_cookie_name: tokens["admin"]},
+                json={
+                    "category_key": "sfp",
+                    "manufacturer_id": manufacturer_id,
+                    "name": f"Contradictory API SFP {marker}",
+                    "attributes": {
+                        "speed_mbps": 10000,
+                        "speed_profile": "10/25 Гбит/с",
+                    },
+                },
+            )
+            assert contradictory_item.status_code == 422
+            assert contradictory_item.json()["detail"]["code"] == (
+                "profile_scalar_mismatch"
+            )
+
             item_response = await client.post(
                 "/api/admin/catalog/items",
                 cookies={settings.auth_cookie_name: tokens["admin"]},
@@ -276,6 +294,55 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
             )
             assert immutable_category.status_code == 422
             assert immutable_category.json()["detail"]["code"] == "category_immutable"
+
+            consistent_attributes_patch = await client.patch(
+                f"/api/admin/catalog/items/{item_id}",
+                cookies={settings.auth_cookie_name: tokens["admin"]},
+                json={
+                    "attributes": {
+                        "speed_mbps": 10000,
+                        "speed_profile": "10 Гбит/с",
+                        "reach_profile": "до 20 км",
+                        "reach_m": 20000,
+                        "wavelength_profile": "1310 нм",
+                        "nominal_wavelength_nm": "1310",
+                    }
+                },
+            )
+            assert consistent_attributes_patch.status_code == 200
+            assert (
+                consistent_attributes_patch.json()["attributes"]["reach_m"]
+                == 20000
+            )
+
+            contradictory_attributes_patch = await client.patch(
+                f"/api/admin/catalog/items/{item_id}",
+                cookies={settings.auth_cookie_name: tokens["admin"]},
+                json={
+                    "attributes": {
+                        "speed_mbps": 10000,
+                        "speed_profile": "10 Гбит/с",
+                        "reach_profile": "до 20 км",
+                        "reach_m": 10000,
+                        "wavelength_profile": "1310 нм",
+                        "nominal_wavelength_nm": "1310",
+                    }
+                },
+            )
+            assert contradictory_attributes_patch.status_code == 422
+            assert contradictory_attributes_patch.json()["detail"]["code"] == (
+                "profile_scalar_mismatch"
+            )
+
+            after_failed_patch = await client.get(
+                f"/api/catalog/items/{item_id}",
+                cookies={settings.auth_cookie_name: tokens["admin"]},
+            )
+            assert after_failed_patch.status_code == 200
+            assert after_failed_patch.json()["attributes"]["reach_m"] == 20000
+            assert after_failed_patch.json()["attributes"]["reach_profile"] == (
+                "до 20 км"
+            )
 
             duplicate_response = await client.post(
                 "/api/admin/catalog/items/check-duplicates",

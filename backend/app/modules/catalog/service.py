@@ -32,6 +32,41 @@ MAX_DECIMAL_SCALE = 10
 MAX_DECIMAL_INTEGRAL_DIGITS = MAX_DECIMAL_PRECISION - MAX_DECIMAL_SCALE
 MIN_BIGINT = -(2**63)
 MAX_BIGINT = 2**63 - 1
+SFP_CATEGORY_ID = uuid.UUID("10000000-0000-4000-8000-000000000001")
+
+SFP_SPEED_PROFILE_SCALARS: dict[str, Decimal | None] = {
+    "10 Гбит/с": Decimal("10000"),
+    "10/25 Гбит/с": Decimal("25000"),
+    "100 Гбит/с": Decimal("100000"),
+    "16G FC": Decimal("16000"),
+    "25 Гбит/с": Decimal("25000"),
+    "4/8/16G FC": Decimal("16000"),
+    "40 Гбит/с": Decimal("40000"),
+    "8/16/32G FC": Decimal("32000"),
+}
+
+SFP_REACH_PROFILE_SCALARS: dict[str, Decimal | None] = {
+    "MMF: до 35 м\nOM3: до 100 м": Decimal("100"),
+    "OM2: до 20 м\nOM3: до 70 м\nOM4: до 100 м": Decimal("100"),
+    "OM2: до 35 м\nOM3: до 100 м\nOM4: до 125 м": Decimal("125"),
+    (
+        "OM3: 30 м без RS-FEC / 70 м с RS-FEC\n"
+        "OM4: 40 м без RS-FEC / 100 м с RS-FEC"
+    ): Decimal("100"),
+    "OM3: до 100 м\nOM4: до 125 м": Decimal("125"),
+    "OM3: до 70 м\nOM4: до 100 м": Decimal("100"),
+    "до 10 км": Decimal("10000"),
+    "до 100 м": Decimal("100"),
+    "до 100 м по OM4": Decimal("100"),
+    "до 20 км": Decimal("20000"),
+    "до 300 м": Decimal("300"),
+}
+
+SFP_WAVELENGTH_PROFILE_SCALARS: dict[str, Decimal | None] = {
+    "850 нм": Decimal("850"),
+    "1310 нм": Decimal("1310"),
+    "1271 / 1291 / 1311 / 1331 нм": None,
+}
 
 
 class CatalogError(RuntimeError):
@@ -64,6 +99,82 @@ class PreparedAttributeValue:
     decimal_value: Decimal | None = None
     boolean_value: bool | None = None
     enum_value: str | None = None
+
+
+def _prepared_numeric_value(
+    value: PreparedAttributeValue,
+) -> Decimal | None:
+    if value.integer_value is not None:
+        return Decimal(value.integer_value)
+    if value.decimal_value is not None:
+        return value.decimal_value
+    return None
+
+
+def _validate_profile_scalar_pair(
+    values: Mapping[str, PreparedAttributeValue],
+    *,
+    profile_key: str,
+    scalar_key: str,
+    expectations: Mapping[str, Decimal | None],
+) -> None:
+    profile_value = values.get(profile_key)
+    scalar_value = values.get(scalar_key)
+
+    if (
+        profile_value is None
+        or profile_value.text_value is None
+        or scalar_value is None
+    ):
+        return
+
+    profile = profile_value.text_value
+    actual = _prepared_numeric_value(scalar_value)
+    if actual is None:
+        raise CatalogSchemaError(
+            f"attribute {scalar_key} is not numeric"
+        )
+
+    if profile not in expectations:
+        raise CatalogValidationError(
+            "profile_scalar_unverifiable",
+            f"cannot validate {scalar_key} against unrecognized {profile_key}",
+        )
+
+    expected = expectations[profile]
+    if expected is None or actual != expected:
+        raise CatalogValidationError(
+            "profile_scalar_mismatch",
+            f"attribute {scalar_key} contradicts {profile_key}",
+        )
+
+
+def _validate_sfp_profile_scalar_consistency(
+    prepared: Sequence[PreparedAttributeValue],
+) -> None:
+    values = {
+        value.attribute.key: value
+        for value in prepared
+    }
+
+    _validate_profile_scalar_pair(
+        values,
+        profile_key="speed_profile",
+        scalar_key="speed_mbps",
+        expectations=SFP_SPEED_PROFILE_SCALARS,
+    )
+    _validate_profile_scalar_pair(
+        values,
+        profile_key="reach_profile",
+        scalar_key="reach_m",
+        expectations=SFP_REACH_PROFILE_SCALARS,
+    )
+    _validate_profile_scalar_pair(
+        values,
+        profile_key="wavelength_profile",
+        scalar_key="nominal_wavelength_nm",
+        expectations=SFP_WAVELENGTH_PROFILE_SCALARS,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -455,6 +566,10 @@ def validate_attribute_values(
         value = _prepare_attribute_value(by_key[key], raw_value)
         if value is not None:
             prepared.append(value)
+
+    if category_id == SFP_CATEGORY_ID:
+        _validate_sfp_profile_scalar_consistency(prepared)
+
     return prepared
 
 

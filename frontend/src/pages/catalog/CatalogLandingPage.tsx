@@ -4,6 +4,7 @@ import {
   useLocation,
 } from "react-router-dom";
 
+import { useAuthState } from "../../features/auth/useAuthState";
 import {
   getCatalogCategories,
 } from "../../shared/api/catalog";
@@ -25,6 +26,7 @@ import "../../features/catalog/catalog.css";
 export function CatalogLandingPage() {
   const { updateSearch, viewState } = useCatalogUrlState();
   const location = useLocation();
+  const authQuery = useAuthState();
 
   const categoriesQuery = useQuery({
     queryKey: ["catalog", "categories"],
@@ -53,6 +55,13 @@ export function CatalogLandingPage() {
       </header>
 
       <div className="catalog-page__body">
+        {authQuery.data?.user.role === "ADMIN" ? (
+          <div className="admin-create-row">
+            <Link className="button button--dark" state={{ from: returnTo }} to="/catalog/new">
+              + Новая позиция
+            </Link>
+          </div>
+        ) : null}
         {searchActive ? (
           <section aria-labelledby="global-search-title" className="catalog-section">
             <div className="section-heading">

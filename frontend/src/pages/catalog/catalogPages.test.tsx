@@ -379,6 +379,118 @@ it("pending debounce не откатывает более новый filter stat
   expect(params.get("availability")).toBe("IN_STOCK");
 });
 
+it("facets загружаются только при открытии фильтров и pageable facet дозагружается", async () => {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url.startsWith("/api/catalog/items/facets?")) {
+      const params = new URL(url, "https://app.test").searchParams;
+
+      if (params.get("facet") === "manufacturer") {
+        expect(params.get("facet_limit")).toBe("50");
+        expect(params.get("facet_offset")).toBe("1");
+
+        return jsonResponse({
+          facets: [
+            {
+              key: "manufacturer",
+              label: "Производитель",
+              data_type: "TEXT",
+              unit: null,
+              filter_type: "EXACT",
+              values_has_more: false,
+              values: [
+                {
+                  value: "manufacturer-page-2",
+                  count: 2,
+                  label: "NVIDIA page 2",
+                  code: null,
+                  name: null,
+                },
+              ],
+              min: null,
+              max: null,
+            },
+          ],
+        });
+      }
+
+      return jsonResponse({
+        facets: [
+          {
+            key: "manufacturer",
+            label: "Производитель",
+            data_type: "TEXT",
+            unit: null,
+            filter_type: "EXACT",
+            values_has_more: true,
+            values: [
+              {
+                value: "manufacturer-page-1",
+                count: 3,
+                label: "Mellanox page 1",
+                code: null,
+                name: null,
+              },
+            ],
+            min: null,
+            max: null,
+          },
+        ],
+      });
+    }
+
+    return catalogFetch(input);
+  });
+
+  vi.stubGlobal("fetch", fetchMock);
+
+  renderRoutes("/catalog/sfp");
+
+  expect(
+    await screen.findByRole("heading", { name: "MFM1T02A-LR" }),
+  ).toBeInTheDocument();
+
+  const facetCallsBeforeOpen = fetchMock.mock.calls.filter(
+    ([input]) =>
+      String(input).startsWith("/api/catalog/items/facets?"),
+  );
+
+  expect(facetCallsBeforeOpen).toHaveLength(0);
+
+  fireEvent.click(
+    screen.getByRole("button", { name: "Фильтры" }),
+  );
+
+  expect(
+    await screen.findByLabelText("Mellanox page 1"),
+  ).toBeInTheDocument();
+
+  const initialFacetCalls = fetchMock.mock.calls.filter(
+    ([input]) =>
+      String(input).startsWith("/api/catalog/items/facets?"),
+  );
+
+  expect(initialFacetCalls).toHaveLength(1);
+
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Показать ещё: Производитель",
+    }),
+  );
+
+  expect(
+    await screen.findByLabelText("NVIDIA page 2"),
+  ).toBeInTheDocument();
+
+  const allFacetCalls = fetchMock.mock.calls.filter(
+    ([input]) =>
+      String(input).startsWith("/api/catalog/items/facets?"),
+  );
+
+  expect(allFacetCalls).toHaveLength(2);
+});
+
 it("FilterSheet Apply сохраняет текущие q и sort/order", async () => {
   vi.stubGlobal("fetch", vi.fn(catalogFetch));
   renderRoutes(

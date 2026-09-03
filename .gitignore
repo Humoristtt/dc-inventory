@@ -16,6 +16,8 @@ venv/
 node_modules/
 dist/
 coverage/
+playwright-report/
+test-results/
 
 # IDE / OS
 .DS_Store
@@ -30,3 +32,8 @@ tmp/
 
 # Python packaging
 *.egg-info/
+
+# Authoritative operational inventory sources
+sfp-authoritative*.xlsx
+sfp-authoritative*.xlsm
+sfp-authoritative*.xls

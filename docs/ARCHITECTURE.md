@@ -134,9 +134,15 @@ Telegram authentication и webhook используют backend-only настр�
     NOTIFICATION_WORKER_MAX_ATTEMPTS
 
 `TELEGRAM_BOT_TOKEN` нужен backend для серверной проверки подписи Telegram
-`initData`. Он не передаётся frontend и не нужен migration container.
-`telegram-worker` bot token также не получает: Bot API token хранится
-Cloudflare Worker Secret.
+`initData`. Тот же Telegram-issued bot token независимо provisioned в
+Cloudflare Worker Secret как `BOT_TOKEN` для вызовов Bot API. Это две secret
+storage copies одного credential, а не два разных bot token.
+
+Frontend, migration container и `telegram-worker` bot token не получают.
+`telegram-worker` обращается к Cloudflare Gateway только через
+`TELEGRAM_GATEWAY_URL` и отдельный `TELEGRAM_GATEWAY_SECRET`. При ротации
+Telegram bot token backend `TELEGRAM_BOT_TOKEN` и Cloudflare `BOT_TOKEN`
+должны обновляться согласованно.
 
 Секреты не имеют production-default значений и не хранятся в Git.
 
@@ -212,10 +218,17 @@ Alembic использует тот же async PostgreSQL driver `asyncpg`, чт
     b7c8d9e0f1a2  Warehouse ledger + current-state projections
     c8d9e0f1a2b3  Technical-retention indexes
     d9e0f1a2b3c4  Catalog search, typed filters and inventory/facet read model
+    e0f1a2b3c4d5  Telegram start welcome state and deleteMessage
+    f1a2b3c4d5e6  Telegram sendPhoto delivery
+    a2b3c4d5e6f7  Authoritative SFP metadata refinement
 
-Текущий migration head:
+Текущий source migration head:
 
-    d9e0f1a2b3c4
+    a2b3c4d5e6f7
+
+Production migration head до Stage 8B release:
+
+    f1a2b3c4d5e6
 
 Следующие предметные схемы добавляются отдельными миграциями.
 
@@ -297,6 +310,14 @@ Backend различает:
 `Authenticated` нужен для собственного access-status API. Будущие складские
 и административные endpoints обязаны использовать `Approved` или `Admin`.
 
+Cookie-authenticated state-changing HTTP requests защищены дополнительной
+same-origin boundary. Для `POST`, `PUT`, `PATCH` и `DELETE`, которые используют
+валидную server-side auth session cookie, backend требует `Origin`, совпадающий
+с origin настроенного `TELEGRAM_WEB_APP_URL`. Отсутствующий или чужой `Origin`
+возвращает `403` до выполнения mutation. Safe methods `GET`, `HEAD` и `OPTIONS`
+этой проверкой не ограничиваются. Telegram initData authentication и Telegram
+webhook не используют эту cookie-authenticated mutation boundary.
+
 ## Предметная модель
 
 Реализованные identity/auth и Telegram delivery сущности описаны выше.
@@ -374,13 +395,12 @@ ledger и остаётся отдельной задачей.
 - network interface cards;
 - disks/drives.
 
-Три локальных source workbook сверены как reference examples. Они не являются
-inventory database или import source: quantity/balance/placement state не
-переносится в catalog. Reference review добавил отдельную recurring copper
-network cable Category, два power conductor attributes и два SFP vocabulary
-tokens через migration `a6b7c8d9e0f1`. Неоднозначные connector/model/MPN и
-multi-rate notations остаются manual decisions, а schema definitions —
-deterministic versioned reference data.
+Три legacy source workbook сверены как reference examples и не являются
+inventory database/import source. Единственный authoritative input для будущего
+SFP-ввода — внешний read-only `sfp-authoritative.xlsx`; migration
+`a2b3c4d5e6f7` version-controls только lossless profile/scalar metadata и exact
+connector vocabulary. Workbook rows, quantities и physical units в migration
+не входят.
 
 ## Catalog read/query layer
 
@@ -394,7 +414,11 @@ Pagination и total поэтому работают по unique Item rows; attri
 Immutable `CatalogQuerySpec` является единым validated input для item list и
 facets. Category behavior определяется CategoryAttribute metadata. Facet base
 query переиспользует тот же predicate builder и исключает только predicate
-вычисляемого facet. Contains search использует escaped bound LIKE/ILIKE values;
+вычисляемого facet. Contains search использует escaped bound LIKE/ILIKE values.
+Serial/WWN predicate дополнительно viewer-scoped: `ADMIN` может искать по всем
+physical units, а обычный `USER` — только по текущим `ISSUED` units с
+`current_holder_user_id == self`. Stored, foreign, `WRITTEN_OFF` и `VOIDED`
+identifiers не участвуют в USER catalog search или facets.
 `pg_trgm` GIN indexes и typed EAV indexes добавлены migration
 `d9e0f1a2b3c4`. Warehouse journal/projection write path Stage 6 не изменён.
 
@@ -534,8 +558,10 @@ Frontend cache не является authorization boundary: backend `Approved` 
 
 `TelegramAccessGate` остаётся внешней границей всего React-приложения. После
 `APPROVED` внутри неё работает единый application shell с URL routes
-`/catalog`, `/catalog/:categoryKey`, `/catalog/items/:itemId` и placeholder
-routes будущих разделов. Второй auth state или frontend tokens не создаются.
+`/catalog`, `/catalog/:categoryKey`, `/catalog/items/:itemId`, Admin-only
+`/catalog/new`, `/catalog/items/:itemId/edit` и approved-user `/mine`. Второй
+auth state или frontend tokens не создаются: role и внутренний `User.id` читаются
+из того же TanStack Query auth cache.
 
 Catalog frontend разделяет два вида состояния:
 
@@ -557,6 +583,13 @@ Item list сохраняет previous pages во время progressive refetch.
 предыдущего query за актуальные.
 
 Catalog API encoding централизован в typed same-origin client. Repeated
+Facet values не materialize-ятся в UI без границы. Initial facet request
+выполняется только при открытом FilterSheet. High-cardinality value sets
+возвращаются bounded страницами: default 50, максимум 100; следующая страница
+запрашивается для одного facet и объединяется с уже загруженными значениями.
+Активное выбранное значение сохраняется в draft даже если оно отсутствует в
+текущей странице backend values.
+
 `manufacturer_id`, `location_id` и metadata attribute `filter` parameters
 сортируются и кодируются детерминированно. Filter UI получает common/dynamic
 facets от backend и CategoryAttribute metadata; category-specific query logic в
@@ -566,6 +599,13 @@ Telegram wrapper владеет `ready`/`expand`, runtime safe-area values и п
 BackButton subscribe/unsubscribe lifecycle. На `/catalog` BackButton скрыт; на
 внутреннем route он возвращает по SPA history, а direct deep link безопасно
 возвращается на `/catalog` без закрытия Mini App.
+
+Admin Item form строит dynamic controls из CategoryAttribute metadata и
+передаёт DECIMAL как exact string. Scalar edit формирует только изменившиеся
+PATCH fields; attributes заменяются только при фактическом изменении полного
+набора. Stock/custody detail и «Моё» читают существующие paginated inventory
+projections; frontend-агрегация служит presentation и не становится каноническим
+balance state.
 
 
 ## Telegram delivery и access decisions
@@ -581,10 +621,11 @@ Inline callback содержит только opaque token. Request/user/action 
 сервером, а решение может выполнять только Telegram identity с
 `ADMIN + APPROVED`. AccessRequest и User блокируются `FOR UPDATE`.
 
-Исходящая доставка идёт через Cloudflare Telegram Gateway. Bot token хранится
-как Cloudflare Worker Secret; production `telegram-worker` получает только
-gateway URL и отдельный gateway secret. Gateway имеет фиксированный allowlist
-Bot API methods.
+Исходящая доставка идёт через Cloudflare Telegram Gateway. Cloudflare хранит
+свою copy того же Telegram-issued bot token как Worker Secret `BOT_TOKEN`;
+production `telegram-worker` получает только gateway URL и отдельный gateway
+secret. Backend copy используется только на auth boundary для `initData`
+validation. Gateway имеет фиксированный allowlist Bot API methods.
 
 
 Telegram `update_id` является внешним natural key и не генерируется PostgreSQL:

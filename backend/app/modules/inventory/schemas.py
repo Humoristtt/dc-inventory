@@ -40,7 +40,7 @@ class LocationListOut(BaseModel):
 
 
 class UserPositionOut(BaseModel):
-    user_id: UUID
+    user_id: UUID | None
     display_name: str
 
 
@@ -71,7 +71,7 @@ class InventoryUnitOut(BaseModel):
     id: UUID
     item_id: UUID
     item_name: str
-    serial_number: str
+    serial_number: str | None
     wwn: str | None
     comment: str | None
     state: InventoryUnitState
@@ -84,6 +84,34 @@ class InventoryUnitOut(BaseModel):
 class InventoryUnitListOut(BaseModel):
     items: list[InventoryUnitOut]
     total: int
+    limit: int
+    offset: int
+
+
+class InventoryCurrentSummaryOut(BaseModel):
+    available_count: int = Field(ge=0)
+    custody_count: int = Field(ge=0)
+    total_count: int = Field(ge=0)
+
+
+class MyEquipmentSerialPreviewOut(BaseModel):
+    id: UUID
+    serial_number: str
+    wwn: str | None
+
+
+class MyEquipmentPositionOut(BaseModel):
+    item_id: UUID
+    item_name: str
+    accounting_mode: AccountingMode
+    quantity: int = Field(ge=0)
+    serial_count: int = Field(ge=0)
+    serial_preview: list[MyEquipmentSerialPreviewOut]
+
+
+class MyEquipmentListOut(BaseModel):
+    items: list[MyEquipmentPositionOut]
+    total: int = Field(ge=0)
     limit: int
     offset: int
 

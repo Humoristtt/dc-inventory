@@ -18,6 +18,10 @@ type FilterSheetProps = {
   loading?: boolean;
   error?: boolean;
   onRetry?: () => void;
+  onLoadMore?: (
+    facetKey: string,
+    offset: number,
+  ) => Promise<CatalogFacet>;
   onApply: (next: CatalogFilterState) => void;
   onCancel: () => void;
 };
@@ -156,10 +160,23 @@ export function FilterSheet({
   loading = false,
   error = false,
   onRetry,
+  onLoadMore,
   onApply,
   onCancel,
 }: FilterSheetProps) {
   const [draft, setDraft] = useState(() => cloneState(active));
+  const [loadedFacetPages, setLoadedFacetPages] = useState<
+    Record<string, {
+      values: FacetValue[];
+      hasMore: boolean;
+    }>
+  >({});
+  const [loadingFacetKey, setLoadingFacetKey] = useState<string | null>(
+    null,
+  );
+  const [facetLoadErrors, setFacetLoadErrors] = useState<
+    Record<string, boolean>
+  >({});
 
   useEffect(() => {
     const previousOverflow = document.body.style.overflow;
@@ -186,6 +203,60 @@ export function FilterSheet({
     () => orderedFacets.filter((facet) => facetHasVisibleControls(facet, draft)),
     [draft, orderedFacets],
   );
+
+  const loadMoreFacet = async (facet: CatalogFacet) => {
+    if (onLoadMore === undefined || loadingFacetKey === facet.key) {
+      return;
+    }
+
+    const loaded = loadedFacetPages[facet.key];
+    const offset = facet.values.length + (loaded?.values.length ?? 0);
+
+    setLoadingFacetKey(facet.key);
+    setFacetLoadErrors((current) => ({
+      ...current,
+      [facet.key]: false,
+    }));
+
+    try {
+      const nextFacet = await onLoadMore(facet.key, offset);
+
+      if (nextFacet.key !== facet.key) {
+        throw new Error(`Facet page mismatch for ${facet.key}`);
+      }
+
+      setLoadedFacetPages((current) => {
+        const existing = current[facet.key]?.values ?? [];
+        const known = new Set(
+          [...facet.values, ...existing].map((value) =>
+            stringValue(value.value)
+          ),
+        );
+        const additions = nextFacet.values.filter(
+          (value) => !known.has(stringValue(value.value)),
+        );
+
+        return {
+          ...current,
+          [facet.key]: {
+            values: [...existing, ...additions],
+            hasMore:
+              nextFacet.values_has_more
+              && nextFacet.values.length > 0,
+          },
+        };
+      });
+    } catch {
+      setFacetLoadErrors((current) => ({
+        ...current,
+        [facet.key]: true,
+      }));
+    } finally {
+      setLoadingFacetKey((current) =>
+        current === facet.key ? null : current
+      );
+    }
+  };
 
   return (
     <div
@@ -295,9 +366,17 @@ export function FilterSheet({
               );
             }
 
-            const knownValues = new Set(facet.values.map((value) => stringValue(value.value)));
-            const values = [
+            const loadedFacet = loadedFacetPages[facet.key];
+            const backendValues = [
               ...facet.values,
+              ...(loadedFacet?.values ?? []),
+            ];
+            const hasMore = loadedFacet?.hasMore ?? facet.values_has_more;
+            const knownValues = new Set(
+              backendValues.map((value) => stringValue(value.value)),
+            );
+            const values = [
+              ...backendValues,
               ...selectedValues
                 .filter((value) => !knownValues.has(value))
                 .map((value) => ({
@@ -348,6 +427,26 @@ export function FilterSheet({
                     );
                   })}
                 </div>
+                {hasMore && onLoadMore !== undefined ? (
+                  <button
+                    aria-label={`Показать ещё: ${label}`}
+                    className="text-button"
+                    disabled={loadingFacetKey === facet.key}
+                    onClick={() => void loadMoreFacet(facet)}
+                    type="button"
+                  >
+                    {loadingFacetKey === facet.key
+                      ? "Загружаем…"
+                      : facetLoadErrors[facet.key]
+                        ? "Повторить загрузку"
+                        : "Показать ещё"}
+                  </button>
+                ) : null}
+                {facetLoadErrors[facet.key] ? (
+                  <p className="filter-inline-error" role="alert">
+                    Не удалось загрузить дополнительные варианты.
+                  </p>
+                ) : null}
               </fieldset>
             );
           }) : null}

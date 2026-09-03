@@ -36,6 +36,8 @@ Frontend использует Node.js 24:
     npm run typecheck
     npm test
     npm run build
+    npx playwright install chromium
+    npm run test:e2e
 
 ## Конфигурация
 
@@ -76,9 +78,11 @@ Baseline Alembic:
 
     48c2f07f01a0
 
-Текущий migration head:
+Текущий source migration head:
 
-    d9e0f1a2b3c4
+    a2b3c4d5e6f7
+
+Production остаётся на `f1a2b3c4d5e6` до Stage 8B release.
 
 ## Локальный backend
 
@@ -128,12 +132,17 @@ Frontend:
     npm run typecheck
     npm test
     npm run build
+    npm run test:e2e
 
-Текущий frontend включает Stage 8 catalog UX поверх существующего
-Telegram/auth/access gate. Focused regressions для URL-owned search/filter/sort
-state, filter sheets и facet loading находятся рядом с catalog components и
-pages; viewport/Playwright acceptance остаётся отдельным незакрытым Stage 8
-gate.
+Текущий frontend включает Stage 8 catalog/Admin/stock/«Моё» UX поверх
+существующего Telegram/auth/access gate. Focused Vitest regressions находятся
+рядом с components/pages. `frontend/e2e/stage8.spec.ts` использует только
+deterministic synthetic API/Telegram boundaries и запускается на Telegram
+Desktop narrow, Android-like, iPhone-like и desktop/admin profiles. Это
+browser-level acceptance, а не full-stack E2E: FastAPI/PostgreSQL этим
+Playwright suite не поднимаются; backend contracts проверяются отдельными
+Pytest/integration suites. Browser runtime устанавливается локально через
+`npx playwright install chromium`; CI использует `--with-deps`.
 
 Из корня репозитория:
 
@@ -189,6 +198,18 @@ gate запускает их явно против уже мигрированн
     RUN_POSTGRES_INTEGRATION=1     DATABASE_URL=postgresql+asyncpg://...@127.0.0.1:PORT/dc_inventory     pytest -q
 
 CI всегда включает этот режим.
+
+Отдельный migration-safety gate проверяет destructive downgrade SFP metadata
+на реальном PostgreSQL 18. Обычный `pytest` этот сценарий пропускает; локальный
+эквивалент required backend CI запускается явно:
+
+    RUN_SFP_DOWNGRADE_POSTGRES=1 \
+    DATABASE_URL=postgresql+asyncpg://...@127.0.0.1:PORT/dc_inventory \
+    pytest -q tests/test_sfp_migration_downgrade_postgres.py
+
+Этот regression обязан доказать как успешный безопасный downgrade/upgrade cycle
+без profile values, так и отказ downgrade при существующих SFP profile values
+без потери данных и без смещения Alembic revision с `head`.
 
 Catalog PostgreSQL checks можно запускать сфокусированно:
 

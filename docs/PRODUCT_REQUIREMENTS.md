@@ -15,8 +15,10 @@ Spikatel Inventory — внутреннее Telegram Mini App для склад�
 
 PostgreSQL — канонический источник данных.
 
-В production развёрнуты Stages 4–7; migration head — `d9e0f1a2b3c4`.
-Текущий продуктовый этап — Stage 8 Working Mini App UX.
+В production развёрнуты Stages 4–7, Stage 8A и branded Telegram entry flow;
+production source — `c8d77f8cf34f89b7e54f668619319db26de5fc0b`, migration
+head — `f1a2b3c4d5e6`. Stage 8B реализован локально и ожидает
+human-controlled review/CI/deploy/acceptance.
 
 ## Пользователи и роли
 
@@ -189,7 +191,10 @@ Application transaction не вызывает Telegram Bot API напрямую.
 
 Production gateway URL обязан использовать HTTPS.
 
-Bot token хранится в Cloudflare Worker Secret.
+Для Bot API Cloudflare Worker хранит Telegram bot token как secret
+`BOT_TOKEN`. Тот же credential независимо доступен backend как
+`TELEGRAM_BOT_TOKEN` только для server-side HMAC-проверки Mini App `initData`;
+`telegram-worker` bot token не получает.
 
 ## Frontend
 
@@ -198,10 +203,18 @@ catalog UX:
 
 - единый application shell и Telegram-aware navigation;
 - API-driven catalog categories;
-- global/category debounced search, включая backend serial/WWN search;
+- global/category debounced search; backend serial/WWN search соблюдает
+  privacy scope: `ADMIN` ищет по всем physical units, обычный `USER` — только
+  по текущим `ISSUED` units, которые числятся за ним;
 - metadata/facet-driven exact, boolean и range filters;
+- bounded high-cardinality facet values с lazy загрузкой и явной дозагрузкой
+  следующих страниц без потери уже выбранных значений;
 - sorting и progressive pagination;
 - compact item cards и Item detail;
+- role-aware metadata-driven Admin create/edit/archive, inline Manufacturer и
+  backend duplicate-check UX;
+- Item detail stock-by-location и custody/holder projections;
+- self-view «Моё» для QUANTITY и SERIAL по внутреннему `User.id`;
 - URL-owned search/filter/sort navigation state;
 - loading/error/empty/retry states.
 
@@ -212,9 +225,9 @@ Telegram SDK поставляется same-origin:
 CI проверяет SHA-256 vendored SDK.
 
 Frontend отдельно обрабатывает SDK load error и timeout. Backend остаётся
-authorization boundary. Admin catalog forms, warehouse operations/history,
-stock/holder/«Моё», final viewport acceptance и Playwright E2E относятся к
-оставшейся Stage 8 и следующим stages.
+authorization boundary. Stage 8 viewport acceptance выполняется Playwright на
+Telegram Desktop narrow, Android-like, iPhone-like и desktop profiles.
+Warehouse mutations/history относятся к следующим stages.
 
 ## Technical retention
 

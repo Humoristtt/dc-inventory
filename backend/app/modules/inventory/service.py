@@ -7,7 +7,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select, tuple_
+from sqlalchemy import case, func, select, tuple_, union
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -60,6 +60,7 @@ class InventoryConflictError(InventoryError):
 
 POSTGRES_BIGINT_MAX = 2**63 - 1
 IDENTITY_DISPLAY_MAX_LENGTH = 579
+MY_EQUIPMENT_SERIAL_PREVIEW_LIMIT = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -103,6 +104,34 @@ class InventoryUnitRecord:
 @dataclass(frozen=True, slots=True)
 class InventoryUnitPage:
     items: list[InventoryUnitRecord]
+    total: int
+
+
+@dataclass(frozen=True, slots=True)
+class CurrentInventorySummary:
+    available_count: int
+    custody_count: int
+    total_count: int
+
+
+@dataclass(frozen=True, slots=True)
+class UserHoldingSerialPreview:
+    id: uuid.UUID
+    serial_number: str
+    wwn: str | None
+
+
+@dataclass(frozen=True, slots=True)
+class UserHoldingRecord:
+    item: Item
+    quantity: int
+    serial_count: int
+    serial_preview: tuple[UserHoldingSerialPreview, ...]
+
+
+@dataclass(frozen=True, slots=True)
+class UserHoldingPage:
+    items: list[UserHoldingRecord]
     total: int
 
 
@@ -1575,6 +1604,251 @@ async def _holder_display_names(
         select(TelegramIdentity).where(TelegramIdentity.user_id.in_(holder_ids))
     )
     return {identity.user_id: display_identity(identity) for identity in identities.all()}
+
+
+async def get_current_inventory_summary(
+    db: AsyncSession,
+    item_id: uuid.UUID,
+) -> CurrentInventorySummary:
+    item = await db.get(Item, item_id)
+    if item is None:
+        raise InventoryNotFoundError(
+            "inventory item not found",
+            code="inventory_item_not_found",
+        )
+
+    if item.accounting_mode == AccountingMode.QUANTITY:
+        available_count, custody_count = (
+            await db.execute(
+                select(
+                    func.coalesce(
+                        func.sum(
+                            case(
+                                (
+                                    StockBalance.location_id.is_not(None),
+                                    StockBalance.quantity,
+                                ),
+                                else_=0,
+                            )
+                        ),
+                        0,
+                    ),
+                    func.coalesce(
+                        func.sum(
+                            case(
+                                (
+                                    StockBalance.holder_user_id.is_not(None),
+                                    StockBalance.quantity,
+                                ),
+                                else_=0,
+                            )
+                        ),
+                        0,
+                    ),
+                ).where(StockBalance.item_id == item_id)
+            )
+        ).one()
+    else:
+        available_count, custody_count = (
+            await db.execute(
+                select(
+                    func.count().filter(
+                        InventoryUnit.state == InventoryUnitState.STORED
+                    ),
+                    func.count().filter(
+                        InventoryUnit.state == InventoryUnitState.ISSUED
+                    ),
+                ).where(
+                    InventoryUnit.item_id == item_id,
+                    InventoryUnit.state.in_(
+                        [
+                            InventoryUnitState.STORED,
+                            InventoryUnitState.ISSUED,
+                        ]
+                    ),
+                )
+            )
+        ).one()
+
+    available = int(available_count)
+    custody = int(custody_count)
+
+    return CurrentInventorySummary(
+        available_count=available,
+        custody_count=custody,
+        total_count=available + custody,
+    )
+
+
+async def list_user_holdings(
+    db: AsyncSession,
+    *,
+    holder_user_id: uuid.UUID,
+    limit: int,
+    offset: int,
+) -> UserHoldingPage:
+    quantity_items = (
+        select(StockBalance.item_id.label("item_id"))
+        .where(StockBalance.holder_user_id == holder_user_id)
+        .group_by(StockBalance.item_id)
+    )
+    serial_items = (
+        select(InventoryUnit.item_id.label("item_id"))
+        .where(
+            InventoryUnit.current_holder_user_id == holder_user_id,
+            InventoryUnit.state == InventoryUnitState.ISSUED,
+        )
+        .group_by(InventoryUnit.item_id)
+    )
+
+    held_items = union(quantity_items, serial_items).subquery(
+        "held_inventory_items"
+    )
+
+    total = await db.scalar(
+        select(func.count()).select_from(held_items)
+    )
+
+    items = list(
+        (
+            await db.scalars(
+                select(Item)
+                .join(
+                    held_items,
+                    held_items.c.item_id == Item.id,
+                )
+                .order_by(Item.normalized_name, Item.id)
+                .limit(limit)
+                .offset(offset)
+            )
+        ).all()
+    )
+
+    if not items:
+        return UserHoldingPage(
+            items=[],
+            total=int(total or 0),
+        )
+
+    item_ids = [item.id for item in items]
+
+    quantity_rows = (
+        await db.execute(
+            select(
+                StockBalance.item_id,
+                func.sum(StockBalance.quantity),
+            )
+            .where(
+                StockBalance.holder_user_id == holder_user_id,
+                StockBalance.item_id.in_(item_ids),
+            )
+            .group_by(StockBalance.item_id)
+        )
+    ).tuples()
+
+    serial_rows = (
+        await db.execute(
+            select(
+                InventoryUnit.item_id,
+                func.count(),
+            )
+            .where(
+                InventoryUnit.current_holder_user_id == holder_user_id,
+                InventoryUnit.state == InventoryUnitState.ISSUED,
+                InventoryUnit.item_id.in_(item_ids),
+            )
+            .group_by(InventoryUnit.item_id)
+        )
+    ).tuples()
+
+    quantities = {
+        item_id: int(quantity)
+        for item_id, quantity in quantity_rows
+    }
+    serial_counts = {
+        item_id: int(count)
+        for item_id, count in serial_rows
+    }
+
+    serial_item_ids = [
+        item.id
+        for item in items
+        if item.accounting_mode == AccountingMode.SERIAL
+    ]
+
+    serial_preview_by_item: dict[
+        uuid.UUID,
+        list[UserHoldingSerialPreview],
+    ] = {}
+
+    if serial_item_ids:
+        ranked_units = (
+            select(
+                InventoryUnit.id.label("id"),
+                InventoryUnit.item_id.label("item_id"),
+                InventoryUnit.serial_number.label("serial_number"),
+                InventoryUnit.wwn.label("wwn"),
+                func.row_number()
+                .over(
+                    partition_by=InventoryUnit.item_id,
+                    order_by=(
+                        InventoryUnit.normalized_serial_number,
+                        InventoryUnit.id,
+                    ),
+                )
+                .label("preview_rank"),
+            )
+            .where(
+                InventoryUnit.current_holder_user_id == holder_user_id,
+                InventoryUnit.state == InventoryUnitState.ISSUED,
+                InventoryUnit.item_id.in_(serial_item_ids),
+            )
+            .subquery("ranked_held_units")
+        )
+
+        preview_rows = (
+            await db.execute(
+                select(
+                    ranked_units.c.id,
+                    ranked_units.c.item_id,
+                    ranked_units.c.serial_number,
+                    ranked_units.c.wwn,
+                    ranked_units.c.preview_rank,
+                )
+                .where(
+                    ranked_units.c.preview_rank
+                    <= MY_EQUIPMENT_SERIAL_PREVIEW_LIMIT
+                )
+                .order_by(
+                    ranked_units.c.item_id,
+                    ranked_units.c.preview_rank,
+                )
+            )
+        ).tuples()
+
+        for unit_id, item_id, serial_number, wwn, _rank in preview_rows:
+            serial_preview_by_item.setdefault(item_id, []).append(
+                UserHoldingSerialPreview(
+                    id=unit_id,
+                    serial_number=serial_number,
+                    wwn=wwn,
+                )
+            )
+
+    return UserHoldingPage(
+        items=[
+            UserHoldingRecord(
+                item=item,
+                quantity=quantities.get(item.id, 0),
+                serial_count=serial_counts.get(item.id, 0),
+                serial_preview=tuple(
+                    serial_preview_by_item.get(item.id, [])
+                ),
+            )
+            for item in items
+        ],
+        total=int(total or 0),
+    )
 
 
 async def list_stock_balances(

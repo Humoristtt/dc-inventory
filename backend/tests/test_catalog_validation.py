@@ -8,6 +8,8 @@ from app.modules.catalog.enums import AttributeDataType, FilterType
 from app.modules.catalog.models import CategoryAttribute
 from app.modules.catalog.schemas import ItemCreate
 from app.modules.catalog.service import (
+    SFP_CATEGORY_ID,
+    CatalogSchemaError,
     CatalogValidationError,
     normalize_comparison,
     validate_attribute_values,
@@ -79,6 +81,38 @@ def test_valid_typed_values_are_prepared_without_losing_decimal_precision() -> N
     assert by_key["enum"].enum_value == "A"
 
 
+def test_text_metadata_can_preserve_source_profile_whitespace() -> None:
+    category_id = uuid.uuid4()
+    attribute = _attribute(
+        "reach_profile",
+        AttributeDataType.TEXT,
+        category_id=category_id,
+        validation_metadata={"max_length": 2000, "preserve_whitespace": True},
+    )
+    source_profile = "  OM3: до 70 м\nOM4: до 100 м  "
+
+    result = validate_attribute_values(
+        category_id,
+        [attribute],
+        {"reach_profile": source_profile},
+    )
+
+    assert result[0].text_value == "OM3: до 70 м\nOM4: до 100 м"
+
+
+def test_text_preserve_whitespace_metadata_requires_boolean() -> None:
+    category_id = uuid.uuid4()
+    attribute = _attribute(
+        "profile",
+        AttributeDataType.TEXT,
+        category_id=category_id,
+        validation_metadata={"preserve_whitespace": "yes"},
+    )
+
+    with pytest.raises(CatalogSchemaError):
+        validate_attribute_values(category_id, [attribute], {"profile": "value"})
+
+
 @pytest.mark.parametrize(
     ("data_type", "raw_value"),
     [
@@ -123,6 +157,59 @@ def test_boolean_is_not_accepted_as_integer() -> None:
         validate_attribute_values(category_id, [attribute], {"integer": True})
 
     assert exc_info.value.code == "attribute_type_mismatch"
+
+
+@pytest.mark.parametrize(
+    "raw_value",
+    [
+        -(2**53 - 1),
+        2**53 - 1,
+    ],
+)
+def test_integer_values_within_exact_json_range_are_accepted(
+    raw_value: int,
+) -> None:
+    category_id = uuid.uuid4()
+    attribute = _attribute(
+        "integer",
+        AttributeDataType.INTEGER,
+        category_id=category_id,
+    )
+
+    result = validate_attribute_values(
+        category_id,
+        [attribute],
+        {"integer": raw_value},
+    )
+
+    assert result[0].integer_value == raw_value
+
+
+@pytest.mark.parametrize(
+    "raw_value",
+    [
+        -(2**53),
+        2**53,
+    ],
+)
+def test_integer_values_outside_exact_json_range_are_rejected(
+    raw_value: int,
+) -> None:
+    category_id = uuid.uuid4()
+    attribute = _attribute(
+        "integer",
+        AttributeDataType.INTEGER,
+        category_id=category_id,
+    )
+
+    with pytest.raises(CatalogValidationError) as exc_info:
+        validate_attribute_values(
+            category_id,
+            [attribute],
+            {"integer": raw_value},
+        )
+
+    assert exc_info.value.code == "integer_out_of_range"
 
 
 def test_unknown_and_cross_category_attributes_are_rejected() -> None:
@@ -309,3 +396,246 @@ def test_item_datasheet_url_accepts_valid_http_and_https_links() -> None:
             datasheet_url=datasheet_url,
         )
         assert payload.datasheet_url == datasheet_url
+
+@pytest.mark.parametrize(
+    (
+        "profile_key",
+        "profile",
+        "scalar_key",
+        "scalar_type",
+        "scalar",
+    ),
+    [
+        (
+            "speed_profile",
+            "4/8/16G FC",
+            "speed_mbps",
+            AttributeDataType.INTEGER,
+            16000,
+        ),
+        (
+            "speed_profile",
+            "8/16/32G FC",
+            "speed_mbps",
+            AttributeDataType.INTEGER,
+            32000,
+        ),
+        (
+            "reach_profile",
+            "OM2: до 35 м\nOM3: до 100 м\nOM4: до 125 м",
+            "reach_m",
+            AttributeDataType.INTEGER,
+            125,
+        ),
+        (
+            "reach_profile",
+            (
+                "OM3: 30 м без RS-FEC / 70 м с RS-FEC\n"
+                "OM4: 40 м без RS-FEC / 100 м с RS-FEC"
+            ),
+            "reach_m",
+            AttributeDataType.INTEGER,
+            100,
+        ),
+        (
+            "wavelength_profile",
+            "1310 нм",
+            "nominal_wavelength_nm",
+            AttributeDataType.DECIMAL,
+            Decimal("1310"),
+        ),
+    ],
+)
+def test_sfp_profile_scalar_pairs_match_authoritative_contract(
+    profile_key: str,
+    profile: str,
+    scalar_key: str,
+    scalar_type: AttributeDataType,
+    scalar: int | Decimal,
+) -> None:
+    category_id = SFP_CATEGORY_ID
+    definitions = [
+        _attribute(
+            profile_key,
+            AttributeDataType.TEXT,
+            category_id=category_id,
+            validation_metadata={
+                "preserve_whitespace": True,
+                "max_length": 2000,
+            },
+        ),
+        _attribute(
+            scalar_key,
+            scalar_type,
+            category_id=category_id,
+        ),
+    ]
+
+    result = validate_attribute_values(
+        category_id,
+        definitions,
+        {
+            profile_key: profile,
+            scalar_key: scalar,
+        },
+    )
+
+    assert len(result) == 2
+
+
+@pytest.mark.parametrize(
+    (
+        "profile_key",
+        "profile",
+        "scalar_key",
+        "scalar_type",
+        "scalar",
+    ),
+    [
+        (
+            "speed_profile",
+            "10/25 Гбит/с",
+            "speed_mbps",
+            AttributeDataType.INTEGER,
+            10000,
+        ),
+        (
+            "reach_profile",
+            "до 20 км",
+            "reach_m",
+            AttributeDataType.INTEGER,
+            10000,
+        ),
+        (
+            "wavelength_profile",
+            "850 нм",
+            "nominal_wavelength_nm",
+            AttributeDataType.DECIMAL,
+            Decimal("1310"),
+        ),
+        (
+            "wavelength_profile",
+            "1271 / 1291 / 1311 / 1331 нм",
+            "nominal_wavelength_nm",
+            AttributeDataType.DECIMAL,
+            Decimal("1271"),
+        ),
+    ],
+)
+def test_sfp_profile_scalar_contradictions_are_rejected(
+    profile_key: str,
+    profile: str,
+    scalar_key: str,
+    scalar_type: AttributeDataType,
+    scalar: int | Decimal,
+) -> None:
+    category_id = SFP_CATEGORY_ID
+    definitions = [
+        _attribute(
+            profile_key,
+            AttributeDataType.TEXT,
+            category_id=category_id,
+            validation_metadata={
+                "preserve_whitespace": True,
+                "max_length": 2000,
+            },
+        ),
+        _attribute(
+            scalar_key,
+            scalar_type,
+            category_id=category_id,
+        ),
+    ]
+
+    with pytest.raises(CatalogValidationError) as exc_info:
+        validate_attribute_values(
+            category_id,
+            definitions,
+            {
+                profile_key: profile,
+                scalar_key: scalar,
+            },
+        )
+
+    assert exc_info.value.code == "profile_scalar_mismatch"
+
+
+def test_sfp_unknown_profile_with_scalar_is_rejected() -> None:
+    category_id = SFP_CATEGORY_ID
+    definitions = [
+        _attribute(
+            "speed_profile",
+            AttributeDataType.TEXT,
+            category_id=category_id,
+        ),
+        _attribute(
+            "speed_mbps",
+            AttributeDataType.INTEGER,
+            category_id=category_id,
+        ),
+    ]
+
+    with pytest.raises(CatalogValidationError) as exc_info:
+        validate_attribute_values(
+            category_id,
+            definitions,
+            {
+                "speed_profile": "50 Гбит/с experimental",
+                "speed_mbps": 50000,
+            },
+        )
+
+    assert exc_info.value.code == "profile_scalar_unverifiable"
+
+
+def test_sfp_unknown_optional_profile_without_scalar_is_preserved() -> None:
+    category_id = SFP_CATEGORY_ID
+    definitions = [
+        _attribute(
+            "reach_profile",
+            AttributeDataType.TEXT,
+            category_id=category_id,
+            validation_metadata={"preserve_whitespace": True},
+        ),
+        _attribute(
+            "reach_m",
+            AttributeDataType.INTEGER,
+            category_id=category_id,
+        ),
+    ]
+
+    result = validate_attribute_values(
+        category_id,
+        definitions,
+        {
+            "reach_profile": "Vendor-specific conditional reach",
+        },
+    )
+
+    assert result[0].text_value == "Vendor-specific conditional reach"
+
+def test_sfp_contract_is_not_applied_to_other_categories() -> None:
+    category_id = uuid.uuid4()
+    definitions = [
+        _attribute(
+            "speed_profile",
+            AttributeDataType.TEXT,
+            category_id=category_id,
+        ),
+        _attribute(
+            "speed_mbps",
+            AttributeDataType.INTEGER,
+            category_id=category_id,
+        ),
+    ]
+
+    result = validate_attribute_values(
+        category_id,
+        definitions,
+        {
+            "speed_profile": "Independent category semantics",
+            "speed_mbps": 12345,
+        },
+    )
+
+    assert len(result) == 2

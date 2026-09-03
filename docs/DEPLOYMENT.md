@@ -64,6 +64,16 @@ Nginx нормализует эти значения и передаёт backend
 
 Uvicorn доверяет proxy headers, потому что production backend не публикуется на host и доступен только через внутреннюю application-сеть.
 
+Nginx применяет rate limiting после нормализации `CF-Connecting-IP`: общий API ограничен до 30 запросов/с на клиента с burst 60; `POST /api/auth/telegram` и `POST /api/access-requests` дополнительно ограничены до 10 запросов/мин с burst 5. Telegram webhook вынесен в отдельный лимит 50 запросов/с с burst 100, чтобы Telegram delivery burst не конкурировал с пользовательским API. Превышение ingress-лимита возвращает HTTP `429`.
+
+## Supply-chain pinning
+
+Внешние container images в production/runtime, development и CI фиксируются одновременно human-readable tag и immutable `sha256` manifest digest. GitHub Actions фиксируются полным commit SHA; major version остаётся только комментарием для читаемости.
+
+Required backend CI gate проверяет Dockerfile, Compose, CI service images и GitHub Actions и отклоняет возврат mutable external execution references.
+
+Обновление pin выполняется явно: сначала выбирается новая версия/tag, затем проверяется upstream digest или Action commit SHA, после чего новый immutable reference проходит обычные runtime/CI gates.
+
 ## Секреты
 
 Production `.env` создаётся непосредственно на VM и не хранится в Git.
@@ -99,7 +109,16 @@ Backend Telegram/auth boundary использует:
     TELEGRAM_WEB_APP_URL
 
 `TELEGRAM_BOT_TOKEN` нужен backend для server-side HMAC-проверки Telegram
-`initData`. Frontend его никогда не получает.
+`initData`. Это тот же Telegram-issued credential, который Cloudflare Worker
+хранит независимо как secret `BOT_TOKEN` для Bot API. Frontend его никогда не
+получает.
+
+В production `TELEGRAM_WEB_APP_URL` задаёт ровно публичный HTTPS origin Mini
+App: без credentials, path, query, fragment и surrounding whitespace. Допустим
+корневой `/` и явный TCP port. Стандартный HTTPS port `443` при same-origin
+проверке канонизируется как обычный HTTPS origin без явного порта.
+Этот origin одновременно используется WebApp-кнопками, same-origin asset
+branded `/start` и защитой cookie-authenticated mutations по `Origin`.
 
 Отдельный `telegram-worker` использует:
 
@@ -118,13 +137,19 @@ credentials, query, fragment или surrounding whitespace. HTTP разрешё�
 для development/internal test configuration.
 
 
-Cloudflare Worker имеет собственные secrets:
+Cloudflare Worker имеет собственное secret storage:
 
     BOT_TOKEN
     GATEWAY_SECRET
 
-Значение `GATEWAY_SECRET` является отдельным shared secret между production
-worker и Cloudflare Worker. Секреты Cloudflare не хранятся в Git.
+`BOT_TOKEN` должен содержать то же значение Telegram bot token, что backend
+получает через `TELEGRAM_BOT_TOKEN`; secret stores при этом независимы.
+`GATEWAY_SECRET` — другой credential: отдельный shared secret между production
+`telegram-worker` и Cloudflare Worker.
+
+При ротации Telegram bot token необходимо согласованно заменить backend
+`TELEGRAM_BOT_TOKEN` и Cloudflare `BOT_TOKEN`. Секреты Cloudflare не хранятся
+в Git.
 
 Migration container получает owner/migration DB-конфигурацию.
 После успешного Alembic upgrade одноразовый `db-permissions` container
@@ -201,7 +226,16 @@ PostgreSQL lock. Эти значения отделены от runtime
 `DATABASE_STATEMENT_TIMEOUT_SECONDS` / `DATABASE_LOCK_TIMEOUT_SECONDS`, потому
 что DDL-миграции и обычные API-транзакции имеют разный профиль выполнения.
 
-Предметные миграции должны быть безопасны для последовательного deploy. Для потенциально разрушительных изменений обязателен backup и заранее определённый rollback/forward-fix plan.
+Предметные миграции должны быть безопасны для последовательного deploy. Для
+потенциально разрушительных изменений обязателен backup и заранее определённый
+rollback/forward-fix plan.
+
+Migration `a2b3c4d5e6f7` допускает schema downgrade только пока новые SFP
+profile attributes не содержат данных. Если существует хотя бы один такой
+`ItemAttributeValue`, downgrade fail-fast завершается без удаления значений.
+В этом состоянии production rollback выполняется forward-fix либо
+восстановлением verified PostgreSQL backup; destructive Alembic downgrade
+не является допустимым rollback path.
 
 ## Проверка после deploy
 

@@ -57,6 +57,7 @@ from app.modules.catalog.service import (
     set_item_archived,
     update_item,
 )
+from app.modules.identity.enums import UserRole
 
 read_router = APIRouter(prefix="/api/catalog", tags=["catalog"])
 admin_router = APIRouter(prefix="/api/admin/catalog", tags=["admin-catalog"])
@@ -191,6 +192,7 @@ def _facet_out(facet: FacetRecord) -> FacetOut:
         data_type=facet.data_type,
         unit=facet.unit,
         filter_type=facet.filter_type,
+        values_has_more=facet.values_has_more,
         values=[
             FacetValueOut(
                 value=value.value,
@@ -209,6 +211,7 @@ def _facet_out(facet: FacetRecord) -> FacetOut:
 async def _query_spec(
     db: DbSession,
     *,
+    approved: Approved,
     q: str | None,
     category: str | None,
     item_status: ItemStatus,
@@ -222,6 +225,11 @@ async def _query_spec(
     return await build_catalog_query_spec(
         db,
         q=q,
+        serial_identity_holder_user_id=(
+            None
+            if approved.user.role == UserRole.ADMIN
+            else approved.user.id
+        ),
         category_key=category,
         item_status=item_status,
         manufacturer_ids=manufacturer_ids or (),
@@ -274,10 +282,16 @@ async def get_category(
 async def get_manufacturers(
     db: DbSession,
     _approved: Approved,
+    q: Annotated[str | None, Query(max_length=255)] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> ManufacturerListOut:
-    page = await list_manufacturers(db, limit=limit, offset=offset)
+    page = await list_manufacturers(
+        db,
+        query=q,
+        limit=limit,
+        offset=offset,
+    )
     return ManufacturerListOut(
         items=[_manufacturer_out(item) for item in page.items],
         total=page.total,
@@ -289,7 +303,7 @@ async def get_manufacturers(
 @read_router.get("/items", response_model=ItemListOut)
 async def get_items(
     db: DbSession,
-    _approved: Approved,
+    approved: Approved,
     q: Annotated[str | None, Query(max_length=200)] = None,
     category: Annotated[str | None, Query(max_length=64)] = None,
     item_status: Annotated[ItemStatus, Query(alias="status")] = ItemStatus.ACTIVE,
@@ -308,6 +322,7 @@ async def get_items(
     try:
         spec = await _query_spec(
             db,
+            approved=approved,
             q=q,
             category=category,
             item_status=item_status,
@@ -337,7 +352,7 @@ async def get_items(
 @read_router.get("/items/facets", response_model=FacetListOut)
 async def get_item_facets(
     db: DbSession,
-    _approved: Approved,
+    approved: Approved,
     q: Annotated[str | None, Query(max_length=200)] = None,
     category: Annotated[str | None, Query(max_length=64)] = None,
     item_status: Annotated[ItemStatus, Query(alias="status")] = ItemStatus.ACTIVE,
@@ -348,10 +363,17 @@ async def get_item_facets(
         list[str] | None,
         Query(alias="filter", max_length=2300),
     ] = None,
+    facet_key: Annotated[
+        str | None,
+        Query(alias="facet", max_length=64),
+    ] = None,
+    facet_limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    facet_offset: Annotated[int, Query(ge=0)] = 0,
 ) -> FacetListOut:
     try:
         spec = await _query_spec(
             db,
+            approved=approved,
             q=q,
             category=category,
             item_status=item_status,
@@ -360,7 +382,13 @@ async def get_item_facets(
             location_ids=location_id,
             attribute_filters=attribute_filter,
         )
-        facets = await query_catalog_facets(db, spec)
+        facets = await query_catalog_facets(
+            db,
+            spec,
+            value_limit=facet_limit,
+            value_offset=facet_offset,
+            only_key=facet_key,
+        )
     except CatalogError as error:
         _raise_catalog_error(error)
     return FacetListOut(facets=[_facet_out(facet) for facet in facets])

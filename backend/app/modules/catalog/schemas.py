@@ -196,6 +196,7 @@ class FacetOut(BaseModel):
     unit: str | None
     filter_type: FilterType
     values: list[FacetValueOut] = Field(default_factory=list)
+    values_has_more: bool = False
     min: FacetBoundValue | None = None
     max: FacetBoundValue | None = None
 

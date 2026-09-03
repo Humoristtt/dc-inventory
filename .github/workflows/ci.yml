@@ -15,7 +15,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:18
+        image: postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
         env:
           POSTGRES_DB: dc_inventory
           POSTGRES_USER: dc_inventory
@@ -34,9 +34,125 @@ jobs:
       DATABASE_CONNECT_TIMEOUT_SECONDS: "5"
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-python@v7
+      - name: Verify immutable supply-chain references
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          workflow = Path(".github/workflows/ci.yml").read_text()
+
+          action_refs = re.findall(
+              r"^\s+- uses:\s+([^@\s]+)@([^\s#]+)",
+              workflow,
+              flags=re.MULTILINE,
+          )
+
+          mutable_actions = [
+              f"{name}@{ref}"
+              for name, ref in action_refs
+              if re.fullmatch(r"[0-9a-f]{40}", ref) is None
+          ]
+
+          image_refs = []
+
+          for filename in (
+              "backend/Dockerfile",
+              "frontend/Dockerfile",
+          ):
+              source = Path(filename)
+
+              for line in source.read_text().splitlines():
+                  if line.startswith("FROM "):
+                      image_refs.append(
+                          (filename, line.split()[1])
+                      )
+
+          for filename in (
+              "compose.yaml",
+              "compose.dev.yaml",
+          ):
+              source = Path(filename)
+
+              for line in source.read_text().splitlines():
+                  match = re.match(
+                      r"^(?:  |    )image:\s+(\S+)\s*$",
+                      line,
+                  )
+
+                  if match:
+                      image_refs.append(
+                          (filename, match.group(1))
+                      )
+
+          for line in workflow.splitlines():
+              match = re.match(
+                  r"^ {8}image:\s+(\S+)\s*$",
+                  line,
+              )
+
+              if match:
+                  image_refs.append(
+                      (
+                          ".github/workflows/ci.yml",
+                          match.group(1),
+                      )
+                  )
+
+          mutable_images = []
+
+          for source, image in image_refs:
+              if image.startswith("dc-inventory-"):
+                  continue
+
+              if re.search(
+                  r"@sha256:[0-9a-f]{64}$",
+                  image,
+              ) is None:
+                  mutable_images.append(
+                      f"{source}:{image}"
+                  )
+
+          if mutable_actions:
+              print(
+                  "Mutable GitHub Action references:",
+                  *mutable_actions,
+                  sep="\n",
+              )
+
+          if mutable_images:
+              print(
+                  "Mutable external image references:",
+                  *mutable_images,
+                  sep="\n",
+              )
+
+          if mutable_actions or mutable_images:
+              raise SystemExit(1)
+
+          print("IMMUTABLE_SUPPLY_CHAIN_GUARD=PASS")
+          PY
+
+
+      - name: Reject authoritative inventory workbooks
+        shell: bash
+        run: |
+          forbidden="$(
+            git ls-files |
+              grep -Ei '(^|/)sfp-authoritative[^/]*\.(xlsx|xlsm|xls)$' ||
+              true
+          )"
+
+          if [ -n "$forbidden" ]; then
+            echo "Authoritative operational workbook must remain outside Git:"
+            printf '%s\n' "$forbidden"
+            exit 1
+          fi
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
           cache: pip
@@ -61,6 +177,12 @@ jobs:
           alembic check
           alembic current
 
+      - name: SFP destructive downgrade safety
+        working-directory: backend
+        env:
+          RUN_SFP_DOWNGRADE_POSTGRES: "1"
+        run: pytest -q tests/test_sfp_migration_downgrade_postgres.py
+
       - name: Tests
         working-directory: backend
         env:
@@ -71,9 +193,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24"
           cache: npm
@@ -108,13 +230,50 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Install Playwright browsers
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium webkit
+
+      - name: Build production frontend runtime for Playwright
+        run: docker build -t dc-inventory-playwright-web ./frontend
+
+      - name: Start production frontend runtime for Playwright
+        run: |
+          docker run -d --rm \
+            --name dc-inventory-playwright-web \
+            -p 127.0.0.1:4173:8080 \
+            dc-inventory-playwright-web
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent \
+              http://127.0.0.1:4173/healthz \
+              | grep -q '^ok$'; then
+              exit 0
+            fi
+
+            sleep 1
+          done
+
+          docker logs dc-inventory-playwright-web
+          exit 1
+
+      - name: Stage 8 browser acceptance
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
+        run: npm run test:e2e
+
+      - name: Stop production frontend runtime for Playwright
+        if: always()
+        run: docker rm -f dc-inventory-playwright-web || true
+
   telegram-gateway:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
           node-version: "24"
 
@@ -126,7 +285,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
       - name: Create runtime environment
         run: |

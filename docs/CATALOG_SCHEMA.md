@@ -217,7 +217,15 @@ Stage 5 сохраняет filter metadata, но не реализует faceted
 `validation_metadata` представляет JSON object. Текущий versioned contract:
 
 - `min` / `max` для INTEGER и DECIMAL;
-- `max_length` для TEXT.
+- `max_length` для TEXT;
+- `preserve_whitespace` для TEXT — optional boolean, default `false`:
+  - `false` или отсутствие ключа нормализует whitespace до одиночных пробелов;
+  - `true` удаляет только outer whitespace и сохраняет внутренние пробелы,
+    переводы строк и исходное форматирование текста.
+
+`preserve_whitespace` не меняет правило для blank values: whitespace-only TEXT
+по-прежнему считается отсутствующим значением, а required поле отклоняется.
+Небулево значение `preserve_whitespace` является некорректной metadata.
 
 Новые правила metadata должны добавляться вместе с backend support и новой
 миграцией.
@@ -233,7 +241,7 @@ Stage 5 сохраняет filter metadata, но не реализует faceted
 - `category_attribute_id`;
 - redundant `category_id` для DB-level cross-category integrity;
 - `text_value`;
-- `integer_value` как signed 64-bit integer;
+- `integer_value` физически хранится как signed PostgreSQL `BIGINT`; application/API INTEGER contract ограничен JavaScript-safe signed range для точного JSON round-trip;
 - `decimal_value` как `NUMERIC(30, 10)`;
 - `boolean_value`;
 - `enum_value`.
@@ -274,7 +282,7 @@ Create Item и полная замена attributes выполняют metadata-
 5. Тип должен совпадать с metadata.
 6. ENUM value должен входить в `allowed_values`.
 7. Python bool не принимается как INTEGER.
-8. INTEGER должен помещаться в signed 64-bit range.
+8. INTEGER application/API value должен помещаться в JavaScript-safe signed range `[-9007199254740991, 9007199254740991]`; физический storage остаётся PostgreSQL `BIGINT`.
 9. DECIMAL не принимает binary float.
 10. DECIMAL принимается как exact decimal string, integer либо `Decimal` во
     внутренних Python-вызовах.
@@ -315,21 +323,44 @@ Default accounting: `QUANTITY`.
 | Key | Type | Required | Unit / controlled values |
 |---|---|---:|---|
 | `form_factor` | ENUM | no | SFP, SFP+, SFP28, XFP, QSFP+, QSFP28, QSFP56, QSFP-DD |
+| `speed_profile` | TEXT | no | exact source-facing speed notation, max length 255 |
 | `speed_mbps` | INTEGER | yes | Mbps, min 1 |
 | `medium` | ENUM | no | SMF, MMF, Copper, DAC, AOC |
 | `reach_class` | ENUM | no | SR, LR, ER, ZR, BiDi, CWDM, DWDM |
+| `reach_profile` | TEXT | no | exact/conditional source-facing reach, max length 2000 |
 | `reach_m` | INTEGER | no | m, min 0 |
-| `connector` | ENUM | no | LC Duplex, LC Simplex, SC Simplex, MPO/MTP, RJ45 |
+| `connector` | ENUM | no | LC Duplex, LC Simplex, SC Simplex, MPO, MPO/PC, MPO/MTP, RJ45 |
+| `wavelength_profile` | TEXT | no | exact source-facing wavelength notation, max length 255 |
+| `nominal_wavelength_nm` | DECIMAL | no | nm, min 0 |
 | `tx_wavelength_nm` | DECIMAL | no | nm, min 0 |
 | `rx_wavelength_nm` | DECIMAL | no | nm, min 0 |
 | `dom_ddm` | BOOLEAN | no | — |
 | `vendor_compatibility` | TEXT | no | max length 2000 |
 
 Списки form factor, medium, reach class и connector являются расширяемой
-versioned metadata, а не заявлением о глобальной полноте. `XFP` и `SC Simplex`
-добавлены после source reference review. Multi-rate speed, conditional reach и
-multi-channel wavelength требуют проверки product specs и не нормализуются
-догадкой.
+versioned metadata, а не заявлением о глобальной полноте. Exact profile fields
+сохраняют source text; metadata `preserve_whitespace` сохраняет внутренние
+переносы строк после outer trim.
+
+Для multi-rate `speed_profile` `speed_mbps` означает максимальную явно
+перечисленную line rate, используемую только для filter/sort: например,
+`4/8/16G FC -> 16000`, `8/16/32G FC -> 32000`, `10/25 Гбит/с -> 25000`.
+`reach_m` аналогично может содержать только максимальную явно указанную
+дистанцию, но условный `reach_profile` обязателен для lossless presentation.
+`nominal_wavelength_nm` заполняется только при одной однозначной номинальной
+длине волны. Multi-channel profile не сворачивается к произвольному scalar;
+`tx_wavelength_nm`/`rx_wavelength_nm` используются только когда source явно
+различает TX и RX. `reach_class` и Ethernet/FC protocol по model не выводятся.
+
+Для текущего authoritative SFP contract backend проверяет согласованность
+lossless profile и scalar без эвристического разбора текста. Известные
+`speed_profile`, `reach_profile` и `wavelength_profile` сопоставляются с
+явно зафиксированным ожидаемым scalar. Если profile и scalar переданы вместе,
+противоречие отклоняется. Неизвестный profile вместе со scalar также
+отклоняется как непроверяемая комбинация; новый authoritative profile должен
+быть добавлен в contract явно. Optional reach/wavelength profile без scalar
+может храниться losslessly. Multi-channel wavelength profile не допускает
+произвольный `nominal_wavelength_nm`.
 
 ### Optical cabling
 
@@ -490,6 +521,18 @@ Category detail возвращает frontend-friendly metadata. Item response �
 единый `attributes` object по key/value и не раскрывает пять nullable EAV
 columns.
 
+Manufacturer list:
+
+- deterministic order по `normalized_name` и UUID;
+- default limit 100, max 200;
+- offset pagination;
+- optional `q`, максимум 255 characters;
+- `q` проходит ту же comparison-normalization, что и canonical manufacturer
+  name, и выполняет contains-search по `normalized_name`;
+- frontend не считает первую страницу исчерпывающим списком: форма позиции
+  использует bounded pages по 50 записей, server-side search и явную загрузку
+  следующих страниц.
+
 Item list:
 
 - deterministic order по normalized name и UUID по умолчанию;
@@ -537,8 +580,8 @@ versioned engineering characteristic поддерживала exact и bounds re
 Repeated `eq` одного key объединяются OR, разные keys — AND. `gte` и `lte`
 одного key образуют inclusive range; duplicate boundary одного направления —
 422, а не last-one-wins. TEXT equality нормализует whitespace и игнорирует
-case; ENUM принимает только canonical `allowed_values`; INTEGER — signed BIGINT
-без bool coercion; DECIMAL — exact NUMERIC(30,10); BOOLEAN — только
+case; ENUM принимает только canonical `allowed_values`; INTEGER — JavaScript-safe signed integer
+без bool coercion; физический storage остаётся PostgreSQL `BIGINT`; DECIMAL — exact NUMERIC(30,10); BOOLEAN — только
 `true`/`false`.
 
 Repeated manufacturer/location values имеют OR внутри facet и AND с другими
@@ -578,7 +621,10 @@ pagination идёт по unique Item rows. `total` считается после
 
 `GET /api/catalog/items/facets` имеет ту же Approved boundary и принимает тот же
 query context (`q`, `category`, `status`, repeated manufacturer/location,
-availability, repeated filter), но не pagination/sorting.
+availability, repeated filter), но не item-list `limit`/`offset` или
+sorting. Pagination списка значений facet имеет отдельный bounded contract:
+`facet=<key>`, `facet_limit=1..100` (default 50) и `facet_offset>=0`.
+Ненулевой `facet_offset` требует конкретный `facet`.
 
 Без Category response содержит category, manufacturer, availability и location.
 С Category category facet убирается и metadata-driven facets добавляются для
@@ -588,6 +634,14 @@ data type, unit/filter type и non-zero values/counts. Manufacturer содерж
 BOOLEAN в deterministic false/true order, TEXT — в normalized display order.
 RANGE не создаёт buckets: возвращает real `min`/`max`; empty dataset возвращает
 оба bounds как null, без fabricated `0..0`. Decimal сериализуется точно.
+
+High-cardinality facet value sets не возвращаются без границы.
+Category, manufacturer, location, TEXT EXACT и data-driven numeric EXACT
+значения используют deterministic offset pages. Ответ facet содержит
+`values_has_more`; frontend может запросить следующую страницу только этого
+facet. ENUM/BOOLEAN EXACT остаются целиком metadata-bounded, а RANGE facet
+возвращает только `min`/`max`. Выбранные значения не обязаны присутствовать в
+текущей странице facet values и поэтому сохраняются frontend отдельно.
 
 Каждый facet self-excluding: применяются все active predicates кроме predicate
 этого facet. Search и status при этом сохраняются. Это одинаково действует для
@@ -662,6 +716,22 @@ Scalar changes и attribute replacement входят в одну API-owned trans
    `SC Simplex`;
 4. не читает `data/source/` и не импортирует Item или inventory state.
 
+Миграция `a2b3c4d5e6f7`:
+
+1. добавляет optional SFP attributes `speed_profile`, `reach_profile`,
+   `wavelength_profile`, `nominal_wavelength_nm` со стабильными UUID;
+2. добавляет exact connector values `MPO` и `MPO/PC`, не подменяя их
+   `MPO/MTP`;
+3. не создаёт Item, InventoryUnit, StockBalance или opening movement и не читает
+   внешний workbook;
+4. downgrade разрешён только пока ни один из новых SFP attributes не имеет
+   ItemAttributeValue; при наличии хотя бы одного значения migration
+   fail-fast останавливается до destructive DELETE;
+5. безопасный downgrade без profile values удаляет только новую metadata и
+   восстанавливает прежний connector vocabulary. После появления profile
+   values rollback выполняется forward-fix либо восстановлением verified
+   PostgreSQL backup, а не удалением этих значений.
+
 ## Database integrity and delete policy
 
 DB-level invariants:
@@ -709,16 +779,16 @@ deferred:
 - InventoryUnit/serial lifecycle (реализовано Stage 6);
 - location, holder и custody (реализовано Stage 6);
 - receiving/issuing/return/transfer/write-off (реализовано Stage 6);
-- global search и faceted filters;
+- global search и faceted filters (реализовано Stage 7);
 - media;
 - Excel import/export;
 - source quantities, balances или opening-balance import;
-- frontend catalog UI;
+- frontend catalog/Admin/stock/«Моё» UI (реализовано Stage 8);
 - Redis, Elasticsearch, queues или новые services.
 
 ## Source reference reconciliation
 
-Source reference review выполнен для трёх workbook, шести sheets и 176
+Legacy source reference review выполнен для трёх workbook, шести sheets и 176
 непустых data rows. Результат и классификация A–F находятся в
 `docs/CATALOG_SOURCE_REFERENCE.md`.
 
@@ -728,13 +798,22 @@ Recurring copper network cables потребовали отдельной system
 power-conductor semantics и два SFP tokens потребовали versioned metadata
 refinement. Backend domain contract не менялся.
 
-Остаются provisional или требуют human verification:
+Для SFP этот legacy review superseded внешним read-only workbook
+`~/dc-inventory-input/sfp-authoritative.xlsx`, sheet `На складе`. Audit всех 23
+строк (265 физических модулей, 10 manufacturers) подтвердил lossless contract
+выше: source `Модель` отображается только в `Item.model`, а
+`manufacturer_part_number` и `internal_code` остаются `NULL` без отдельного
+authoritative source. SFP остаётся `QUANTITY`; InventoryUnit не создаются.
+Workbook не скопирован в repository и данные/количества не импортированы.
+Будущий Stage 12 import обязан запросить явную destination Location и провести
+opening quantities через movement semantics после снятия production-data gate.
+
+Для остальных категорий остаются provisional или требуют human verification:
 
 - optics connector/product-type/color/polarity vocabularies;
 - power connector/color vocabularies;
 - NIC PCIe/media notation, поскольку прямых NIC examples нет;
 - disk sector format/endurance notation;
-- multi-rate SFP speed, conditional reach и multi-channel wavelength;
 - ambiguous disk vendor/model/MPN strings.
 
 Reference files не становятся runtime source of truth и не предназначены для

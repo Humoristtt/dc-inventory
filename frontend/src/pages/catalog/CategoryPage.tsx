@@ -2,12 +2,15 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   useLocation,
+  Link,
   useParams,
 } from "react-router-dom";
 
+import { useAuthState } from "../../features/auth/useAuthState";
 import {
   catalogQueryCacheKey,
   getCatalogCategory,
+  getCatalogFacetPage,
   getCatalogFacets,
 } from "../../shared/api/catalog";
 import {
@@ -47,6 +50,7 @@ export function CategoryPage() {
   const location = useLocation();
   const navigateBack = useInternalBackNavigation();
   const telegramOwnsBack = getTelegramWebApp()?.BackButton !== undefined;
+  const authQuery = useAuthState();
 
   const categoryQuery = useQuery({
     queryKey: ["catalog", "category", categoryKey],
@@ -59,7 +63,7 @@ export function CategoryPage() {
   const facetsQuery = useQuery({
     queryKey: ["catalog", "facets", catalogQueryCacheKey(catalogQuery)],
     queryFn: ({ signal }) => getCatalogFacets(catalogQuery, signal),
-    enabled: categoryKey !== "",
+    enabled: filtersOpen && categoryKey !== "",
   });
   const filtersCount = activeFilterCount(viewState);
   const returnTo = `${location.pathname}${location.search}`;
@@ -119,6 +123,15 @@ export function CategoryPage() {
                 </h2>
               </div>
               <div className="result-toolbar__actions">
+                {authQuery.data?.user.role === "ADMIN" ? (
+                  <Link
+                    className="tool-button tool-button--primary"
+                    state={{ from: returnTo }}
+                    to={`/catalog/new?category=${encodeURIComponent(categoryKey)}`}
+                  >
+                    + Новая
+                  </Link>
+                ) : null}
                 <button
                   className={filtersCount > 0 ? "tool-button tool-button--active" : "tool-button"}
                   onClick={() => setFiltersOpen(true)}
@@ -192,6 +205,22 @@ export function CategoryPage() {
             setFiltersOpen(false);
           }}
           onCancel={() => setFiltersOpen(false)}
+          onLoadMore={async (facetKey, offset) => {
+            const page = await getCatalogFacetPage(
+              catalogQuery,
+              {
+                facet: facetKey,
+                offset,
+              },
+            );
+            const nextFacet = page.facets[0];
+            if (nextFacet === undefined || nextFacet.key !== facetKey) {
+              throw new Error(
+                `Facet page mismatch for ${facetKey}`,
+              );
+            }
+            return nextFacet;
+          }}
           onRetry={() => void facetsQuery.refetch()}
         />
       ) : null}

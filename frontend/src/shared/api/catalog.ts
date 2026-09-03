@@ -126,6 +126,7 @@ export type CatalogFacet = {
   unit: string | null;
   filter_type: FilterType;
   values: FacetValue[];
+  values_has_more: boolean;
   min: string | number | null;
   max: string | number | null;
 };
@@ -138,6 +139,48 @@ export type CatalogAttributeFilter = {
   key: string;
   operator: AttributeFilterOperator;
   value: string;
+};
+
+export type ItemWritePayload = {
+  category_key: string;
+  manufacturer_id: string | null;
+  name: string;
+  model: string | null;
+  manufacturer_part_number: string | null;
+  internal_code: string | null;
+  description: string | null;
+  accounting_mode: AccountingMode | null;
+  comment: string | null;
+  datasheet_url: string | null;
+  technical_data_source: string | null;
+  attributes: Record<string, CatalogScalar>;
+};
+
+export type ItemPatchPayload = Partial<
+  Omit<ItemWritePayload, "category_key" | "accounting_mode">
+>;
+
+export type DuplicateCandidate = {
+  item_id: string;
+  name: string;
+  model: string | null;
+  manufacturer_id: string | null;
+  manufacturer_name: string | null;
+  manufacturer_part_number: string | null;
+  reason: string;
+};
+
+export type DuplicateCheckPayload = {
+  category_key: string;
+  manufacturer_id: string | null;
+  manufacturer_part_number: string | null;
+  name: string;
+  model: string | null;
+  exclude_item_id?: string;
+};
+
+export type DuplicateCheckResult = {
+  candidates: DuplicateCandidate[];
 };
 
 export type CatalogQuery = {
@@ -230,7 +273,22 @@ export function catalogQueryCacheKey(query: CatalogQuery): string {
 
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    throw new ApiRequestError(response.status, `HTTP ${response.status}`);
+    let code: string | undefined;
+    let message = `HTTP ${response.status}`;
+    try {
+      const payload = await response.json() as {
+        detail?: string | { code?: string; message?: string };
+      };
+      if (typeof payload.detail === "string") {
+        message = payload.detail;
+      } else if (payload.detail !== undefined) {
+        code = payload.detail.code;
+        message = payload.detail.message ?? message;
+      }
+    } catch {
+      // Non-JSON proxy responses keep the stable HTTP fallback.
+    }
+    throw new ApiRequestError(response.status, message, code);
   }
   return (await response.json()) as T;
 }
@@ -238,6 +296,22 @@ async function readJson<T>(response: Response): Promise<T> {
 async function getJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(url, {
     credentials: "same-origin",
+    signal,
+  });
+  return readJson<T>(response);
+}
+
+async function sendJson<T>(
+  url: string,
+  method: "POST" | "PATCH",
+  body: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
+  const response = await fetch(url, {
+    method,
+    credentials: "same-origin",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
     signal,
   });
   return readJson<T>(response);
@@ -258,13 +332,26 @@ export function getCatalogCategory(
 }
 
 export function getCatalogManufacturers(
-  { limit = 100, offset = 0 }: { limit?: number; offset?: number } = {},
+  {
+    limit = 100,
+    offset = 0,
+    q,
+  }: {
+    limit?: number;
+    offset?: number;
+    q?: string;
+  } = {},
   signal?: AbortSignal,
 ) {
   const params = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),
   });
+
+  if (q !== undefined && q.trim() !== "") {
+    params.set("q", q.trim());
+  }
+
   return getJson<ManufacturerPage>(
     `/api/catalog/manufacturers?${params.toString()}`,
     signal,
@@ -290,9 +377,96 @@ export function getCatalogFacets(query: CatalogQuery, signal?: AbortSignal) {
   );
 }
 
+export function getCatalogFacetPage(
+  query: CatalogQuery,
+  {
+    facet,
+    limit = 50,
+    offset = 0,
+  }: {
+    facet: string;
+    limit?: number;
+    offset?: number;
+  },
+  signal?: AbortSignal,
+) {
+  const params = encodeCatalogQuery(query, {
+    includePagination: false,
+    includeSorting: false,
+  });
+
+  params.set("facet", facet);
+  params.set("facet_limit", String(limit));
+  params.set("facet_offset", String(offset));
+
+  return getJson<CatalogFacetList>(
+    `/api/catalog/items/facets?${params.toString()}`,
+    signal,
+  );
+}
+
 export function getCatalogItem(itemId: string, signal?: AbortSignal) {
   return getJson<CatalogItem>(
     `/api/catalog/items/${encodeURIComponent(itemId)}`,
+    signal,
+  );
+}
+
+export function createCatalogManufacturer(name: string, signal?: AbortSignal) {
+  return sendJson<Manufacturer>(
+    "/api/admin/catalog/manufacturers",
+    "POST",
+    { name },
+    signal,
+  );
+}
+
+export function checkCatalogDuplicates(
+  payload: DuplicateCheckPayload,
+  signal?: AbortSignal,
+) {
+  return sendJson<DuplicateCheckResult>(
+    "/api/admin/catalog/items/check-duplicates",
+    "POST",
+    payload,
+    signal,
+  );
+}
+
+export function createCatalogItem(
+  payload: ItemWritePayload,
+  signal?: AbortSignal,
+) {
+  return sendJson<CatalogItem>(
+    "/api/admin/catalog/items",
+    "POST",
+    payload,
+    signal,
+  );
+}
+
+export function patchCatalogItem(
+  itemId: string,
+  payload: ItemPatchPayload,
+  signal?: AbortSignal,
+) {
+  return sendJson<CatalogItem>(
+    `/api/admin/catalog/items/${encodeURIComponent(itemId)}`,
+    "PATCH",
+    payload,
+    signal,
+  );
+}
+
+export function setCatalogItemArchived(
+  itemId: string,
+  archived: boolean,
+  signal?: AbortSignal,
+) {
+  return sendJson<CatalogItem>(
+    `/api/admin/catalog/items/${encodeURIComponent(itemId)}/${archived ? "archive" : "unarchive"}`,
+    "POST",
+    {},
     signal,
   );
 }

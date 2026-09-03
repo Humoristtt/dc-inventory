@@ -648,6 +648,7 @@ async def process_telegram_update(
             isinstance(text, str)
             and text.split(maxsplit=1)[0].split("@", 1)[0] == "/start"
             and isinstance(chat, dict)
+            and chat.get("type") == "private"
         ):
             chat_id = _integer(chat.get("id"))
             command_message_id = _integer(message.get("message_id"))

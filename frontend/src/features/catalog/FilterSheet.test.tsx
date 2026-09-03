@@ -71,6 +71,7 @@ const facets: CatalogFacet[] = [
     data_type: "TEXT",
     unit: null,
     filter_type: "EXACT",
+  values_has_more: false,
     values: [
       { value: "m-1", count: 8, label: "Mellanox", code: null, name: null },
     ],
@@ -83,6 +84,7 @@ const facets: CatalogFacet[] = [
     data_type: "ENUM",
     unit: null,
     filter_type: "EXACT",
+  values_has_more: false,
     values: [
       { value: "10G", count: 5, label: "10G", code: null, name: null },
       { value: "25G", count: 3, label: "25G", code: null, name: null },
@@ -96,6 +98,7 @@ const facets: CatalogFacet[] = [
     data_type: "DECIMAL",
     unit: "м",
     filter_type: "RANGE",
+  values_has_more: false,
     values: [],
     min: 1,
     max: 30,
@@ -179,6 +182,87 @@ it("Apply возвращает только filter-owned state", () => {
   expect(onApply.mock.calls[0]?.[0]).not.toHaveProperty("order");
 });
 
+it("дозагружает facet и сохраняет выбранное значение вне текущей страницы", async () => {
+  const manufacturerFacet: CatalogFacet = {
+    key: "manufacturer",
+    label: "Производитель",
+    data_type: "TEXT",
+    unit: null,
+    filter_type: "EXACT",
+    values_has_more: true,
+    values: [
+      {
+        value: "m-1",
+        count: 8,
+        label: "Mellanox",
+        code: null,
+        name: null,
+      },
+    ],
+    min: null,
+    max: null,
+  };
+
+  const active: CatalogFilterState = {
+    ...defaultCatalogFilterState,
+    manufacturerIds: ["m-selected"],
+  };
+
+  const onLoadMore = vi.fn(
+    async (
+      facetKey: string,
+      offset: number,
+    ): Promise<CatalogFacet> => {
+      expect(facetKey).toBe("manufacturer");
+      expect(offset).toBe(1);
+
+      return {
+        ...manufacturerFacet,
+        values: [
+          {
+            value: "m-2",
+            count: 4,
+            label: "NVIDIA",
+            code: null,
+            name: null,
+          },
+        ],
+        values_has_more: false,
+      };
+    },
+  );
+
+  render(
+    <FilterSheet
+      active={active}
+      attributes={attributes}
+      facets={[manufacturerFacet]}
+      onApply={vi.fn()}
+      onCancel={vi.fn()}
+      onLoadMore={onLoadMore}
+    />,
+  );
+
+  expect(screen.getByLabelText("m-selected")).toBeChecked();
+  expect(screen.getByLabelText("Mellanox")).toBeInTheDocument();
+
+  fireEvent.click(
+    screen.getByRole("button", {
+      name: "Показать ещё: Производитель",
+    }),
+  );
+
+  expect(await screen.findByLabelText("NVIDIA")).toBeInTheDocument();
+  expect(screen.getByLabelText("m-selected")).toBeChecked();
+  expect(onLoadMore).toHaveBeenCalledTimes(1);
+
+  expect(
+    screen.queryByRole("button", {
+      name: "Показать ещё: Производитель",
+    }),
+  ).not.toBeInTheDocument();
+});
+
 it("скрывает facet-группы без доступных значений или range bounds", () => {
   const emptyFacets: CatalogFacet[] = [
     {
@@ -187,6 +271,7 @@ it("скрывает facet-группы без доступных значени
       data_type: "TEXT",
       unit: null,
       filter_type: "EXACT",
+  values_has_more: false,
       values: [],
       min: null,
       max: null,
@@ -197,6 +282,7 @@ it("скрывает facet-группы без доступных значени
       data_type: "DECIMAL",
       unit: "м",
       filter_type: "RANGE",
+  values_has_more: false,
       values: [],
       min: null,
       max: null,
@@ -233,6 +319,7 @@ it("не скрывает пустой facet, если в нём уже есть
       data_type: "TEXT",
       unit: null,
       filter_type: "EXACT",
+  values_has_more: false,
       values: [],
       min: null,
       max: null,
@@ -243,6 +330,7 @@ it("не скрывает пустой facet, если в нём уже есть
       data_type: "DECIMAL",
       unit: "м",
       filter_type: "RANGE",
+  values_has_more: false,
       values: [],
       min: null,
       max: null,

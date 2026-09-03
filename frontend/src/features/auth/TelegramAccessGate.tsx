@@ -16,6 +16,7 @@ import {
 } from "../../shared/api/access";
 import {
   ApiRequestError,
+  AUTH_QUERY_KEY,
   authenticateWithTelegram,
   getAuthState,
   type AuthState,
@@ -24,12 +25,12 @@ import {
 import {
   getTelegramInitData,
   getTelegramWebAppSdkLoadStatus,
+  loadTelegramWebAppSdk,
   openTelegramContact,
   prepareTelegramWebApp,
 } from "../../shared/telegram/webApp";
 import "./access-gate.css";
 
-const authQueryKey = ["auth", "state"] as const;
 function accessQueryKey(userId: string | undefined) {
   return ["access", "me", userId] as const;
 }
@@ -327,10 +328,11 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
   }, []);
 
   const authQuery = useQuery({
-    queryKey: authQueryKey,
+    queryKey: AUTH_QUERY_KEY,
     queryFn: ({ signal }) => resolveAuthState(signal),
     retry: false,
     staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 
   const authState = authQuery.data;
@@ -361,7 +363,7 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
       return;
     }
 
-    queryClient.setQueryData<AuthState>(authQueryKey, (current) => {
+    queryClient.setQueryData<AuthState>(AUTH_QUERY_KEY, (current) => {
       if (
         current === undefined
         || current.user.id !== observedUserId
@@ -392,7 +394,7 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
       queryClient.setQueryData(accessQueryKey(userId), state);
 
       if (state.access_status === "PENDING") {
-        queryClient.setQueryData<AuthState>(authQueryKey, (current) => {
+        queryClient.setQueryData<AuthState>(AUTH_QUERY_KEY, (current) => {
           if (
             current === undefined
             || current.user.id !== userId
@@ -419,10 +421,18 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
   }
 
   if (authQuery.isError) {
+    const retryAuth = async () => {
+      if (authQuery.error instanceof TelegramSdkUnavailableError) {
+        await loadTelegramWebAppSdk();
+        prepareTelegramWebApp();
+      }
+      await authQuery.refetch();
+    };
+
     return (
       <ErrorScreen
         retry={() => {
-          void authQuery.refetch();
+          void retryAuth();
         }}
         telegramRequired={
           authQuery.error instanceof TelegramContextRequiredError

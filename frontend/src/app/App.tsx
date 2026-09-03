@@ -8,6 +8,8 @@ import {
 import { CategoryPage } from "../pages/catalog/CategoryPage";
 import { CatalogLandingPage } from "../pages/catalog/CatalogLandingPage";
 import { ItemDetailPage } from "../pages/catalog/ItemDetailPage";
+import { ItemFormPage } from "../pages/catalog/ItemFormPage";
+import { MyEquipmentPage } from "../pages/inventory/MyEquipmentPage";
 import { PlaceholderPage } from "../pages/placeholder/PlaceholderPage";
 import { ApplicationShell } from "./ApplicationShell";
 
@@ -17,18 +19,11 @@ export function ApplicationRoutes() {
       <Route element={<ApplicationShell />}>
         <Route index element={<Navigate replace to="/catalog" />} />
         <Route path="catalog" element={<CatalogLandingPage />} />
+        <Route path="catalog/new" element={<ItemFormPage />} />
+        <Route path="catalog/items/:itemId/edit" element={<ItemFormPage />} />
         <Route path="catalog/items/:itemId" element={<ItemDetailPage />} />
         <Route path="catalog/:categoryKey" element={<CategoryPage />} />
-        <Route
-          path="mine"
-          element={
-            <PlaceholderPage
-              description="Персональные выдачи и удерживаемое оборудование относятся к следующему этапу интерфейса."
-              eyebrow="Персональный учёт"
-              title="Моё оборудование"
-            />
-          }
-        />
+        <Route path="mine" element={<MyEquipmentPage />} />
         <Route
           path="movements"
           element={

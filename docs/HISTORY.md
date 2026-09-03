@@ -376,3 +376,28 @@
 - Stage 8A и branded Telegram entry UX production accepted 2026-09-03.
   Следующий продуктовый slice — Stage 8B. Full Playwright multi-viewport/E2E
   остаётся отдельным final Stage 8 gate.
+
+## 2026-09-03 — Stage 8B implemented locally
+
+- Read-only audit всех 23 строк authoritative SFP workbook подтвердил 265
+  физических модулей и 10 manufacturers; workbook не изменялся, не копировался
+  в repository и не использовался для stock/catalog seed.
+- Migration `a2b3c4d5e6f7` добавила lossless speed/reach/wavelength profiles,
+  optional nominal wavelength и exact `MPO`/`MPO/PC` connector semantics.
+- TEXT validation получила metadata-controlled сохранение internal whitespace;
+  обычная normalization осталась прежней.
+- Реализованы role-aware Admin create/edit/archive/unarchive, metadata-driven
+  dynamic form, inline Manufacturer и backend duplicate-candidate flow.
+- Item detail показывает paginated warehouse projections по Location/holder и
+  SERIAL units; «Моё» использует внутренний `User.id` для QUANTITY/SERIAL.
+- Playwright acceptance добавлен для Telegram Desktop narrow, Android-like,
+  iPhone-like и desktop/admin, включая BackButton, retry/empty, safe bottom
+  navigation и horizontal overflow assertions; suite включён в frontend CI.
+- Final local gates: Ruff PASS, strict mypy `107` files PASS, backend Pytest
+  `233/233` PASS, frontend Vitest `49/49` PASS, production build PASS и
+  Playwright `8/8` executed scenarios PASS (`12` inapplicable project
+  combinations skipped). Fresh PostgreSQL migration upgrade/check,
+  downgrade/re-upgrade/check PASS.
+- Stage 8 implementation complete locally / ready for review. Production
+  baseline `c8d77f8cf34f89b7e54f668619319db26de5fc0b` и production migration
+  head `f1a2b3c4d5e6` не изменялись; production acceptance не заявляется.

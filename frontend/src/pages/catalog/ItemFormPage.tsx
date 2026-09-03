@@ -564,20 +564,32 @@ export function ItemFormPage() {
     if (saveMutation.isPending || checkingDuplicates) return;
     const attributes = validate();
     if (attributes === null) return;
-    if (editing) {
+    const editingItem = editing ? itemQuery.data : undefined;
+    const checkedIdentity = duplicateIdentity(draft);
+    const checkedIdentityKey = JSON.stringify(checkedIdentity);
+
+    if (
+      editingItem !== undefined
+      && checkedIdentityKey
+        === duplicateIdentityKey(draftFromItem(editingItem))
+    ) {
       save(attributes);
       return;
     }
+
     setSaveError(null);
     setDuplicateReview(null);
 
     const checkedRevision = formRevisionRef.current;
-    const checkedIdentity = duplicateIdentity(draft);
-    const checkedIdentityKey = JSON.stringify(checkedIdentity);
 
     setCheckingDuplicates(true);
     try {
-      const result = await checkCatalogDuplicates(checkedIdentity);
+      const result = await checkCatalogDuplicates({
+        ...checkedIdentity,
+        ...(editingItem !== undefined
+          ? { exclude_item_id: editingItem.id }
+          : {}),
+      });
 
       if (formRevisionRef.current !== checkedRevision) {
         setSaveError(staleDuplicateCheckMessage);
@@ -906,7 +918,7 @@ export function ItemFormPage() {
                 }}
                 type="button"
               >
-                Всё равно создать
+                {editing ? "Всё равно сохранить" : "Всё равно создать"}
               </button>
             </footer>
           </section>

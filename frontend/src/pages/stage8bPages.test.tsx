@@ -263,6 +263,129 @@ it("ADMIN creates metadata-driven item after inline manufacturer and duplicate w
   expect(client.getQueryState(facetKey)?.isInvalidated).toBe(true);
 });
 
+it("ADMIN checks duplicate advisory on identity edit and excludes the current item", async () => {
+  let duplicatePayload: Record<string, unknown> | null = null;
+  let patchPayload: Record<string, unknown> | null = null;
+
+  vi.stubGlobal("fetch", vi.fn(async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+  ) => {
+    const url = String(input);
+
+    if (url === "/api/catalog/categories") {
+      return jsonResponse([category]);
+    }
+
+    if (url === "/api/catalog/categories/sfp") {
+      return jsonResponse(category);
+    }
+
+    if (url === "/api/catalog/items/item-1") {
+      return jsonResponse(activeItem);
+    }
+
+    if (url.startsWith("/api/catalog/manufacturers?")) {
+      return jsonResponse({
+        items: [{
+          id: "manufacturer-1",
+          name: "Avago",
+          created_at: "2026-09-03T00:00:00Z",
+          updated_at: "2026-09-03T00:00:00Z",
+        }],
+        total: 1,
+        limit: 50,
+        offset: 0,
+      });
+    }
+
+    if (url === "/api/admin/catalog/items/check-duplicates") {
+      duplicatePayload = JSON.parse(
+        String(init?.body),
+      ) as Record<string, unknown>;
+
+      return jsonResponse({
+        candidates: [{
+          item_id: "item-2",
+          name: "Трансивер FC обновлённый",
+          model: activeItem.model,
+          manufacturer_id: "manufacturer-1",
+          manufacturer_name: "Avago",
+          manufacturer_part_number: null,
+          reason: "same_category_manufacturer_name_model",
+        }],
+      });
+    }
+
+    if (url === "/api/admin/catalog/items/item-1") {
+      patchPayload = JSON.parse(
+        String(init?.body),
+      ) as Record<string, unknown>;
+
+      return jsonResponse({
+        ...activeItem,
+        name: "Трансивер FC обновлённый",
+      });
+    }
+
+    if (url.startsWith("/api/inventory/stock?")) {
+      return jsonResponse({
+        items: [],
+        total: 0,
+        limit: 50,
+        offset: 0,
+      });
+    }
+
+    throw new Error(`unexpected fetch ${url}`);
+  }));
+
+  renderRoute("/catalog/items/item-1/edit", "ADMIN");
+
+  const nameInput = await screen.findByLabelText(/^Название/);
+
+  expect(nameInput).toHaveValue(activeItem.name);
+
+  fireEvent.change(nameInput, {
+    target: { value: "Трансивер FC обновлённый" },
+  });
+
+  fireEvent.click(
+    screen.getByRole("button", { name: "Сохранить" }),
+  );
+
+  expect(
+    await screen.findByRole(
+      "heading",
+      { name: "Похожие позиции уже есть" },
+    ),
+  ).toBeInTheDocument();
+
+  expect(duplicatePayload).toMatchObject({
+    category_key: "sfp",
+    manufacturer_id: "manufacturer-1",
+    name: "Трансивер FC обновлённый",
+    model: activeItem.model,
+    manufacturer_part_number: null,
+    exclude_item_id: "item-1",
+  });
+
+  expect(patchPayload).toBeNull();
+
+  fireEvent.click(
+    screen.getByRole(
+      "button",
+      { name: "Всё равно сохранить" },
+    ),
+  );
+
+  await waitFor(() => {
+    expect(patchPayload).toEqual({
+      name: "Трансивер FC обновлённый",
+    });
+  });
+});
+
 it("ADMIN can page and search manufacturers beyond the initial bounded result", async () => {
   const manufacturerRequests: string[] = [];
 

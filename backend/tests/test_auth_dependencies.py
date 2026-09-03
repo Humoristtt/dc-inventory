@@ -3,12 +3,43 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import HTTPException
+from starlette.requests import Request
 
-from app.modules.auth.dependencies import get_admin_context, get_approved_context
+from app.core.config import Settings
+from app.modules.auth.dependencies import (
+    _enforce_cookie_mutation_origin,
+    get_admin_context,
+    get_approved_context,
+)
 from app.modules.auth.models import AuthSession
 from app.modules.auth.service import AuthenticatedContext
 from app.modules.identity.enums import UserAccessStatus, UserRole
 from app.modules.identity.models import TelegramIdentity, User
+
+
+def _request(
+    method: str,
+    *,
+    origin: str | None = None,
+) -> Request:
+    headers: list[tuple[bytes, bytes]] = []
+    if origin is not None:
+        headers.append((b"origin", origin.encode()))
+
+    return Request(
+        {
+            "type": "http",
+            "http_version": "1.1",
+            "method": method,
+            "scheme": "https",
+            "path": "/api/test",
+            "raw_path": b"/api/test",
+            "query_string": b"",
+            "headers": headers,
+            "client": ("127.0.0.1", 12345),
+            "server": ("app.spik-inventory.ru", 443),
+        }
+    )
 
 
 def _context(
@@ -84,3 +115,75 @@ async def test_admin_dependency_accepts_approved_admin() -> None:
         role=UserRole.ADMIN,
     )
     assert await get_admin_context(context) is context
+
+@pytest.mark.parametrize("method", ["GET", "HEAD", "OPTIONS"])
+def test_cookie_origin_guard_allows_safe_methods_without_origin(
+    method: str,
+) -> None:
+    settings = Settings(
+        database_url="postgresql+asyncpg://unused",
+        app_env="test",
+        telegram_web_app_url="https://app.spik-inventory.ru",
+    )
+
+    _enforce_cookie_mutation_origin(
+        _request(method),
+        settings,
+    )
+
+
+@pytest.mark.parametrize("method", ["POST", "PUT", "PATCH", "DELETE"])
+def test_cookie_origin_guard_rejects_mutation_without_origin(
+    method: str,
+) -> None:
+    settings = Settings(
+        database_url="postgresql+asyncpg://unused",
+        app_env="test",
+        telegram_web_app_url="https://app.spik-inventory.ru",
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _enforce_cookie_mutation_origin(
+            _request(method),
+            settings,
+        )
+
+    assert exc_info.value.status_code == 403
+    assert exc_info.value.detail == (
+        "cross-origin authenticated mutation forbidden"
+    )
+
+
+def test_cookie_origin_guard_rejects_foreign_origin() -> None:
+    settings = Settings(
+        database_url="postgresql+asyncpg://unused",
+        app_env="test",
+        telegram_web_app_url="https://app.spik-inventory.ru",
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        _enforce_cookie_mutation_origin(
+            _request(
+                "POST",
+                origin="https://evil.example",
+            ),
+            settings,
+        )
+
+    assert exc_info.value.status_code == 403
+
+
+def test_cookie_origin_guard_accepts_configured_origin() -> None:
+    settings = Settings(
+        database_url="postgresql+asyncpg://unused",
+        app_env="test",
+        telegram_web_app_url="https://app.spik-inventory.ru",
+    )
+
+    _enforce_cookie_mutation_origin(
+        _request(
+            "PATCH",
+            origin="https://app.spik-inventory.ru",
+        ),
+        settings,
+    )

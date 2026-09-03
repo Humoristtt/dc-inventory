@@ -85,9 +85,38 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
             await db.commit()
 
         transport = ASGITransport(app=application)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
+        async with AsyncClient(
+            transport=transport,
+            base_url="http://test",
+            headers={"Origin": settings.telegram_web_app_url},
+        ) as client:
             unauthenticated = await client.get("/api/catalog/categories")
             assert unauthenticated.status_code == 401
+
+            async with AsyncClient(
+                transport=ASGITransport(app=application),
+                base_url="http://test",
+            ) as originless_client:
+                missing_origin = await originless_client.post(
+                    "/api/admin/catalog/manufacturers",
+                    cookies={settings.auth_cookie_name: tokens["admin"]},
+                    json={"name": f"Missing Origin {marker}"},
+                )
+                foreign_origin = await originless_client.post(
+                    "/api/admin/catalog/manufacturers",
+                    cookies={settings.auth_cookie_name: tokens["admin"]},
+                    headers={"Origin": "https://evil.example"},
+                    json={"name": f"Foreign Origin {marker}"},
+                )
+
+            assert missing_origin.status_code == 403
+            assert missing_origin.json()["detail"] == (
+                "cross-origin authenticated mutation forbidden"
+            )
+            assert foreign_origin.status_code == 403
+            assert foreign_origin.json()["detail"] == (
+                "cross-origin authenticated mutation forbidden"
+            )
 
             for key in ("pending", "rejected", "blocked"):
                 denied = await client.get(

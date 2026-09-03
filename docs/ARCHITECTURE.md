@@ -304,6 +304,14 @@ Backend различает:
 `Authenticated` нужен для собственного access-status API. Будущие складские
 и административные endpoints обязаны использовать `Approved` или `Admin`.
 
+Cookie-authenticated state-changing HTTP requests защищены дополнительной
+same-origin boundary. Для `POST`, `PUT`, `PATCH` и `DELETE`, которые используют
+валидную server-side auth session cookie, backend требует `Origin`, совпадающий
+с origin настроенного `TELEGRAM_WEB_APP_URL`. Отсутствующий или чужой `Origin`
+возвращает `403` до выполнения mutation. Safe methods `GET`, `HEAD` и `OPTIONS`
+этой проверкой не ограничиваются. Telegram initData authentication и Telegram
+webhook не используют эту cookie-authenticated mutation boundary.
+
 ## Предметная модель
 
 Реализованные identity/auth и Telegram delivery сущности описаны выше.

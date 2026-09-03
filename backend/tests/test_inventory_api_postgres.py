@@ -69,7 +69,11 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
             await db.commit()
 
         transport = ASGITransport(app=application)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
+        async with AsyncClient(
+            transport=transport,
+            base_url="http://test",
+            headers={"Origin": settings.telegram_web_app_url},
+        ) as client:
             anonymous_read = await client.get("/api/inventory/stock")
             anonymous_mutation = await client.post(
                 "/api/admin/inventory/movements",

@@ -6,10 +6,10 @@
 > Если решение меняется, старый пункт не удаляется бесследно: он переносится в раздел «Изменённые / отложенные решения» с короткой причиной.
 >
 > **Последнее обновление:** 2026-09-03
-> **Production runtime code baseline:** `50d013feb04d13d0976fc196ced99b589a95af6b` — merge PR #13, Stage 7 production close.
-> **Production:** Stage 4 Telegram/auth/access, Stage 5 Catalog Foundation, Stage 6 Inventory Ledger и Stage 7 Catalog Read API / Search / Filters развёрнуты в production. Production migration head: `d9e0f1a2b3c4`.
-> **Git/GitHub:** local и remote очищены до `main`; `main` protected; обязательны PR и четыре CI checks: `CI/backend`, `CI/frontend`, `CI/runtime`, `CI/telegram-gateway`.
-> **Current product stage:** Stage 8 — Working Mini App UX.
+> **Production runtime code baseline:** `c8d77f8cf34f89b7e54f668619319db26de5fc0b` — Stage 8A + актуальный Telegram `/start` production baseline.
+> **Production:** Stages 4–7, Stage 8A Working Catalog UX и branded Telegram entry flow развёрнуты в production. Production migration head: `f1a2b3c4d5e6`.
+> **Git/GitHub:** local, remote и production checkout синхронизированы с `main`; `main` protected; обязательны PR и четыре CI checks: `CI/backend`, `CI/frontend`, `CI/runtime`, `CI/telegram-gateway`.
+> **Current product stage:** Stage 8B — Admin catalog / stock-holder / «Моё» UX.
 > **Production-data gate:** automated off-VM PostgreSQL backup + real restore test намеренно отложены до подготовки к вводу настоящих складских остатков. Это блокирует только real inventory entry, но не дальнейшую feature-разработку, deploy и synthetic/test data.
 > **Repository visibility:** repository остаётся public до последнего GitHub-dependent шага; перевод в private выполняется отдельно в конце.
 
@@ -231,7 +231,9 @@ CUSTODY  → у конкретного пользователя
 - [x] Кратко описывать назначение приложения.
 - [x] Добавить кнопку «Открыть приложение».
 - [ ] UX polish: добавить в `/start` отдельную кнопку «Запросить доступ», если пользователь не APPROVED.
-- [ ] UX polish: не дублировать бессмысленно приветствие при повторном `/start`.
+- [x] UX polish: повторный `/start` не оставляет бессмысленные дубли welcome;
+  предыдущий message best-effort удаляется внутри Telegram delete window,
+  stale/concurrent starts схлопываются.
 
 Эти два UX-пункта не блокируют закрытие Stage 4 production MVP и остаются
 явным backlog без изменения backend access/security boundary.
@@ -1513,7 +1515,7 @@ Viewport profiles:
 - [x] Production Swagger/OpenAPI отключён.
 - [x] app/db Docker networks разделены.
 - [x] CI backend/frontend/runtime зелёный.
-- [x] Production source guard на `50d013feb04d13d0976fc196ced99b589a95af6b`.
+- [x] Production source guard на `c8d77f8cf34f89b7e54f668619319db26de5fc0b`.
 
 До реальных данных:
 
@@ -1727,16 +1729,16 @@ Backup/restore остаётся отдельным production-data gate и не 
 
 ## Stage 8 — Working Mini App UX
 
-**STATUS: IN PROGRESS — Stage 8A catalog UX implemented; Stage 8B/admin and final viewport/E2E gates remain.**
+**STATUS: IN PROGRESS — Stage 8A production accepted; Stage 8B/admin and final Playwright multi-viewport/E2E gates remain.**
 
 Telegram entry UX (parallel Stage 8 slice):
 
-- [ ] Branded `/start` welcome: Telegram `first_name` personalization, one
+- [x] Branded `/start` welcome: Telegram `first_name` personalization, one
   `Открыть приложение` CTA, deletion of the incoming `/start`, refresh of the
-  previous welcome while it is inside Telegram's 48-hour delete window,
-  stale/concurrent `/start` collapse, and best-effort animated reaction.
-- [ ] Final welcome media card using the Spikatel mascot/sticker visual after
-  the text/behavior flow is production-proven.
+  previous welcome while it is inside Telegram's 48-hour delete window and
+  stale/concurrent `/start` collapse.
+- [x] Final branded welcome media card: same-origin Spikatel visual delivered
+  through Telegram `sendPhoto`, caption and verified message effect.
 
 ### Stage 8A — Working catalog UX
 
@@ -1755,6 +1757,20 @@ Telegram entry UX (parallel Stage 8 slice):
 - [x] Loading/error/empty/retry states.
 - [x] Telegram BackButton and URL-preserving internal navigation.
 - [x] Mobile/narrow-first responsive implementation.
+- [x] PR #15 Stage 8A merged; required backend/frontend/runtime/telegram-gateway
+  CI passed.
+- [x] Live Telegram production viewport smoke completed.
+- [x] PR #17 closed viewport findings: empty facet groups, duplicated inline
+  BackButton and native range-input steppers.
+- [x] Telegram `/start` production slice completed through PRs #16, #18, #19
+  and #20, including final branded `sendPhoto` welcome.
+- [x] Production source synchronized at
+  `c8d77f8cf34f89b7e54f668619319db26de5fc0b`.
+- [x] Production migration head verified as `f1a2b3c4d5e6`.
+- [x] Mac / GitHub / production Git synchronized and obsolete Stage 8A/start
+  branches cleaned.
+
+**Stage 8A STATUS: DONE — production acceptance completed 2026-09-03.**
 
 ### Remaining Stage 8B / final Stage 8 scope
 
@@ -1994,9 +2010,12 @@ Stage 7–14 feature development, production deploy и synthetic/test data не
 
 # 42. Следующий фактический шаг
 
-**CURRENT: Stage 8 — Working Mini App UX; Stage 8A local remediation complete, PR CI / production deploy pending**
+**CURRENT: Stage 8 — Working Mini App UX; Stage 8A production accepted, Stage 8B is the next product slice**
 
-Stages 4–7 полностью закрыты: source → review → CI → merge → production deploy → Telegram smoke → Git cleanup → branch protection.
+Stages 4–7 и Stage 8A полностью закрыты по release-cycle:
+source → review → CI → merge → production deploy → Telegram/viewport smoke →
+Git cleanup. Branded Telegram `/start` entry UX также развёрнут и принят в
+production.
 
 Backup/restore не забыты, но сознательно вынесены из текущего критического пути: они обязательны перед real inventory entry, а не перед разработкой рабочего UI.
 
@@ -2014,13 +2033,15 @@ Backup/restore не забыты, но сознательно вынесены �
    - filter fixture matrices.
 
 2. **Stage 8 — Working Mini App UX — CURRENT**
-   - Home / Catalog / global search;
-   - category lists;
-   - compact cards / Item detail;
-   - stock by location / holder summary;
-   - «Моё»;
-   - Telegram BackButton, safe areas, loading/error/empty states;
-   - Desktop narrow + mobile acceptance.
+   - Stage 8A catalog shell / search / category lists / filters / sorting /
+     compact cards / Item detail — DONE / production;
+   - Telegram BackButton, safe areas, loading/error/empty states and live narrow
+     viewport acceptance — DONE / production;
+   - branded Telegram `/start` entry UX — DONE / production;
+   - Stage 8B stock by location / holder summary / «Моё» / Admin catalog UX —
+     CURRENT;
+   - final Playwright multi-viewport/E2E acceptance remains before complete
+     Stage 8 close.
 
 3. **Stage 9 — Warehouse Operations UI**
    - receipt;
@@ -2110,18 +2131,17 @@ production deploy
 Не проводить бесконечный full-source audit после каждой продуктовой фичи.
 Большой end-to-end/security/data-integrity review возвращается перед снятием production-data gate.
 
-## 42.3. Текущая ветка и следующий шаг
+## 42.3. Development baseline и следующий шаг
 
-Текущая feature-ветка:
+Stage 8A runtime baseline принят в production на
+`c8d77f8cf34f89b7e54f668619319db26de5fc0b`; production migration head —
+`f1a2b3c4d5e6`.
 
-`feature/stage8a-catalog-ux`
+Stage 8A feature/start branches закрыты и удалены. Новая product-разработка
+начинается от актуального protected `main`, после завершения этого docs-only
+production-close checkpoint.
 
-Stage 8A использует уже закрытый Stage 7 backend contract и не должен тянуть в
-change set Warehouse Operations UI, media, Excel, stocktake, S3 backup,
-QR/barcode, NetBox integration или новые микросервисы.
-
-Следующий фактический шаг: зафиксировать завершённый Stage 8A remediation,
-push feature-ветки, пройти PR / required CI / merge / production deploy. После
-Stage 8A production close продолжить оставшийся Stage 8 scope, включая Stage 8B
-Admin catalog forms, stock/holder/«Моё» и финальный viewport/Playwright
-acceptance.
+Следующий продуктовый slice — Stage 8B: role-aware Admin catalog forms,
+stock by location, holder summary и «Моё». Warehouse Operations UI, media,
+Excel, stocktake и production-data hardening остаются в своих следующих stages,
+а full Playwright multi-viewport/E2E остаётся финальным Stage 8 acceptance gate.

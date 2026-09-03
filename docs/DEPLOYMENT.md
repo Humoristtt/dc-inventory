@@ -161,12 +161,18 @@ Webhook проверяет `X-Telegram-Bot-Api-Secret-Token`, а обработ�
 
 Прямой outbound к Telegram Bot API с production VM не используется.
 
-Cloudflare Gateway принимает Stage 4 allowlist:
+Cloudflare Gateway принимает ограниченный Bot API allowlist:
 
     sendMessage
+    sendPhoto
+    deleteMessage
     editMessageText
     editMessageReplyMarkup
     answerCallbackQuery
+
+`sendPhoto` используется branded `/start` welcome, а `deleteMessage` —
+best-effort cleanup incoming `/start` и предыдущего welcome. Gateway остаётся
+deny-by-default для методов вне allowlist.
 
 Запросы `telegram-worker` защищены отдельным gateway secret.
 HTTP-клиент использует явный service `User-Agent`, чтобы Cloudflare edge
@@ -220,8 +226,12 @@ PostgreSQL lock. Эти значения отделены от runtime
 - docs-only sync может продвигать worktree вперёд без rebuild/restart контейнеров, если runtime source не менялся.
 
 Для Telegram delivery после runtime-changing deploy выполняется минимальный live
-smoke: `/start` должен пройти webhook/outbox/worker/Gateway и вернуться
-сообщением в Telegram. Для access acceptance используется отдельный пользователь:
+smoke: `/start` должен пройти webhook/outbox/worker/Gateway, удалить входящую
+команду best-effort и вернуть branded `sendPhoto` welcome с caption и WebApp
+button. Same-origin asset `/telegram/start-welcome.png` должен публично
+отдаваться через production web path.
+
+Для access acceptance используется отдельный пользователь:
 request → ADMIN approve → user notification → вход в Mini App.
 
 ## Backup

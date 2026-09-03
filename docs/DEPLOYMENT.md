@@ -66,6 +66,14 @@ Uvicorn доверяет proxy headers, потому что production backend �
 
 Nginx применяет rate limiting после нормализации `CF-Connecting-IP`: общий API ограничен до 30 запросов/с на клиента с burst 60; `POST /api/auth/telegram` и `POST /api/access-requests` дополнительно ограничены до 10 запросов/мин с burst 5. Telegram webhook вынесен в отдельный лимит 50 запросов/с с burst 100, чтобы Telegram delivery burst не конкурировал с пользовательским API. Превышение ingress-лимита возвращает HTTP `429`.
 
+## Supply-chain pinning
+
+Внешние container images в production/runtime, development и CI фиксируются одновременно human-readable tag и immutable `sha256` manifest digest. GitHub Actions фиксируются полным commit SHA; major version остаётся только комментарием для читаемости.
+
+Required backend CI gate проверяет Dockerfile, Compose, CI service images и GitHub Actions и отклоняет возврат mutable external execution references.
+
+Обновление pin выполняется явно: сначала выбирается новая версия/tag, затем проверяется upstream digest или Action commit SHA, после чего новый immutable reference проходит обычные runtime/CI gates.
+
 ## Секреты
 
 Production `.env` создаётся непосредственно на VM и не хранится в Git.

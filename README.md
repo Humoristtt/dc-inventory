@@ -107,8 +107,9 @@ Item detail, URL-preserving navigation, Telegram BackButton/safe-area integratio
 
 Stage 8B реализован локально и готов к review: добавлены metadata-driven Admin
 create/edit/archive, inline Manufacturer и duplicate-check UX, stock/custody
-detail, рабочий экран «Моё» и Playwright acceptance на четырёх viewport
-profiles. Source migration head ветки — `a2b3c4d5e6f7`; production остаётся на
+detail, рабочий экран «Моё» и Playwright browser acceptance на четырёх
+viewport profiles с deterministic synthetic API/Telegram boundaries. Source
+migration head ветки — `a2b3c4d5e6f7`; production остаётся на
 `f1a2b3c4d5e6` до human-controlled PR/CI/deploy/acceptance.
 
 Item остаётся каталожной позицией; физические serial units и balances существуют
@@ -155,8 +156,9 @@ database или обязательным import source. Существующие
 - CI: GitHub Actions
 - Backend tests: Pytest
 - Frontend tests: Vitest
-- E2E: Playwright с Telegram Desktop narrow, Android-like, iPhone-like и desktop
-  profiles
+- Browser acceptance: Playwright с Telegram Desktop narrow, Android-like,
+  iPhone-like и desktop profiles; API/Telegram boundaries в этом suite
+  deterministic synthetic
 
 ## Инфраструктура
 

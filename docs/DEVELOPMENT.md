@@ -138,9 +138,11 @@ Frontend:
 существующего Telegram/auth/access gate. Focused Vitest regressions находятся
 рядом с components/pages. `frontend/e2e/stage8.spec.ts` использует только
 deterministic synthetic API/Telegram boundaries и запускается на Telegram
-Desktop narrow, Android-like, iPhone-like и desktop/admin profiles. Browser
-runtime устанавливается локально через `npx playwright install chromium`; CI
-использует `--with-deps`.
+Desktop narrow, Android-like, iPhone-like и desktop/admin profiles. Это
+browser-level acceptance, а не full-stack E2E: FastAPI/PostgreSQL этим
+Playwright suite не поднимаются; backend contracts проверяются отдельными
+Pytest/integration suites. Browser runtime устанавливается локально через
+`npx playwright install chromium`; CI использует `--with-deps`.
 
 Из корня репозитория:
 

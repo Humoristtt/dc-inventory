@@ -1741,8 +1741,8 @@ Backup/restore остаётся отдельным production-data gate и не 
 ## Stage 8 — Working Mini App UX
 
 **STATUS: IMPLEMENTED LOCALLY / READY FOR REVIEW — Stage 8A production accepted;
-Stage 8B and final Playwright multi-viewport/E2E gates pass locally. Stage 8B
-production acceptance remains pending.**
+Stage 8B and final Playwright multi-viewport browser-acceptance gates pass
+locally. Stage 8B production acceptance remains pending.**
 
 Telegram entry UX (parallel Stage 8 slice):
 
@@ -1795,7 +1795,8 @@ Telegram entry UX (parallel Stage 8 slice):
 - [x] «Моё».
 - [x] Browser viewport acceptance for Telegram Desktop narrow, Android-like,
   iPhone-like and normal desktop widths.
-- [x] Playwright visual/E2E with deterministic synthetic fixtures.
+- [x] Playwright browser acceptance with deterministic synthetic API/Telegram
+  fixtures; это не full-stack frontend→FastAPI→PostgreSQL E2E.
 
 **GATE:** UI комфортен в Telegram Desktop narrow и mobile viewports; данные отображаются без обрезки.
 

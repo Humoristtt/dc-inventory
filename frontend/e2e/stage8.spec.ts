@@ -450,13 +450,18 @@ async function installApiMock(page: Page, options: MockOptions) {
   };
 }
 
-test("approved USER navigates catalog with preserved filters and projection detail", async ({ page }) => {
+test("approved USER is redirected from ADMIN form and navigates catalog with preserved filters", async ({ page }) => {
   await installTelegramMock(page);
   const api = await installApiMock(page, { role: "USER" });
-  await page.goto("/catalog");
+  await page.goto("/catalog/new?category=sfp");
 
+  await expect(page).toHaveURL(/\/catalog$/);
   await expect(page.getByRole("heading", { name: "Найти оборудование" })).toBeVisible();
   await expect(page.getByRole("link", { name: "+ Новая позиция" })).toHaveCount(0);
+
+  expect(
+    api.requestedUrls.some((url) => url.startsWith("/api/admin/")),
+  ).toBe(false);
   await page.getByRole("link", { name: /SFP-модули/ }).click();
   await page.getByRole("button", { name: "Фильтры" }).click();
   await page.getByLabel("В наличии").check();

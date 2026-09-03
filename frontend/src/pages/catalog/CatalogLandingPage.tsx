@@ -1,17 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
-import { useMemo } from "react";
 import {
   Link,
   useLocation,
-  useSearchParams,
 } from "react-router-dom";
 
 import {
   getCatalogCategories,
 } from "../../shared/api/catalog";
 import {
-  catalogViewStateToSearchParams,
-  readCatalogViewState,
   toCatalogQuery,
 } from "../../features/catalog/catalogQuery";
 import {
@@ -21,16 +17,13 @@ import {
 } from "../../features/catalog/CatalogState";
 import { EquipmentList } from "../../features/catalog/EquipmentList";
 import { DebouncedSearchField } from "../../features/catalog/DebouncedSearchField";
+import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useCatalogItems } from "../../features/catalog/useCatalogItems";
+import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
 import "../../features/catalog/catalog.css";
 
 export function CatalogLandingPage() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const serializedSearch = searchParams.toString();
-  const viewState = useMemo(
-    () => readCatalogViewState(new URLSearchParams(serializedSearch)),
-    [serializedSearch],
-  );
+  const { updateSearch, viewState } = useCatalogUrlState();
   const location = useLocation();
 
   const categoriesQuery = useQuery({
@@ -45,13 +38,7 @@ export function CatalogLandingPage() {
   return (
     <main className="catalog-page catalog-page--landing">
       <header className="catalog-landing-header">
-        <div className="compact-brand compact-brand--inverse">
-          <span className="compact-brand__mark">SI</span>
-          <div>
-            <strong>Spikatel Inventory</strong>
-            <small>Оборудование ЦОД</small>
-          </div>
-        </div>
+        <SpikatelBrand inverse subtitle="Оборудование ЦОД" />
         <div className="catalog-landing-header__copy">
           <span className="section-kicker">Рабочий каталог</span>
           <h1>Найти оборудование</h1>
@@ -59,14 +46,8 @@ export function CatalogLandingPage() {
         <DebouncedSearchField
           busy={itemsQuery.isFetching}
           committedValue={viewState.q}
-          key={viewState.q}
           label="Поиск по каталогу"
-          onCommit={(q) => {
-            setSearchParams(
-              catalogViewStateToSearchParams({ ...viewState, q }),
-              { replace: true },
-            );
-          }}
+          onCommit={updateSearch}
           placeholder="Модель, PN, производитель, серийный номер…"
         />
       </header>

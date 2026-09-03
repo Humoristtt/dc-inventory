@@ -16,8 +16,8 @@ import type {
   CategoryAttribute,
 } from "../../shared/api/catalog";
 import {
-  defaultCatalogViewState,
-  type CatalogViewState,
+  defaultCatalogFilterState,
+  type CatalogFilterState,
 } from "./catalogQuery";
 import { FilterSheet } from "./FilterSheet";
 
@@ -103,7 +103,7 @@ const facets: CatalogFacet[] = [
 ];
 
 function renderSheet(
-  active: CatalogViewState = defaultCatalogViewState,
+  active: CatalogFilterState = defaultCatalogFilterState,
   onApply = vi.fn(),
   onCancel = vi.fn(),
 ) {
@@ -130,7 +130,7 @@ it("Apply фиксирует draft exact и range фильтры", () => {
   fireEvent.click(screen.getByRole("button", { name: "Применить" }));
 
   expect(onApply).toHaveBeenCalledTimes(1);
-  const next = onApply.mock.calls[0]?.[0] as CatalogViewState;
+  const next = onApply.mock.calls[0]?.[0] as CatalogFilterState;
   expect(next.manufacturerIds).toEqual(["m-1"]);
   expect(next.filters).toEqual(expect.arrayContaining([
     { key: "speed", operator: "eq", value: "10G" },
@@ -150,8 +150,8 @@ it("Cancel не применяет draft", () => {
 });
 
 it("Reset очищает выбранные значения перед Apply", () => {
-  const active: CatalogViewState = {
-    ...defaultCatalogViewState,
+  const active: CatalogFilterState = {
+    ...defaultCatalogFilterState,
     manufacturerIds: ["m-1"],
     filters: [{ key: "speed", operator: "eq", value: "10G" }],
   };
@@ -160,7 +160,21 @@ it("Reset очищает выбранные значения перед Apply", 
   fireEvent.click(screen.getByRole("button", { name: "Сбросить" }));
   fireEvent.click(screen.getByRole("button", { name: "Применить" }));
 
-  const next = onApply.mock.calls[0]?.[0] as CatalogViewState;
+  const next = onApply.mock.calls[0]?.[0] as CatalogFilterState;
   expect(next.manufacturerIds).toEqual([]);
   expect(next.filters).toEqual([]);
+});
+
+it("Apply возвращает только filter-owned state", () => {
+  const { onApply } = renderSheet();
+  fireEvent.click(screen.getByLabelText("Mellanox"));
+  fireEvent.click(screen.getByRole("button", { name: "Применить" }));
+
+  expect(onApply).toHaveBeenCalledWith(expect.objectContaining({
+    manufacturerIds: ["m-1"],
+    status: "ACTIVE",
+  }));
+  expect(onApply.mock.calls[0]?.[0]).not.toHaveProperty("q");
+  expect(onApply.mock.calls[0]?.[0]).not.toHaveProperty("sort");
+  expect(onApply.mock.calls[0]?.[0]).not.toHaveProperty("order");
 });

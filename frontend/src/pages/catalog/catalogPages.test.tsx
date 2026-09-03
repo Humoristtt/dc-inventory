@@ -1,12 +1,16 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
   screen,
   waitFor,
 } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import {
+  MemoryRouter,
+  useLocation,
+} from "react-router-dom";
 import {
   afterEach,
   expect,
@@ -143,6 +147,26 @@ function renderRoutes(initialEntry: string, children = <ApplicationRoutes />) {
   return { ...result, client };
 }
 
+function LocationProbe() {
+  const location = useLocation();
+  return <output data-testid="location-search">{location.search}</output>;
+}
+
+function routesWithLocationProbe() {
+  return (
+    <>
+      <ApplicationRoutes />
+      <LocationProbe />
+    </>
+  );
+}
+
+function currentSearchParams(): URLSearchParams {
+  return new URLSearchParams(
+    screen.getByTestId("location-search").textContent ?? "",
+  );
+}
+
 function catalogFetch(input: RequestInfo | URL): Promise<Response> {
   const url = String(input);
   if (url === "/api/catalog/categories/sfp") {
@@ -195,6 +219,7 @@ function catalogFetch(input: RequestInfo | URL): Promise<Response> {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   delete window.Telegram;
 });
@@ -226,6 +251,10 @@ it("после approved access gate показывает рабочий shell и
   );
 
   expect(await screen.findByRole("heading", { name: "Найти оборудование" })).toBeInTheDocument();
+  expect(screen.getByRole("img", { name: "Спикател" })).toHaveAttribute(
+    "src",
+    "/brand/spikatel-logo-white.svg",
+  );
   expect(await screen.findByRole("link", { name: /SFP-модули/ })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Диски и накопители/ })).toBeInTheDocument();
   expect(screen.getByRole("navigation", { name: "Основная навигация" })).toBeInTheDocument();
@@ -277,6 +306,128 @@ it("category request содержит key, а смена сортировки м
         && params.get("order") === "desc";
     })).toBe(true);
   });
+});
+
+it("pending debounce не откатывает более новую сортировку", async () => {
+  vi.stubGlobal("fetch", vi.fn(catalogFetch));
+  renderRoutes("/catalog/sfp", routesWithLocationProbe());
+  await screen.findByRole("heading", { name: "MFM1T02A-LR" });
+  vi.useFakeTimers();
+
+  fireEvent.change(
+    screen.getByRole("searchbox", { name: "Поиск внутри категории" }),
+    { target: { value: "needle" } },
+  );
+  fireEvent.click(screen.getByRole("button", { name: /По названию/ }));
+  fireEvent.click(screen.getByRole("button", { name: /Сначала доступные/ }));
+  act(() => vi.advanceTimersByTime(320));
+
+  const params = currentSearchParams();
+  expect(params.get("q")).toBe("needle");
+  expect(params.get("sort")).toBe("available");
+  expect(params.get("order")).toBe("desc");
+});
+
+it("pending debounce не откатывает более новый filter state", async () => {
+  vi.stubGlobal("fetch", vi.fn(catalogFetch));
+  renderRoutes("/catalog/sfp", routesWithLocationProbe());
+  await screen.findByRole("heading", { name: "MFM1T02A-LR" });
+
+  fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
+  await screen.findByLabelText("В наличии");
+  fireEvent.click(screen.getByRole("button", { name: "Закрыть фильтры" }));
+  vi.useFakeTimers();
+
+  fireEvent.change(
+    screen.getByRole("searchbox", { name: "Поиск внутри категории" }),
+    { target: { value: "needle" } },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
+  fireEvent.click(screen.getByLabelText("В наличии"));
+  fireEvent.click(screen.getByRole("button", { name: "Применить" }));
+  act(() => vi.advanceTimersByTime(320));
+
+  const params = currentSearchParams();
+  expect(params.get("q")).toBe("needle");
+  expect(params.get("availability")).toBe("IN_STOCK");
+});
+
+it("FilterSheet Apply сохраняет текущие q и sort/order", async () => {
+  vi.stubGlobal("fetch", vi.fn(catalogFetch));
+  renderRoutes(
+    "/catalog/sfp?q=existing&sort=total&order=desc",
+    routesWithLocationProbe(),
+  );
+  await screen.findByRole("heading", { name: "MFM1T02A-LR" });
+
+  fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
+  fireEvent.click(await screen.findByLabelText("В наличии"));
+  fireEvent.click(screen.getByRole("button", { name: "Применить" }));
+
+  const params = currentSearchParams();
+  expect(params.get("q")).toBe("existing");
+  expect(params.get("sort")).toBe("total");
+  expect(params.get("order")).toBe("desc");
+  expect(params.get("availability")).toBe("IN_STOCK");
+});
+
+it("facet sheet не показывает previous-query counts как текущие", async () => {
+  let resolveNextFacets: ((response: Response) => void) | undefined;
+  const nextFacets = new Promise<Response>((resolve) => {
+    resolveNextFacets = resolve;
+  });
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.startsWith("/api/catalog/items/facets?")) {
+      const params = new URL(url, "https://app.test").searchParams;
+      if (params.get("q") === "needle") {
+        return nextFacets;
+      }
+      return Promise.resolve(jsonResponse({
+        facets: [{
+          key: "availability",
+          label: "Наличие",
+          data_type: "ENUM",
+          unit: null,
+          filter_type: "EXACT",
+          values: [{
+            value: "IN_STOCK",
+            count: 99,
+            label: "Старое значение",
+            code: null,
+            name: null,
+          }],
+          min: null,
+          max: null,
+        }],
+      }));
+    }
+    return catalogFetch(input);
+  }));
+  renderRoutes("/catalog/sfp", routesWithLocationProbe());
+  await screen.findByRole("heading", { name: "MFM1T02A-LR" });
+
+  fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
+  expect(await screen.findByLabelText("Старое значение")).toBeInTheDocument();
+  expect(screen.getByText("99")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Закрыть фильтры" }));
+  vi.useFakeTimers();
+
+  fireEvent.change(
+    screen.getByRole("searchbox", { name: "Поиск внутри категории" }),
+    { target: { value: "needle" } },
+  );
+  await act(async () => {
+    vi.advanceTimersByTime(320);
+    await Promise.resolve();
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Фильтры" }));
+
+  expect(screen.getByLabelText("Загрузка фильтров")).toBeInTheDocument();
+  expect(screen.queryByLabelText("Старое значение")).not.toBeInTheDocument();
+  expect(screen.queryByText("99")).not.toBeInTheDocument();
+
+  resolveNextFacets?.(jsonResponse({ facets: [] }));
 });
 
 it("detail показывает только detail_visible атрибуты и безопасный datasheet", async () => {

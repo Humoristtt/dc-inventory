@@ -18,6 +18,17 @@ export type CatalogViewState = {
   order: SortOrder;
 };
 
+export type CatalogFilterState = Pick<
+  CatalogViewState,
+  | "status"
+  | "manufacturerIds"
+  | "availability"
+  | "locationIds"
+  | "filters"
+>;
+
+export type CatalogSortState = Pick<CatalogViewState, "sort" | "order">;
+
 export const defaultCatalogViewState: CatalogViewState = {
   q: "",
   status: "ACTIVE",
@@ -27,6 +38,14 @@ export const defaultCatalogViewState: CatalogViewState = {
   filters: [],
   sort: "name",
   order: "asc",
+};
+
+export const defaultCatalogFilterState: CatalogFilterState = {
+  status: defaultCatalogViewState.status,
+  manufacturerIds: [],
+  availability: defaultCatalogViewState.availability,
+  locationIds: [],
+  filters: [],
 };
 
 const itemSorts = new Set<ItemSort>([
@@ -157,13 +176,39 @@ export function activeFilterCount(state: CatalogViewState): number {
   );
 }
 
-export function withoutFilters(state: CatalogViewState): CatalogViewState {
+export function catalogFiltersFromViewState(
+  state: CatalogViewState,
+): CatalogFilterState {
+  return {
+    status: state.status,
+    manufacturerIds: [...state.manufacturerIds],
+    availability: state.availability,
+    locationIds: [...state.locationIds],
+    filters: state.filters.map((filter) => ({ ...filter })),
+  };
+}
+
+export function withCatalogFilters(
+  state: CatalogViewState,
+  filters: CatalogFilterState,
+): CatalogViewState {
   return {
     ...state,
-    status: "ACTIVE",
-    manufacturerIds: [],
-    availability: "ANY",
-    locationIds: [],
-    filters: [],
+    status: filters.status,
+    manufacturerIds: [...filters.manufacturerIds],
+    availability: filters.availability,
+    locationIds: [...filters.locationIds],
+    filters: filters.filters.map((filter) => ({ ...filter })),
   };
+}
+
+export function withCatalogSort(
+  state: CatalogViewState,
+  selection: CatalogSortState,
+): CatalogViewState {
+  return { ...state, ...selection };
+}
+
+export function withoutFilters(state: CatalogViewState): CatalogViewState {
+  return withCatalogFilters(state, defaultCatalogFilterState);
 }

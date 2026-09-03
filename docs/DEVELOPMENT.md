@@ -78,7 +78,7 @@ Baseline Alembic:
 
 Текущий migration head:
 
-    c8d9e0f1a2b3
+    d9e0f1a2b3c4
 
 ## Локальный backend
 
@@ -128,6 +128,12 @@ Frontend:
     npm run typecheck
     npm test
     npm run build
+
+Текущий frontend включает Stage 8 catalog UX поверх существующего
+Telegram/auth/access gate. Focused regressions для URL-owned search/filter/sort
+state, filter sheets и facet loading находятся рядом с catalog components и
+pages; viewport/Playwright acceptance остаётся отдельным незакрытым Stage 8
+gate.
 
 Из корня репозитория:
 

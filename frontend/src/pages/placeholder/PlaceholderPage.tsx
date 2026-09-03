@@ -1,5 +1,7 @@
 import { Link } from "react-router-dom";
 
+import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
+
 type PlaceholderPageProps = {
   eyebrow: string;
   title: string;
@@ -13,12 +15,8 @@ export function PlaceholderPage({
 }: PlaceholderPageProps) {
   return (
     <main className="placeholder-page">
-      <header className="compact-brand">
-        <span className="compact-brand__mark">SI</span>
-        <div>
-          <strong>Spikatel Inventory</strong>
-          <small>Внутренний каталог ЦОД</small>
-        </div>
+      <header>
+        <SpikatelBrand subtitle="Внутренний каталог ЦОД" />
       </header>
       <section className="placeholder-page__card">
         <span className="section-kicker">{eyebrow}</span>

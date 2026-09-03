@@ -211,10 +211,11 @@ Alembic использует тот же async PostgreSQL driver `asyncpg`, чт
     a6b7c8d9e0f1  Source-backed catalog metadata refinement
     b7c8d9e0f1a2  Warehouse ledger + current-state projections
     c8d9e0f1a2b3  Technical-retention indexes
+    d9e0f1a2b3c4  Catalog search, typed filters and inventory/facet read model
 
 Текущий migration head:
 
-    c8d9e0f1a2b3
+    d9e0f1a2b3c4
 
 Следующие предметные схемы добавляются отдельными миграциями.
 
@@ -543,6 +544,17 @@ Catalog frontend разделяет два вида состояния:
   воспроизводимы;
 - server responses хранятся в TanStack Query cache с детерминированными keys;
   limit/offset pages добавляются без дублирования Item.
+
+URL navigation state изменяется ownership-specific updates: search меняет
+только `q`, sort — только `sort/order`, filter sheet — только status,
+manufacturer/location/availability и metadata filters. Каждый update сначала
+читает актуальные `URLSearchParams`, поэтому отложенный debounce или старый
+filter draft не может откатить более новое состояние другого owner. Search
+input синхронизируется с back/reload/external URL без принудительного remount.
+
+Item list сохраняет previous pages во время progressive refetch. Facets этого
+не делают: при смене facet query UI показывает loading state и не выдаёт counts
+предыдущего query за актуальные.
 
 Catalog API encoding централизован в typed same-origin client. Repeated
 `manufacturer_id`, `location_id` и metadata attribute `filter` parameters

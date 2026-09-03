@@ -1,9 +1,8 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
-import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   useLocation,
   useParams,
-  useSearchParams,
 } from "react-router-dom";
 
 import {
@@ -13,10 +12,9 @@ import {
 } from "../../shared/api/catalog";
 import {
   activeFilterCount,
-  catalogViewStateToSearchParams,
-  readCatalogViewState,
+  catalogFiltersFromViewState,
+  defaultCatalogFilterState,
   toCatalogQuery,
-  withoutFilters,
 } from "../../features/catalog/catalogQuery";
 import {
   CatalogEmptyState,
@@ -31,16 +29,18 @@ import {
   SortSheet,
 } from "../../features/catalog/SortSheet";
 import { useCatalogItems } from "../../features/catalog/useCatalogItems";
+import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
+import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
 
 export function CategoryPage() {
   const { categoryKey = "" } = useParams();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const serializedSearch = searchParams.toString();
-  const viewState = useMemo(
-    () => readCatalogViewState(new URLSearchParams(serializedSearch)),
-    [serializedSearch],
-  );
+  const {
+    updateFilters,
+    updateSearch,
+    updateSort,
+    viewState,
+  } = useCatalogUrlState();
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const location = useLocation();
@@ -58,16 +58,12 @@ export function CategoryPage() {
     queryKey: ["catalog", "facets", catalogQueryCacheKey(catalogQuery)],
     queryFn: ({ signal }) => getCatalogFacets(catalogQuery, signal),
     enabled: categoryKey !== "",
-    placeholderData: keepPreviousData,
   });
   const filtersCount = activeFilterCount(viewState);
   const returnTo = `${location.pathname}${location.search}`;
 
   const clearAllFilters = () => {
-    setSearchParams(
-      catalogViewStateToSearchParams(withoutFilters(viewState)),
-      { replace: false },
-    );
+    updateFilters(defaultCatalogFilterState);
   };
 
   return (
@@ -77,13 +73,7 @@ export function CategoryPage() {
           <button aria-label="Назад в каталог" className="icon-button icon-button--light" onClick={navigateBack} type="button">
             ←
           </button>
-          <div className="compact-brand compact-brand--inverse">
-            <span className="compact-brand__mark">SI</span>
-            <div>
-              <strong>Spikatel Inventory</strong>
-              <small>Каталог оборудования</small>
-            </div>
-          </div>
+          <SpikatelBrand inverse subtitle="Каталог оборудования" />
         </div>
         <div className="category-header__title">
           <span className="section-kicker">Категория</span>
@@ -93,14 +83,8 @@ export function CategoryPage() {
         <DebouncedSearchField
           busy={itemsQuery.isFetching}
           committedValue={viewState.q}
-          key={viewState.q}
           label="Поиск внутри категории"
-          onCommit={(q) => {
-            setSearchParams(
-              catalogViewStateToSearchParams({ ...viewState, q }),
-              { replace: true },
-            );
-          }}
+          onCommit={updateSearch}
           placeholder="Поиск внутри категории…"
         />
       </header>
@@ -189,13 +173,13 @@ export function CategoryPage() {
 
       {filtersOpen ? (
         <FilterSheet
-          active={viewState}
+          active={catalogFiltersFromViewState(viewState)}
           attributes={categoryQuery.data?.attributes ?? []}
           error={facetsQuery.isError}
           facets={facetsQuery.data?.facets ?? []}
           loading={facetsQuery.isPending}
           onApply={(next) => {
-            setSearchParams(catalogViewStateToSearchParams(next));
+            updateFilters(next);
             setFiltersOpen(false);
           }}
           onCancel={() => setFiltersOpen(false)}
@@ -206,10 +190,8 @@ export function CategoryPage() {
         <SortSheet
           active={viewState}
           onCancel={() => setSortOpen(false)}
-          onSelect={({ sort, order }) => {
-            setSearchParams(
-              catalogViewStateToSearchParams({ ...viewState, sort, order }),
-            );
+          onSelect={(selection) => {
+            updateSort(selection);
             setSortOpen(false);
           }}
         />

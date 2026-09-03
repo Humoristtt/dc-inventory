@@ -6,17 +6,19 @@ import type {
   CategoryAttribute,
   FacetValue,
 } from "../../shared/api/catalog";
-import type { CatalogViewState } from "./catalogQuery";
-import { withoutFilters } from "./catalogQuery";
+import {
+  defaultCatalogFilterState,
+  type CatalogFilterState,
+} from "./catalogQuery";
 
 type FilterSheetProps = {
-  active: CatalogViewState;
+  active: CatalogFilterState;
   facets: CatalogFacet[];
   attributes: CategoryAttribute[];
   loading?: boolean;
   error?: boolean;
   onRetry?: () => void;
-  onApply: (next: CatalogViewState) => void;
+  onApply: (next: CatalogFilterState) => void;
   onCancel: () => void;
 };
 
@@ -26,7 +28,7 @@ const commonFacetOrder = new Map([
   ["location", 2],
 ]);
 
-function cloneState(state: CatalogViewState): CatalogViewState {
+function cloneState(state: CatalogFilterState): CatalogFilterState {
   return {
     ...state,
     manufacturerIds: [...state.manufacturerIds],
@@ -46,7 +48,7 @@ function facetValueLabel(facet: CatalogFacet, value: FacetValue): string {
   return value.label ?? value.name ?? value.code ?? String(value.value);
 }
 
-function exactValues(state: CatalogViewState, key: string): string[] {
+function exactValues(state: CatalogFilterState, key: string): string[] {
   if (key === "manufacturer") {
     return state.manufacturerIds;
   }
@@ -62,11 +64,11 @@ function exactValues(state: CatalogViewState, key: string): string[] {
 }
 
 function updateExactValue(
-  state: CatalogViewState,
+  state: CatalogFilterState,
   key: string,
   value: string,
   selected: boolean,
-): CatalogViewState {
+): CatalogFilterState {
   if (key === "manufacturer") {
     return {
       ...state,
@@ -105,11 +107,11 @@ function updateExactValue(
 }
 
 function updateRange(
-  state: CatalogViewState,
+  state: CatalogFilterState,
   key: string,
   operator: "gte" | "lte",
   value: string,
-): CatalogViewState {
+): CatalogFilterState {
   const remaining = state.filters.filter(
     (filter) => !(filter.key === key && filter.operator === operator),
   );
@@ -333,7 +335,7 @@ export function FilterSheet({
         <footer className="sheet__footer">
           <button
             className="button button--ghost"
-            onClick={() => setDraft((current) => withoutFilters(current))}
+            onClick={() => setDraft(cloneState(defaultCatalogFilterState))}
             type="button"
           >
             Сбросить

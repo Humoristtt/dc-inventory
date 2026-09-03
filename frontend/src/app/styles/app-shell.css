@@ -97,18 +97,12 @@
   gap: 10px;
 }
 
-.compact-brand__mark {
-  display: grid;
-  width: 36px;
-  height: 36px;
-  flex: 0 0 36px;
-  place-items: center;
-  border-radius: 11px;
-  background: var(--color-ink);
-  color: var(--color-acid);
-  font-size: 12px;
-  font-weight: 850;
-  letter-spacing: -0.03em;
+.compact-brand__logo {
+  display: block;
+  width: 112px;
+  height: auto;
+  flex: 0 0 112px;
+  object-fit: contain;
 }
 
 .compact-brand > div {
@@ -136,11 +130,6 @@
 
 .compact-brand--inverse {
   color: #fff;
-}
-
-.compact-brand--inverse .compact-brand__mark {
-  background: var(--color-acid);
-  color: var(--color-ink);
 }
 
 .compact-brand--inverse small {

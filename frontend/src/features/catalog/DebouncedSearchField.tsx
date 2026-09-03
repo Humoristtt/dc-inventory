@@ -20,7 +20,26 @@ export function DebouncedSearchField({
   delay = 320,
 }: DebouncedSearchFieldProps) {
   const [inputValue, setInputValue] = useState(committedValue);
+  const [observedCommittedValue, setObservedCommittedValue] =
+    useState(committedValue);
   const timeoutRef = useRef<number | null>(null);
+  const onCommitRef = useRef(onCommit);
+
+  if (committedValue !== observedCommittedValue) {
+    setObservedCommittedValue(committedValue);
+    setInputValue(committedValue);
+  }
+
+  useEffect(() => {
+    onCommitRef.current = onCommit;
+  }, [onCommit]);
+
+  useEffect(() => {
+    if (timeoutRef.current !== null) {
+      window.clearTimeout(timeoutRef.current);
+      timeoutRef.current = null;
+    }
+  }, [committedValue]);
 
   useEffect(
     () => () => {
@@ -44,7 +63,7 @@ export function DebouncedSearchField({
           timeoutRef.current = null;
           const trimmedValue = value.trim();
           setInputValue(trimmedValue);
-          onCommit(trimmedValue);
+          onCommitRef.current(trimmedValue);
         }, delay);
       }}
       onClear={() => {
@@ -53,7 +72,7 @@ export function DebouncedSearchField({
           timeoutRef.current = null;
         }
         setInputValue("");
-        onCommit("");
+        onCommitRef.current("");
       }}
       placeholder={placeholder}
       value={inputValue}

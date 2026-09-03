@@ -6,10 +6,10 @@
 > Если решение меняется, старый пункт не удаляется бесследно: он переносится в раздел «Изменённые / отложенные решения» с короткой причиной.
 >
 > **Последнее обновление:** 2026-09-03
-> **Production runtime code baseline:** `c8d77f8cf34f89b7e54f668619319db26de5fc0b` — Stage 8A + актуальный Telegram `/start` production baseline.
-> **Production:** Stages 4–7, Stage 8A Working Catalog UX и branded Telegram entry flow развёрнуты в production. Production migration head: `f1a2b3c4d5e6`.
-> **Git/GitHub:** local, remote и production checkout синхронизированы с `main`; `main` protected; обязательны PR и четыре CI checks: `CI/backend`, `CI/frontend`, `CI/runtime`, `CI/telegram-gateway`.
-> **Current product stage:** Stage 8 implemented locally / ready for review; production acceptance remains human-controlled.
+> **Production runtime code baseline:** `d7a95f6f6d7b5a232fa545ab9011f86858e7da08` — Stage 8B production-accepted runtime.
+> **Production:** Stages 4–8B и branded Telegram entry flow развёрнуты и приняты в production. Production migration head: `a2b3c4d5e6f7`.
+> **Git/GitHub:** local, remote и production checkout синхронизируются через protected `main`; обязательны PR и четыре CI checks: `CI/backend`, `CI/frontend`, `CI/runtime`, `CI/telegram-gateway`.
+> **Current product stage:** Stage 8B production accepted; следующий feature slice ещё не начат.
 > **Production-data gate:** automated off-VM PostgreSQL backup + real restore test намеренно отложены до подготовки к вводу настоящих складских остатков. Это блокирует только real inventory entry, но не дальнейшую feature-разработку, deploy и synthetic/test data.
 > **Repository visibility:** repository остаётся public до последнего GitHub-dependent шага; перевод в private выполняется отдельно в конце.
 
@@ -737,7 +737,7 @@ ABC12345
 - [x] Совмещается с category filters.
 - [x] Совмещается с sorting.
 - [x] Совмещается с availability.
-- [ ] Фильтры сохраняются при возврате из карточки.
+- [x] Фильтры сохраняются при возврате из карточки.
 - [ ] Можно быстро очистить все фильтры.
 
 ---
@@ -765,7 +765,7 @@ Intel       3
 - [x] Range filters определены и протестированы.
 - [x] «Только в наличии».
 - [x] Фильтр по локации.
-- [ ] Filter metadata не захардкожен в каждом React screen.
+- [x] Filter metadata не захардкожен в каждом React screen.
 
 ---
 
@@ -906,11 +906,11 @@ Future controlled workflows, не реализованные generic Stage 6 mov
 
 Для USER:
 
-- [ ] Список всего, что сейчас числится на пользователе.
-- [ ] Группировка по категориям.
-- [ ] Количество для QUANTITY.
-- [ ] Serial для SERIAL.
-- [ ] Быстрый переход к карточке.
+- [x] Список всего, что сейчас числится на пользователе.
+- [x] Группировка по категориям.
+- [x] Количество для QUANTITY.
+- [x] Serial для SERIAL.
+- [x] Быстрый переход к карточке.
 - [ ] Быстрый старт возврата.
 - [ ] История собственных движений при разрешённой политике.
 
@@ -1526,7 +1526,7 @@ Viewport profiles:
 - [x] Production Swagger/OpenAPI отключён.
 - [x] app/db Docker networks разделены.
 - [x] CI backend/frontend/runtime зелёный.
-- [x] Production source guard на `c8d77f8cf34f89b7e54f668619319db26de5fc0b`.
+- [x] Production runtime baseline принят на `d7a95f6f6d7b5a232fa545ab9011f86858e7da08`; production checkout clean.
 
 До реальных данных:
 
@@ -1801,6 +1801,8 @@ Telegram entry UX (parallel Stage 8 slice):
   fixtures; это не full-stack frontend→FastAPI→PostgreSQL E2E.
 
 **GATE:** UI комфортен в Telegram Desktop narrow и mobile viewports; данные отображаются без обрезки.
+
+**STAGE 8B STATUS: DONE — PR #22 merged, production deploy and Telegram acceptance completed 2026-09-03.**
 
 ## Stage 9 — Warehouse Operations UI
 
@@ -2151,12 +2153,14 @@ production deploy
 
 ## 42.3. Development baseline и следующий шаг
 
-Stage 8A runtime baseline принят в production на
-`c8d77f8cf34f89b7e54f668619319db26de5fc0b`; production migration head —
-`f1a2b3c4d5e6`.
+Stage 8B принят в production 2026-09-03. Production runtime code baseline —
+`d7a95f6f6d7b5a232fa545ab9011f86858e7da08`; production migration head — `a2b3c4d5e6f7`.
 
-Stage 8B реализован локально на feature branch от актуального protected `main`.
-Следующий human-controlled шаг — review, PR CI и только затем отдельное решение
-о deploy/production acceptance. После закрытия release-cycle следующий
-продуктовый slice — Stage 9 Warehouse Operations UI. Media, Excel, stocktake и
-production-data hardening остаются в своих последующих stages.
+PR #22 прошёл required backend/frontend/runtime/telegram-gateway CI, был merged
+в protected `main`, после чего merge commit также прошёл push CI. Production
+deploy, runtime acceptance и реальный Telegram `/start` smoke завершены успешно.
+
+Следующий продуктовый slice — Stage 9 Warehouse Operations UI. Media, Excel,
+stocktake и production-data hardening остаются в своих последующих stages.
+Real inventory entry по-прежнему запрещён до Stage 15: automated off-VM
+PostgreSQL backup, isolated real restore и projection reconciliation.

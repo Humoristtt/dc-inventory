@@ -20,10 +20,11 @@
 
 ## Текущее состояние
 
-В production развёрнуты Stages 4–7, Stage 8A Working Catalog UX и
-актуальный Telegram `/start` entry flow. Production source baseline —
-`c8d77f8cf34f89b7e54f668619319db26de5fc0b`; текущий migration head —
-`f1a2b3c4d5e6`.
+В production развёрнуты Stages 4–8B, включая Working Catalog UX,
+Admin catalog management, экран «Моё оборудование» и актуальный Telegram
+`/start` entry flow. Production runtime code baseline —
+`d7a95f6f6d7b5a232fa545ab9011f86858e7da08`; текущий migration head —
+`a2b3c4d5e6f7`.
 
 Production runtime включает:
 
@@ -105,12 +106,13 @@ metadata-driven facet filters, sorting, progressive item list, compact cards,
 Item detail, URL-preserving navigation, Telegram BackButton/safe-area integration
 и production viewport remediation работают на текущем baseline.
 
-Stage 8B реализован локально и готов к review: добавлены metadata-driven Admin
-create/edit/archive, inline Manufacturer и duplicate-check UX, stock/custody
-detail, рабочий экран «Моё» и Playwright browser acceptance на четырёх
-viewport profiles с deterministic synthetic API/Telegram boundaries. Source
-migration head ветки — `a2b3c4d5e6f7`; production остаётся на
-`f1a2b3c4d5e6` до human-controlled PR/CI/deploy/acceptance.
+Stage 8B завершён и принят в production: metadata-driven Admin
+create/edit/archive/unarchive, inline Manufacturer и duplicate-check UX,
+stock/custody detail, рабочий экран «Моё оборудование», bounded facets,
+privacy/auth/runtime hardening и production-Nginx Playwright acceptance
+прошли local gate, PR #22 required CI и production smoke. Chromium и WebKit
+покрывают mobile/browser acceptance. Production runtime code baseline —
+`d7a95f6f6d7b5a232fa545ab9011f86858e7da08`, migration head — `a2b3c4d5e6f7`.
 
 Item остаётся каталожной позицией; физические serial units и balances существуют
 только в warehouse domain. Старые локальные workbook остаются только reference
@@ -157,8 +159,8 @@ database или обязательным import source. Существующие
 - Backend tests: Pytest
 - Frontend tests: Vitest
 - Browser acceptance: Playwright с Telegram Desktop narrow, Android-like,
-  iPhone-like и desktop profiles; API/Telegram boundaries в этом suite
-  deterministic synthetic
+  iPhone-like, iPhone WebKit и desktop/admin profiles; API/Telegram boundaries
+  в этом suite deterministic synthetic
 
 ## Инфраструктура
 

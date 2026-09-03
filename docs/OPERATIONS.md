@@ -51,16 +51,18 @@ Warehouse mutation privileges отсутствуют.
 
 ## Current production baseline
 
-Source:
+Runtime source:
 
-    c8d77f8cf34f89b7e54f668619319db26de5fc0b
+    d7a95f6f6d7b5a232fa545ab9011f86858e7da08
 
 Migration head:
 
-    f1a2b3c4d5e6
+    a2b3c4d5e6f7
 
-Stages 4–7, Stage 8A Working Catalog UX и branded Telegram `/start` entry flow
-развёрнуты и приняты в production. Следующий продуктовый slice — Stage 8B.
+Stages 4–8B и branded Telegram `/start` entry flow развёрнуты и приняты
+в production. Stage 8B production acceptance завершён 2026-09-03.
+Следующий feature slice ещё не начат; real inventory entry остаётся
+заблокирован Stage 15 backup/restore gate.
 
 ## Deploy sequence
 
@@ -187,10 +189,12 @@ gate.
 
 Локальные pre-deploy rollback dumps на production VM используются как
 операционный checkpoint, но **не заменяют** automated off-VM backup и real
-restore acceptance. Последний Stage 8A/start checkpoint:
-`pre-start-image-c8d77f8.dump`, SHA-256
-`0f70a52f874b7b7f1437314089c0e6115126aa8d12658e185e866b6f9bb65c4f`,
-`pg_restore --list` PASS.
+restore acceptance. Последний pre-deploy rollback checkpoint для Stage 8B:
+`/opt/dc-inventory/backups/pre-stage8b-d7a95f6.dump`, SHA-256
+`f595c6211f2ed40c4267555131d093e0d5e4a98ee8e45e10e3bb2a6339dc9d78`, `pg_restore --list` PASS.
+
+Этот artifact остаётся локальным rollback checkpoint конкретного deploy и
+не заменяет automated off-VM backup / restore acceptance Stage 15.
 
 Следовательно:
 
@@ -258,9 +262,9 @@ Data-integrity blocker. Inventory mutations останавливаются.
 
 ## Перед первым real inventory entry
 
-- [x] Stage 6 merged;
-- [x] production deploy Stages 4–7 + Stage 8A + Telegram entry UX PASS;
-- [x] migration head `f1a2b3c4d5e6` verified;
+- [x] Stage 8B merged через PR #22;
+- [x] production deploy Stages 4–8B + Telegram entry UX PASS;
+- [x] migration head `a2b3c4d5e6f7` verified;
 - [x] DB roles verified;
 - [x] Telegram smoke PASS;
 - [x] maintenance iteration PASS;
@@ -269,7 +273,7 @@ Data-integrity blocker. Inventory mutations останавливаются.
 - [ ] real restore PASS;
 - [ ] reconciliation zero drift;
 - [x] branch protection configured;
-- [x] production source clean/current на
-  `c8d77f8cf34f89b7e54f668619319db26de5fc0b`.
+- [x] production runtime code baseline `d7a95f6f6d7b5a232fa545ab9011f86858e7da08` accepted;
+- [x] production checkout clean и синхронизируется с protected `main`.
 
 Только после этого production-data gate можно снять.

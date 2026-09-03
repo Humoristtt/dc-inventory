@@ -405,6 +405,101 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
             assert own_units_filter.status_code == 200
             assert own_units_filter.json()["total"] == 1
             assert own_units_filter.json()["items"][0]["serial_number"] == own_serial
+
+            own_quantity_issue = await client.post(
+                "/api/admin/inventory/movements",
+                cookies={settings.auth_cookie_name: tokens["admin"]},
+                json={
+                    "movement_type": "ISSUE",
+                    "source_location_id": str(scenario.location_one_id),
+                    "destination_holder_user_id": str(scenario.holder_one_id),
+                    "client_request_id": f"api-own-quantity-{marker}",
+                    "lines": [
+                        {
+                            "item_id": str(scenario.quantity_item_id),
+                            "quantity": 1,
+                        }
+                    ],
+                },
+            )
+            assert own_quantity_issue.status_code == 201
+
+            quantity_summary = await client.get(
+                f"/api/inventory/items/{scenario.quantity_item_id}/summary",
+                cookies={settings.auth_cookie_name: tokens["user"]},
+            )
+            assert quantity_summary.status_code == 200
+            assert quantity_summary.json() == {
+                "available_count": 0,
+                "custody_count": 2,
+                "total_count": 2,
+            }
+
+            serial_summary = await client.get(
+                f"/api/inventory/items/{scenario.serial_item_id}/summary",
+                cookies={settings.auth_cookie_name: tokens["user"]},
+            )
+            assert serial_summary.status_code == 200
+            assert serial_summary.json() == {
+                "available_count": 0,
+                "custody_count": 2,
+                "total_count": 2,
+            }
+
+            mine_first_page = await client.get(
+                "/api/inventory/mine?limit=1&offset=0",
+                cookies={settings.auth_cookie_name: tokens["user"]},
+            )
+            mine_all = await client.get(
+                "/api/inventory/mine?limit=100&offset=0",
+                cookies={settings.auth_cookie_name: tokens["user"]},
+            )
+            mine_ignores_foreign_holder = await client.get(
+                (
+                    "/api/inventory/mine?limit=100&offset=0"
+                    f"&holder_user_id={scenario.holder_two_id}"
+                ),
+                cookies={settings.auth_cookie_name: tokens["user"]},
+            )
+
+            assert mine_first_page.status_code == 200
+            assert mine_first_page.json()["total"] == 2
+            assert len(mine_first_page.json()["items"]) == 1
+
+            assert mine_all.status_code == 200
+            assert mine_all.json()["total"] == 2
+            assert mine_ignores_foreign_holder.status_code == 200
+            assert mine_ignores_foreign_holder.json() == mine_all.json()
+
+            mine_by_item = {
+                row["item_id"]: row
+                for row in mine_all.json()["items"]
+            }
+
+            assert set(mine_by_item) == {
+                str(scenario.quantity_item_id),
+                str(scenario.serial_item_id),
+            }
+
+            quantity_holding = mine_by_item[
+                str(scenario.quantity_item_id)
+            ]
+            assert quantity_holding["accounting_mode"] == "QUANTITY"
+            assert quantity_holding["quantity"] > 0
+            assert quantity_holding["serial_count"] == 0
+            assert quantity_holding["serial_preview"] == []
+
+            serial_holding = mine_by_item[
+                str(scenario.serial_item_id)
+            ]
+            assert serial_holding["accounting_mode"] == "SERIAL"
+            assert serial_holding["quantity"] == 0
+            assert serial_holding["serial_count"] == 1
+            assert len(serial_holding["serial_preview"]) == 1
+            assert (
+                serial_holding["serial_preview"][0]["serial_number"]
+                == own_serial
+            )
             assert admin_foreign_units.status_code == 200
             assert admin_foreign_units.json()["total"] == 1
             assert (

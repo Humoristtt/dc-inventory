@@ -295,69 +295,103 @@ async function installApiMock(page: Page, options: MockOptions) {
     if (url.pathname.startsWith("/api/catalog/items/")) {
       return json(route, item);
     }
-    if (url.pathname === "/api/inventory/stock") {
-      if (url.searchParams.get("holder_user_id") === userId) {
-        return json(route, {
-          items: [{
-            id: "holder-balance",
-            item_id: "quantity-holding",
-            item_name: "Патч-корд LC",
-            quantity: 4,
-            location: null,
-            holder: { user_id: userId, display_name: "Иван" },
-            updated_at: now,
-          }],
-          total: 1,
-          limit: 200,
-          offset: 0,
-        });
-      }
+    if (url.pathname === `/api/inventory/items/${item.id}/summary`) {
       return json(route, {
-        items: [
-          {
-            id: "location-balance",
-            item_id: item.id,
-            item_name: item.name,
-            quantity: 8,
-            location: { location_id: "location-1", code: "A-01", name: "Основная стойка" },
-            holder: null,
-            updated_at: now,
-          },
-          {
-            id: "custody-balance",
-            item_id: item.id,
-            item_name: item.name,
-            quantity: 2,
-            location: null,
-            holder: { user_id: "holder-2", display_name: "Пётр" },
-            updated_at: now,
-          },
-        ],
-        total: 2,
-        limit: 200,
-        offset: 0,
+        available_count: 8,
+        custody_count: 2,
+        total_count: 10,
       });
     }
-    if (url.pathname === "/api/inventory/units") {
+
+    if (url.pathname === "/api/inventory/stock") {
+      const limit = Number(url.searchParams.get("limit") ?? "50");
+      const offset = Number(url.searchParams.get("offset") ?? "0");
+
+      const rows = [
+        {
+          id: "location-balance",
+          item_id: item.id,
+          item_name: item.name,
+          quantity: 8,
+          location: {
+            location_id: "location-1",
+            code: "A-01",
+            name: "Основная стойка",
+          },
+          holder: null,
+          updated_at: now,
+        },
+        {
+          id: "custody-balance",
+          item_id: item.id,
+          item_name: item.name,
+          quantity: 2,
+          location: null,
+          holder: {
+            user_id: "holder-2",
+            display_name: "Пётр",
+          },
+          updated_at: now,
+        },
+      ];
+
       return json(route, {
-        items: url.searchParams.get("holder_user_id") === userId ? [{
-          id: "unit-1",
+        items: rows.slice(offset, offset + limit),
+        total: rows.length,
+        limit,
+        offset,
+      });
+    }
+
+    if (url.pathname === "/api/inventory/units") {
+      const limit = Number(url.searchParams.get("limit") ?? "50");
+      const offset = Number(url.searchParams.get("offset") ?? "0");
+
+      return json(route, {
+        items: [],
+        total: 0,
+        limit,
+        offset,
+      });
+    }
+
+    if (url.pathname === "/api/inventory/mine") {
+      const limit = Number(url.searchParams.get("limit") ?? "20");
+      const offset = Number(url.searchParams.get("offset") ?? "0");
+
+      const rows = [
+        {
+          item_id: "quantity-holding",
+          item_name: "Патч-корд LC",
+          accounting_mode: "QUANTITY",
+          quantity: 4,
+          serial_count: 0,
+          serial_preview: [],
+        },
+        {
           item_id: "serial-holding",
           item_name: "Сетевая карта",
-          serial_number: "SN-100",
-          wwn: "10:00:00:00:00:01",
-          comment: null,
-          state: "ISSUED",
-          location: null,
-          holder: { user_id: userId, display_name: "Иван" },
-          created_at: now,
-          updated_at: now,
-        }] : [],
-        total: url.searchParams.get("holder_user_id") === userId ? 1 : 0,
-        limit: 200,
-        offset: 0,
+          accounting_mode: "SERIAL",
+          quantity: 0,
+          serial_count: 1,
+          serial_preview: [
+            {
+              id: "unit-1",
+              serial_number: "SN-100",
+              wwn: "10:00:00:00:00:01",
+            },
+          ],
+        },
+      ];
+
+      return json(route, {
+        items: rows.slice(offset, offset + limit),
+        total: rows.length,
+        limit,
+        offset,
       });
     }
+
     if (url.pathname === "/api/admin/catalog/manufacturers") {
       const manufacturer = {
         id: "manufacturer-new",
@@ -418,7 +452,7 @@ async function installApiMock(page: Page, options: MockOptions) {
 
 test("approved USER navigates catalog with preserved filters and projection detail", async ({ page }) => {
   await installTelegramMock(page);
-  await installApiMock(page, { role: "USER" });
+  const api = await installApiMock(page, { role: "USER" });
   await page.goto("/catalog");
 
   await expect(page.getByRole("heading", { name: "Найти оборудование" })).toBeVisible();
@@ -434,6 +468,26 @@ test("approved USER navigates catalog with preserved filters and projection deta
   await expect(page.getByText("A-01")).toBeVisible();
   await expect(page.getByText("Пётр")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Управление позицией" })).toHaveCount(0);
+
+  expect(
+    api.requestedUrls.some(
+      (url) => url === "/api/inventory/items/item-sfp/summary",
+    ),
+  ).toBe(true);
+
+  const stockRequest = api.requestedUrls.find(
+    (url) => url.startsWith("/api/inventory/stock?"),
+  );
+
+  expect(stockRequest).toBeDefined();
+
+  const stockParams = new URL(
+    stockRequest ?? "",
+    "http://test",
+  ).searchParams;
+
+  expect(stockParams.get("limit")).toBe("50");
+  expect(stockParams.get("offset")).toBe("0");
   await expect.poll(() => page.evaluate(() => (
     (window as unknown as { __stage8Telegram: { visible: boolean } }).__stage8Telegram.visible
   ))).toBe(true);
@@ -512,18 +566,55 @@ test("ADMIN metadata form remains usable in Telegram Desktop narrow", async ({ p
   await assertNoHorizontalOverflow(page);
 });
 
-test("My Equipment shows quantity and serial holdings using internal UUID", async ({ page }, testInfo) => {
+test("My Equipment uses session-scoped grouped holdings", async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== "iphone-like", "iPhone-like holdings acceptance");
+
   await installTelegramMock(page);
   const api = await installApiMock(page, { role: "USER" });
+
   await page.goto("/mine");
 
-  await expect(page.getByRole("heading", { name: "Патч-корд LC" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Сетевая карта" })).toBeVisible();
-  await expect(page.getByText("SN SN-100")).toBeVisible();
-  expect(api.requestedUrls.some((url) => url.includes(`holder_user_id=${userId}`))).toBe(true);
-  expect(api.requestedUrls.every((url) => !url.includes("telegram-alias"))).toBe(true);
-  await expect(page.getByRole("link", { name: /Моё/ })).toHaveAttribute("aria-current", "page");
+  await expect(
+    page.getByRole("heading", { name: "Патч-корд LC" }),
+  ).toBeVisible();
+
+  await expect(
+    page.getByRole("heading", { name: "Сетевая карта" }),
+  ).toBeVisible();
+
+  await expect(
+    page.getByText("SN SN-100"),
+  ).toBeVisible();
+
+  const mineRequests = api.requestedUrls.filter(
+    (url) => url.startsWith("/api/inventory/mine?"),
+  );
+
+  expect(mineRequests.length).toBeGreaterThan(0);
+
+  const uniqueMineRequests = [...new Set(mineRequests)];
+
+  expect(uniqueMineRequests).toEqual([
+    "/api/inventory/mine?limit=20&offset=0",
+  ]);
+
+  for (const mineRequest of mineRequests) {
+    const mineParams = new URL(
+      mineRequest,
+      "http://test",
+    ).searchParams;
+
+    expect(mineParams.get("limit")).toBe("20");
+    expect(mineParams.get("offset")).toBe("0");
+    expect(mineParams.has("holder_user_id")).toBe(false);
+    expect(mineRequest).not.toContain(userId);
+    expect(mineRequest).not.toContain("telegram-alias");
+  }
+
+  await expect(
+    page.getByRole("link", { name: /Моё/ }),
+  ).toHaveAttribute("aria-current", "page");
+
   await assertBottomNavigationClearance(page);
   await assertNoHorizontalOverflow(page);
 });

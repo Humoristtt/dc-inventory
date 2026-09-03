@@ -408,25 +408,94 @@ it("invalidates duplicate review when catalog identity changes", async () => {
 
 it("shows stock by location and custody and lets ADMIN archive without deleting stock", async () => {
   let item = activeItem;
+  const stockRequests: string[] = [];
+
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (url === "/api/catalog/items/item-1") return jsonResponse(item);
-    if (url === "/api/catalog/categories/sfp") return jsonResponse(category);
-    if (url.startsWith("/api/inventory/stock?")) {
-      return jsonResponse({
-        items: [
-          { id: "balance-location", item_id: item.id, item_name: item.name, quantity: 8, location: { location_id: "location-1", code: "A-01", name: "Основная стойка" }, holder: null, updated_at: item.updated_at },
-          { id: "balance-holder", item_id: item.id, item_name: item.name, quantity: 2, location: null, holder: { user_id: "user-2", display_name: "Пётр" }, updated_at: item.updated_at },
-        ],
-        total: 2,
-        limit: 200,
-        offset: 0,
-      });
-    }
-    if (url === "/api/admin/catalog/items/item-1/archive") {
-      item = { ...item, status: "ARCHIVED", archived_at: "2026-09-03T01:00:00Z" };
+
+    if (url === "/api/catalog/items/item-1") {
       return jsonResponse(item);
     }
+
+    if (url === "/api/catalog/categories/sfp") {
+      return jsonResponse(category);
+    }
+
+    if (url === "/api/inventory/items/item-1/summary") {
+      return jsonResponse({
+        available_count: 8,
+        custody_count: 2,
+        total_count: 10,
+      });
+    }
+
+    if (url.startsWith("/api/inventory/stock?")) {
+      stockRequests.push(url);
+
+      const params = new URL(
+        url,
+        "http://test",
+      ).searchParams;
+
+      const offset = Number(params.get("offset") ?? "0");
+
+      if (offset === 0) {
+        return jsonResponse({
+          items: [
+            {
+              id: "balance-location",
+              item_id: item.id,
+              item_name: item.name,
+              quantity: 8,
+              location: {
+                location_id: "location-1",
+                code: "A-01",
+                name: "Основная стойка",
+              },
+              holder: null,
+              updated_at: item.updated_at,
+            },
+          ],
+          total: 2,
+          limit: 50,
+          offset: 0,
+        });
+      }
+
+      if (offset === 1) {
+        return jsonResponse({
+          items: [
+            {
+              id: "balance-holder",
+              item_id: item.id,
+              item_name: item.name,
+              quantity: 2,
+              location: null,
+              holder: {
+                user_id: "user-2",
+                display_name: "Пётр",
+              },
+              updated_at: item.updated_at,
+            },
+          ],
+          total: 2,
+          limit: 50,
+          offset: 1,
+        });
+      }
+
+      throw new Error(`unexpected stock offset ${offset}`);
+    }
+
+    if (url === "/api/admin/catalog/items/item-1/archive") {
+      item = {
+        ...item,
+        status: "ARCHIVED",
+        archived_at: "2026-09-03T01:00:00Z",
+      };
+      return jsonResponse(item);
+    }
+
     throw new Error(`unexpected fetch ${url}`);
   }));
 
@@ -435,15 +504,73 @@ it("shows stock by location and custody and lets ADMIN archive without deleting 
   client.setQueryData(facetKey, { facets: [] });
 
   expect(await screen.findByText("A-01")).toBeInTheDocument();
-  expect(screen.getByText("Пётр")).toBeInTheDocument();
   expect(screen.getByText("Основная стойка")).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: "Редактировать" })).toBeInTheDocument();
+
+  expect(
+    screen.getByText(
+      "Выданные позиции есть — загрузите следующие позиции",
+    ),
+  ).toBeInTheDocument();
+
+  expect(
+    screen.queryByText("Пётр"),
+  ).not.toBeInTheDocument();
+
+  expect(
+    screen.getByRole("link", { name: "Редактировать" }),
+  ).toBeInTheDocument();
+
+  const showMore = screen.getByRole(
+    "button",
+    { name: "Показать ещё позиции" },
+  );
+
+  expect(stockRequests).toHaveLength(1);
+
+  const firstStockParams = new URL(
+    stockRequests[0],
+    "http://test",
+  ).searchParams;
+
+  expect(firstStockParams.get("limit")).toBe("50");
+  expect(firstStockParams.get("offset")).toBe("0");
+
+  fireEvent.click(showMore);
+
+  expect(
+    await screen.findByText("Пётр"),
+  ).toBeInTheDocument();
+
+  expect(stockRequests).toHaveLength(2);
+
+  const secondStockParams = new URL(
+    stockRequests[1],
+    "http://test",
+  ).searchParams;
+
+  expect(secondStockParams.get("limit")).toBe("50");
+  expect(secondStockParams.get("offset")).toBe("1");
 
   fireEvent.click(screen.getByRole("button", { name: "В архив" }));
-  expect(screen.getByText(/Текущий складской остаток.*не удаляются/)).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Подтвердить" }));
-  expect(await screen.findByRole("button", { name: "Вернуть из архива" })).toBeInTheDocument();
-  expect(client.getQueryState(facetKey)?.isInvalidated).toBe(true);
+
+  expect(
+    screen.getByText(/Текущий складской остаток.*не удаляются/),
+  ).toBeInTheDocument();
+
+  fireEvent.click(
+    screen.getByRole("button", { name: "Подтвердить" }),
+  );
+
+  expect(
+    await screen.findByRole(
+      "button",
+      { name: "Вернуть из архива" },
+    ),
+  ).toBeInTheDocument();
+
+  expect(
+    client.getQueryState(facetKey)?.isInvalidated,
+  ).toBe(true);
 });
 
 it("USER item detail hides redacted serial identity for another holder", async () => {
@@ -451,6 +578,8 @@ it("USER item detail hides redacted serial identity for another holder", async (
     ...activeItem,
     accounting_mode: "SERIAL",
   };
+
+  const unitRequests: string[] = [];
 
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
@@ -463,38 +592,53 @@ it("USER item detail hides redacted serial identity for another holder", async (
       return jsonResponse(category);
     }
 
+    if (url === "/api/inventory/items/item-1/summary") {
+      return jsonResponse({
+        available_count: 0,
+        custody_count: 1,
+        total_count: 1,
+      });
+    }
+
     if (url.startsWith("/api/inventory/units?")) {
-      const params = new URL(url, "http://test").searchParams;
+      unitRequests.push(url);
+
+      const params = new URL(
+        url,
+        "http://test",
+      ).searchParams;
 
       if (params.get("state") === "STORED") {
         return jsonResponse({
           items: [],
           total: 0,
-          limit: 200,
+          limit: 50,
           offset: 0,
         });
       }
 
       if (params.get("state") === "ISSUED") {
         return jsonResponse({
-          items: [{
-            id: "foreign-unit",
-            item_id: serialItem.id,
-            item_name: serialItem.name,
-            serial_number: null,
-            wwn: null,
-            comment: null,
-            state: "ISSUED",
-            location: null,
-            holder: {
-              user_id: null,
-              display_name: "Сотрудник",
+          items: [
+            {
+              id: "foreign-unit",
+              item_id: serialItem.id,
+              item_name: serialItem.name,
+              serial_number: null,
+              wwn: null,
+              comment: null,
+              state: "ISSUED",
+              location: null,
+              holder: {
+                user_id: null,
+                display_name: "Сотрудник",
+              },
+              created_at: serialItem.created_at,
+              updated_at: serialItem.updated_at,
             },
-            created_at: serialItem.created_at,
-            updated_at: serialItem.updated_at,
-          }],
+          ],
           total: 1,
-          limit: 200,
+          limit: 50,
           offset: 0,
         });
       }
@@ -515,84 +659,170 @@ it("USER item detail hides redacted serial identity for another holder", async (
   expect(
     await screen.findByText("Сотрудник"),
   ).toBeInTheDocument();
+
   expect(
     await screen.findByText("1 шт."),
   ).toBeInTheDocument();
 
-  expect(screen.queryByText("SN null")).not.toBeInTheDocument();
-  expect(screen.queryByText(/WWN/)).not.toBeInTheDocument();
-  expect(screen.queryByText("Управление позицией")).not.toBeInTheDocument();
+  expect(unitRequests).toHaveLength(2);
+
+  for (const request of unitRequests) {
+    const params = new URL(
+      request,
+      "http://test",
+    ).searchParams;
+
+    expect(params.get("limit")).toBe("50");
+    expect(params.get("offset")).toBe("0");
+  }
+
+  expect(
+    screen.queryByText("SN null"),
+  ).not.toBeInTheDocument();
+
+  expect(
+    screen.queryByText(/WWN/),
+  ).not.toBeInTheDocument();
+
+  expect(
+    screen.queryByText("Управление позицией"),
+  ).not.toBeInTheDocument();
 });
 
-it("USER sees own quantity and serial holdings by internal UUID without Admin controls", async () => {
+it("USER sees own quantity and serial holdings without sending holder identity", async () => {
   const requestedUrls: string[] = [];
+
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
     requestedUrls.push(url);
-    if (url.startsWith("/api/inventory/stock?")) {
+
+    if (url.startsWith("/api/inventory/mine?")) {
       return jsonResponse({
-        items: [{
-          id: "holding-1",
-          item_id: "quantity-item",
-          item_name: "Патч-корд LC",
-          quantity: 4,
-          location: null,
-          holder: { user_id: authState("USER").user.id, display_name: "Иван" },
-          updated_at: "2026-09-03T00:00:00Z",
-        }],
-        total: 1,
-        limit: 200,
+        items: [
+          {
+            item_id: "quantity-item",
+            item_name: "Патч-корд LC",
+            accounting_mode: "QUANTITY",
+            quantity: 4,
+            serial_count: 0,
+            serial_preview: [],
+          },
+          {
+            item_id: "serial-item",
+            item_name: "Сетевая карта",
+            accounting_mode: "SERIAL",
+            quantity: 0,
+            serial_count: 1,
+            serial_preview: [
+              {
+                id: "unit-1",
+                serial_number: "SN-100",
+                wwn: "10:00:00:00:00:01",
+              },
+            ],
+          },
+        ],
+        total: 2,
+        limit: 20,
         offset: 0,
       });
     }
-    if (url.startsWith("/api/inventory/units?")) {
-      return jsonResponse({
-        items: [{
-          id: "unit-1",
-          item_id: "serial-item",
-          item_name: "Сетевая карта",
-          serial_number: "SN-100",
-          wwn: "10:00:00:00:00:01",
-          comment: null,
-          state: "ISSUED",
-          location: null,
-          holder: { user_id: authState("USER").user.id, display_name: "Иван" },
-          created_at: "2026-09-03T00:00:00Z",
-          updated_at: "2026-09-03T00:00:00Z",
-        }],
-        total: 1,
-        limit: 200,
-        offset: 0,
-      });
-    }
+
     throw new Error(`unexpected fetch ${url}`);
   }));
 
   renderRoute("/mine", "USER");
-  expect(await screen.findByRole("heading", { name: "Патч-корд LC" })).toBeInTheDocument();
-  expect(screen.getByRole("heading", { name: "Сетевая карта" })).toBeInTheDocument();
-  expect(screen.getByText("SN SN-100")).toBeInTheDocument();
-  expect(screen.queryByText("Управление позицией")).not.toBeInTheDocument();
-  expect(requestedUrls.every((url) => url.includes(authState("USER").user.id))).toBe(true);
-  expect(requestedUrls.every((url) => !url.includes("telegram-name-must-not-be-used"))).toBe(true);
+
+  expect(
+    await screen.findByRole(
+      "heading",
+      { name: "Патч-корд LC" },
+    ),
+  ).toBeInTheDocument();
+
+  expect(
+    screen.getByRole(
+      "heading",
+      { name: "Сетевая карта" },
+    ),
+  ).toBeInTheDocument();
+
+  expect(
+    screen.getByText("SN SN-100"),
+  ).toBeInTheDocument();
+
+  expect(
+    screen.queryByText("Управление позицией"),
+  ).not.toBeInTheDocument();
+
+  const mineRequests = requestedUrls.filter(
+    (url) => url.startsWith("/api/inventory/mine?"),
+  );
+
+  expect(mineRequests).toHaveLength(1);
+
+  const params = new URL(
+    mineRequests[0],
+    "http://test",
+  ).searchParams;
+
+  expect(params.get("limit")).toBe("20");
+  expect(params.get("offset")).toBe("0");
+  expect(params.has("holder_user_id")).toBe(false);
+
+  expect(
+    mineRequests[0],
+  ).not.toContain(authState("USER").user.id);
+
+  expect(
+    mineRequests[0],
+  ).not.toContain("telegram-name-must-not-be-used");
 });
 
 it("My Equipment exposes empty and retry states", async () => {
-  let failures = 2;
+  let failures = 1;
+
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    if (failures > 0) {
-      failures -= 1;
-      return jsonResponse({ detail: "failed" }, 500);
+
+    if (url.startsWith("/api/inventory/mine?")) {
+      if (failures > 0) {
+        failures -= 1;
+        return jsonResponse(
+          { detail: "failed" },
+          500,
+        );
+      }
+
+      return jsonResponse({
+        items: [],
+        total: 0,
+        limit: 20,
+        offset: 0,
+      });
     }
-    if (url.startsWith("/api/inventory/stock?") || url.startsWith("/api/inventory/units?")) {
-      return jsonResponse({ items: [], total: 0, limit: 200, offset: 0 });
-    }
+
     throw new Error(`unexpected fetch ${url}`);
   }));
 
   renderRoute("/mine", "USER");
-  expect(await screen.findByText("Не удалось загрузить оборудование")).toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
-  expect(await screen.findByText("У вас пока нет оборудования")).toBeInTheDocument();
+
+  expect(
+    await screen.findByText(
+      "Не удалось загрузить оборудование",
+    ),
+  ).toBeInTheDocument();
+
+  fireEvent.click(
+    screen.getByRole(
+      "button",
+      { name: "Повторить" },
+    ),
+  );
+
+  expect(
+    await screen.findByText(
+      "У вас пока нет оборудования",
+    ),
+  ).toBeInTheDocument();
 });

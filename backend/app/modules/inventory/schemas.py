@@ -88,6 +88,34 @@ class InventoryUnitListOut(BaseModel):
     offset: int
 
 
+class InventoryCurrentSummaryOut(BaseModel):
+    available_count: int = Field(ge=0)
+    custody_count: int = Field(ge=0)
+    total_count: int = Field(ge=0)
+
+
+class MyEquipmentSerialPreviewOut(BaseModel):
+    id: UUID
+    serial_number: str
+    wwn: str | None
+
+
+class MyEquipmentPositionOut(BaseModel):
+    item_id: UUID
+    item_name: str
+    accounting_mode: AccountingMode
+    quantity: int = Field(ge=0)
+    serial_count: int = Field(ge=0)
+    serial_preview: list[MyEquipmentSerialPreviewOut]
+
+
+class MyEquipmentListOut(BaseModel):
+    items: list[MyEquipmentPositionOut]
+    total: int = Field(ge=0)
+    limit: int
+    offset: int
+
+
 class MovementLineCreate(StrictRequestModel):
     item_id: UUID | None = None
     quantity: StrictInt | None = None

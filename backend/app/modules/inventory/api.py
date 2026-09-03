@@ -19,6 +19,7 @@ from app.modules.inventory.enums import (
 )
 from app.modules.inventory.models import Location, MovementLine
 from app.modules.inventory.schemas import (
+    InventoryCurrentSummaryOut,
     InventoryUnitListOut,
     InventoryUnitOut,
     LocationCreate,
@@ -30,6 +31,9 @@ from app.modules.inventory.schemas import (
     MovementListOut,
     MovementOut,
     MovementReversalCreate,
+    MyEquipmentListOut,
+    MyEquipmentPositionOut,
+    MyEquipmentSerialPreviewOut,
     StockBalanceListOut,
     StockBalanceOut,
     UserPositionOut,
@@ -44,6 +48,7 @@ from app.modules.inventory.service import (
     create_location,
     create_movement,
     display_identity,
+    get_current_inventory_summary,
     get_inventory_unit_record,
     get_location,
     get_movement_record,
@@ -51,6 +56,7 @@ from app.modules.inventory.service import (
     list_locations,
     list_movements,
     list_stock_balances,
+    list_user_holdings,
     reverse_movement,
     set_location_archived,
 )
@@ -303,6 +309,69 @@ async def get_location_detail(
         return _location_out(await get_location(db, location_id))
     except InventoryError as error:
         _raise_inventory_error(error)
+
+
+@read_router.get(
+    "/items/{item_id}/summary",
+    response_model=InventoryCurrentSummaryOut,
+)
+async def get_item_inventory_summary(
+    item_id: UUID,
+    db: DbSession,
+    _approved: Approved,
+) -> InventoryCurrentSummaryOut:
+    try:
+        summary = await get_current_inventory_summary(db, item_id)
+    except InventoryError as error:
+        _raise_inventory_error(error)
+
+    return InventoryCurrentSummaryOut(
+        available_count=summary.available_count,
+        custody_count=summary.custody_count,
+        total_count=summary.total_count,
+    )
+
+
+@read_router.get(
+    "/mine",
+    response_model=MyEquipmentListOut,
+)
+async def get_my_equipment(
+    db: DbSession,
+    approved: Approved,
+    limit: Annotated[int, Query(ge=1, le=100)] = 20,
+    offset: Annotated[int, Query(ge=0)] = 0,
+) -> MyEquipmentListOut:
+    page = await list_user_holdings(
+        db,
+        holder_user_id=approved.user.id,
+        limit=limit,
+        offset=offset,
+    )
+
+    return MyEquipmentListOut(
+        items=[
+            MyEquipmentPositionOut(
+                item_id=record.item.id,
+                item_name=record.item.name,
+                accounting_mode=record.item.accounting_mode,
+                quantity=record.quantity,
+                serial_count=record.serial_count,
+                serial_preview=[
+                    MyEquipmentSerialPreviewOut(
+                        id=unit.id,
+                        serial_number=unit.serial_number,
+                        wwn=unit.wwn,
+                    )
+                    for unit in record.serial_preview
+                ],
+            )
+            for record in page.items
+        ],
+        total=page.total,
+        limit=limit,
+        offset=offset,
+    )
 
 
 @read_router.get("/stock", response_model=StockBalanceListOut)

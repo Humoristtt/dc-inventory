@@ -199,6 +199,18 @@ gate запускает их явно против уже мигрированн
 
 CI всегда включает этот режим.
 
+Отдельный migration-safety gate проверяет destructive downgrade SFP metadata
+на реальном PostgreSQL 18. Обычный `pytest` этот сценарий пропускает; локальный
+эквивалент required backend CI запускается явно:
+
+    RUN_SFP_DOWNGRADE_POSTGRES=1 \
+    DATABASE_URL=postgresql+asyncpg://...@127.0.0.1:PORT/dc_inventory \
+    pytest -q tests/test_sfp_migration_downgrade_postgres.py
+
+Этот regression обязан доказать как успешный безопасный downgrade/upgrade cycle
+без profile values, так и отказ downgrade при существующих SFP profile values
+без потери данных и без смещения Alembic revision с `head`.
+
 Catalog PostgreSQL checks можно запускать сфокусированно:
 
     RUN_POSTGRES_INTEGRATION=1 \

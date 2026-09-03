@@ -76,6 +76,12 @@ jobs:
           alembic check
           alembic current
 
+      - name: SFP destructive downgrade safety
+        working-directory: backend
+        env:
+          RUN_SFP_DOWNGRADE_POSTGRES: "1"
+        run: pytest -q tests/test_sfp_migration_downgrade_postgres.py
+
       - name: Tests
         working-directory: backend
         env:

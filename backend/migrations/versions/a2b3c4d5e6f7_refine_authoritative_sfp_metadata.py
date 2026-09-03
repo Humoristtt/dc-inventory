@@ -179,13 +179,25 @@ def downgrade() -> None:
     attribute_table = _attribute_table()
     item_attribute_value_table = _item_attribute_value_table()
 
-    op.execute(
-        item_attribute_value_table.delete().where(
+    connection = op.get_bind()
+    profile_value_exists = connection.execute(
+        sa.select(sa.literal(True))
+        .select_from(item_attribute_value_table)
+        .where(
             item_attribute_value_table.c.category_attribute_id.in_(
                 SFP_PROFILE_ATTRIBUTE_IDS
             )
         )
-    )
+        .limit(1)
+    ).scalar_one_or_none()
+
+    if profile_value_exists is not None:
+        raise RuntimeError(
+            "Refusing destructive downgrade of a2b3c4d5e6f7: "
+            "SFP profile attribute values exist. Use a forward fix or "
+            "restore a verified PostgreSQL backup instead."
+        )
+
     op.execute(
         attribute_table.delete().where(
             attribute_table.c.id.in_(SFP_PROFILE_ATTRIBUTE_IDS)

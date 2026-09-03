@@ -713,9 +713,13 @@ Scalar changes и attribute replacement входят в одну API-owned trans
    `MPO/MTP`;
 3. не создаёт Item, InventoryUnit, StockBalance или opening movement и не читает
    внешний workbook;
-4. при downgrade сначала удаляет зависимые ItemAttributeValue новых attributes,
-   затем metadata и только после этого восстанавливает прежний connector
-   vocabulary.
+4. downgrade разрешён только пока ни один из новых SFP attributes не имеет
+   ItemAttributeValue; при наличии хотя бы одного значения migration
+   fail-fast останавливается до destructive DELETE;
+5. безопасный downgrade без profile values удаляет только новую metadata и
+   восстанавливает прежний connector vocabulary. После появления profile
+   values rollback выполняется forward-fix либо восстановлением verified
+   PostgreSQL backup, а не удалением этих значений.
 
 ## Database integrity and delete policy
 

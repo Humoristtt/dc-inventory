@@ -216,7 +216,16 @@ PostgreSQL lock. Эти значения отделены от runtime
 `DATABASE_STATEMENT_TIMEOUT_SECONDS` / `DATABASE_LOCK_TIMEOUT_SECONDS`, потому
 что DDL-миграции и обычные API-транзакции имеют разный профиль выполнения.
 
-Предметные миграции должны быть безопасны для последовательного deploy. Для потенциально разрушительных изменений обязателен backup и заранее определённый rollback/forward-fix plan.
+Предметные миграции должны быть безопасны для последовательного deploy. Для
+потенциально разрушительных изменений обязателен backup и заранее определённый
+rollback/forward-fix plan.
+
+Migration `a2b3c4d5e6f7` допускает schema downgrade только пока новые SFP
+profile attributes не содержат данных. Если существует хотя бы один такой
+`ItemAttributeValue`, downgrade fail-fast завершается без удаления значений.
+В этом состоянии production rollback выполняется forward-fix либо
+восстановлением verified PostgreSQL backup; destructive Alembic downgrade
+не является допустимым rollback path.
 
 ## Проверка после deploy
 

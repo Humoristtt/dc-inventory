@@ -171,6 +171,21 @@ export function prepareTelegramWebApp(): TelegramWebApp | null {
   return webApp;
 }
 
+export function requestTelegramFullscreen(): boolean {
+  const webApp = getTelegramWebApp();
+
+  if (webApp?.requestFullscreen === undefined) {
+    return false;
+  }
+
+  try {
+    webApp.requestFullscreen();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function applyTelegramSafeArea(webApp: TelegramWebApp | null): void {
   const inset = webApp?.contentSafeAreaInset ?? webApp?.safeAreaInset;
   if (inset === undefined) {

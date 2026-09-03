@@ -25,6 +25,7 @@ import {
 import {
   getTelegramInitData,
   getTelegramWebAppSdkLoadStatus,
+  loadTelegramWebAppSdk,
   openTelegramContact,
   prepareTelegramWebApp,
 } from "../../shared/telegram/webApp";
@@ -419,10 +420,18 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
   }
 
   if (authQuery.isError) {
+    const retryAuth = async () => {
+      if (authQuery.error instanceof TelegramSdkUnavailableError) {
+        await loadTelegramWebAppSdk();
+        prepareTelegramWebApp();
+      }
+      await authQuery.refetch();
+    };
+
     return (
       <ErrorScreen
         retry={() => {
-          void authQuery.refetch();
+          void retryAuth();
         }}
         telegramRequired={
           authQuery.error instanceof TelegramContextRequiredError

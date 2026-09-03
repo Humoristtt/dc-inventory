@@ -470,31 +470,62 @@ it("late PENDING request response не понижает свежий APPROVED au
   expect(await screen.findByText("Каталог доступен")).toBeInTheDocument();
 });
 
-it("отличает сбой загрузки Telegram SDK от запуска вне Telegram", async () => {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (input: RequestInfo | URL) => {
-      const url = String(input);
+it("повторно загружает Telegram SDK после ошибки и восстанавливает auth", async () => {
+  const ready = vi.fn();
+  const expand = vi.fn();
+  let authMeCalls = 0;
 
-      if (url === "/api/auth/me") {
-        return new Response(null, { status: 401 });
-      }
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
 
-      throw new Error(`unexpected fetch: ${url}`);
-    }),
-  );
+    if (url === "/api/auth/me") {
+      authMeCalls += 1;
+      return new Response(null, { status: 401 });
+    }
 
-  const sdkPromise = loadTelegramWebAppSdk();
+    if (url === "/api/auth/telegram") {
+      return new Response(
+        JSON.stringify({
+          user: {
+            id: "00000000-0000-0000-0000-000000000008",
+            telegram_user_id: 1008,
+            username: "sdk-recovered",
+            first_name: "Recovered",
+            last_name: null,
+            role: "USER",
+            access_status: "APPROVED",
+          },
+          support,
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        },
+      );
+    }
 
-  const script =
+    throw new Error(`unexpected fetch: ${url}`);
+  });
+
+  vi.stubGlobal("fetch", fetchMock);
+
+  const firstSdkPromise = loadTelegramWebAppSdk();
+
+  const firstScript =
     document.querySelector<HTMLScriptElement>(
       `script[src="${TELEGRAM_WEB_APP_SDK_PATH}"]`,
     );
 
-  expect(script).not.toBeNull();
+  expect(firstScript).not.toBeNull();
 
-  script?.dispatchEvent(new Event("error"));
-  await sdkPromise;
+  firstScript?.dispatchEvent(new Event("error"));
+  await firstSdkPromise;
+
+  expect(
+    document.querySelector(
+      `script[src="${TELEGRAM_WEB_APP_SDK_PATH}"]`,
+    ),
+  ).toBeNull();
 
   renderGate();
 
@@ -511,4 +542,45 @@ it("отличает сбой загрузки Telegram SDK от запуска 
       { name: "Откройте приложение через Telegram" },
     ),
   ).not.toBeInTheDocument();
+
+  fireEvent.click(
+    screen.getByRole("button", { name: "Повторить" }),
+  );
+
+  const retryScript = await waitFor(() => {
+    const script =
+      document.querySelector<HTMLScriptElement>(
+        `script[src="${TELEGRAM_WEB_APP_SDK_PATH}"]`,
+      );
+
+    if (script === null) {
+      throw new Error("retry Telegram SDK script was not mounted");
+    }
+
+    return script;
+  });
+
+  expect(retryScript).not.toBe(firstScript);
+
+  window.Telegram = {
+    WebApp: {
+      initData: "query_id=recovered&auth_date=1&hash=recovered",
+      ready,
+      expand,
+    },
+  };
+
+  retryScript?.dispatchEvent(new Event("load"));
+
+  expect(
+    await screen.findByText("Каталог доступен"),
+  ).toBeInTheDocument();
+
+  expect(authMeCalls).toBeGreaterThanOrEqual(2);
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/auth/telegram",
+    expect.objectContaining({ method: "POST" }),
+  );
+  expect(ready).toHaveBeenCalledTimes(1);
+  expect(expand).toHaveBeenCalledTimes(1);
 });

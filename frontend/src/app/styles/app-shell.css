@@ -1,13 +1,23 @@
 .app-shell {
   min-height: 100vh;
   min-height: 100dvh;
-  background: var(--color-paper);
+  background: #0d0c09;
 }
 
 .app-shell__content {
+  width: min(100%, var(--app-shell-width));
   min-height: 100vh;
   min-height: 100dvh;
+  margin: 0 auto;
   padding-bottom: calc(var(--bottom-nav-height) + var(--safe-area-bottom) + 18px);
+  background: var(--color-paper);
+  box-shadow: 0 0 64px rgb(0 0 0 / 24%);
+}
+
+@media (max-width: 1599px) {
+  .app-shell__content {
+    box-shadow: none;
+  }
 }
 
 .bottom-nav {

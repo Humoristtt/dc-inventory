@@ -281,6 +281,7 @@ export function FilterSheet({
           <button
             aria-label="Закрыть фильтры"
             className="icon-button"
+            data-escape-dismiss=""
             onClick={onCancel}
             type="button"
           >

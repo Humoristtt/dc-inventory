@@ -33,6 +33,7 @@ export function SortSheet({ active, onSelect, onCancel }: SortSheetProps) {
           <button
             aria-label="Закрыть сортировку"
             className="icon-button"
+            data-escape-dismiss=""
             onClick={onCancel}
             type="button"
           >

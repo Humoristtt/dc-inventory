@@ -9,6 +9,7 @@ import {
 
 import {
   TELEGRAM_WEB_APP_SDK_PATH,
+  bindDesktopEscapeGuard,
   bindTelegramBackButton,
   getTelegramWebAppSdkLoadStatus,
   loadTelegramWebAppSdk,
@@ -132,6 +133,72 @@ describe("Telegram Web App SDK delivery", () => {
     expect(ready).toHaveBeenCalledTimes(1);
     expect(expand).toHaveBeenCalledTimes(1);
     expect(document.documentElement.style.getPropertyValue("--app-safe-area-bottom")).toBe("18px");
+  });
+
+  it("requests real fullscreen on Telegram Desktop when supported", () => {
+    const ready = vi.fn();
+    const expand = vi.fn();
+    const requestFullscreen = vi.fn();
+
+    window.Telegram = {
+      WebApp: {
+        initData: "query_id=test",
+        ready,
+        expand,
+        platform: "tdesktop",
+        isFullscreen: false,
+        requestFullscreen,
+      },
+    };
+
+    prepareTelegramWebApp();
+
+    expect(ready).toHaveBeenCalledTimes(1);
+    expect(expand).toHaveBeenCalledTimes(1);
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not force fullscreen on mobile Telegram", () => {
+    const requestFullscreen = vi.fn();
+
+    window.Telegram = {
+      WebApp: {
+        initData: "query_id=test",
+        ready: vi.fn(),
+        expand: vi.fn(),
+        platform: "ios",
+        isFullscreen: false,
+        requestFullscreen,
+      },
+    };
+
+    prepareTelegramWebApp();
+
+    expect(requestFullscreen).not.toHaveBeenCalled();
+  });
+
+  it("consumes Escape and dismisses the top internal layer", () => {
+    const dismiss = document.createElement("button");
+    const onDismiss = vi.fn();
+
+    dismiss.setAttribute("data-escape-dismiss", "");
+    dismiss.addEventListener("click", onDismiss);
+    document.body.append(dismiss);
+
+    const cleanup = bindDesktopEscapeGuard();
+    const event = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+
+    window.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(onDismiss).toHaveBeenCalledTimes(1);
+
+    cleanup();
+    dismiss.remove();
   });
 
   it("subscribes and unsubscribes Telegram BackButton", () => {

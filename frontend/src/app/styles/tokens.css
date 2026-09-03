@@ -26,7 +26,8 @@
   --radius-control: 14px;
   --page-inline: clamp(14px, 3.8vw, 28px);
   --page-block: clamp(16px, 3vh, 28px);
-  --content-width: 880px;
+  --app-shell-width: 1600px;
+  --content-width: 1280px;
   --bottom-nav-height: 68px;
   --shadow-card: 0 12px 30px rgb(34 21 0 / 8%);
 

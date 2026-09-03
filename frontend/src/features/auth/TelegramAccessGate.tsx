@@ -23,6 +23,7 @@ import {
   type SupportContact,
 } from "../../shared/api/auth";
 import {
+  bindDesktopEscapeGuard,
   getTelegramInitData,
   getTelegramWebAppSdkLoadStatus,
   loadTelegramWebAppSdk,
@@ -325,6 +326,7 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
 
   useEffect(() => {
     prepareTelegramWebApp();
+    return bindDesktopEscapeGuard();
   }, []);
 
   const authQuery = useQuery({

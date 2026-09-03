@@ -178,3 +178,87 @@ it("Apply возвращает только filter-owned state", () => {
   expect(onApply.mock.calls[0]?.[0]).not.toHaveProperty("sort");
   expect(onApply.mock.calls[0]?.[0]).not.toHaveProperty("order");
 });
+
+it("скрывает facet-группы без доступных значений или range bounds", () => {
+  const emptyFacets: CatalogFacet[] = [
+    {
+      key: "manufacturer",
+      label: "Производитель",
+      data_type: "TEXT",
+      unit: null,
+      filter_type: "EXACT",
+      values: [],
+      min: null,
+      max: null,
+    },
+    {
+      key: "length",
+      label: "Длина backend",
+      data_type: "DECIMAL",
+      unit: "м",
+      filter_type: "RANGE",
+      values: [],
+      min: null,
+      max: null,
+    },
+  ];
+
+  render(
+    <FilterSheet
+      active={defaultCatalogFilterState}
+      attributes={attributes}
+      facets={emptyFacets}
+      onApply={vi.fn()}
+      onCancel={vi.fn()}
+    />,
+  );
+
+  expect(screen.queryByText("Производитель")).not.toBeInTheDocument();
+  expect(screen.queryByLabelText("Длина: от")).not.toBeInTheDocument();
+  expect(
+    screen.getByText("Для этой выборки фильтры недоступны."),
+  ).toBeInTheDocument();
+});
+
+it("не скрывает пустой facet, если в нём уже есть активный фильтр", () => {
+  const active: CatalogFilterState = {
+    ...defaultCatalogFilterState,
+    manufacturerIds: ["m-1"],
+    filters: [{ key: "length", operator: "gte", value: "2.5" }],
+  };
+  const emptyFacets: CatalogFacet[] = [
+    {
+      key: "manufacturer",
+      label: "Производитель",
+      data_type: "TEXT",
+      unit: null,
+      filter_type: "EXACT",
+      values: [],
+      min: null,
+      max: null,
+    },
+    {
+      key: "length",
+      label: "Длина backend",
+      data_type: "DECIMAL",
+      unit: "м",
+      filter_type: "RANGE",
+      values: [],
+      min: null,
+      max: null,
+    },
+  ];
+
+  render(
+    <FilterSheet
+      active={active}
+      attributes={attributes}
+      facets={emptyFacets}
+      onApply={vi.fn()}
+      onCancel={vi.fn()}
+    />,
+  );
+
+  expect(screen.getByLabelText("m-1")).toBeChecked();
+  expect(screen.getByLabelText("Длина: от")).toHaveValue(2.5);
+});

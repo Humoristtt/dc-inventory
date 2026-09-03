@@ -32,6 +32,7 @@ import { useCatalogItems } from "../../features/catalog/useCatalogItems";
 import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
 import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
+import { getTelegramWebApp } from "../../shared/telegram/webApp";
 
 export function CategoryPage() {
   const { categoryKey = "" } = useParams();
@@ -45,6 +46,7 @@ export function CategoryPage() {
   const [sortOpen, setSortOpen] = useState(false);
   const location = useLocation();
   const navigateBack = useInternalBackNavigation();
+  const telegramOwnsBack = getTelegramWebApp()?.BackButton !== undefined;
 
   const categoryQuery = useQuery({
     queryKey: ["catalog", "category", categoryKey],
@@ -70,9 +72,16 @@ export function CategoryPage() {
     <main className="catalog-page category-page">
       <header className="category-header">
         <div className="page-toolbar">
-          <button aria-label="Назад в каталог" className="icon-button icon-button--light" onClick={navigateBack} type="button">
-            ←
-          </button>
+          {!telegramOwnsBack ? (
+            <button
+              aria-label="Назад в каталог"
+              className="icon-button icon-button--light"
+              onClick={navigateBack}
+              type="button"
+            >
+              ←
+            </button>
+          ) : null}
           <SpikatelBrand inverse subtitle="Каталог оборудования" />
         </div>
         <div className="category-header__title">

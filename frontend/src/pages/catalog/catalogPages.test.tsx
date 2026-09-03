@@ -308,6 +308,33 @@ it("category request содержит key, а смена сортировки м
   });
 });
 
+it("не дублирует inline back, когда навигацию назад предоставляет Telegram", async () => {
+  const backButton = {
+    show: vi.fn(),
+    hide: vi.fn(),
+    onClick: vi.fn(),
+    offClick: vi.fn(),
+  };
+
+  window.Telegram = {
+    WebApp: {
+      initData: "signed",
+      ready: vi.fn(),
+      expand: vi.fn(),
+      BackButton: backButton,
+    },
+  };
+
+  vi.stubGlobal("fetch", vi.fn(catalogFetch));
+  renderRoutes("/catalog/sfp");
+
+  expect(await screen.findByRole("heading", { name: "MFM1T02A-LR" })).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Назад в каталог" }),
+  ).not.toBeInTheDocument();
+  expect(backButton.show).toHaveBeenCalled();
+});
+
 it("pending debounce не откатывает более новую сортировку", async () => {
   vi.stubGlobal("fetch", vi.fn(catalogFetch));
   renderRoutes("/catalog/sfp", routesWithLocationProbe());

@@ -18,6 +18,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base
 
+START_WELCOME_DEDUPE_PREFIX = "telegram-start-welcome:"
+
 
 class TelegramUpdate(Base):
     __tablename__ = "telegram_updates"
@@ -40,6 +42,48 @@ class TelegramUpdate(Base):
         server_default=func.now(),
     )
     processed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class TelegramChatState(Base):
+    __tablename__ = "telegram_chat_states"
+    __table_args__ = (
+        CheckConstraint(
+            "latest_start_update_id >= 0",
+            name="latest_start_update_id_non_negative",
+        ),
+        CheckConstraint(
+            "(last_welcome_message_id IS NULL "
+            "AND last_welcome_sent_at IS NULL) "
+            "OR (last_welcome_message_id IS NOT NULL "
+            "AND last_welcome_sent_at IS NOT NULL)",
+            name="last_welcome_pair",
+        ),
+    )
+
+    chat_id: Mapped[int] = mapped_column(
+        BigInteger,
+        primary_key=True,
+        autoincrement=False,
+    )
+    latest_start_update_id: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+    )
+    last_welcome_message_id: Mapped[int | None] = mapped_column(BigInteger)
+    last_welcome_sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True)
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
 
 
 class AccessDecisionCallback(Base):

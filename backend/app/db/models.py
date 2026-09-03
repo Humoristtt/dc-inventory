@@ -17,7 +17,11 @@ from app.modules.inventory.models import (
     StockBalance,
 )
 from app.modules.notifications.models import NotificationOutbox
-from app.modules.telegram_bot.models import AccessDecisionCallback, TelegramUpdate
+from app.modules.telegram_bot.models import (
+    AccessDecisionCallback,
+    TelegramChatState,
+    TelegramUpdate,
+)
 
 __all__ = [
     "AccessDecisionCallback",
@@ -34,6 +38,7 @@ __all__ = [
     "MovementLine",
     "NotificationOutbox",
     "StockBalance",
+    "TelegramChatState",
     "TelegramIdentity",
     "TelegramUpdate",
     "User",

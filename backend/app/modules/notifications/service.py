@@ -14,6 +14,7 @@ from app.modules.notifications.models import NotificationOutbox
 ALLOWED_TELEGRAM_METHODS = frozenset(
     {
         "sendMessage",
+        "deleteMessage",
         "editMessageText",
         "editMessageReplyMarkup",
         "answerCallbackQuery",
@@ -31,6 +32,7 @@ class ClaimedNotification:
     claim_token: uuid.UUID
     method: str
     payload: dict[str, object]
+    dedupe_key: str
     attempts: int
 
 
@@ -153,6 +155,7 @@ async def claim_notification_batch(
                 claim_token=token,
                 method=row.method,
                 payload=row.payload,
+                dedupe_key=row.dedupe_key,
                 attempts=row.attempts,
             )
         )

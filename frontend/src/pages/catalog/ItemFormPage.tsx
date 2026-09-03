@@ -6,6 +6,7 @@ import {
 import {
   type FormEvent,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import {
@@ -64,6 +65,11 @@ type CommonDraft = {
   technicalDataSource: string;
 };
 
+type DuplicateReview = {
+  candidates: DuplicateCandidate[];
+  identityKey: string;
+};
+
 const emptyDraft: CommonDraft = {
   categoryKey: "",
   manufacturerId: "",
@@ -97,6 +103,31 @@ function draftFromItem(item: CatalogItem): CommonDraft {
 function nullable(value: string): string | null {
   return value.trim() === "" ? null : value;
 }
+
+const duplicateIdentityFields = new Set<keyof CommonDraft>([
+  "categoryKey",
+  "manufacturerId",
+  "name",
+  "model",
+  "manufacturerPartNumber",
+]);
+
+function duplicateIdentity(draft: CommonDraft) {
+  return {
+    category_key: draft.categoryKey,
+    manufacturer_id: draft.manufacturerId || null,
+    manufacturer_part_number: nullable(draft.manufacturerPartNumber),
+    name: draft.name,
+    model: nullable(draft.model),
+  };
+}
+
+function duplicateIdentityKey(draft: CommonDraft): string {
+  return JSON.stringify(duplicateIdentity(draft));
+}
+
+const staleDuplicateCheckMessage =
+  "Данные формы изменились во время проверки дублей. Проверьте их и повторите проверку.";
 
 function errorMessage(error: unknown): string {
   if (!(error instanceof ApiRequestError)) {
@@ -247,9 +278,10 @@ export function ItemFormPage() {
   const [manufacturerFormOpen, setManufacturerFormOpen] = useState(false);
   const [manufacturerName, setManufacturerName] = useState("");
   const [manufacturerError, setManufacturerError] = useState<string | null>(null);
-  const [duplicateCandidates, setDuplicateCandidates] = useState<DuplicateCandidate[]>([]);
+  const [duplicateReview, setDuplicateReview] = useState<DuplicateReview | null>(null);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const formRevisionRef = useRef(0);
 
   const itemQuery = useQuery({
     queryKey: ["catalog", "item", itemId],
@@ -329,6 +361,8 @@ export function ItemFormPage() {
   const manufacturerMutation = useMutation({
     mutationFn: (name: string) => createCatalogManufacturer(name),
     onSuccess: (manufacturer) => {
+      formRevisionRef.current += 1;
+      setDuplicateReview(null);
       queryClient.setQueryData<ManufacturerPage>(
         ["catalog", "manufacturers", "all"],
         (current) => {
@@ -474,28 +508,43 @@ export function ItemFormPage() {
       return;
     }
     setSaveError(null);
+    setDuplicateReview(null);
+
+    const checkedRevision = formRevisionRef.current;
+    const checkedIdentity = duplicateIdentity(draft);
+    const checkedIdentityKey = JSON.stringify(checkedIdentity);
+
     setCheckingDuplicates(true);
     try {
-      const result = await checkCatalogDuplicates({
-        category_key: draft.categoryKey,
-        manufacturer_id: draft.manufacturerId || null,
-        manufacturer_part_number: nullable(draft.manufacturerPartNumber),
-        name: draft.name,
-        model: nullable(draft.model),
-      });
+      const result = await checkCatalogDuplicates(checkedIdentity);
+
+      if (formRevisionRef.current !== checkedRevision) {
+        setSaveError(staleDuplicateCheckMessage);
+        return;
+      }
+
       if (result.candidates.length > 0) {
-        setDuplicateCandidates(result.candidates);
+        setDuplicateReview({
+          candidates: result.candidates,
+          identityKey: checkedIdentityKey,
+        });
       } else {
         save(attributes);
       }
     } catch (error) {
-      setSaveError(errorMessage(error));
+      if (formRevisionRef.current === checkedRevision) {
+        setSaveError(errorMessage(error));
+      }
     } finally {
       setCheckingDuplicates(false);
     }
   };
 
   const updateDraft = <K extends keyof CommonDraft>(key: K, value: CommonDraft[K]) => {
+    formRevisionRef.current += 1;
+    if (duplicateIdentityFields.has(key)) {
+      setDuplicateReview(null);
+    }
     setDraftState((current) => ({ ...(current ?? draft), [key]: value }));
     setFieldErrors((current) => ({ ...current, [key]: "" }));
     setSaveError(null);
@@ -657,6 +706,7 @@ export function ItemFormPage() {
               error={attributeErrors[attribute.key]}
               key={attribute.id}
               onChange={(value) => {
+                formRevisionRef.current += 1;
                 setAttributeDraftState((current) => {
                   const base = current ?? attributeDraft;
                   if (value === undefined) {
@@ -706,16 +756,16 @@ export function ItemFormPage() {
         </div>
       </form>
 
-      {duplicateCandidates.length > 0 ? (
+      {duplicateReview !== null ? (
         <div className="sheet-backdrop" role="presentation">
           <section aria-labelledby="duplicate-title" aria-modal="true" className="sheet duplicate-sheet" role="dialog">
             <header className="sheet__header">
               <div><span className="section-kicker">Проверка дублей</span><h2 id="duplicate-title">Похожие позиции уже есть</h2></div>
-              <button aria-label="Закрыть предупреждение" className="icon-button" onClick={() => setDuplicateCandidates([])} type="button">×</button>
+              <button aria-label="Закрыть предупреждение" className="icon-button" onClick={() => setDuplicateReview(null)} type="button">×</button>
             </header>
             <div className="sheet__body duplicate-sheet__body">
               <p>Проверьте совпадения. Введённые данные сохранены в форме.</p>
-              {duplicateCandidates.map((candidate) => (
+              {duplicateReview.candidates.map((candidate) => (
                 <article className="duplicate-card" key={candidate.item_id}>
                   <strong>{candidate.manufacturer_name ?? "Без производителя"} · {candidate.model ?? candidate.name}</strong>
                   <span>{candidate.name}</span>
@@ -725,14 +775,20 @@ export function ItemFormPage() {
               ))}
             </div>
             <footer className="sheet__footer">
-              <button className="button button--ghost" onClick={() => setDuplicateCandidates([])} type="button">Вернуться</button>
+              <button className="button button--ghost" onClick={() => setDuplicateReview(null)} type="button">Вернуться</button>
               <button
                 className="button button--dark"
                 disabled={saveMutation.isPending}
                 onClick={() => {
+                  if (duplicateReview.identityKey !== duplicateIdentityKey(draft)) {
+                    setDuplicateReview(null);
+                    setSaveError(staleDuplicateCheckMessage);
+                    return;
+                  }
+
                   const attributes = validate();
                   if (attributes !== null) {
-                    setDuplicateCandidates([]);
+                    setDuplicateReview(null);
                     save(attributes);
                   }
                 }}

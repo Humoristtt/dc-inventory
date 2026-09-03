@@ -139,6 +139,14 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((promiseResolve) => {
+    resolve = promiseResolve;
+  });
+  return { promise, resolve };
+}
+
 function renderRoute(path: string, role: "USER" | "ADMIN") {
   const client = new QueryClient({
     defaultOptions: {
@@ -248,6 +256,149 @@ it("ADMIN creates metadata-driven item after inline manufacturer and duplicate w
       connector: "MPO/PC",
     },
   });
+});
+
+it("ignores a stale duplicate-check response when the form changes in flight", async () => {
+  const duplicateResponse = deferred<Response>();
+  let duplicateChecks = 0;
+  let createCalls = 0;
+
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url === "/api/catalog/categories") return jsonResponse([category]);
+    if (url === "/api/catalog/categories/sfp") return jsonResponse(category);
+    if (url.startsWith("/api/catalog/manufacturers?")) {
+      return jsonResponse({ items: [], total: 0, limit: 200, offset: 0 });
+    }
+    if (url === "/api/admin/catalog/items/check-duplicates") {
+      duplicateChecks += 1;
+      return duplicateResponse.promise;
+    }
+    if (url === "/api/admin/catalog/items") {
+      createCalls += 1;
+      return jsonResponse(activeItem, 201);
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  }));
+
+  renderRoute("/catalog/new?category=sfp", "ADMIN");
+
+  fireEvent.change(await screen.findByLabelText(/^Название/), {
+    target: { value: "Позиция A" },
+  });
+  fireEvent.change(screen.getByLabelText("Модель"), {
+    target: { value: "MODEL-A" },
+  });
+  fireEvent.change(screen.getByLabelText(/^Скорость/), {
+    target: { value: "25000" },
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: "Проверить и создать" }));
+
+  await waitFor(() => expect(duplicateChecks).toBe(1));
+
+  fireEvent.change(screen.getByLabelText(/^Название/), {
+    target: { value: "Позиция B" },
+  });
+
+  duplicateResponse.resolve(jsonResponse({
+    candidates: [{
+      item_id: "candidate-a",
+      name: "Позиция A",
+      model: "MODEL-A",
+      manufacturer_id: null,
+      manufacturer_name: null,
+      manufacturer_part_number: null,
+      reason: "same_category_manufacturer_name_model",
+    }],
+  }));
+
+  expect(
+    await screen.findByText(
+      "Данные формы изменились во время проверки дублей. Проверьте их и повторите проверку.",
+    ),
+  ).toBeInTheDocument();
+
+  expect(
+    screen.queryByRole("heading", { name: "Похожие позиции уже есть" }),
+  ).not.toBeInTheDocument();
+
+  expect(createCalls).toBe(0);
+});
+
+it("invalidates duplicate review when catalog identity changes", async () => {
+  let duplicateChecks = 0;
+  let createCalls = 0;
+
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url === "/api/catalog/categories") return jsonResponse([category]);
+    if (url === "/api/catalog/categories/sfp") return jsonResponse(category);
+    if (url.startsWith("/api/catalog/manufacturers?")) {
+      return jsonResponse({ items: [], total: 0, limit: 200, offset: 0 });
+    }
+    if (url === "/api/admin/catalog/items/check-duplicates") {
+      duplicateChecks += 1;
+      return jsonResponse({
+        candidates: [{
+          item_id: `candidate-${duplicateChecks}`,
+          name: duplicateChecks === 1 ? "Позиция A" : "Позиция B",
+          model: duplicateChecks === 1 ? "MODEL-A" : "MODEL-B",
+          manufacturer_id: null,
+          manufacturer_name: null,
+          manufacturer_part_number: null,
+          reason: "same_category_manufacturer_name_model",
+        }],
+      });
+    }
+    if (url === "/api/admin/catalog/items") {
+      createCalls += 1;
+      return jsonResponse(activeItem, 201);
+    }
+    throw new Error(`unexpected fetch ${url}`);
+  }));
+
+  renderRoute("/catalog/new?category=sfp", "ADMIN");
+
+  fireEvent.change(await screen.findByLabelText(/^Название/), {
+    target: { value: "Позиция A" },
+  });
+  fireEvent.change(screen.getByLabelText("Модель"), {
+    target: { value: "MODEL-A" },
+  });
+  fireEvent.change(screen.getByLabelText(/^Скорость/), {
+    target: { value: "25000" },
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: "Проверить и создать" }));
+
+  expect(
+    await screen.findByRole("heading", { name: "Похожие позиции уже есть" }),
+  ).toBeInTheDocument();
+  expect(duplicateChecks).toBe(1);
+
+  fireEvent.change(screen.getByLabelText(/^Название/), {
+    target: { value: "Позиция B" },
+  });
+  fireEvent.change(screen.getByLabelText("Модель"), {
+    target: { value: "MODEL-B" },
+  });
+
+  expect(
+    screen.queryByRole("heading", { name: "Похожие позиции уже есть" }),
+  ).not.toBeInTheDocument();
+
+  fireEvent.click(screen.getByRole("button", { name: "Проверить и создать" }));
+
+  await waitFor(() => expect(duplicateChecks).toBe(2));
+
+  expect(
+    await screen.findByRole("heading", { name: "Похожие позиции уже есть" }),
+  ).toBeInTheDocument();
+
+  expect(createCalls).toBe(0);
 });
 
 it("shows stock by location and custody and lets ADMIN archive without deleting stock", async () => {

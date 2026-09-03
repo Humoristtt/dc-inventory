@@ -49,12 +49,18 @@ Application role.
 
 Warehouse mutation privileges отсутствуют.
 
-## Current migration head
+## Current production baseline
 
-    d9e0f1a2b3c4
+Source:
 
-Stages 4–7 развёрнуты в production. Stage 7 Catalog Read API / Search / Filters
-закрыт; текущий продуктовый этап — Stage 8 Working Mini App UX.
+    c8d77f8cf34f89b7e54f668619319db26de5fc0b
+
+Migration head:
+
+    f1a2b3c4d5e6
+
+Stages 4–7, Stage 8A Working Catalog UX и branded Telegram `/start` entry flow
+развёрнуты и приняты в production. Следующий продуктовый slice — Stage 8B.
 
 ## Deploy sequence
 
@@ -111,7 +117,13 @@ Outgoing:
 
 Production `TELEGRAM_GATEWAY_URL` обязан быть HTTPS.
 
-После Telegram runtime changes минимум проверяется `/start`.
+После Telegram runtime changes минимум проверяется `/start`: incoming command
+удаляется, branded `sendPhoto` welcome приходит с ожидаемой caption/button и
+Mini App открывается по WebApp CTA.
+
+Текущая production Cloudflare Telegram Gateway version:
+
+    a738702b-e731-48be-9576-e3485d1239f4
 
 После access-flow changes:
 
@@ -172,6 +184,13 @@ Canonical script:
 
 Automated production PostgreSQL backup пока не является закрытым acceptance
 gate.
+
+Локальные pre-deploy rollback dumps на production VM используются как
+операционный checkpoint, но **не заменяют** automated off-VM backup и real
+restore acceptance. Последний Stage 8A/start checkpoint:
+`pre-start-image-c8d77f8.dump`, SHA-256
+`0f70a52f874b7b7f1437314089c0e6115126aa8d12658e185e866b6f9bb65c4f`,
+`pg_restore --list` PASS.
 
 Следовательно:
 
@@ -240,8 +259,8 @@ Data-integrity blocker. Inventory mutations останавливаются.
 ## Перед первым real inventory entry
 
 - [x] Stage 6 merged;
-- [x] production deploy Stages 4–7 PASS;
-- [x] migration head `d9e0f1a2b3c4` verified;
+- [x] production deploy Stages 4–7 + Stage 8A + Telegram entry UX PASS;
+- [x] migration head `f1a2b3c4d5e6` verified;
 - [x] DB roles verified;
 - [x] Telegram smoke PASS;
 - [x] maintenance iteration PASS;
@@ -250,6 +269,7 @@ Data-integrity blocker. Inventory mutations останавливаются.
 - [ ] real restore PASS;
 - [ ] reconciliation zero drift;
 - [x] branch protection configured;
-- [x] production source clean/current на Stage 7 production SHA.
+- [x] production source clean/current на
+  `c8d77f8cf34f89b7e54f668619319db26de5fc0b`.
 
 Только после этого production-data gate можно снять.

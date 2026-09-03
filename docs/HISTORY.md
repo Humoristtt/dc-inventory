@@ -345,6 +345,34 @@
   typecheck PASS, focused regressions `17/17`, full frontend suite `39/39`,
   production build PASS и `git diff --check` PASS.
 - Focused remediation review закрыт с `P0=0`, `P1=0`.
-- Stage 8 остаётся текущим: Stage 8A ожидает PR CI / merge / production deploy;
-  Stage 8B Admin catalog forms, stock/holder/«Моё» и финальный browser
-  viewport/Playwright gate ещё не выполнены.
+- PR #15 Stage 8A прошёл required CI, merged и был развёрнут в production.
+- Реальный Telegram Mini App viewport smoke подтвердил catalog landing,
+  safe-area, bottom navigation, category/filter sheet и public frontend path.
+- Production smoke выявил оставшийся viewport polish: пустые facet sections,
+  duplicated inline/native Telegram BackButton и browser-native number
+  steppers.
+- PR #17 закрыл эти findings; локальный gate после remediation:
+  lint `0 warnings / 0 errors`, typecheck PASS, focused tests `17/17`,
+  full frontend suite `42/42`, production build PASS.
+- Telegram entry UX завершён отдельным parallel slice: PR #16 добавил persistent
+  `/start` state, deletion/replacement semantics и stale-start collapse;
+  PRs #18/#19 уточнили message-effect behavior; PR #20 добавил финальную
+  branded image-card через `sendPhoto`.
+- Production PostgreSQL последовательно доведён до migration head
+  `f1a2b3c4d5e6`.
+- Перед финальной `/start` migration создан rollback checkpoint
+  `/home/install/.dc-inventory-db-backups/pre-start-image-c8d77f8.dump`;
+  размер 105K, SHA-256
+  `0f70a52f874b7b7f1437314089c0e6115126aa8d12658e185e866b6f9bb65c4f`;
+  `pg_restore --list` внутри PostgreSQL container PASS.
+- Финальный production source:
+  `c8d77f8cf34f89b7e54f668619319db26de5fc0b`.
+- Production runtime checkpoint: backend/web/PostgreSQL healthy,
+  telegram-worker/maintenance-worker running, health/live/ready PASS.
+- Cloudflare Telegram Gateway production version:
+  `a738702b-e731-48be-9576-e3485d1239f4`.
+- Mac, GitHub и production checkout синхронизированы с `main`; obsolete
+  Stage 8A/start branches удалены и production remote-tracking refs pruned.
+- Stage 8A и branded Telegram entry UX production accepted 2026-09-03.
+  Следующий продуктовый slice — Stage 8B. Full Playwright multi-viewport/E2E
+  остаётся отдельным final Stage 8 gate.

@@ -20,9 +20,10 @@
 
 ## Текущее состояние
 
-В production развёрнуты Stages 4–7: Telegram/auth/access, Catalog Foundation,
-Inventory Ledger и Catalog Read API / Search / Filters. Текущий production
-migration head — `d9e0f1a2b3c4`.
+В production развёрнуты Stages 4–7, Stage 8A Working Catalog UX и
+актуальный Telegram `/start` entry flow. Production source baseline —
+`c8d77f8cf34f89b7e54f668619319db26de5fc0b`; текущий migration head —
+`f1a2b3c4d5e6`.
 
 Production runtime включает:
 
@@ -46,6 +47,9 @@ Production runtime включает:
   Telegram worker и maintenance worker;
 - bounded technical-data retention;
 - Cloudflare Worker Telegram Gateway;
+- branded Telegram `/start`: персональное приветствие, удаление команды,
+  замена предыдущего welcome, image-card через `sendPhoto` и кнопка открытия
+  Mini App;
 - production gateway URL требует HTTPS;
 - ADMIN approve/reject через inline-кнопки;
 - Ruff, mypy strict, Pytest, Oxlint, TypeScript, Vitest;
@@ -94,12 +98,15 @@ Stage 7 также завершён и развёрнут: реализован�
 sorting/pagination, global/category search, включая serial/WWN, availability,
 location и metadata-driven filters/facets.
 
-Текущий продуктовый этап — Stage 8 Working Mini App UX. В текущем source уже
-есть рабочий frontend catalog: application shell, API-driven categories,
-debounced global/category search, facet filters, sorting, progressive item list,
-compact cards, Item detail и URL-preserving navigation. Stage 8 целиком не
-закрыт: Admin catalog forms, stock/holder/«Моё», viewport acceptance и
-Playwright visual/E2E остаются в roadmap.
+Stage 8A Working Mini App Catalog UX завершён и принят в production:
+application shell, API-driven categories, debounced global/category search,
+metadata-driven facet filters, sorting, progressive item list, compact cards,
+Item detail, URL-preserving navigation, Telegram BackButton/safe-area integration
+и production viewport remediation работают на текущем baseline.
+
+Stage 8 целиком ещё не закрыт. Следующий продуктовый slice — Stage 8B:
+Admin catalog forms, stock/holder/«Моё» и дальнейший UX. Полный multi-viewport
+Playwright visual/E2E остаётся отдельным финальным Stage 8 gate.
 
 Item остаётся каталожной позицией; физические serial units и balances существуют
 только в warehouse domain. Три локальных workbook сверены только как reference

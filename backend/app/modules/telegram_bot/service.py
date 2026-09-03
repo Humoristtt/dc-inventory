@@ -240,7 +240,8 @@ async def enqueue_access_request_admin_notification(
 
 _START_WELCOME_DELETE_WINDOW = timedelta(hours=48)
 _START_WELCOME_SEND_DELAY = timedelta(milliseconds=150)
-_START_WELCOME_EFFECT_ID = "5113957245121463396"
+_START_WELCOME_EFFECT_ID = "5046509860389126442"
+_START_WELCOME_CUSTOM_EMOJI_ID = "5444965061749644170"
 
 
 def _start_welcome_dedupe_key(update_id: int, chat_id: int) -> str:
@@ -251,6 +252,7 @@ def _start_welcome_text(first_name: str, settings: Settings) -> str:
     safe_name = html.escape(first_name.strip() or "коллега")
     safe_support = html.escape(settings.support_telegram_username)
     return (
+        f'<tg-emoji emoji-id="{_START_WELCOME_CUSTOM_EMOJI_ID}">👨‍💻</tg-emoji> '
         f"<b>Привет, {safe_name}! 👋</b>\n\n"
         "Добро пожаловать в <b>Spikatel Inventory</b> — внутреннюю "
         "систему учёта оборудования ЦОД.\n\n"

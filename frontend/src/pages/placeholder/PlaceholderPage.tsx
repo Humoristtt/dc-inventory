@@ -15,8 +15,8 @@ export function PlaceholderPage({
 }: PlaceholderPageProps) {
   return (
     <main className="placeholder-page">
-      <header>
-        <SpikatelBrand subtitle="Внутренний каталог ЦОД" />
+      <header className="placeholder-page__header">
+        <SpikatelBrand inverse title="Инвентаризация ЦОД" />
       </header>
       <section className="placeholder-page__card">
         <span className="section-kicker">{eyebrow}</span>

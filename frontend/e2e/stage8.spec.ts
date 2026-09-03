@@ -157,25 +157,40 @@ function json(route: Route, body: unknown, status = 200) {
   return route.fulfill({ json: body, status });
 }
 
-async function installTelegramMock(page: Page) {
+async function installTelegramMock(
+  page: Page,
+  platform = "unknown",
+) {
   await page.route("**/vendor/telegram/telegram-web-app.js", (route) =>
     route.fulfill({ body: "", contentType: "application/javascript" }),
   );
-  await page.addInitScript(() => {
+  await page.addInitScript((telegramPlatform: string) => {
     const state: {
       callback: (() => void) | null;
       expanded: boolean;
+      fullscreenRequested: boolean;
       ready: boolean;
       visible: boolean;
-    } = { callback: null, expanded: false, ready: false, visible: false };
+    } = {
+      callback: null,
+      expanded: false,
+      fullscreenRequested: false,
+      ready: false,
+      visible: false,
+    };
     Object.defineProperty(window, "__stage8Telegram", { value: state });
     Object.defineProperty(window, "Telegram", {
       configurable: true,
       value: {
         WebApp: {
           initData: "synthetic-signed-data",
+          platform: telegramPlatform,
+          isFullscreen: false,
           ready: () => { state.ready = true; },
           expand: () => { state.expanded = true; },
+          requestFullscreen: () => {
+            state.fullscreenRequested = true;
+          },
           BackButton: {
             show: () => { state.visible = true; },
             hide: () => { state.visible = false; },
@@ -187,7 +202,7 @@ async function installTelegramMock(page: Page) {
         },
       },
     });
-  });
+  }, platform);
 }
 
 async function assertNoHorizontalOverflow(page: Page) {
@@ -512,7 +527,12 @@ test("ADMIN completes create, edit, archive and unarchive lifecycle", async ({ p
   const api = await installApiMock(page, { role: "ADMIN" });
   await page.goto("/catalog");
 
-  await page.getByRole("link", { name: "+ Новая позиция" }).click();
+  await expect(
+    page.getByRole("link", { name: /\+ Новая/ }),
+  ).toHaveCount(0);
+
+  await page.goto("/catalog/new?category=sfp");
+
   await page.getByLabel(/^Название/).fill("Трансивер 10/25G");
   await page.getByLabel("Модель").fill("DSO-25");
   await page.getByLabel(/^Профиль скорости/).fill("10/25 Гбит/с");
@@ -643,3 +663,138 @@ test("catalog API error retries into a compact empty state", async ({ page }, te
   await expect(page.getByText("Категорий пока нет")).toBeVisible();
   await assertNoHorizontalOverflow(page);
 });
+
+
+test(
+  "desktop UX requests fullscreen, centers ultrawide shell and Escape dismisses only the internal layer",
+  async ({ page }, testInfo) => {
+    test.skip(
+      !["desktop-admin", "desktop-ultrawide"].includes(
+        testInfo.project.name,
+      ),
+      "desktop UX acceptance",
+    );
+
+    await installTelegramMock(page, "tdesktop");
+    await installApiMock(page, { role: "ADMIN" });
+
+    await page.goto("/catalog");
+
+    await expect(
+      page.getByText("Инвентаризация ЦОД", { exact: true }),
+    ).toBeVisible();
+
+    await expect.poll(
+      () => page.evaluate(() => (
+        (
+          window as unknown as {
+            __stage8Telegram: {
+              fullscreenRequested: boolean;
+            };
+          }
+        ).__stage8Telegram.fullscreenRequested
+      )),
+    ).toBe(true);
+
+    await expect(
+      page.getByRole("link", { name: /\+ Новая/ }),
+    ).toHaveCount(0);
+
+    const columns = await page.locator(".category-grid").evaluate(
+      (element) =>
+        getComputedStyle(element)
+          .gridTemplateColumns
+          .trim()
+          .split(/\s+/)
+          .filter(Boolean)
+          .length,
+    );
+
+    expect(columns).toBe(4);
+
+    if (testInfo.project.name === "desktop-ultrawide") {
+      const geometry = await page.evaluate(() => {
+        const shell =
+          document.querySelector<HTMLElement>(
+            ".app-shell__content",
+          );
+
+        const catalog =
+          document.querySelector<HTMLElement>(
+            ".catalog-page",
+          );
+
+        if (shell === null || catalog === null) {
+          return null;
+        }
+
+        const shellRect = shell.getBoundingClientRect();
+        const catalogRect = catalog.getBoundingClientRect();
+
+        return {
+          viewportWidth: window.innerWidth,
+          shellLeft: shellRect.left,
+          shellRight: shellRect.right,
+          shellWidth: shellRect.width,
+          catalogWidth: catalogRect.width,
+        };
+      });
+
+      expect(geometry).not.toBeNull();
+
+      if (geometry === null) {
+        throw new Error("desktop geometry unavailable");
+      }
+
+      expect(geometry.shellWidth).toBeLessThanOrEqual(1601);
+      expect(geometry.catalogWidth).toBeLessThanOrEqual(1281);
+
+      const leftGutter = geometry.shellLeft;
+      const rightGutter =
+        geometry.viewportWidth - geometry.shellRight;
+
+      expect(Math.abs(leftGutter - rightGutter))
+        .toBeLessThanOrEqual(2);
+
+      expect(leftGutter).toBeGreaterThan(400);
+    }
+
+    await page.getByRole(
+      "link",
+      { name: /SFP-модули/ },
+    ).click();
+
+    await page.getByRole(
+      "button",
+      { name: "Фильтры" },
+    ).click();
+
+    await expect(
+      page.getByRole(
+        "dialog",
+        { name: "Фильтры" },
+      ),
+    ).toBeVisible();
+
+    await page.keyboard.press("Escape");
+
+    await expect(
+      page.getByRole(
+        "dialog",
+        { name: "Фильтры" },
+      ),
+    ).toHaveCount(0);
+
+    await expect(page).toHaveURL(/\/catalog\/sfp/);
+
+    await expect(
+      page.getByRole(
+        "heading",
+        { name: /шт\.$/ },
+      ),
+    ).toBeVisible();
+
+    await assertBottomNavigationClearance(page);
+    await assertNoHorizontalOverflow(page);
+  },
+);

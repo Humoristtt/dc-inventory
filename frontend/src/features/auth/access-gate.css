@@ -8,52 +8,61 @@
     max(28px, env(safe-area-inset-top))
     18px
     max(24px, env(safe-area-inset-bottom));
-  background:
-    radial-gradient(circle at 18% 8%, rgb(255 236 183 / 88%), transparent 38%),
-    radial-gradient(circle at 90% 92%, rgb(255 0 0 / 38%), transparent 34%),
-    linear-gradient(145deg, #fcff2e 0%, #feaa13 38%, #ff6600 68%, #a1021b 118%);
-  color: #000;
+  background: var(--brand-header-background);
+  color: var(--color-ink);
 }
 
 .access-gate__glow {
   position: absolute;
-  width: 52vw;
-  height: 52vw;
-  max-width: 420px;
-  max-height: 420px;
+  top: 10%;
+  right: 8%;
+  width: min(44vw, 520px);
+  aspect-ratio: 1;
   border-radius: 999px;
-  background: rgb(255 255 255 / 32%);
-  filter: blur(80px);
-  transform: translate(46%, -54%);
+  background: rgb(249 235 110 / 14%);
+  filter: blur(90px);
 }
 
 .access-gate__card {
   position: relative;
-  width: min(100%, 470px);
-  padding: 26px;
-  border: 1px solid rgb(255 255 255 / 42%);
+  width: min(100%, 500px);
+  padding: clamp(24px, 4vw, 34px);
+  border: 1px solid rgb(254 170 19 / 28%);
   border-radius: 30px;
-  background: rgb(255 245 216 / 72%);
-  box-shadow: 0 24px 80px rgb(80 20 0 / 18%);
-  backdrop-filter: blur(22px);
+  background: rgb(255 253 247 / 96%);
+  box-shadow: 0 28px 90px rgb(0 0 0 / 34%);
+  backdrop-filter: blur(20px);
+}
+
+.access-gate__brand {
+  margin-bottom: 30px;
+}
+
+.access-gate__brand .compact-brand__logo {
+  width: clamp(118px, 13vw, 152px);
+}
+
+.access-gate__brand .compact-brand__title {
+  font-size: clamp(13px, 1.4vw, 17px);
 }
 
 .access-gate__eyebrow {
   display: inline-flex;
-  margin-bottom: 18px;
+  margin-bottom: 16px;
   padding: 7px 11px;
-  border: 1px solid rgb(0 0 0 / 14%);
+  border: 1px solid rgb(214 147 3 / 22%);
   border-radius: 999px;
+  background: rgb(249 235 110 / 28%);
   font-size: 0.72rem;
-  font-weight: 600;
+  font-weight: 650;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .access-gate h1 {
-  max-width: 10ch;
+  max-width: 12ch;
   margin: 0;
-  font-size: clamp(2rem, 9vw, 3.1rem);
+  font-size: clamp(2rem, 7vw, 3rem);
   font-weight: 760;
   letter-spacing: -0.055em;
   line-height: 0.98;
@@ -63,7 +72,7 @@
   display: grid;
   gap: 10px;
   margin-top: 22px;
-  color: rgb(0 0 0 / 72%);
+  color: rgb(0 0 0 / 70%);
   font-size: 0.98rem;
   line-height: 1.5;
 }
@@ -79,8 +88,9 @@
   gap: 14px;
   margin-top: 24px;
   padding: 14px 16px;
+  border: 1px solid rgb(214 147 3 / 16%);
   border-radius: 18px;
-  background: rgb(255 255 255 / 44%);
+  background: rgb(249 235 110 / 18%);
   font-size: 0.82rem;
 }
 
@@ -89,8 +99,9 @@
 }
 
 .access-gate__support {
-  color: #000;
+  color: var(--color-ink);
   font-weight: 720;
+  text-decoration-color: var(--color-brand-deep);
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;
 }
@@ -104,14 +115,19 @@
   min-height: 54px;
   border: 0;
   border-radius: 18px;
-  background: #000;
+  background: var(--color-ink);
   color: #fff;
   cursor: pointer;
   font: inherit;
   font-weight: 680;
   transition:
     transform 120ms ease,
+    box-shadow 160ms ease,
     opacity 120ms ease;
+}
+
+.access-gate__button:hover:not(:disabled) {
+  box-shadow: 0 8px 26px rgb(214 147 3 / 24%);
 }
 
 .access-gate__button:active:not(:disabled) {
@@ -121,6 +137,11 @@
 .access-gate__button:disabled {
   cursor: wait;
   opacity: 0.55;
+}
+
+.access-gate__error {
+  color: var(--color-wine);
+  font-weight: 600;
 }
 
 @media (max-width: 420px) {
@@ -133,6 +154,10 @@
     border-radius: 28px;
   }
 
+  .access-gate__brand {
+    margin-bottom: 24px;
+  }
+
   .access-gate h1 {
     font-size: clamp(2rem, 11vw, 2.65rem);
   }
@@ -142,9 +167,4 @@
     flex-direction: column;
     gap: 5px;
   }
-}
-
-.access-gate__error {
-  font-weight: 600;
-  color: #a1021b;
 }

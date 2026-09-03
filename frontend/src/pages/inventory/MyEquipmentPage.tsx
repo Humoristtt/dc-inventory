@@ -59,7 +59,7 @@ export function MyEquipmentPage() {
   return (
     <main className="mine-page">
       <header className="mine-header">
-        <SpikatelBrand inverse subtitle="Персональный учёт" />
+        <SpikatelBrand inverse title="Инвентаризация ЦОД" />
         <div>
           <span className="section-kicker">
             Текущая ответственность

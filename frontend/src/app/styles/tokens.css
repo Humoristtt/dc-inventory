@@ -1,12 +1,30 @@
 :root {
   --color-ink: #000000;
-  --color-cream: #ffecb7;
-  --color-acid: #fcff2e;
-  --color-orange: #ff6600;
+
+  --color-brand-primary: #feaa13;
+  --color-brand-soft: #f9eb6e;
+  --color-brand-deep: #d69303;
+
+  --color-cream: #fff3c4;
+  --color-acid: var(--color-brand-soft);
+  --color-orange: var(--color-brand-primary);
   --color-red: #ff0000;
   --color-wine: #a1021b;
   --color-paper: #f7f4eb;
   --color-surface: #fffdf7;
+
+  --brand-header-background:
+    radial-gradient(
+      circle at 92% -10%,
+      rgb(249 235 110 / 38%),
+      transparent 36%
+    ),
+    linear-gradient(
+      145deg,
+      #17130a 0%,
+      #070604 72%,
+      #000000 100%
+    );
   --color-surface-muted: #eeeae0;
   --color-border: rgb(0 0 0 / 14%);
   --color-muted: rgb(0 0 0 / 58%);
@@ -26,7 +44,8 @@
   --radius-control: 14px;
   --page-inline: clamp(14px, 3.8vw, 28px);
   --page-block: clamp(16px, 3vh, 28px);
-  --content-width: 880px;
+  --app-shell-width: 1600px;
+  --content-width: 1280px;
   --bottom-nav-height: 68px;
   --shadow-card: 0 12px 30px rgb(34 21 0 / 8%);
 

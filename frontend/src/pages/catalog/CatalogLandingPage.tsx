@@ -4,7 +4,6 @@ import {
   useLocation,
 } from "react-router-dom";
 
-import { useAuthState } from "../../features/auth/useAuthState";
 import {
   getCatalogCategories,
 } from "../../shared/api/catalog";
@@ -26,8 +25,6 @@ import "../../features/catalog/catalog.css";
 export function CatalogLandingPage() {
   const { updateSearch, viewState } = useCatalogUrlState();
   const location = useLocation();
-  const authQuery = useAuthState();
-
   const categoriesQuery = useQuery({
     queryKey: ["catalog", "categories"],
     queryFn: ({ signal }) => getCatalogCategories(signal),
@@ -40,7 +37,7 @@ export function CatalogLandingPage() {
   return (
     <main className="catalog-page catalog-page--landing">
       <header className="catalog-landing-header">
-        <SpikatelBrand inverse subtitle="Оборудование ЦОД" />
+        <SpikatelBrand inverse title="Инвентаризация ЦОД" />
         <div className="catalog-landing-header__copy">
           <span className="section-kicker">Рабочий каталог</span>
           <h1>Найти оборудование</h1>
@@ -55,13 +52,6 @@ export function CatalogLandingPage() {
       </header>
 
       <div className="catalog-page__body">
-        {authQuery.data?.user.role === "ADMIN" ? (
-          <div className="admin-create-row">
-            <Link className="button button--dark" state={{ from: returnTo }} to="/catalog/new">
-              + Новая позиция
-            </Link>
-          </div>
-        ) : null}
         {searchActive ? (
           <section aria-labelledby="global-search-title" className="catalog-section">
             <div className="section-heading">

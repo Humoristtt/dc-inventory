@@ -49,7 +49,7 @@
   display: grid;
   gap: 28px;
   padding: calc(var(--safe-area-top) + 18px) max(var(--page-inline), var(--safe-area-right)) 24px max(var(--page-inline), var(--safe-area-left));
-  background: radial-gradient(circle at 92% 10%, rgb(252 255 46 / 54%), transparent 35%), #000;
+  background: var(--brand-header-background);
   color: #fff;
 }
 
@@ -64,17 +64,49 @@
 .holding-card__heading > div { min-width: 0; }
 .holding-card__heading span { color: var(--color-muted); font-size: 9px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
 .holding-card h3 { margin: 4px 0 0; font-size: 17px; letter-spacing: -0.03em; line-height: 1.1; overflow-wrap: anywhere; }
-.holding-card__heading > b { flex: 0 0 auto; padding: 6px 8px; border-radius: 9px; background: var(--color-success-soft); font-size: 11px; }
+.holding-card__heading > b {
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  border-radius: 9px;
+  background: rgb(249 235 110 / 48%);
+  font-size: 11px;
+}
 .holding-card > p { margin: 0; color: var(--color-muted); font-size: 11px; }
 .holding-card ul { display: grid; gap: 5px; margin: 0; padding: 0; list-style: none; }
 .holding-card li { display: flex; min-width: 0; justify-content: space-between; gap: 8px; padding: 8px 9px; border-radius: 9px; background: var(--color-surface-muted); font-size: 10px; }
 .holding-card li strong,
 .holding-card li span { overflow-wrap: anywhere; }
 .holding-card li span { color: var(--color-muted); }
-.holding-card__link { color: var(--color-wine); font-size: 10px; font-weight: 720; }
+.holding-card__link {
+  color: var(--color-brand-deep);
+  font-size: 10px;
+  font-weight: 720;
+}
 
 @media (min-width: 680px) {
   .mine-page { border-right: 1px solid var(--color-border); border-left: 1px solid var(--color-border); }
   .inventory-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .holdings-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (min-width: 1100px) {
+  .mine-header {
+    padding:
+      calc(var(--safe-area-top) + 18px)
+      34px
+      30px;
+  }
+
+  .mine-header h1 {
+    font-size: clamp(38px, 4vw, 52px);
+  }
+
+  .mine-page__body {
+    padding: 28px 34px 34px;
+  }
+
+  .holdings-list {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 14px;
+  }
 }

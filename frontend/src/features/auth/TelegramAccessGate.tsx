@@ -22,7 +22,9 @@ import {
   type AuthState,
   type SupportContact,
 } from "../../shared/api/auth";
+import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
 import {
+  bindDesktopEscapeGuard,
   getTelegramInitData,
   getTelegramWebAppSdkLoadStatus,
   loadTelegramWebAppSdk,
@@ -116,6 +118,9 @@ function AccessScreen({
     <main className="access-gate">
       <div className="access-gate__glow" aria-hidden="true" />
       <section className="access-gate__card">
+        <div className="access-gate__brand">
+          <SpikatelBrand title="Инвентаризация ЦОД" />
+        </div>
         <span className="access-gate__eyebrow">{eyebrow}</span>
         <h1>{title}</h1>
         <div className="access-gate__body">{children}</div>
@@ -325,6 +330,7 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
 
   useEffect(() => {
     prepareTelegramWebApp();
+    return bindDesktopEscapeGuard();
   }, []);
 
   const authQuery = useQuery({

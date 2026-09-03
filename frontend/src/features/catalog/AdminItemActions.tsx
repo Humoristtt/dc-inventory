@@ -69,7 +69,7 @@ export function AdminItemActions({ item }: { item: CatalogItem }) {
                   {item.status === "ACTIVE" ? "Архивировать позицию?" : "Вернуть позицию?"}
                 </h2>
               </div>
-              <button aria-label="Закрыть подтверждение" className="icon-button" onClick={() => setConfirmationOpen(false)} type="button">×</button>
+              <button aria-label="Закрыть подтверждение" className="icon-button" data-escape-dismiss="" onClick={() => setConfirmationOpen(false)} type="button">×</button>
             </header>
             <div className="sheet__body archive-sheet__body">
               {item.status === "ACTIVE" ? (

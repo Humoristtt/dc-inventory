@@ -108,6 +108,14 @@ jobs:
         working-directory: frontend
         run: npm run build
 
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Stage 8 browser acceptance
+        working-directory: frontend
+        run: npm run test:e2e
+
   telegram-gateway:
     runs-on: ubuntu-latest
 

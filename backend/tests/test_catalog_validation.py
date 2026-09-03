@@ -8,6 +8,7 @@ from app.modules.catalog.enums import AttributeDataType, FilterType
 from app.modules.catalog.models import CategoryAttribute
 from app.modules.catalog.schemas import ItemCreate
 from app.modules.catalog.service import (
+    CatalogSchemaError,
     CatalogValidationError,
     normalize_comparison,
     validate_attribute_values,
@@ -77,6 +78,38 @@ def test_valid_typed_values_are_prepared_without_losing_decimal_precision() -> N
     assert by_key["decimal"].decimal_value == Decimal("12345.1234567890")
     assert by_key["boolean"].boolean_value is True
     assert by_key["enum"].enum_value == "A"
+
+
+def test_text_metadata_can_preserve_source_profile_whitespace() -> None:
+    category_id = uuid.uuid4()
+    attribute = _attribute(
+        "reach_profile",
+        AttributeDataType.TEXT,
+        category_id=category_id,
+        validation_metadata={"max_length": 2000, "preserve_whitespace": True},
+    )
+    source_profile = "  OM3: до 70 м\nOM4: до 100 м  "
+
+    result = validate_attribute_values(
+        category_id,
+        [attribute],
+        {"reach_profile": source_profile},
+    )
+
+    assert result[0].text_value == "OM3: до 70 м\nOM4: до 100 м"
+
+
+def test_text_preserve_whitespace_metadata_requires_boolean() -> None:
+    category_id = uuid.uuid4()
+    attribute = _attribute(
+        "profile",
+        AttributeDataType.TEXT,
+        category_id=category_id,
+        validation_metadata={"preserve_whitespace": "yes"},
+    )
+
+    with pytest.raises(CatalogSchemaError):
+        validate_attribute_values(category_id, [attribute], {"profile": "value"})
 
 
 @pytest.mark.parametrize(

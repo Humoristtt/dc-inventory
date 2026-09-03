@@ -110,6 +110,27 @@ async def test_source_reference_refinement_metadata_is_versioned() -> None:
             assert {"SC Simplex"} <= set(
                 sfp_by_key["connector"].allowed_values or []
             )
+            assert {"MPO", "MPO/PC"} <= set(
+                sfp_by_key["connector"].allowed_values or []
+            )
+            assert sfp_by_key["speed_profile"].data_type == AttributeDataType.TEXT
+            assert sfp_by_key["speed_profile"].searchable is True
+            assert sfp_by_key["speed_profile"].validation_metadata == {
+                "max_length": 255,
+                "preserve_whitespace": True,
+            }
+            assert sfp_by_key["reach_profile"].validation_metadata == {
+                "max_length": 2000,
+                "preserve_whitespace": True,
+            }
+            assert sfp_by_key["wavelength_profile"].data_type == (
+                AttributeDataType.TEXT
+            )
+            assert sfp_by_key["nominal_wavelength_nm"].data_type == (
+                AttributeDataType.DECIMAL
+            )
+            assert sfp_by_key["nominal_wavelength_nm"].unit == "nm"
+            assert sfp_by_key["nominal_wavelength_nm"].filterable is True
 
             power = await get_category_record(db, "power_cable")
             power_by_key = {

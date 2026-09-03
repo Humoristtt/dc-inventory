@@ -231,7 +231,13 @@ def _prepare_attribute_value(
                 "attribute_type_mismatch",
                 f"attribute {attribute.key} requires TEXT",
             )
-        value = " ".join(raw_value.split())
+        metadata = attribute.validation_metadata or {}
+        preserve_whitespace = metadata.get("preserve_whitespace", False)
+        if not isinstance(preserve_whitespace, bool):
+            raise CatalogSchemaError(
+                f"attribute {attribute.key} has invalid preserve_whitespace metadata"
+            )
+        value = raw_value.strip() if preserve_whitespace else " ".join(raw_value.split())
         if not value:
             if attribute.required:
                 raise CatalogValidationError(
@@ -239,7 +245,6 @@ def _prepare_attribute_value(
                     f"required attribute {attribute.key} must not be blank",
                 )
             return None
-        metadata = attribute.validation_metadata or {}
         max_length = metadata.get("max_length")
         if max_length is not None:
             if isinstance(max_length, bool) or not isinstance(max_length, int):

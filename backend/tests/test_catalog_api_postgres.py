@@ -144,6 +144,10 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
                     "attributes": {
                         "form_factor": "SFP+",
                         "speed_mbps": 10000,
+                        "speed_profile": "10 Гбит/с",
+                        "reach_profile": "OM3: до 70 м\nOM4: до 100 м",
+                        "wavelength_profile": "1310 нм",
+                        "nominal_wavelength_nm": "1310",
                         "tx_wavelength_nm": "1310.125",
                         "dom_ddm": True,
                     },
@@ -158,6 +162,12 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
             assert item_response.json()["attributes"]["speed_mbps"] == 10000
             assert item_response.json()["attributes"]["tx_wavelength_nm"] == (
                 "1310.1250000000"
+            )
+            assert item_response.json()["attributes"]["reach_profile"] == (
+                "OM3: до 70 м\nOM4: до 100 м"
+            )
+            assert item_response.json()["attributes"]["nominal_wavelength_nm"] == (
+                "1310.0000000000"
             )
 
             stage7_listing = await client.get(

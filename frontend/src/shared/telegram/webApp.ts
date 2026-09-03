@@ -16,8 +16,6 @@ type TelegramWebApp = {
   initData: string;
   ready: () => void;
   expand: () => void;
-  platform?: string;
-  isFullscreen?: boolean;
   requestFullscreen?: () => void;
   BackButton?: TelegramBackButton;
   safeAreaInset?: TelegramSafeAreaInset;
@@ -35,18 +33,6 @@ declare global {
 
 export const TELEGRAM_WEB_APP_SDK_PATH =
   "/vendor/telegram/telegram-web-app.js";
-
-const DESKTOP_TELEGRAM_PLATFORMS = new Set([
-  "desktop",
-  "linux",
-  "macos",
-  "tdesktop",
-  "unigram",
-  "web",
-  "weba",
-  "webk",
-  "windows",
-]);
 
 export type TelegramWebAppSdkLoadStatus =
   | "idle"
@@ -153,27 +139,6 @@ export function loadTelegramWebAppSdk(): Promise<void> {
   return sdkLoadPromise;
 }
 
-function requestDesktopFullscreen(
-  webApp: TelegramWebApp | null,
-): void {
-  const platform = webApp?.platform?.toLowerCase();
-
-  if (
-    platform === undefined
-    || !DESKTOP_TELEGRAM_PLATFORMS.has(platform)
-    || webApp?.requestFullscreen === undefined
-    || webApp.isFullscreen === true
-  ) {
-    return;
-  }
-
-  try {
-    webApp.requestFullscreen();
-  } catch {
-    // Older or unsupported Telegram clients keep the expanded fallback.
-  }
-}
-
 export function bindDesktopEscapeGuard(): () => void {
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key !== "Escape") {
@@ -202,7 +167,6 @@ export function prepareTelegramWebApp(): TelegramWebApp | null {
   const webApp = getTelegramWebApp();
   webApp?.ready();
   webApp?.expand();
-  requestDesktopFullscreen(webApp);
   applyTelegramSafeArea(webApp);
   return webApp;
 }

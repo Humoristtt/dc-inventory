@@ -666,10 +666,14 @@ test("catalog API error retries into a compact empty state", async ({ page }, te
 
 
 test(
-  "desktop UX requests fullscreen, centers ultrawide shell and Escape dismisses only the internal layer",
+  "desktop UX uses windowed expanded viewport, responsive shell and internal Escape",
   async ({ page }, testInfo) => {
     test.skip(
-      !["desktop-admin", "desktop-ultrawide"].includes(
+      ![
+        "desktop-admin",
+        "desktop-standard",
+        "desktop-ultrawide",
+      ].includes(
         testInfo.project.name,
       ),
       "desktop UX acceptance",
@@ -684,17 +688,19 @@ test(
       page.getByText("Инвентаризация ЦОД", { exact: true }),
     ).toBeVisible();
 
-    await expect.poll(
-      () => page.evaluate(() => (
-        (
-          window as unknown as {
-            __stage8Telegram: {
-              fullscreenRequested: boolean;
-            };
-          }
-        ).__stage8Telegram.fullscreenRequested
-      )),
-    ).toBe(true);
+    const telegramViewportState = await page.evaluate(() => (
+      (
+        window as unknown as {
+          __stage8Telegram: {
+            expanded: boolean;
+            fullscreenRequested: boolean;
+          };
+        }
+      ).__stage8Telegram
+    ));
+
+    expect(telegramViewportState.expanded).toBe(true);
+    expect(telegramViewportState.fullscreenRequested).toBe(false);
 
     await expect(
       page.getByRole("link", { name: /\+ Новая/ }),
@@ -746,8 +752,8 @@ test(
         throw new Error("desktop geometry unavailable");
       }
 
-      expect(geometry.shellWidth).toBeLessThanOrEqual(1601);
-      expect(geometry.catalogWidth).toBeLessThanOrEqual(1281);
+      expect(geometry.shellWidth).toBeLessThanOrEqual(1921);
+      expect(geometry.catalogWidth).toBeLessThanOrEqual(1921);
 
       const leftGutter = geometry.shellLeft;
       const rightGutter =
@@ -756,7 +762,7 @@ test(
       expect(Math.abs(leftGutter - rightGutter))
         .toBeLessThanOrEqual(2);
 
-      expect(leftGutter).toBeGreaterThan(400);
+      expect(leftGutter).toBeGreaterThan(250);
     }
 
     await page.getByRole(

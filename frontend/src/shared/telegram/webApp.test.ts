@@ -135,7 +135,7 @@ describe("Telegram Web App SDK delivery", () => {
     expect(document.documentElement.style.getPropertyValue("--app-safe-area-bottom")).toBe("18px");
   });
 
-  it("requests real fullscreen on Telegram Desktop when supported", () => {
+  it("uses expanded windowed mode without requesting fullscreen", () => {
     const ready = vi.fn();
     const expand = vi.fn();
     const requestFullscreen = vi.fn();
@@ -145,8 +145,6 @@ describe("Telegram Web App SDK delivery", () => {
         initData: "query_id=test",
         ready,
         expand,
-        platform: "tdesktop",
-        isFullscreen: false,
         requestFullscreen,
       },
     };
@@ -155,25 +153,6 @@ describe("Telegram Web App SDK delivery", () => {
 
     expect(ready).toHaveBeenCalledTimes(1);
     expect(expand).toHaveBeenCalledTimes(1);
-    expect(requestFullscreen).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not force fullscreen on mobile Telegram", () => {
-    const requestFullscreen = vi.fn();
-
-    window.Telegram = {
-      WebApp: {
-        initData: "query_id=test",
-        ready: vi.fn(),
-        expand: vi.fn(),
-        platform: "ios",
-        isFullscreen: false,
-        requestFullscreen,
-      },
-    };
-
-    prepareTelegramWebApp();
-
     expect(requestFullscreen).not.toHaveBeenCalled();
   });
 

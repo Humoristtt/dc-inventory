@@ -702,6 +702,26 @@ test(
     expect(telegramViewportState.expanded).toBe(true);
     expect(telegramViewportState.fullscreenRequested).toBe(false);
 
+    const fullscreenButton = page.getByRole(
+      "button",
+      { name: "Открыть на полный экран" },
+    );
+
+    await expect(fullscreenButton).toBeVisible();
+    await fullscreenButton.click();
+
+    await expect.poll(
+      () => page.evaluate(() => (
+        (
+          window as unknown as {
+            __stage8Telegram: {
+              fullscreenRequested: boolean;
+            };
+          }
+        ).__stage8Telegram.fullscreenRequested
+      )),
+    ).toBe(true);
+
     await expect(
       page.getByRole("link", { name: /\+ Новая/ }),
     ).toHaveCount(0);
@@ -765,10 +785,33 @@ test(
       expect(leftGutter).toBeGreaterThan(250);
     }
 
+    await page.evaluate(() => {
+      window.scrollTo(0, document.documentElement.scrollHeight);
+    });
+
     await page.getByRole(
       "link",
       { name: /SFP-модули/ },
     ).click();
+
+    await expect.poll(
+      () => page.evaluate(() => window.scrollY),
+    ).toBe(0);
+
+    if (
+      testInfo.project.name === "desktop-standard"
+      || testInfo.project.name === "desktop-ultrawide"
+    ) {
+      const toolbarFontSize = await page
+        .getByRole("button", { name: "Фильтры" })
+        .evaluate(
+          (element) => Number.parseFloat(
+            getComputedStyle(element).fontSize,
+          ),
+        );
+
+      expect(toolbarFontSize).toBeGreaterThanOrEqual(13);
+    }
 
     await page.getByRole(
       "button",

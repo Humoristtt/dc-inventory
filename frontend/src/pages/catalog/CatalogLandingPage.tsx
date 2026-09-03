@@ -20,6 +20,7 @@ import { DebouncedSearchField } from "../../features/catalog/DebouncedSearchFiel
 import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useCatalogItems } from "../../features/catalog/useCatalogItems";
 import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
+import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 import "../../features/catalog/catalog.css";
 
 export function CatalogLandingPage() {
@@ -37,7 +38,10 @@ export function CatalogLandingPage() {
   return (
     <main className="catalog-page catalog-page--landing">
       <header className="catalog-landing-header">
-        <SpikatelBrand inverse title="Инвентаризация ЦОД" />
+        <div className="page-toolbar page-toolbar--brand">
+          <SpikatelBrand inverse title="Инвентаризация ЦОД" />
+          <TelegramFullscreenButton />
+        </div>
         <div className="catalog-landing-header__copy">
           <span className="section-kicker">Рабочий каталог</span>
           <h1>Найти оборудование</h1>
@@ -47,7 +51,7 @@ export function CatalogLandingPage() {
           committedValue={viewState.q}
           label="Поиск по каталогу"
           onCommit={updateSearch}
-          placeholder="Найдёт всё, что вам нужно"
+          placeholder="Найдёт всё, что нужно"
         />
       </header>
 
@@ -130,6 +134,13 @@ export function CatalogLandingPage() {
                     <Link
                       className="category-tile"
                       key={category.id}
+                      onClick={() => {
+                        window.scrollTo({
+                          top: 0,
+                          left: 0,
+                          behavior: "auto",
+                        });
+                      }}
                       to={`/catalog/${encodeURIComponent(category.key)}`}
                     >
                       <span className="category-tile__index">

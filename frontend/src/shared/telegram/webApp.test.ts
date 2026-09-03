@@ -14,6 +14,7 @@ import {
   getTelegramWebAppSdkLoadStatus,
   loadTelegramWebAppSdk,
   prepareTelegramWebApp,
+  requestTelegramFullscreen,
 } from "./webApp";
 
 function sdkScript(): HTMLScriptElement | null {
@@ -154,6 +155,34 @@ describe("Telegram Web App SDK delivery", () => {
     expect(ready).toHaveBeenCalledTimes(1);
     expect(expand).toHaveBeenCalledTimes(1);
     expect(requestFullscreen).not.toHaveBeenCalled();
+  });
+
+  it("requests fullscreen only after explicit user action", () => {
+    const requestFullscreen = vi.fn();
+
+    window.Telegram = {
+      WebApp: {
+        initData: "query_id=test",
+        ready: vi.fn(),
+        expand: vi.fn(),
+        requestFullscreen,
+      },
+    };
+
+    expect(requestTelegramFullscreen()).toBe(true);
+    expect(requestFullscreen).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns false when fullscreen is unsupported", () => {
+    window.Telegram = {
+      WebApp: {
+        initData: "query_id=test",
+        ready: vi.fn(),
+        expand: vi.fn(),
+      },
+    };
+
+    expect(requestTelegramFullscreen()).toBe(false);
   });
 
   it("consumes Escape and dismisses the top internal layer", () => {

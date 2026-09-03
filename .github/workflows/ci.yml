@@ -10,6 +10,27 @@ permissions:
   contents: read
 
 jobs:
+  repository-policy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Reject authoritative inventory workbooks
+        shell: bash
+        run: |
+          forbidden="$(
+            git ls-files |
+              grep -Ei '(^|/)sfp-authoritative[^/]*\.(xlsx|xlsm|xls)$' ||
+              true
+          )"
+
+          if [ -n "$forbidden" ]; then
+            echo "Authoritative operational workbook must remain outside Git:"
+            printf '%s\n' "$forbidden"
+            exit 1
+          fi
+
   backend:
     runs-on: ubuntu-latest
 

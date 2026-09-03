@@ -242,6 +242,7 @@ _START_WELCOME_DELETE_WINDOW = timedelta(hours=48)
 _START_WELCOME_SEND_DELAY = timedelta(milliseconds=150)
 _START_WELCOME_EFFECT_ID = "5046509860389126442"
 _START_WELCOME_CUSTOM_EMOJI_ID = "5444965061749644170"
+_START_WELCOME_IMAGE_PATH = "/telegram/start-welcome.png"
 
 
 def _start_welcome_dedupe_key(update_id: int, chat_id: int) -> str:
@@ -358,10 +359,14 @@ async def enqueue_start_message(
 
     await enqueue_telegram_call(
         db,
-        method="sendMessage",
+        method="sendPhoto",
         payload={
             "chat_id": chat_id,
-            "text": _start_welcome_text(first_name, settings),
+            "photo": (
+                f"{settings.telegram_web_app_url.rstrip('/')}"
+                f"{_START_WELCOME_IMAGE_PATH}"
+            ),
+            "caption": _start_welcome_text(first_name, settings),
             "parse_mode": "HTML",
             "message_effect_id": _START_WELCOME_EFFECT_ID,
             "reply_markup": {

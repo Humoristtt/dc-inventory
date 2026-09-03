@@ -14,6 +14,7 @@ from app.modules.notifications.models import NotificationOutbox
 ALLOWED_TELEGRAM_METHODS = frozenset(
     {
         "sendMessage",
+        "sendPhoto",
         "deleteMessage",
         "editMessageText",
         "editMessageReplyMarkup",

@@ -652,12 +652,29 @@ async def create_manufacturer(
 async def list_manufacturers(
     db: AsyncSession,
     *,
+    query: str | None,
     limit: int,
     offset: int,
 ) -> ManufacturerPage:
-    total = await db.scalar(select(func.count()).select_from(Manufacturer))
+    statement = select(Manufacturer)
+    count_statement = select(func.count()).select_from(Manufacturer)
+
+    if query is not None and query.strip() != "":
+        normalized_query = normalize_comparison(
+            query,
+            field="manufacturer_query",
+            max_length=255,
+        )
+        predicate = Manufacturer.normalized_name.contains(
+            normalized_query,
+            autoescape=True,
+        )
+        statement = statement.where(predicate)
+        count_statement = count_statement.where(predicate)
+
+    total = await db.scalar(count_statement)
     result = await db.scalars(
-        select(Manufacturer)
+        statement
         .order_by(Manufacturer.normalized_name, Manufacturer.id)
         .limit(limit)
         .offset(offset)

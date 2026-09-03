@@ -263,6 +263,197 @@ it("ADMIN creates metadata-driven item after inline manufacturer and duplicate w
   expect(client.getQueryState(facetKey)?.isInvalidated).toBe(true);
 });
 
+it("ADMIN can page and search manufacturers beyond the initial bounded result", async () => {
+  const manufacturerRequests: string[] = [];
+
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url === "/api/catalog/categories") {
+      return jsonResponse([category]);
+    }
+
+    if (url === "/api/catalog/categories/sfp") {
+      return jsonResponse(category);
+    }
+
+    if (url.startsWith("/api/catalog/manufacturers?")) {
+      manufacturerRequests.push(url);
+
+      const params = new URL(
+        url,
+        "http://test",
+      ).searchParams;
+
+      const query = params.get("q");
+      const limit = Number(params.get("limit"));
+      const offset = Number(params.get("offset"));
+
+      if (query === "Tail Vendor") {
+        return jsonResponse({
+          items: [
+            {
+              id: "manufacturer-tail",
+              name: "Tail Vendor",
+              created_at: "2026-09-03T00:00:00Z",
+              updated_at: "2026-09-03T00:00:00Z",
+            },
+          ],
+          total: 1,
+          limit,
+          offset,
+        });
+      }
+
+      if (query === "No match") {
+        return jsonResponse({
+          items: [],
+          total: 0,
+          limit,
+          offset,
+        });
+      }
+
+      const items = Array.from(
+        { length: 50 },
+        (_, index) => {
+          const position = offset + index;
+
+          return {
+            id: `manufacturer-${position}`,
+            name: `Vendor ${String(position).padStart(3, "0")}`,
+            created_at: "2026-09-03T00:00:00Z",
+            updated_at: "2026-09-03T00:00:00Z",
+          };
+        },
+      );
+
+      return jsonResponse({
+        items,
+        total: 201,
+        limit,
+        offset,
+      });
+    }
+
+    throw new Error(`unexpected fetch ${url}`);
+  }));
+
+  renderRoute("/catalog/new?category=sfp", "ADMIN");
+
+  const search = await screen.findByLabelText(
+    "Поиск производителя",
+  );
+
+  const showMoreManufacturers = await screen.findByRole(
+    "button",
+    { name: "Показать ещё производителей" },
+  );
+
+  const firstPageRequest = manufacturerRequests.find((url) => {
+    const params = new URL(url, "http://test").searchParams;
+
+    return params.get("offset") === "0"
+      && params.get("q") === null;
+  });
+
+  expect(firstPageRequest).toBeDefined();
+
+  const firstPageParams = new URL(
+    firstPageRequest ?? "",
+    "http://test",
+  ).searchParams;
+
+  expect(firstPageParams.get("limit")).toBe("50");
+
+  fireEvent.click(showMoreManufacturers);
+
+  await waitFor(() => {
+    expect(
+      manufacturerRequests.some((url) => {
+        const params = new URL(
+          url,
+          "http://test",
+        ).searchParams;
+
+        return params.get("offset") === "50"
+          && params.get("q") === null;
+      }),
+    ).toBe(true);
+  });
+
+  fireEvent.change(search, {
+    target: { value: "Tail Vendor" },
+  });
+
+  expect(
+    manufacturerRequests.some((url) => {
+      const params = new URL(
+        url,
+        "http://test",
+      ).searchParams;
+
+      return params.get("q") === "Tail Vendor";
+    }),
+  ).toBe(false);
+
+  expect(
+    await screen.findByRole(
+      "option",
+      { name: "Tail Vendor" },
+    ),
+  ).toBeInTheDocument();
+
+  const selector = screen.getByLabelText("Производитель");
+
+  fireEvent.change(selector, {
+    target: { value: "manufacturer-tail" },
+  });
+
+  expect(selector).toHaveValue("manufacturer-tail");
+
+  await waitFor(() => {
+    expect(
+      manufacturerRequests.some((url) => {
+        const params = new URL(
+          url,
+          "http://test",
+        ).searchParams;
+
+        return params.get("q") === "Tail Vendor"
+          && params.get("limit") === "50"
+          && params.get("offset") === "0";
+      }),
+    ).toBe(true);
+  });
+
+  fireEvent.change(search, {
+    target: { value: "No match" },
+  });
+
+  await waitFor(() => {
+    expect(
+      manufacturerRequests.some((url) => {
+        const params = new URL(
+          url,
+          "http://test",
+        ).searchParams;
+
+        return params.get("q") === "No match";
+      }),
+    ).toBe(true);
+  });
+
+  expect(selector).toHaveValue("manufacturer-tail");
+
+  expect(
+    screen.getByRole(
+      "option",
+      { name: "Tail Vendor" },
+    ),
+  ).toBeInTheDocument();
+});
+
 it("ignores a stale duplicate-check response when the form changes in flight", async () => {
   const duplicateResponse = deferred<Response>();
   let duplicateChecks = 0;

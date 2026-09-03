@@ -513,6 +513,18 @@ Category detail возвращает frontend-friendly metadata. Item response �
 единый `attributes` object по key/value и не раскрывает пять nullable EAV
 columns.
 
+Manufacturer list:
+
+- deterministic order по `normalized_name` и UUID;
+- default limit 100, max 200;
+- offset pagination;
+- optional `q`, максимум 255 characters;
+- `q` проходит ту же comparison-normalization, что и canonical manufacturer
+  name, и выполняет contains-search по `normalized_name`;
+- frontend не считает первую страницу исчерпывающим списком: форма позиции
+  использует bounded pages по 50 записей, server-side search и явную загрузку
+  следующих страниц.
+
 Item list:
 
 - deterministic order по normalized name и UUID по умолчанию;

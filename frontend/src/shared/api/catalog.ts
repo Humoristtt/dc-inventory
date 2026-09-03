@@ -331,13 +331,26 @@ export function getCatalogCategory(
 }
 
 export function getCatalogManufacturers(
-  { limit = 100, offset = 0 }: { limit?: number; offset?: number } = {},
+  {
+    limit = 100,
+    offset = 0,
+    q,
+  }: {
+    limit?: number;
+    offset?: number;
+    q?: string;
+  } = {},
   signal?: AbortSignal,
 ) {
   const params = new URLSearchParams({
     limit: String(limit),
     offset: String(offset),
   });
+
+  if (q !== undefined && q.trim() !== "") {
+    params.set("q", q.trim());
+  }
+
   return getJson<ManufacturerPage>(
     `/api/catalog/manufacturers?${params.toString()}`,
     signal,

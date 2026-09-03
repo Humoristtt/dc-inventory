@@ -161,6 +161,15 @@
   white-space: nowrap;
 }
 
+.manufacturer-picker {
+  display: grid;
+  gap: 7px;
+}
+
+.manufacturer-picker__more {
+  justify-self: start;
+}
+
 .catalog-form__inline-error {
   display: flex;
   align-items: center;

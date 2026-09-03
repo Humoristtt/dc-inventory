@@ -1,4 +1,5 @@
 import {
+  useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
@@ -21,6 +22,9 @@ import {
   CatalogErrorState,
   CatalogListSkeleton,
 } from "../../features/catalog/CatalogState";
+import {
+  DebouncedSearchField,
+} from "../../features/catalog/DebouncedSearchField";
 import {
   type AttributeDraft,
   attributesEqual,
@@ -47,7 +51,7 @@ import {
   type DuplicateCandidate,
   type ItemPatchPayload,
   type ItemWritePayload,
-  type ManufacturerPage,
+  type ItemManufacturer,
 } from "../../shared/api/catalog";
 import "../../features/catalog/admin-catalog.css";
 
@@ -278,6 +282,9 @@ export function ItemFormPage() {
   const [manufacturerFormOpen, setManufacturerFormOpen] = useState(false);
   const [manufacturerName, setManufacturerName] = useState("");
   const [manufacturerError, setManufacturerError] = useState<string | null>(null);
+  const [manufacturerSearch, setManufacturerSearch] = useState("");
+  const [selectedManufacturer, setSelectedManufacturer] =
+    useState<ItemManufacturer | null>(null);
   const [duplicateReview, setDuplicateReview] = useState<DuplicateReview | null>(null);
   const [checkingDuplicates, setCheckingDuplicates] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -293,9 +300,33 @@ export function ItemFormPage() {
     queryFn: ({ signal }) => getCatalogCategories(signal),
     staleTime: 5 * 60_000,
   });
-  const manufacturersQuery = useQuery({
-    queryKey: ["catalog", "manufacturers", "all"],
-    queryFn: ({ signal }) => getCatalogManufacturers({ limit: 200 }, signal),
+  const manufacturersQuery = useInfiniteQuery({
+    queryKey: [
+      "catalog",
+      "manufacturers",
+      manufacturerSearch.trim(),
+    ],
+    queryFn: ({ pageParam, signal }) => getCatalogManufacturers(
+      {
+        limit: 50,
+        offset: pageParam,
+        q: manufacturerSearch.trim() || undefined,
+      },
+      signal,
+    ),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => {
+      if (lastPage.items.length === 0) {
+        return undefined;
+      }
+
+      const nextOffset =
+        lastPage.offset + lastPage.items.length;
+
+      return nextOffset < lastPage.total
+        ? nextOffset
+        : undefined;
+    },
     staleTime: 5 * 60_000,
   });
   const sortedCategories = useMemo(
@@ -315,6 +346,45 @@ export function ItemFormPage() {
       accountingMode: defaultCategory?.default_accounting_mode ?? "QUANTITY",
     };
   const draft = draftState ?? initialDraft;
+
+  const manufacturerOptions = useMemo(() => {
+    const byId = new Map<string, ItemManufacturer>();
+
+    for (const page of manufacturersQuery.data?.pages ?? []) {
+      for (const manufacturer of page.items) {
+        byId.set(manufacturer.id, manufacturer);
+      }
+    }
+
+    const editingManufacturer = itemQuery.data?.manufacturer;
+    if (
+      editingManufacturer !== null
+      && editingManufacturer !== undefined
+      && editingManufacturer.id === draft.manufacturerId
+    ) {
+      byId.set(editingManufacturer.id, editingManufacturer);
+    }
+
+    if (
+      selectedManufacturer !== null
+      && selectedManufacturer.id === draft.manufacturerId
+    ) {
+      byId.set(selectedManufacturer.id, selectedManufacturer);
+    }
+
+    return [...byId.values()].sort(
+      (left, right) => left.name.localeCompare(
+        right.name,
+        "ru",
+      ),
+    );
+  }, [
+    draft.manufacturerId,
+    itemQuery.data?.manufacturer,
+    manufacturersQuery.data?.pages,
+    selectedManufacturer,
+  ]);
+
   const attributeDraft = attributeDraftState
     ?? (editing && itemQuery.data !== undefined
       ? draftAttributesFromItem(itemQuery.data)
@@ -364,20 +434,10 @@ export function ItemFormPage() {
     onSuccess: (manufacturer) => {
       formRevisionRef.current += 1;
       setDuplicateReview(null);
-      queryClient.setQueryData<ManufacturerPage>(
-        ["catalog", "manufacturers", "all"],
-        (current) => {
-          const items = [...(current?.items ?? []), manufacturer].sort((left, right) =>
-            left.name.localeCompare(right.name, "ru"),
-          );
-          return {
-            items,
-            total: (current?.total ?? 0) + 1,
-            limit: current?.limit ?? 200,
-            offset: 0,
-          };
-        },
-      );
+      setSelectedManufacturer(manufacturer);
+      void queryClient.invalidateQueries({
+        queryKey: ["catalog", "manufacturers"],
+      });
       setDraftState((current) => ({
         ...(current ?? draft),
         manufacturerId: manufacturer.id,
@@ -597,29 +657,80 @@ export function ItemFormPage() {
           )}
 
           <div className="catalog-form__field">
-            <label htmlFor="item-manufacturer"><span className="catalog-form__label">Производитель</span></label>
-            <div className="catalog-form__inline-control">
-              <select
-                disabled={manufacturersQuery.isPending || manufacturersQuery.isError}
-                id="item-manufacturer"
-                onChange={(event) => updateDraft("manufacturerId", event.target.value)}
-                value={draft.manufacturerId}
-              >
-                <option value="">Не указан</option>
-                {(manufacturersQuery.data?.items ?? []).map((manufacturer) => (
-                  <option key={manufacturer.id} value={manufacturer.id}>{manufacturer.name}</option>
-                ))}
-              </select>
-              <button
-                className="button button--ghost catalog-form__inline-button"
-                onClick={() => {
-                  setManufacturerFormOpen((open) => !open);
-                  setManufacturerError(null);
-                }}
-                type="button"
-              >
-                + Новый
-              </button>
+            <label htmlFor="item-manufacturer">
+              <span className="catalog-form__label">Производитель</span>
+            </label>
+
+            <div className="manufacturer-picker">
+              <DebouncedSearchField
+                busy={manufacturersQuery.isFetching}
+                committedValue={manufacturerSearch}
+                label="Поиск производителя"
+                onCommit={setManufacturerSearch}
+                placeholder="Начните вводить название"
+              />
+
+              <div className="catalog-form__inline-control">
+                <select
+                  disabled={
+                    manufacturersQuery.isPending
+                    && manufacturerOptions.length === 0
+                  }
+                  id="item-manufacturer"
+                  onChange={(event) => {
+                    const manufacturerId = event.target.value;
+
+                    setSelectedManufacturer(
+                      manufacturerOptions.find(
+                        (manufacturer) =>
+                          manufacturer.id === manufacturerId,
+                      ) ?? null,
+                    );
+
+                    updateDraft(
+                      "manufacturerId",
+                      manufacturerId,
+                    );
+                  }}
+                  value={draft.manufacturerId}
+                >
+                  <option value="">Не указан</option>
+
+                  {manufacturerOptions.map((manufacturer) => (
+                    <option
+                      key={manufacturer.id}
+                      value={manufacturer.id}
+                    >
+                      {manufacturer.name}
+                    </option>
+                  ))}
+                </select>
+
+                <button
+                  className="button button--ghost catalog-form__inline-button"
+                  onClick={() => {
+                    setManufacturerFormOpen((open) => !open);
+                    setManufacturerError(null);
+                  }}
+                  type="button"
+                >
+                  + Новый
+                </button>
+              </div>
+
+              {manufacturersQuery.hasNextPage ? (
+                <button
+                  className="text-button manufacturer-picker__more"
+                  disabled={manufacturersQuery.isFetchingNextPage}
+                  onClick={() =>
+                    void manufacturersQuery.fetchNextPage()}
+                  type="button"
+                >
+                  {manufacturersQuery.isFetchingNextPage
+                    ? "Загрузка…"
+                    : "Показать ещё производителей"}
+                </button>
+              ) : null}
             </div>
             {manufacturersQuery.isError ? (
               <div className="catalog-form__inline-error" role="alert">

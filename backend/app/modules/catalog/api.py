@@ -274,10 +274,16 @@ async def get_category(
 async def get_manufacturers(
     db: DbSession,
     _approved: Approved,
+    q: Annotated[str | None, Query(max_length=255)] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> ManufacturerListOut:
-    page = await list_manufacturers(db, limit=limit, offset=offset)
+    page = await list_manufacturers(
+        db,
+        query=q,
+        limit=limit,
+        offset=offset,
+    )
     return ManufacturerListOut(
         items=[_manufacturer_out(item) for item in page.items],
         total=page.total,

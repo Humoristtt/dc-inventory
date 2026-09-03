@@ -159,6 +159,23 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
             assert manufacturer_response.status_code == 201
             manufacturer_id = manufacturer_response.json()["id"]
 
+            manufacturer_search = await client.get(
+                "/api/catalog/manufacturers",
+                params={
+                    "q": f"  API   Manufacturer {marker}  ",
+                    "limit": 1,
+                    "offset": 0,
+                },
+                cookies={settings.auth_cookie_name: tokens["user"]},
+            )
+            assert manufacturer_search.status_code == 200
+            assert manufacturer_search.json()["total"] == 1
+            assert manufacturer_search.json()["items"] == [
+                manufacturer_response.json()
+            ]
+            assert manufacturer_search.json()["limit"] == 1
+            assert manufacturer_search.json()["offset"] == 0
+
             contradictory_item = await client.post(
                 "/api/admin/catalog/items",
                 cookies={settings.auth_cookie_name: tokens["admin"]},

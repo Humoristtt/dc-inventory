@@ -50,6 +50,7 @@ function renderGate(queryClient = createTestQueryClient()) {
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
   delete window.Telegram;
 });
@@ -79,6 +80,67 @@ it("показывает приложение одобренному польз�
   renderGate();
 
   expect(await screen.findByText("Каталог доступен")).toBeInTheDocument();
+});
+
+it("периодически обновляет APPROVED auth state", async () => {
+  vi.useFakeTimers();
+
+  let authRequests = 0;
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url !== "/api/auth/me") {
+        throw new Error(`unexpected fetch: ${url}`);
+      }
+
+      authRequests += 1;
+
+      return new Response(
+        JSON.stringify({
+          user: {
+            id: "00000000-0000-0000-0000-000000000009",
+            telegram_user_id: 1009,
+            username: "refresh-user",
+            first_name: "Refresh",
+            last_name: null,
+            role: "USER",
+            access_status:
+              authRequests === 1
+                ? "APPROVED"
+                : "BLOCKED",
+          },
+          support,
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+          },
+        },
+      );
+    }),
+  );
+
+  renderGate();
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+
+  expect(
+    screen.getByText("Каталог доступен"),
+  ).toBeInTheDocument();
+
+  expect(authRequests).toBe(1);
+
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(60_000);
+  });
+
+  expect(authRequests).toBe(2);
 });
 
 it("показывает контакт и создаёт запрос доступа", async () => {

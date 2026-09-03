@@ -332,6 +332,7 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
     queryFn: ({ signal }) => resolveAuthState(signal),
     retry: false,
     staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 
   const authState = authQuery.data;

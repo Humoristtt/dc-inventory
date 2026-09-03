@@ -247,12 +247,30 @@ source/state после ожидания concurrent transaction.
 
 ## API и permissions
 
-`Approved` read boundary:
+Любой `Approved` пользователь может читать:
 
 - `GET /api/inventory/locations[/{id}]`;
 - `GET /api/inventory/stock`;
-- `GET /api/inventory/units[/{id}]`;
-- `GET /api/inventory/movements[/{id}]`.
+- `GET /api/inventory/units`.
+
+Для обычного `USER` inventory read model использует least-privilege:
+
+- общий stock и факт custody доступны для рабочего складского UX, но чужой
+  holder обезличивается: `user_id=null`, display name=`Сотрудник`;
+- `holder_user_id` filter для stock и units разрешён только для собственного
+  User UUID; запрос чужого holder возвращает `403`;
+- в общем списке serial units поля `serial_number`, `wwn`, `comment` и реальная
+  identity holder доступны только для unit, который сейчас выдан этому USER;
+  чужие и находящиеся на складе serial units возвращаются без этих private
+  полей;
+- `GET /api/inventory/units/{id}` обычному USER разрешён только для unit,
+  который сейчас числится за ним; чужой или складской unit detail возвращает
+  `403`;
+- immutable movement journal не является пользовательским read API:
+  `GET /api/inventory/movements[/{id}]` доступен только `ADMIN`.
+
+`ADMIN` получает полные stock/unit representations, может фильтровать по любому
+holder и читать полный immutable movement journal.
 
 `Admin` mutation boundary:
 

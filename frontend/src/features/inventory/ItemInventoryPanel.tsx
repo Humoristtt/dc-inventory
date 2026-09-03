@@ -119,7 +119,7 @@ export function ItemInventoryPanel({
                     <div>
                       <strong>{row.location?.code ?? "Локация"}</strong>
                       <span>{row.location?.name}</span>
-                      {"serial_number" in row ? (
+                      {"serial_number" in row && row.serial_number !== null ? (
                         <small>SN {row.serial_number}{row.wwn ? ` · WWN ${row.wwn}` : ""}</small>
                       ) : null}
                     </div>
@@ -137,7 +137,7 @@ export function ItemInventoryPanel({
                   <li key={row.id}>
                     <div>
                       <strong>{row.holder?.display_name ?? "Сотрудник"}</strong>
-                      {"serial_number" in row ? (
+                      {"serial_number" in row && row.serial_number !== null ? (
                         <small>SN {row.serial_number}{row.wwn ? ` · WWN ${row.wwn}` : ""}</small>
                       ) : null}
                     </div>

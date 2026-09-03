@@ -105,7 +105,11 @@ export function MyEquipmentPage() {
                     <ul>
                       {holding.units.map((unit) => (
                         <li key={unit.id}>
-                          <strong>SN {unit.serial_number}</strong>
+                          <strong>
+                            {unit.serial_number
+                              ? `SN ${unit.serial_number}`
+                              : "Серийный номер недоступен"}
+                          </strong>
                           {unit.wwn ? <span>WWN {unit.wwn}</span> : null}
                         </li>
                       ))}

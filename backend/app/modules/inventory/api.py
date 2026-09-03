@@ -10,6 +10,8 @@ from app.db.errors import (
     postgres_sqlstate,
 )
 from app.modules.auth.dependencies import Admin, Approved, DbSession
+from app.modules.auth.service import AuthenticatedContext
+from app.modules.identity.enums import UserRole
 from app.modules.inventory.enums import (
     InventoryUnitState,
     LocationStatus,
@@ -113,6 +115,52 @@ def _location_out(location: Location) -> LocationOut:
     )
 
 
+def _can_view_private_inventory(
+    viewer: AuthenticatedContext,
+    holder_user_id: UUID | None,
+) -> bool:
+    return (
+        viewer.user.role == UserRole.ADMIN
+        or holder_user_id == viewer.user.id
+    )
+
+
+def _holder_out(
+    *,
+    holder_user_id: UUID | None,
+    display_name: str | None,
+    viewer: AuthenticatedContext,
+) -> UserPositionOut | None:
+    if holder_user_id is None or display_name is None:
+        return None
+
+    if _can_view_private_inventory(viewer, holder_user_id):
+        return UserPositionOut(
+            user_id=holder_user_id,
+            display_name=display_name,
+        )
+
+    return UserPositionOut(
+        user_id=None,
+        display_name="Сотрудник",
+    )
+
+
+def _forbid_other_holder_filter(
+    holder_user_id: UUID | None,
+    viewer: AuthenticatedContext,
+) -> None:
+    if (
+        holder_user_id is not None
+        and viewer.user.role != UserRole.ADMIN
+        and holder_user_id != viewer.user.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="cannot inspect another user's holdings",
+        )
+
+
 def _movement_line_out(line: MovementLine) -> MovementLineOut:
     return MovementLineOut(
         id=line.id,
@@ -159,7 +207,10 @@ def _movement_out(record: MovementRecord) -> MovementOut:
     )
 
 
-def _stock_balance_out(record: StockBalanceRecord) -> StockBalanceOut:
+def _stock_balance_out(
+    record: StockBalanceRecord,
+    viewer: AuthenticatedContext,
+) -> StockBalanceOut:
     balance = record.balance
     return StockBalanceOut(
         id=balance.id,
@@ -175,27 +226,31 @@ def _stock_balance_out(record: StockBalanceRecord) -> StockBalanceOut:
             if record.location is not None
             else None
         ),
-        holder=(
-            UserPositionOut(
-                user_id=balance.holder_user_id,
-                display_name=record.holder_display_name,
-            )
-            if balance.holder_user_id is not None and record.holder_display_name is not None
-            else None
+        holder=_holder_out(
+            holder_user_id=balance.holder_user_id,
+            display_name=record.holder_display_name,
+            viewer=viewer,
         ),
         updated_at=balance.updated_at,
     )
 
 
-def _inventory_unit_out(record: InventoryUnitRecord) -> InventoryUnitOut:
+def _inventory_unit_out(
+    record: InventoryUnitRecord,
+    viewer: AuthenticatedContext,
+) -> InventoryUnitOut:
     unit = record.unit
+    private_visible = _can_view_private_inventory(
+        viewer,
+        unit.current_holder_user_id,
+    )
     return InventoryUnitOut(
         id=unit.id,
         item_id=unit.item_id,
         item_name=record.item.name,
-        serial_number=unit.serial_number,
-        wwn=unit.wwn,
-        comment=unit.comment,
+        serial_number=unit.serial_number if private_visible else None,
+        wwn=unit.wwn if private_visible else None,
+        comment=unit.comment if private_visible else None,
         state=unit.state,
         location=(
             LocationPositionOut(
@@ -206,13 +261,10 @@ def _inventory_unit_out(record: InventoryUnitRecord) -> InventoryUnitOut:
             if record.location is not None
             else None
         ),
-        holder=(
-            UserPositionOut(
-                user_id=unit.current_holder_user_id,
-                display_name=record.holder_display_name,
-            )
-            if unit.current_holder_user_id is not None and record.holder_display_name is not None
-            else None
+        holder=_holder_out(
+            holder_user_id=unit.current_holder_user_id,
+            display_name=record.holder_display_name,
+            viewer=viewer,
         ),
         created_at=unit.created_at,
         updated_at=unit.updated_at,
@@ -256,13 +308,14 @@ async def get_location_detail(
 @read_router.get("/stock", response_model=StockBalanceListOut)
 async def get_stock(
     db: DbSession,
-    _approved: Approved,
+    approved: Approved,
     item_id: UUID | None = None,
     location_id: UUID | None = None,
     holder_user_id: UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> StockBalanceListOut:
+    _forbid_other_holder_filter(holder_user_id, approved)
     page = await list_stock_balances(
         db,
         item_id=item_id,
@@ -272,7 +325,7 @@ async def get_stock(
         offset=offset,
     )
     return StockBalanceListOut(
-        items=[_stock_balance_out(item) for item in page.items],
+        items=[_stock_balance_out(item, approved) for item in page.items],
         total=page.total,
         limit=limit,
         offset=offset,
@@ -282,7 +335,7 @@ async def get_stock(
 @read_router.get("/units", response_model=InventoryUnitListOut)
 async def get_inventory_units(
     db: DbSession,
-    _approved: Approved,
+    approved: Approved,
     item_id: UUID | None = None,
     unit_state: Annotated[InventoryUnitState | None, Query(alias="state")] = None,
     location_id: UUID | None = None,
@@ -290,6 +343,7 @@ async def get_inventory_units(
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> InventoryUnitListOut:
+    _forbid_other_holder_filter(holder_user_id, approved)
     page = await list_inventory_units(
         db,
         item_id=item_id,
@@ -300,7 +354,7 @@ async def get_inventory_units(
         offset=offset,
     )
     return InventoryUnitListOut(
-        items=[_inventory_unit_out(item) for item in page.items],
+        items=[_inventory_unit_out(item, approved) for item in page.items],
         total=page.total,
         limit=limit,
         offset=offset,
@@ -311,18 +365,29 @@ async def get_inventory_units(
 async def get_inventory_unit(
     unit_id: UUID,
     db: DbSession,
-    _approved: Approved,
+    approved: Approved,
 ) -> InventoryUnitOut:
     try:
-        return _inventory_unit_out(await get_inventory_unit_record(db, unit_id))
+        record = await get_inventory_unit_record(db, unit_id)
     except InventoryError as error:
         _raise_inventory_error(error)
+
+    if (
+        approved.user.role != UserRole.ADMIN
+        and record.unit.current_holder_user_id != approved.user.id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="inventory unit detail is limited to its holder",
+        )
+
+    return _inventory_unit_out(record, approved)
 
 
 @read_router.get("/movements", response_model=MovementListOut)
 async def get_movements(
     db: DbSession,
-    _approved: Approved,
+    _admin: Admin,
     movement_type: MovementType | None = None,
     item_id: UUID | None = None,
     inventory_unit_id: UUID | None = None,
@@ -349,7 +414,7 @@ async def get_movements(
 async def get_movement(
     movement_id: UUID,
     db: DbSession,
-    _approved: Approved,
+    _admin: Admin,
 ) -> MovementOut:
     try:
         return _movement_out(await get_movement_record(db, movement_id))

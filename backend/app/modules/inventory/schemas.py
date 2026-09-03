@@ -40,7 +40,7 @@ class LocationListOut(BaseModel):
 
 
 class UserPositionOut(BaseModel):
-    user_id: UUID
+    user_id: UUID | None
     display_name: str
 
 
@@ -71,7 +71,7 @@ class InventoryUnitOut(BaseModel):
     id: UUID
     item_id: UUID
     item_name: str
-    serial_number: str
+    serial_number: str | None
     wwn: str | None
     comment: str | None
     state: InventoryUnitState

@@ -78,7 +78,8 @@ Stage 5 Catalog Foundation и Stage 6 Warehouse Core развёрнуты в pro
 
 - Category, Manufacturer и Item;
 - metadata-driven CategoryAttribute и typed ItemAttributeValue;
-- Approved read API и Admin mutation API;
+- role-aware read API: Approved catalog/current inventory, USER custody
+  redaction и Admin-only movement journal; Admin mutation API;
 - пять initial versioned schemas: SFP, оптика, кабели питания, NIC и диски;
 - source-backed refinement: медные сетевые кабели, conductor attributes для
   кабелей питания и уточнённые SFP vocabularies.

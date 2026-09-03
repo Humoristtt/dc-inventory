@@ -446,6 +446,84 @@ it("shows stock by location and custody and lets ADMIN archive without deleting 
   expect(client.getQueryState(facetKey)?.isInvalidated).toBe(true);
 });
 
+it("USER item detail hides redacted serial identity for another holder", async () => {
+  const serialItem: CatalogItem = {
+    ...activeItem,
+    accounting_mode: "SERIAL",
+  };
+
+  vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+
+    if (url === "/api/catalog/items/item-1") {
+      return jsonResponse(serialItem);
+    }
+
+    if (url === "/api/catalog/categories/sfp") {
+      return jsonResponse(category);
+    }
+
+    if (url.startsWith("/api/inventory/units?")) {
+      const params = new URL(url, "http://test").searchParams;
+
+      if (params.get("state") === "STORED") {
+        return jsonResponse({
+          items: [],
+          total: 0,
+          limit: 200,
+          offset: 0,
+        });
+      }
+
+      if (params.get("state") === "ISSUED") {
+        return jsonResponse({
+          items: [{
+            id: "foreign-unit",
+            item_id: serialItem.id,
+            item_name: serialItem.name,
+            serial_number: null,
+            wwn: null,
+            comment: null,
+            state: "ISSUED",
+            location: null,
+            holder: {
+              user_id: null,
+              display_name: "Сотрудник",
+            },
+            created_at: serialItem.created_at,
+            updated_at: serialItem.updated_at,
+          }],
+          total: 1,
+          limit: 200,
+          offset: 0,
+        });
+      }
+    }
+
+    throw new Error(`unexpected fetch ${url}`);
+  }));
+
+  renderRoute("/catalog/items/item-1", "USER");
+
+  expect(
+    await screen.findByRole(
+      "heading",
+      { name: serialItem.model ?? serialItem.name },
+    ),
+  ).toBeInTheDocument();
+
+  expect(
+    await screen.findByText("Сотрудник"),
+  ).toBeInTheDocument();
+  expect(
+    await screen.findByText("1 шт."),
+  ).toBeInTheDocument();
+
+  expect(screen.queryByText("SN null")).not.toBeInTheDocument();
+  expect(screen.queryByText(/WWN/)).not.toBeInTheDocument();
+  expect(screen.queryByText("Управление позицией")).not.toBeInTheDocument();
+});
+
 it("USER sees own quantity and serial holdings by internal UUID without Admin controls", async () => {
   const requestedUrls: string[] = [];
   vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL) => {

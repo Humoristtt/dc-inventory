@@ -7,7 +7,7 @@ export type LocationPosition = {
 };
 
 export type UserPosition = {
-  user_id: string;
+  user_id: string | null;
   display_name: string;
 };
 
@@ -27,7 +27,7 @@ export type InventoryUnit = {
   id: string;
   item_id: string;
   item_name: string;
-  serial_number: string;
+  serial_number: string | null;
   wwn: string | null;
   comment: string | null;
   state: InventoryUnitState;

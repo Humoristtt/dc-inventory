@@ -234,9 +234,38 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
+      - name: Build production frontend runtime for Playwright
+        run: docker build -t dc-inventory-playwright-web ./frontend
+
+      - name: Start production frontend runtime for Playwright
+        run: |
+          docker run -d --rm \
+            --name dc-inventory-playwright-web \
+            -p 127.0.0.1:4173:8080 \
+            dc-inventory-playwright-web
+
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent \
+              http://127.0.0.1:4173/healthz \
+              | grep -q '^ok$'; then
+              exit 0
+            fi
+
+            sleep 1
+          done
+
+          docker logs dc-inventory-playwright-web
+          exit 1
+
       - name: Stage 8 browser acceptance
         working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173
         run: npm run test:e2e
+
+      - name: Stop production frontend runtime for Playwright
+        if: always()
+        run: docker rm -f dc-inventory-playwright-web || true
 
   telegram-gateway:
     runs-on: ubuntu-latest

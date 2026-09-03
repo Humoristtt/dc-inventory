@@ -212,10 +212,17 @@ Alembic использует тот же async PostgreSQL driver `asyncpg`, чт
     b7c8d9e0f1a2  Warehouse ledger + current-state projections
     c8d9e0f1a2b3  Technical-retention indexes
     d9e0f1a2b3c4  Catalog search, typed filters and inventory/facet read model
+    e0f1a2b3c4d5  Telegram start welcome state and deleteMessage
+    f1a2b3c4d5e6  Telegram sendPhoto delivery
+    a2b3c4d5e6f7  Authoritative SFP metadata refinement
 
-Текущий migration head:
+Текущий source migration head:
 
-    d9e0f1a2b3c4
+    a2b3c4d5e6f7
+
+Production migration head до Stage 8B release:
+
+    f1a2b3c4d5e6
 
 Следующие предметные схемы добавляются отдельными миграциями.
 
@@ -374,13 +381,12 @@ ledger и остаётся отдельной задачей.
 - network interface cards;
 - disks/drives.
 
-Три локальных source workbook сверены как reference examples. Они не являются
-inventory database или import source: quantity/balance/placement state не
-переносится в catalog. Reference review добавил отдельную recurring copper
-network cable Category, два power conductor attributes и два SFP vocabulary
-tokens через migration `a6b7c8d9e0f1`. Неоднозначные connector/model/MPN и
-multi-rate notations остаются manual decisions, а schema definitions —
-deterministic versioned reference data.
+Три legacy source workbook сверены как reference examples и не являются
+inventory database/import source. Единственный authoritative input для будущего
+SFP-ввода — внешний read-only `sfp-authoritative.xlsx`; migration
+`a2b3c4d5e6f7` version-controls только lossless profile/scalar metadata и exact
+connector vocabulary. Workbook rows, quantities и physical units в migration
+не входят.
 
 ## Catalog read/query layer
 
@@ -534,8 +540,10 @@ Frontend cache не является authorization boundary: backend `Approved` 
 
 `TelegramAccessGate` остаётся внешней границей всего React-приложения. После
 `APPROVED` внутри неё работает единый application shell с URL routes
-`/catalog`, `/catalog/:categoryKey`, `/catalog/items/:itemId` и placeholder
-routes будущих разделов. Второй auth state или frontend tokens не создаются.
+`/catalog`, `/catalog/:categoryKey`, `/catalog/items/:itemId`, Admin-only
+`/catalog/new`, `/catalog/items/:itemId/edit` и approved-user `/mine`. Второй
+auth state или frontend tokens не создаются: role и внутренний `User.id` читаются
+из того же TanStack Query auth cache.
 
 Catalog frontend разделяет два вида состояния:
 
@@ -566,6 +574,13 @@ Telegram wrapper владеет `ready`/`expand`, runtime safe-area values и п
 BackButton subscribe/unsubscribe lifecycle. На `/catalog` BackButton скрыт; на
 внутреннем route он возвращает по SPA history, а direct deep link безопасно
 возвращается на `/catalog` без закрытия Mini App.
+
+Admin Item form строит dynamic controls из CategoryAttribute metadata и
+передаёт DECIMAL как exact string. Scalar edit формирует только изменившиеся
+PATCH fields; attributes заменяются только при фактическом изменении полного
+набора. Stock/custody detail и «Моё» читают существующие paginated inventory
+projections; frontend-агрегация служит presentation и не становится каноническим
+balance state.
 
 
 ## Telegram delivery и access decisions

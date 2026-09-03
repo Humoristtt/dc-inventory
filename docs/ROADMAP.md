@@ -9,7 +9,7 @@
 > **Production runtime code baseline:** `c8d77f8cf34f89b7e54f668619319db26de5fc0b` — Stage 8A + актуальный Telegram `/start` production baseline.
 > **Production:** Stages 4–7, Stage 8A Working Catalog UX и branded Telegram entry flow развёрнуты в production. Production migration head: `f1a2b3c4d5e6`.
 > **Git/GitHub:** local, remote и production checkout синхронизированы с `main`; `main` protected; обязательны PR и четыре CI checks: `CI/backend`, `CI/frontend`, `CI/runtime`, `CI/telegram-gateway`.
-> **Current product stage:** Stage 8B — Admin catalog / stock-holder / «Моё» UX.
+> **Current product stage:** Stage 8 implemented locally / ready for review; production acceptance remains human-controlled.
 > **Production-data gate:** automated off-VM PostgreSQL backup + real restore test намеренно отложены до подготовки к вводу настоящих складских остатков. Это блокирует только real inventory entry, но не дальнейшую feature-разработку, deploy и synthetic/test data.
 > **Repository visibility:** repository остаётся public до последнего GitHub-dependent шага; перевод в private выполняется отдельно в конце.
 
@@ -94,7 +94,7 @@ CUSTODY  → у конкретного пользователя
 - [x] Backend списание: склад / пользователь → write-off.
 - [x] Коррекция: только отдельное linked movement.
 - [x] Approved/Admin API показывает current positions/holders.
-- [ ] Пользователь видит экран «Моё оборудование».
+- [x] Пользователь видит экран «Моё оборудование».
 
 ---
 
@@ -390,9 +390,9 @@ else if (category === "disk") ...
 - [x] Типы минимум: text, integer, decimal, boolean, enum.
 - [x] Нормализация единиц измерения.
 - [x] Backend валидирует атрибуты по схеме категории.
-- [ ] Frontend формы строятся из metadata.
-- [ ] Frontend карточки строятся из metadata.
-- [ ] Frontend фильтры строятся из metadata.
+- [x] Frontend формы строятся из metadata.
+- [x] Frontend карточки строятся из metadata.
+- [x] Frontend фильтры строятся из metadata.
 - [ ] Excel-колонки строятся из metadata.
 - [x] Первые 5 схем version-controlled.
 - [x] Source-backed refinement добавляет шестую schema без category-specific
@@ -412,20 +412,26 @@ else if (category === "disk") ...
 - manufacturer part number;
 - форм-фактор: SFP / SFP+ / SFP28 / QSFP+ / QSFP28 / QSFP56 / QSFP-DD / расширяемо;
 - скорость;
+- exact профиль скорости;
 - среда: SMF / MMF / Copper / DAC / AOC;
 - стандарт / reach class: SR / LR / ER / ZR / BiDi / CWDM / DWDM / расширяемо;
 - дальность;
-- connector: LC Duplex / LC Simplex / MPO/MTP / RJ45 / расширяемо;
+- exact/conditional профиль дальности;
+- connector: LC Duplex / LC Simplex / MPO / MPO/PC / MPO/MTP / RJ45 / расширяемо;
 - TX wavelength;
 - RX wavelength;
+- exact профиль wavelength и optional однозначная nominal wavelength;
 - DOM/DDM;
 - vendor compatibility;
 - datasheet URL;
 - примечание.
 
-- [x] Скорость хранится в нормализованном виде.
-- [x] Дальность хранится в метрах, UI форматирует м/км.
-- [x] Wavelength хранится в нормализованном виде.
+- [x] Exact speed profile сохраняется losslessly; `speed_mbps` хранит только
+  максимальную явно перечисленную line rate для filter/sort.
+- [x] Exact/conditional reach profile сохраняется losslessly; `reach_m` может
+  хранить только максимальную явно указанную дистанцию.
+- [x] Exact wavelength profile сохраняется losslessly; single nominal scalar
+  заполняется только для одной однозначной wavelength, TX/RX не выдумываются.
 - [x] Form factor — enum/controlled vocabulary.
 - [x] Medium — controlled vocabulary.
 - [x] Connector — controlled vocabulary.
@@ -602,7 +608,7 @@ Normalization:
 - [x] Cable category и shielding остаются TEXT: один observed value не
   доказывает полный controlled vocabulary.
 - [x] Metadata-driven backend search/filters/facets реализованы в Stage 7.
-- [ ] Catalog UI реализуется в Stage 8.
+- [x] Metadata-driven Catalog UI реализован в Stage 8.
 
 ---
 
@@ -1377,22 +1383,22 @@ Finisar 25G  LR  10 km
 - [ ] Нулевой остаток.
 - [ ] Большой остаток.
 - [ ] Несколько локаций.
-- [ ] SERIAL item.
-- [ ] QUANTITY item.
-- [ ] Missing optional attributes.
+- [x] SERIAL item.
+- [x] QUANTITY item.
+- [x] Missing optional attributes.
 - [ ] 20 detail attributes.
-- [ ] Archived item.
+- [x] Archived item.
 
 Filters:
 
-- [ ] Bottom sheet / modal открывается корректно.
-- [ ] Скролл.
-- [ ] Apply.
+- [x] Bottom sheet / modal открывается корректно.
+- [x] Скролл.
+- [x] Apply.
 - [ ] Reset.
-- [ ] Counts.
+- [x] Counts.
 - [ ] Длинные значения.
 - [ ] Empty result.
-- [ ] Возврат из Item detail не теряет фильтры.
+- [x] Возврат из Item detail не теряет фильтры.
 
 ---
 
@@ -1400,16 +1406,19 @@ Filters:
 
 Viewport profiles:
 
-- [ ] Telegram Desktop narrow.
-- [ ] Android-like.
-- [ ] iPhone-like.
-- [ ] Desktop wide для admin workflows.
+- [x] Telegram Desktop narrow.
+- [x] Android-like.
+- [x] iPhone-like.
+- [x] Desktop wide для admin workflows.
 
 Критические E2E:
 
 - [ ] PENDING → request access → ADMIN approve → USER enters catalog.
 - [ ] Global search → Item detail.
-- [ ] Category → filters → Item detail.
+- [x] Category → filters → Item detail.
+- [x] ADMIN metadata-driven create with inline Manufacturer and duplicate warning.
+- [x] ADMIN edit and archive/unarchive.
+- [x] Item detail stock by Location and holder summary.
 - [ ] QUANTITY issue.
 - [ ] SERIAL issue.
 - [ ] Batch issue.
@@ -1417,7 +1426,9 @@ Viewport profiles:
 - [ ] Transfer.
 - [ ] Admin receipt.
 - [ ] Correction / reversal.
-- [ ] «Моё оборудование».
+- [x] «Моё оборудование».
+- [x] API error → retry → empty state.
+- [x] Telegram BackButton, bottom-navigation clearance and no horizontal overflow.
 - [ ] History movement detail.
 - [ ] Export current filtered category.
 - [ ] Image upload.
@@ -1729,7 +1740,9 @@ Backup/restore остаётся отдельным production-data gate и не 
 
 ## Stage 8 — Working Mini App UX
 
-**STATUS: IN PROGRESS — Stage 8A production accepted; Stage 8B/admin and final Playwright multi-viewport/E2E gates remain.**
+**STATUS: IMPLEMENTED LOCALLY / READY FOR REVIEW — Stage 8A production accepted;
+Stage 8B and final Playwright multi-viewport/E2E gates pass locally. Stage 8B
+production acceptance remains pending.**
 
 Telegram entry UX (parallel Stage 8 slice):
 
@@ -1772,16 +1785,17 @@ Telegram entry UX (parallel Stage 8 slice):
 
 **Stage 8A STATUS: DONE — production acceptance completed 2026-09-03.**
 
-### Remaining Stage 8B / final Stage 8 scope
+### Stage 8B / final Stage 8 scope
 
-- [ ] Role-aware Admin catalog create/edit/archive forms.
-- [ ] Inline manufacturer creation and duplicate-check UX.
-- [ ] Stock by location.
-- [ ] Holder summary.
-- [ ] «Моё».
-- [ ] Browser viewport acceptance for Telegram Desktop narrow, Android-like,
+- [x] Authoritative SFP contract audit and versioned lossless metadata refinement.
+- [x] Role-aware Admin catalog create/edit/archive forms.
+- [x] Inline manufacturer creation and duplicate-check UX.
+- [x] Stock by location.
+- [x] Holder summary.
+- [x] «Моё».
+- [x] Browser viewport acceptance for Telegram Desktop narrow, Android-like,
   iPhone-like and normal desktop widths.
-- [ ] Playwright visual/E2E.
+- [x] Playwright visual/E2E with deterministic synthetic fixtures.
 
 **GATE:** UI комфортен в Telegram Desktop narrow и mobile viewports; данные отображаются без обрезки.
 
@@ -2010,7 +2024,8 @@ Stage 7–14 feature development, production deploy и synthetic/test data не
 
 # 42. Следующий фактический шаг
 
-**CURRENT: Stage 8 — Working Mini App UX; Stage 8A production accepted, Stage 8B is the next product slice**
+**CURRENT: Stage 8 implemented locally / ready for review; Stage 8A production
+accepted, Stage 8B production acceptance pending**
 
 Stages 4–7 и Stage 8A полностью закрыты по release-cycle:
 source → review → CI → merge → production deploy → Telegram/viewport smoke →
@@ -2032,16 +2047,16 @@ Backup/restore не забыты, но сознательно вынесены �
    - deterministic pagination;
    - filter fixture matrices.
 
-2. **Stage 8 — Working Mini App UX — CURRENT**
+2. **Stage 8 — Working Mini App UX — IMPLEMENTED LOCALLY / REVIEW PENDING**
    - Stage 8A catalog shell / search / category lists / filters / sorting /
      compact cards / Item detail — DONE / production;
    - Telegram BackButton, safe areas, loading/error/empty states and live narrow
      viewport acceptance — DONE / production;
    - branded Telegram `/start` entry UX — DONE / production;
    - Stage 8B stock by location / holder summary / «Моё» / Admin catalog UX —
-     CURRENT;
-   - final Playwright multi-viewport/E2E acceptance remains before complete
-     Stage 8 close.
+     DONE locally;
+   - final Playwright multi-viewport/E2E acceptance — PASS locally;
+   - PR/CI/deploy/production acceptance — pending human control.
 
 3. **Stage 9 — Warehouse Operations UI**
    - receipt;
@@ -2137,11 +2152,8 @@ Stage 8A runtime baseline принят в production на
 `c8d77f8cf34f89b7e54f668619319db26de5fc0b`; production migration head —
 `f1a2b3c4d5e6`.
 
-Stage 8A feature/start branches закрыты и удалены. Новая product-разработка
-начинается от актуального protected `main`, после завершения этого docs-only
-production-close checkpoint.
-
-Следующий продуктовый slice — Stage 8B: role-aware Admin catalog forms,
-stock by location, holder summary и «Моё». Warehouse Operations UI, media,
-Excel, stocktake и production-data hardening остаются в своих следующих stages,
-а full Playwright multi-viewport/E2E остаётся финальным Stage 8 acceptance gate.
+Stage 8B реализован локально на feature branch от актуального protected `main`.
+Следующий human-controlled шаг — review, PR CI и только затем отдельное решение
+о deploy/production acceptance. После закрытия release-cycle следующий
+продуктовый slice — Stage 9 Warehouse Operations UI. Media, Excel, stocktake и
+production-data hardening остаются в своих последующих stages.

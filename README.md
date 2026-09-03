@@ -104,14 +104,18 @@ metadata-driven facet filters, sorting, progressive item list, compact cards,
 Item detail, URL-preserving navigation, Telegram BackButton/safe-area integration
 и production viewport remediation работают на текущем baseline.
 
-Stage 8 целиком ещё не закрыт. Следующий продуктовый slice — Stage 8B:
-Admin catalog forms, stock/holder/«Моё» и дальнейший UX. Полный multi-viewport
-Playwright visual/E2E остаётся отдельным финальным Stage 8 gate.
+Stage 8B реализован локально и готов к review: добавлены metadata-driven Admin
+create/edit/archive, inline Manufacturer и duplicate-check UX, stock/custody
+detail, рабочий экран «Моё» и Playwright acceptance на четырёх viewport
+profiles. Source migration head ветки — `a2b3c4d5e6f7`; production остаётся на
+`f1a2b3c4d5e6` до human-controlled PR/CI/deploy/acceptance.
 
 Item остаётся каталожной позицией; физические serial units и balances существуют
-только в warehouse domain. Три локальных workbook сверены только как reference
-examples для catalog design. Quantities, balances и serial identities из них не
-импортируются. Stage 6 не добавляет frontend warehouse UI.
+только в warehouse domain. Старые локальные workbook остаются только reference
+examples для catalog design. Для будущего SFP-ввода единственный операционный
+источник — внешний read-only `sfp-authoritative.xlsx`; его 265 модулей не
+импортированы и не входят в migrations. Stage 8B не добавляет warehouse mutation
+UI.
 
 Ввод реальных inventory данных в production заблокирован до автоматизированного
 PostgreSQL backup и успешного real restore test в отдельное окружение. После
@@ -150,7 +154,8 @@ database или обязательным import source. Существующие
 - CI: GitHub Actions
 - Backend tests: Pytest
 - Frontend tests: Vitest
-- E2E: Playwright — запланирован roadmap, не текущий runtime dependency
+- E2E: Playwright с Telegram Desktop narrow, Android-like, iPhone-like и desktop
+  profiles
 
 ## Инфраструктура
 

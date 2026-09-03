@@ -25,13 +25,17 @@ export type AuthState = {
   support: SupportContact;
 };
 
+export const AUTH_QUERY_KEY = ["auth", "state"] as const;
+
 export class ApiRequestError extends Error {
   readonly status: number;
+  readonly code: string | undefined;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.name = "ApiRequestError";
     this.status = status;
+    this.code = code;
   }
 }
 

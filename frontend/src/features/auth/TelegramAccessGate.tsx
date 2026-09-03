@@ -16,6 +16,7 @@ import {
 } from "../../shared/api/access";
 import {
   ApiRequestError,
+  AUTH_QUERY_KEY,
   authenticateWithTelegram,
   getAuthState,
   type AuthState,
@@ -29,7 +30,6 @@ import {
 } from "../../shared/telegram/webApp";
 import "./access-gate.css";
 
-const authQueryKey = ["auth", "state"] as const;
 function accessQueryKey(userId: string | undefined) {
   return ["access", "me", userId] as const;
 }
@@ -327,7 +327,7 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
   }, []);
 
   const authQuery = useQuery({
-    queryKey: authQueryKey,
+    queryKey: AUTH_QUERY_KEY,
     queryFn: ({ signal }) => resolveAuthState(signal),
     retry: false,
     staleTime: 60_000,
@@ -361,7 +361,7 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
       return;
     }
 
-    queryClient.setQueryData<AuthState>(authQueryKey, (current) => {
+    queryClient.setQueryData<AuthState>(AUTH_QUERY_KEY, (current) => {
       if (
         current === undefined
         || current.user.id !== observedUserId
@@ -392,7 +392,7 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
       queryClient.setQueryData(accessQueryKey(userId), state);
 
       if (state.access_status === "PENDING") {
-        queryClient.setQueryData<AuthState>(authQueryKey, (current) => {
+        queryClient.setQueryData<AuthState>(AUTH_QUERY_KEY, (current) => {
           if (
             current === undefined
             || current.user.id !== userId

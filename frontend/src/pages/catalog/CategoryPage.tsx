@@ -2,9 +2,11 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
   useLocation,
+  Link,
   useParams,
 } from "react-router-dom";
 
+import { useAuthState } from "../../features/auth/useAuthState";
 import {
   catalogQueryCacheKey,
   getCatalogCategory,
@@ -47,6 +49,7 @@ export function CategoryPage() {
   const location = useLocation();
   const navigateBack = useInternalBackNavigation();
   const telegramOwnsBack = getTelegramWebApp()?.BackButton !== undefined;
+  const authQuery = useAuthState();
 
   const categoryQuery = useQuery({
     queryKey: ["catalog", "category", categoryKey],
@@ -119,6 +122,15 @@ export function CategoryPage() {
                 </h2>
               </div>
               <div className="result-toolbar__actions">
+                {authQuery.data?.user.role === "ADMIN" ? (
+                  <Link
+                    className="tool-button tool-button--primary"
+                    state={{ from: returnTo }}
+                    to={`/catalog/new?category=${encodeURIComponent(categoryKey)}`}
+                  >
+                    + Новая
+                  </Link>
+                ) : null}
                 <button
                   className={filtersCount > 0 ? "tool-button tool-button--active" : "tool-button"}
                   onClick={() => setFiltersOpen(true)}

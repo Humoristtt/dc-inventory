@@ -1,18 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import {
-  useLocation,
   useParams,
 } from "react-router-dom";
 
 import {
   getCatalogCategory,
   getCatalogItem,
-  type InventorySummary,
 } from "../../shared/api/catalog";
 import {
   CatalogErrorState,
   CatalogListSkeleton,
 } from "../../features/catalog/CatalogState";
+import { AdminItemActions } from "../../features/catalog/AdminItemActions";
+import { ItemInventoryPanel } from "../../features/inventory/ItemInventoryPanel";
 import {
   formatAccountingMode,
   formatAttributeValue,
@@ -21,37 +21,8 @@ import {
 } from "../../features/catalog/format";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
 
-type ItemNavigationState = {
-  from?: unknown;
-  inventory?: unknown;
-};
-
-function inventoryFromState(state: unknown): InventorySummary | null {
-  if (state === null || typeof state !== "object") {
-    return null;
-  }
-  const inventory = (state as ItemNavigationState).inventory;
-  if (inventory === null || typeof inventory !== "object") {
-    return null;
-  }
-  const candidate = inventory as Partial<InventorySummary>;
-  if (
-    typeof candidate.available_count !== "number"
-    || typeof candidate.custody_count !== "number"
-    || typeof candidate.total_count !== "number"
-    || candidate.available_count < 0
-    || candidate.custody_count < 0
-    || candidate.total_count < 0
-  ) {
-    return null;
-  }
-  return candidate as InventorySummary;
-}
-
 export function ItemDetailPage() {
   const { itemId = "" } = useParams();
-  const location = useLocation();
-  const inventory = inventoryFromState(location.state);
   const navigateBack = useInternalBackNavigation();
   const itemQuery = useQuery({
     queryKey: ["catalog", "item", itemId],
@@ -131,31 +102,7 @@ export function ItemDetailPage() {
       </div>
 
       <div className="catalog-page__body detail-body">
-        {inventory ? (
-          <section aria-labelledby="stock-title" className="detail-panel detail-panel--stock">
-            <div className="detail-panel__heading">
-              <div>
-                <span className="section-kicker">Текущий остаток</span>
-                <h2 id="stock-title">Наличие</h2>
-              </div>
-              <small>Из списка каталога</small>
-            </div>
-            <dl className="stock-strip stock-strip--detail">
-              <div className={inventory.available_count > 0 ? "stock-strip__available" : "stock-strip__zero"}>
-                <dt>Доступно</dt>
-                <dd>{inventory.available_count}</dd>
-              </div>
-              <div>
-                <dt>У пользователей</dt>
-                <dd>{inventory.custody_count}</dd>
-              </div>
-              <div>
-                <dt>Всего активно</dt>
-                <dd>{inventory.total_count}</dd>
-              </div>
-            </dl>
-          </section>
-        ) : null}
+        <ItemInventoryPanel itemId={item.id} mode={item.accounting_mode} />
 
         <section aria-labelledby="identity-title" className="detail-panel">
           <div className="detail-panel__heading">
@@ -241,6 +188,8 @@ export function ItemDetailPage() {
             ) : null}
           </section>
         ) : null}
+
+        <AdminItemActions item={item} />
       </div>
     </main>
   );

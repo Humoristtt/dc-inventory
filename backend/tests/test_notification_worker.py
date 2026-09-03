@@ -213,7 +213,7 @@ def test_telegram_message_id_rejects_invalid_shapes() -> None:
     assert worker._telegram_message_id(None) is None
 
 @pytest.mark.asyncio
-async def test_current_start_welcome_finalizes_state_before_reaction(
+async def test_current_start_welcome_finalizes_state_without_followup_reaction(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     events: list[str] = []
@@ -309,7 +309,6 @@ async def test_current_start_welcome_finalizes_state_before_reaction(
         "claim",
         "send:sendMessage",
         "finalize:start",
-        "send:setMessageReaction",
         "claim:empty",
     ]
 

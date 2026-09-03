@@ -119,6 +119,7 @@ async def test_start_refresh_personalizes_and_deletes_recent_previous() -> None:
             assert welcome.method == "sendMessage"
             assert welcome.available_at > by_key[command_key].available_at
             assert welcome.payload["parse_mode"] == "HTML"
+            assert welcome.payload["message_effect_id"] == "5113957245121463396"
             welcome_text = welcome.payload["text"]
             assert isinstance(welcome_text, str)
             assert (

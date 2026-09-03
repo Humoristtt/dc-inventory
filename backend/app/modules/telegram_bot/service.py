@@ -240,6 +240,7 @@ async def enqueue_access_request_admin_notification(
 
 _START_WELCOME_DELETE_WINDOW = timedelta(hours=48)
 _START_WELCOME_SEND_DELAY = timedelta(milliseconds=150)
+_START_WELCOME_EFFECT_ID = "5113957245121463396"
 
 
 def _start_welcome_dedupe_key(update_id: int, chat_id: int) -> str:
@@ -360,6 +361,7 @@ async def enqueue_start_message(
             "chat_id": chat_id,
             "text": _start_welcome_text(first_name, settings),
             "parse_mode": "HTML",
+            "message_effect_id": _START_WELCOME_EFFECT_ID,
             "reply_markup": {
                 "inline_keyboard": [
                     [

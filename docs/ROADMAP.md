@@ -1793,6 +1793,8 @@ Telegram entry UX (parallel Stage 8 slice):
 - [x] Stock by location.
 - [x] Holder summary.
 - [x] «Моё».
+- [x] High-cardinality facet values bounded/pageable; FilterSheet загружает
+  facets lazily и поддерживает «Показать ещё» без потери выбранных значений.
 - [x] Browser viewport acceptance for Telegram Desktop narrow, Android-like,
   iPhone-like and normal desktop widths.
 - [x] Playwright browser acceptance with deterministic synthetic API/Telegram

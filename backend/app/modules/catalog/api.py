@@ -192,6 +192,7 @@ def _facet_out(facet: FacetRecord) -> FacetOut:
         data_type=facet.data_type,
         unit=facet.unit,
         filter_type=facet.filter_type,
+        values_has_more=facet.values_has_more,
         values=[
             FacetValueOut(
                 value=value.value,
@@ -362,6 +363,12 @@ async def get_item_facets(
         list[str] | None,
         Query(alias="filter", max_length=2300),
     ] = None,
+    facet_key: Annotated[
+        str | None,
+        Query(alias="facet", max_length=64),
+    ] = None,
+    facet_limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    facet_offset: Annotated[int, Query(ge=0)] = 0,
 ) -> FacetListOut:
     try:
         spec = await _query_spec(
@@ -375,7 +382,13 @@ async def get_item_facets(
             location_ids=location_id,
             attribute_filters=attribute_filter,
         )
-        facets = await query_catalog_facets(db, spec)
+        facets = await query_catalog_facets(
+            db,
+            spec,
+            value_limit=facet_limit,
+            value_offset=facet_offset,
+            only_key=facet_key,
+        )
     except CatalogError as error:
         _raise_catalog_error(error)
     return FacetListOut(facets=[_facet_out(facet) for facet in facets])

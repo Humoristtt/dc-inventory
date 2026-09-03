@@ -10,6 +10,7 @@ import { useAuthState } from "../../features/auth/useAuthState";
 import {
   catalogQueryCacheKey,
   getCatalogCategory,
+  getCatalogFacetPage,
   getCatalogFacets,
 } from "../../shared/api/catalog";
 import {
@@ -62,7 +63,7 @@ export function CategoryPage() {
   const facetsQuery = useQuery({
     queryKey: ["catalog", "facets", catalogQueryCacheKey(catalogQuery)],
     queryFn: ({ signal }) => getCatalogFacets(catalogQuery, signal),
-    enabled: categoryKey !== "",
+    enabled: filtersOpen && categoryKey !== "",
   });
   const filtersCount = activeFilterCount(viewState);
   const returnTo = `${location.pathname}${location.search}`;
@@ -204,6 +205,22 @@ export function CategoryPage() {
             setFiltersOpen(false);
           }}
           onCancel={() => setFiltersOpen(false)}
+          onLoadMore={async (facetKey, offset) => {
+            const page = await getCatalogFacetPage(
+              catalogQuery,
+              {
+                facet: facetKey,
+                offset,
+              },
+            );
+            const nextFacet = page.facets[0];
+            if (nextFacet === undefined || nextFacet.key !== facetKey) {
+              throw new Error(
+                `Facet page mismatch for ${facetKey}`,
+              );
+            }
+            return nextFacet;
+          }}
           onRetry={() => void facetsQuery.refetch()}
         />
       ) : null}

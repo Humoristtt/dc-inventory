@@ -7,8 +7,19 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from app.modules.catalog.enums import AccountingMode, ItemStatus
-from app.modules.catalog.models import Category, Item, Manufacturer
+from app.modules.catalog.enums import (
+    AccountingMode,
+    AttributeDataType,
+    FilterType,
+    ItemStatus,
+)
+from app.modules.catalog.models import (
+    Category,
+    CategoryAttribute,
+    Item,
+    ItemAttributeValue,
+    Manufacturer,
+)
 from app.modules.catalog.query import (
     FacetRecord,
     build_catalog_query_spec,
@@ -813,6 +824,262 @@ async def test_stage7_search_filters_inventory_facets_and_pagination() -> None:
                 empty_reach = _facet_by_key(empty_facets, "reach_m")
                 assert empty_reach.minimum is None
                 assert empty_reach.maximum is None
+            finally:
+                await transaction.rollback()
+    finally:
+        await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_facet_values_are_bounded_and_pageable() -> None:
+    engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
+    marker = uuid.uuid4().hex
+
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            transaction = await db.begin()
+            try:
+                category = await db.scalar(
+                    select(Category).where(Category.key == "sfp")
+                )
+                assert category is not None
+
+                text_attribute = CategoryAttribute(
+                    id=uuid.uuid4(),
+                    category_id=category.id,
+                    key=f"f34_text_{marker[:8]}",
+                    label="F34 text facet",
+                    data_type=AttributeDataType.TEXT,
+                    filterable=True,
+                    filter_type=FilterType.EXACT,
+                    sort_order=99_000,
+                    is_system=False,
+                )
+                db.add(text_attribute)
+                await db.flush()
+
+                manufacturers: list[Manufacturer] = []
+                locations: list[Location] = []
+                items: list[Item] = []
+
+                for index in range(61):
+                    suffix = f"{index:03d}"
+
+                    manufacturer_name = (
+                        f"F34 Manufacturer {suffix} {marker}"
+                    )
+                    manufacturer = Manufacturer(
+                        id=uuid.uuid4(),
+                        name=manufacturer_name,
+                        normalized_name=normalize_comparison(
+                            manufacturer_name
+                        ),
+                    )
+
+                    location_code = f"F34-{suffix}-{marker[:6]}"
+                    location = Location(
+                        id=uuid.uuid4(),
+                        code=location_code,
+                        normalized_code=location_code.lower(),
+                        name=f"F34 Location {suffix}",
+                        status=LocationStatus.ACTIVE,
+                    )
+
+                    item_name = f"F34 Item {suffix} {marker}"
+                    item = Item(
+                        id=uuid.uuid4(),
+                        category_id=category.id,
+                        manufacturer_id=manufacturer.id,
+                        name=item_name,
+                        normalized_name=normalize_comparison(item_name),
+                        accounting_mode=AccountingMode.QUANTITY,
+                    )
+
+                    manufacturers.append(manufacturer)
+                    locations.append(location)
+                    items.append(item)
+
+                    db.add_all([manufacturer, location, item])
+
+                await db.flush()
+
+                for index, (item, location) in enumerate(
+                    zip(items, locations, strict=True)
+                ):
+                    db.add(
+                        StockBalance(
+                            item_id=item.id,
+                            location_id=location.id,
+                            quantity=1,
+                        )
+                    )
+                    db.add(
+                        ItemAttributeValue(
+                            id=uuid.uuid4(),
+                            item_id=item.id,
+                            category_attribute_id=text_attribute.id,
+                            category_id=category.id,
+                            text_value=f"F34 Value {index:03d}",
+                        )
+                    )
+
+                await db.flush()
+
+                spec = await build_catalog_query_spec(
+                    db,
+                    category_key="sfp",
+                    q=marker,
+                )
+
+                initial = await query_catalog_facets(
+                    db,
+                    spec,
+                    value_limit=50,
+                )
+
+                manufacturer_first = _facet_by_key(
+                    initial,
+                    "manufacturer",
+                )
+                location_first = _facet_by_key(
+                    initial,
+                    "location",
+                )
+                text_first = _facet_by_key(
+                    initial,
+                    text_attribute.key,
+                )
+
+                assert len(manufacturer_first.values) == 50
+                assert manufacturer_first.values_has_more is True
+
+                assert len(location_first.values) == 50
+                assert location_first.values_has_more is True
+
+                assert len(text_first.values) == 50
+                assert text_first.values_has_more is True
+
+                manufacturer_second = _facet_by_key(
+                    await query_catalog_facets(
+                        db,
+                        spec,
+                        value_limit=50,
+                        value_offset=50,
+                        only_key="manufacturer",
+                    ),
+                    "manufacturer",
+                )
+                location_second = _facet_by_key(
+                    await query_catalog_facets(
+                        db,
+                        spec,
+                        value_limit=50,
+                        value_offset=50,
+                        only_key="location",
+                    ),
+                    "location",
+                )
+                text_second = _facet_by_key(
+                    await query_catalog_facets(
+                        db,
+                        spec,
+                        value_limit=50,
+                        value_offset=50,
+                        only_key=text_attribute.key,
+                    ),
+                    text_attribute.key,
+                )
+
+                assert len(manufacturer_second.values) == 11
+                assert manufacturer_second.values_has_more is False
+
+                assert len(location_second.values) == 11
+                assert location_second.values_has_more is False
+
+                assert len(text_second.values) == 11
+                assert text_second.values_has_more is False
+
+                manufacturer_values = [
+                    value.value
+                    for value in (
+                        *manufacturer_first.values,
+                        *manufacturer_second.values,
+                    )
+                ]
+                location_values = [
+                    value.value
+                    for value in (
+                        *location_first.values,
+                        *location_second.values,
+                    )
+                ]
+                text_values = [
+                    value.value
+                    for value in (
+                        *text_first.values,
+                        *text_second.values,
+                    )
+                ]
+
+                assert len(manufacturer_values) == 61
+                assert len(set(manufacturer_values)) == 61
+                assert set(manufacturer_values) == {
+                    manufacturer.id
+                    for manufacturer in manufacturers
+                }
+
+                assert len(location_values) == 61
+                assert len(set(location_values)) == 61
+                assert set(location_values) == {
+                    location.id
+                    for location in locations
+                }
+
+                assert len(text_values) == 61
+                assert len(set(text_values)) == 61
+                assert set(text_values) == {
+                    f"F34 Value {index:03d}"
+                    for index in range(61)
+                }
+
+                small_page = _facet_by_key(
+                    await query_catalog_facets(
+                        db,
+                        spec,
+                        value_limit=7,
+                        only_key="manufacturer",
+                    ),
+                    "manufacturer",
+                )
+                assert len(small_page.values) == 7
+                assert small_page.values_has_more is True
+
+                try:
+                    await query_catalog_facets(
+                        db,
+                        spec,
+                        value_limit=50,
+                        value_offset=1,
+                    )
+                except CatalogValidationError as error:
+                    assert error.code == "facet_key_required"
+                else:
+                    raise AssertionError(
+                        "non-zero facet offset without facet key must fail"
+                    )
+
+                try:
+                    await query_catalog_facets(
+                        db,
+                        spec,
+                        only_key="definitely_missing_facet",
+                    )
+                except CatalogValidationError as error:
+                    assert error.code == "facet_unknown"
+                else:
+                    raise AssertionError(
+                        "unknown facet key must fail"
+                    )
             finally:
                 await transaction.rollback()
     finally:

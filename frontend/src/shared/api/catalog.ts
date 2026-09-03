@@ -126,6 +126,7 @@ export type CatalogFacet = {
   unit: string | null;
   filter_type: FilterType;
   values: FacetValue[];
+  values_has_more: boolean;
   min: string | number | null;
   max: string | number | null;
 };
@@ -370,6 +371,34 @@ export function getCatalogFacets(query: CatalogQuery, signal?: AbortSignal) {
     includePagination: false,
     includeSorting: false,
   });
+  return getJson<CatalogFacetList>(
+    `/api/catalog/items/facets?${params.toString()}`,
+    signal,
+  );
+}
+
+export function getCatalogFacetPage(
+  query: CatalogQuery,
+  {
+    facet,
+    limit = 50,
+    offset = 0,
+  }: {
+    facet: string;
+    limit?: number;
+    offset?: number;
+  },
+  signal?: AbortSignal,
+) {
+  const params = encodeCatalogQuery(query, {
+    includePagination: false,
+    includeSorting: false,
+  });
+
+  params.set("facet", facet);
+  params.set("facet_limit", String(limit));
+  params.set("facet_offset", String(offset));
+
   return getJson<CatalogFacetList>(
     `/api/catalog/items/facets?${params.toString()}`,
     signal,

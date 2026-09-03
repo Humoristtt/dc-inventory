@@ -49,6 +49,9 @@ type FilterValue = str | int | Decimal | bool
 type FacetValue = uuid.UUID | str | int | Decimal | bool
 type FacetBound = int | Decimal
 
+DEFAULT_FACET_VALUE_LIMIT = 50
+MAX_FACET_VALUE_LIMIT = 100
+
 
 @dataclass(frozen=True, slots=True)
 class AttributeFilter:
@@ -111,6 +114,7 @@ class FacetRecord:
     unit: str | None
     filter_type: FilterType
     values: tuple[FacetValueRecord, ...] = ()
+    values_has_more: bool = False
     minimum: FacetBound | None = None
     maximum: FacetBound | None = None
 
@@ -637,19 +641,37 @@ async def query_catalog_items(
 
 
 async def _category_facet(
-    db: AsyncSession, spec: CatalogQuerySpec, inventory: Subquery
+    db: AsyncSession,
+    spec: CatalogQuerySpec,
+    inventory: Subquery,
+    *,
+    value_limit: int,
+    value_offset: int,
 ) -> FacetRecord:
     matching = _matching_items(spec, inventory, exclude=frozenset({"category"}))
     rows = (
-        await db.execute(
-            select(Category.key, Category.display_name, func.count())
-            .select_from(Category)
-            .join(Item, Item.category_id == Category.id)
-            .join(matching, matching.c.item_id == Item.id)
-            .group_by(Category.id, Category.key, Category.display_name, Category.sort_order)
-            .order_by(Category.sort_order, Category.key)
+        (
+            await db.execute(
+                select(Category.key, Category.display_name, func.count())
+                .select_from(Category)
+                .join(Item, Item.category_id == Category.id)
+                .join(matching, matching.c.item_id == Item.id)
+                .group_by(
+                    Category.id,
+                    Category.key,
+                    Category.display_name,
+                    Category.sort_order,
+                )
+                .order_by(Category.sort_order, Category.key)
+                .limit(value_limit + 1)
+                .offset(value_offset)
+            )
         )
-    ).tuples()
+        .tuples()
+        .all()
+    )
+    has_more = len(rows) > value_limit
+    rows = rows[:value_limit]
     return FacetRecord(
         key="category",
         label="Категория",
@@ -657,25 +679,48 @@ async def _category_facet(
         unit=None,
         filter_type=FilterType.EXACT,
         values=tuple(
-            FacetValueRecord(value=key, label=label, count=int(count)) for key, label, count in rows
+            FacetValueRecord(
+                value=key,
+                label=label,
+                count=int(count),
+            )
+            for key, label, count in rows
         ),
+        values_has_more=has_more,
     )
 
 
 async def _manufacturer_facet(
-    db: AsyncSession, spec: CatalogQuerySpec, inventory: Subquery
+    db: AsyncSession,
+    spec: CatalogQuerySpec,
+    inventory: Subquery,
+    *,
+    value_limit: int,
+    value_offset: int,
 ) -> FacetRecord:
     matching = _matching_items(spec, inventory, exclude=frozenset({"manufacturer"}))
     rows = (
-        await db.execute(
-            select(Manufacturer.id, Manufacturer.name, func.count())
-            .select_from(Manufacturer)
-            .join(Item, Item.manufacturer_id == Manufacturer.id)
-            .join(matching, matching.c.item_id == Item.id)
-            .group_by(Manufacturer.id, Manufacturer.name, Manufacturer.normalized_name)
-            .order_by(Manufacturer.normalized_name, Manufacturer.id)
+        (
+            await db.execute(
+                select(Manufacturer.id, Manufacturer.name, func.count())
+                .select_from(Manufacturer)
+                .join(Item, Item.manufacturer_id == Manufacturer.id)
+                .join(matching, matching.c.item_id == Item.id)
+                .group_by(
+                    Manufacturer.id,
+                    Manufacturer.name,
+                    Manufacturer.normalized_name,
+                )
+                .order_by(Manufacturer.normalized_name, Manufacturer.id)
+                .limit(value_limit + 1)
+                .offset(value_offset)
+            )
         )
-    ).tuples()
+        .tuples()
+        .all()
+    )
+    has_more = len(rows) > value_limit
+    rows = rows[:value_limit]
     return FacetRecord(
         key="manufacturer",
         label="Производитель",
@@ -683,9 +728,14 @@ async def _manufacturer_facet(
         unit=None,
         filter_type=FilterType.EXACT,
         values=tuple(
-            FacetValueRecord(value=identifier, label=name, count=int(count))
+            FacetValueRecord(
+                value=identifier,
+                label=name,
+                count=int(count),
+            )
             for identifier, name, count in rows
         ),
+        values_has_more=has_more,
     )
 
 
@@ -737,25 +787,43 @@ def _location_item_pairs() -> Subquery:
 
 
 async def _location_facet(
-    db: AsyncSession, spec: CatalogQuerySpec, inventory: Subquery
+    db: AsyncSession,
+    spec: CatalogQuerySpec,
+    inventory: Subquery,
+    *,
+    value_limit: int,
+    value_offset: int,
 ) -> FacetRecord:
     matching = _matching_items(spec, inventory, exclude=frozenset({"location"}))
     pairs = _location_item_pairs()
     rows = (
-        await db.execute(
-            select(
-                Location.id,
-                Location.code,
-                Location.name,
-                func.count(func.distinct(pairs.c.item_id)),
+        (
+            await db.execute(
+                select(
+                    Location.id,
+                    Location.code,
+                    Location.name,
+                    func.count(func.distinct(pairs.c.item_id)),
+                )
+                .select_from(Location)
+                .join(pairs, pairs.c.location_id == Location.id)
+                .join(matching, matching.c.item_id == pairs.c.item_id)
+                .group_by(
+                    Location.id,
+                    Location.code,
+                    Location.name,
+                    Location.normalized_code,
+                )
+                .order_by(Location.normalized_code, Location.id)
+                .limit(value_limit + 1)
+                .offset(value_offset)
             )
-            .select_from(Location)
-            .join(pairs, pairs.c.location_id == Location.id)
-            .join(matching, matching.c.item_id == pairs.c.item_id)
-            .group_by(Location.id, Location.code, Location.name, Location.normalized_code)
-            .order_by(Location.normalized_code, Location.id)
         )
-    ).tuples()
+        .tuples()
+        .all()
+    )
+    has_more = len(rows) > value_limit
+    rows = rows[:value_limit]
     return FacetRecord(
         key="location",
         label="Локация",
@@ -772,6 +840,7 @@ async def _location_facet(
             )
             for identifier, code, name, count in rows
         ),
+        values_has_more=has_more,
     )
 
 
@@ -780,6 +849,9 @@ async def _exact_attribute_facet(
     spec: CatalogQuerySpec,
     inventory: Subquery,
     attribute: CategoryAttribute,
+    *,
+    value_limit: int,
+    value_offset: int,
 ) -> FacetRecord:
     matching = _matching_items(
         spec,
@@ -787,37 +859,91 @@ async def _exact_attribute_facet(
         exclude=frozenset({f"attribute:{attribute.key}"}),
     )
     column = _attribute_value_column(attribute.data_type)
+    has_more = False
+
     if attribute.data_type == AttributeDataType.TEXT:
         normalized = func.lower(ItemAttributeValue.text_value)
         text_rows = (
-            await db.execute(
-                select(normalized, func.min(ItemAttributeValue.text_value), func.count())
-                .select_from(ItemAttributeValue)
-                .join(matching, matching.c.item_id == ItemAttributeValue.item_id)
-                .where(ItemAttributeValue.category_attribute_id == attribute.id)
-                .group_by(normalized)
-                .order_by(normalized)
-            )
-        ).tuples()
-        values = tuple(
-            FacetValueRecord(value=display, label=display, count=int(count))
-            for _normalized, display, count in text_rows
-        )
-    else:
-        exact_rows = (
             (
                 await db.execute(
-                    select(column, func.count())
+                    select(
+                        normalized,
+                        func.min(ItemAttributeValue.text_value),
+                        func.count(),
+                    )
                     .select_from(ItemAttributeValue)
-                    .join(matching, matching.c.item_id == ItemAttributeValue.item_id)
-                    .where(ItemAttributeValue.category_attribute_id == attribute.id)
-                    .group_by(column)
+                    .join(
+                        matching,
+                        matching.c.item_id == ItemAttributeValue.item_id,
+                    )
+                    .where(
+                        ItemAttributeValue.category_attribute_id
+                        == attribute.id
+                    )
+                    .group_by(normalized)
+                    .order_by(normalized)
+                    .limit(value_limit + 1)
+                    .offset(value_offset)
                 )
             )
             .tuples()
             .all()
         )
-        by_value = {value: int(count) for value, count in exact_rows}
+        has_more = len(text_rows) > value_limit
+        text_rows = text_rows[:value_limit]
+        values = tuple(
+            FacetValueRecord(
+                value=display,
+                label=display,
+                count=int(count),
+            )
+            for _normalized, display, count in text_rows
+        )
+    else:
+        statement = (
+            select(column, func.count())
+            .select_from(ItemAttributeValue)
+            .join(
+                matching,
+                matching.c.item_id == ItemAttributeValue.item_id,
+            )
+            .where(
+                ItemAttributeValue.category_attribute_id
+                == attribute.id
+            )
+            .group_by(column)
+        )
+
+        if attribute.data_type in {
+            AttributeDataType.ENUM,
+            AttributeDataType.BOOLEAN,
+        }:
+            exact_rows = (
+                (await db.execute(statement))
+                .tuples()
+                .all()
+            )
+        else:
+            exact_rows = (
+                (
+                    await db.execute(
+                        statement
+                        .order_by(column)
+                        .limit(value_limit + 1)
+                        .offset(value_offset)
+                    )
+                )
+                .tuples()
+                .all()
+            )
+            has_more = len(exact_rows) > value_limit
+            exact_rows = exact_rows[:value_limit]
+
+        by_value = {
+            value: int(count)
+            for value, count in exact_rows
+        }
+
         if attribute.data_type == AttributeDataType.ENUM:
             allowed_values = attribute.allowed_values
             if not isinstance(allowed_values, list):
@@ -825,20 +951,32 @@ async def _exact_attribute_facet(
                     f"attribute {attribute.key} has invalid ENUM allowed_values"
                 )
             ordered_values: list[FacetValue] = [
-                value for value in allowed_values if value in by_value
+                value
+                for value in allowed_values
+                if value in by_value
             ]
         elif attribute.data_type == AttributeDataType.BOOLEAN:
-            ordered_values = [value for value in (False, True) if value in by_value]
+            ordered_values = [
+                value
+                for value in (False, True)
+                if value in by_value
+            ]
         else:
             ordered_values = sorted(by_value)
+
         values = tuple(
             FacetValueRecord(
                 value=value,
-                label=(str(value).lower() if isinstance(value, bool) else str(value)),
+                label=(
+                    str(value).lower()
+                    if isinstance(value, bool)
+                    else str(value)
+                ),
                 count=by_value[value],
             )
             for value in ordered_values
         )
+
     return FacetRecord(
         key=attribute.key,
         label=attribute.label,
@@ -846,6 +984,7 @@ async def _exact_attribute_facet(
         unit=attribute.unit,
         filter_type=attribute.filter_type,
         values=values,
+        values_has_more=has_more,
     )
 
 
@@ -884,18 +1023,71 @@ async def _range_attribute_facet(
 async def query_catalog_facets(
     db: AsyncSession,
     spec: CatalogQuerySpec,
+    *,
+    value_limit: int = DEFAULT_FACET_VALUE_LIMIT,
+    value_offset: int = 0,
+    only_key: str | None = None,
 ) -> list[FacetRecord]:
+    if not 1 <= value_limit <= MAX_FACET_VALUE_LIMIT:
+        raise CatalogValidationError(
+            "facet_limit_invalid",
+            "facet value limit is outside the allowed range",
+        )
+    if value_offset < 0:
+        raise CatalogValidationError(
+            "facet_offset_invalid",
+            "facet value offset must be non-negative",
+        )
+    if value_offset > 0 and only_key is None:
+        raise CatalogValidationError(
+            "facet_key_required",
+            "facet key is required for a non-zero facet offset",
+        )
+
     inventory = _inventory_aggregate()
     facets: list[FacetRecord] = []
-    if spec.category_id is None:
-        facets.append(await _category_facet(db, spec, inventory))
-    facets.extend(
-        [
-            await _manufacturer_facet(db, spec, inventory),
-            await _availability_facet(db, spec, inventory),
-            await _location_facet(db, spec, inventory),
-        ]
-    )
+
+    def wanted(key: str) -> bool:
+        return only_key is None or only_key == key
+
+    if spec.category_id is None and wanted("category"):
+        facets.append(
+            await _category_facet(
+                db,
+                spec,
+                inventory,
+                value_limit=value_limit,
+                value_offset=value_offset,
+            )
+        )
+
+    if wanted("manufacturer"):
+        facets.append(
+            await _manufacturer_facet(
+                db,
+                spec,
+                inventory,
+                value_limit=value_limit,
+                value_offset=value_offset,
+            )
+        )
+
+    if wanted("availability"):
+        facets.append(
+            await _availability_facet(db, spec, inventory)
+        )
+
+    if wanted("location"):
+        facets.append(
+            await _location_facet(
+                db,
+                spec,
+                inventory,
+                value_limit=value_limit,
+                value_offset=value_offset,
+            )
+        )
+
     if spec.category_id is not None:
         definitions = (
             await db.scalars(
@@ -904,16 +1096,47 @@ async def query_catalog_facets(
                     CategoryAttribute.category_id == spec.category_id,
                     CategoryAttribute.filterable.is_(True),
                 )
-                .order_by(CategoryAttribute.sort_order, CategoryAttribute.key)
+                .order_by(
+                    CategoryAttribute.sort_order,
+                    CategoryAttribute.key,
+                )
             )
         ).all()
+
         for attribute in definitions:
+            if not wanted(attribute.key):
+                continue
+
             if attribute.filter_type == FilterType.RANGE:
-                facets.append(await _range_attribute_facet(db, spec, inventory, attribute))
+                facets.append(
+                    await _range_attribute_facet(
+                        db,
+                        spec,
+                        inventory,
+                        attribute,
+                    )
+                )
             elif attribute.filter_type == FilterType.EXACT:
-                facets.append(await _exact_attribute_facet(db, spec, inventory, attribute))
+                facets.append(
+                    await _exact_attribute_facet(
+                        db,
+                        spec,
+                        inventory,
+                        attribute,
+                        value_limit=value_limit,
+                        value_offset=value_offset,
+                    )
+                )
             else:
                 raise CatalogSchemaError(
-                    f"filterable attribute {attribute.key} has invalid filter type"
+                    f"filterable attribute {attribute.key} "
+                    "has invalid filter type"
                 )
+
+    if only_key is not None and not facets:
+        raise CatalogValidationError(
+            "facet_unknown",
+            f"unknown or unavailable facet: {only_key}",
+        )
+
     return facets

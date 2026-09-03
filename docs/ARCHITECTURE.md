@@ -583,6 +583,13 @@ Item list сохраняет previous pages во время progressive refetch.
 предыдущего query за актуальные.
 
 Catalog API encoding централизован в typed same-origin client. Repeated
+Facet values не materialize-ятся в UI без границы. Initial facet request
+выполняется только при открытом FilterSheet. High-cardinality value sets
+возвращаются bounded страницами: default 50, максимум 100; следующая страница
+запрашивается для одного facet и объединяется с уже загруженными значениями.
+Активное выбранное значение сохраняется в draft даже если оно отсутствует в
+текущей странице backend values.
+
 `manufacturer_id`, `location_id` и metadata attribute `filter` parameters
 сортируются и кодируются детерминированно. Filter UI получает common/dynamic
 facets от backend и CategoryAttribute metadata; category-specific query logic в

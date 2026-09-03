@@ -207,6 +207,8 @@ catalog UX:
   privacy scope: `ADMIN` ищет по всем physical units, обычный `USER` — только
   по текущим `ISSUED` units, которые числятся за ним;
 - metadata/facet-driven exact, boolean и range filters;
+- bounded high-cardinality facet values с lazy загрузкой и явной дозагрузкой
+  следующих страниц без потери уже выбранных значений;
 - sorting и progressive pagination;
 - compact item cards и Item detail;
 - role-aware metadata-driven Admin create/edit/archive, inline Manufacturer и

@@ -11,7 +11,13 @@ from app.core.config import Settings
 from app.main import create_app
 from app.modules.auth.models import AuthSession
 from app.modules.auth.service import hash_session_token
-from app.modules.catalog.models import Item, ItemAttributeValue, Manufacturer
+from app.modules.catalog.enums import AccountingMode
+from app.modules.catalog.models import (
+    Category,
+    Item,
+    ItemAttributeValue,
+    Manufacturer,
+)
 from app.modules.catalog.service import normalize_comparison
 from app.modules.identity.enums import UserAccessStatus, UserRole
 from app.modules.identity.models import TelegramIdentity, User
@@ -47,6 +53,8 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
     user_ids_by_key: dict[str, uuid.UUID] = {}
     tokens: dict[str, str] = {}
     privacy_location_id: uuid.UUID | None = None
+    facet_item_ids: list[uuid.UUID] = []
+    facet_manufacturer_ids: list[uuid.UUID] = []
     manufacturer_normalized_name = normalize_comparison(
         f"API Manufacturer {marker}"
     )
@@ -458,6 +466,133 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
                 for value in admin_category_facet["values"]
             )
 
+            # F34: the HTTP facet contract must expose bounded,
+            # independently pageable values without losing candidates.
+            facet_marker = f"f34api{uuid.uuid4().hex}"
+
+            async with AsyncSession(
+                engine,
+                expire_on_commit=False,
+            ) as db:
+                sfp_category = await db.scalar(
+                    select(Category).where(Category.key == "sfp")
+                )
+                assert sfp_category is not None
+
+                for index in range(61):
+                    suffix = f"{index:03d}"
+
+                    manufacturer_name = (
+                        f"F34 API Manufacturer {suffix} "
+                        f"{facet_marker}"
+                    )
+                    facet_manufacturer = Manufacturer(
+                        id=uuid.uuid4(),
+                        name=manufacturer_name,
+                        normalized_name=normalize_comparison(
+                            manufacturer_name
+                        ),
+                    )
+
+                    item_name = (
+                        f"F34 API Item {suffix} {facet_marker}"
+                    )
+                    item = Item(
+                        id=uuid.uuid4(),
+                        category_id=sfp_category.id,
+                        manufacturer_id=facet_manufacturer.id,
+                        name=item_name,
+                        normalized_name=normalize_comparison(
+                            item_name
+                        ),
+                        accounting_mode=AccountingMode.QUANTITY,
+                    )
+
+                    facet_manufacturer_ids.append(
+                        facet_manufacturer.id
+                    )
+                    facet_item_ids.append(item.id)
+                    db.add_all([facet_manufacturer, item])
+
+                await db.commit()
+
+            first_facet_page = await client.get(
+                "/api/catalog/items/facets",
+                params={
+                    "category": "sfp",
+                    "q": facet_marker,
+                    "facet": "manufacturer",
+                    "facet_limit": 50,
+                },
+                cookies={
+                    settings.auth_cookie_name: tokens["user"],
+                },
+            )
+            assert first_facet_page.status_code == 200
+
+            first_payload = first_facet_page.json()
+            assert len(first_payload["facets"]) == 1
+
+            first_manufacturers = first_payload["facets"][0]
+            assert first_manufacturers["key"] == "manufacturer"
+            assert len(first_manufacturers["values"]) == 50
+            assert first_manufacturers["values_has_more"] is True
+
+            second_facet_page = await client.get(
+                "/api/catalog/items/facets",
+                params={
+                    "category": "sfp",
+                    "q": facet_marker,
+                    "facet": "manufacturer",
+                    "facet_limit": 50,
+                    "facet_offset": 50,
+                },
+                cookies={
+                    settings.auth_cookie_name: tokens["user"],
+                },
+            )
+            assert second_facet_page.status_code == 200
+
+            second_payload = second_facet_page.json()
+            assert len(second_payload["facets"]) == 1
+
+            second_manufacturers = second_payload["facets"][0]
+            assert second_manufacturers["key"] == "manufacturer"
+            assert len(second_manufacturers["values"]) == 11
+            assert second_manufacturers["values_has_more"] is False
+
+            returned_manufacturer_ids = {
+                str(value["value"])
+                for value in (
+                    *first_manufacturers["values"],
+                    *second_manufacturers["values"],
+                )
+            }
+            expected_manufacturer_ids = {
+                str(identifier)
+                for identifier in facet_manufacturer_ids
+            }
+
+            assert len(returned_manufacturer_ids) == 61
+            assert (
+                returned_manufacturer_ids
+                == expected_manufacturer_ids
+            )
+
+            invalid_facet_limit = await client.get(
+                "/api/catalog/items/facets",
+                params={
+                    "category": "sfp",
+                    "q": facet_marker,
+                    "facet": "manufacturer",
+                    "facet_limit": 0,
+                },
+                cookies={
+                    settings.auth_cookie_name: tokens["user"],
+                },
+            )
+            assert invalid_facet_limit.status_code == 422
+
             stage7_listing = await client.get(
                 "/api/catalog/items",
                 params={"q": "api-pn-1", "category": "sfp"},
@@ -678,6 +813,20 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
                     )
                     await db.execute(delete(Item).where(Item.id.in_(item_ids)))
                 await db.delete(manufacturer)
+            if facet_item_ids:
+                await db.execute(
+                    delete(Item).where(
+                        Item.id.in_(facet_item_ids)
+                    )
+                )
+            if facet_manufacturer_ids:
+                await db.execute(
+                    delete(Manufacturer).where(
+                        Manufacturer.id.in_(
+                            facet_manufacturer_ids
+                        )
+                    )
+                )
             if privacy_location_id is not None:
                 await db.execute(
                     delete(Location).where(

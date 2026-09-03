@@ -621,7 +621,10 @@ pagination идёт по unique Item rows. `total` считается после
 
 `GET /api/catalog/items/facets` имеет ту же Approved boundary и принимает тот же
 query context (`q`, `category`, `status`, repeated manufacturer/location,
-availability, repeated filter), но не pagination/sorting.
+availability, repeated filter), но не item-list `limit`/`offset` или
+sorting. Pagination списка значений facet имеет отдельный bounded contract:
+`facet=<key>`, `facet_limit=1..100` (default 50) и `facet_offset>=0`.
+Ненулевой `facet_offset` требует конкретный `facet`.
 
 Без Category response содержит category, manufacturer, availability и location.
 С Category category facet убирается и metadata-driven facets добавляются для
@@ -631,6 +634,14 @@ data type, unit/filter type и non-zero values/counts. Manufacturer содерж
 BOOLEAN в deterministic false/true order, TEXT — в normalized display order.
 RANGE не создаёт buckets: возвращает real `min`/`max`; empty dataset возвращает
 оба bounds как null, без fabricated `0..0`. Decimal сериализуется точно.
+
+High-cardinality facet value sets не возвращаются без границы.
+Category, manufacturer, location, TEXT EXACT и data-driven numeric EXACT
+значения используют deterministic offset pages. Ответ facet содержит
+`values_has_more`; frontend может запросить следующую страницу только этого
+facet. ENUM/BOOLEAN EXACT остаются целиком metadata-bounded, а RANGE facet
+возвращает только `min`/`max`. Выбранные значения не обязаны присутствовать в
+текущей странице facet values и поэтому сохраняются frontend отдельно.
 
 Каждый facet self-excluding: применяются все active predicates кроме predicate
 этого facet. Search и status при этом сохраняются. Это одинаково действует для

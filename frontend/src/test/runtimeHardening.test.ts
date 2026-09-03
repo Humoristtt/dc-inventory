@@ -28,9 +28,29 @@ function expectSecurityHeaders(body: string): void {
   expect(body).toContain(
     "add_header Referrer-Policy strict-origin-when-cross-origin always;",
   );
+  expect(body).toContain(
+    "add_header Content-Security-Policy \"default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; form-action 'self'\" always;",
+  );
+  expect(body).toContain(
+    'add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), payment=(), usb=()" always;',
+  );
 }
 
 describe("production web hardening", () => {
+  it("keeps CSP and Permissions-Policy on all explicit security-header scopes", () => {
+    expect(
+      nginxConfig.match(
+        /add_header Content-Security-Policy/g,
+      ),
+    ).toHaveLength(3);
+
+    expect(
+      nginxConfig.match(
+        /add_header Permissions-Policy/g,
+      ),
+    ).toHaveLength(3);
+  });
+
   it("keeps security headers on immutable assets", () => {
     const body = locationBody("location /assets/");
 

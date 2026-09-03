@@ -217,7 +217,15 @@ Stage 5 сохраняет filter metadata, но не реализует faceted
 `validation_metadata` представляет JSON object. Текущий versioned contract:
 
 - `min` / `max` для INTEGER и DECIMAL;
-- `max_length` для TEXT.
+- `max_length` для TEXT;
+- `preserve_whitespace` для TEXT — optional boolean, default `false`:
+  - `false` или отсутствие ключа нормализует whitespace до одиночных пробелов;
+  - `true` удаляет только outer whitespace и сохраняет внутренние пробелы,
+    переводы строк и исходное форматирование текста.
+
+`preserve_whitespace` не меняет правило для blank values: whitespace-only TEXT
+по-прежнему считается отсутствующим значением, а required поле отклоняется.
+Небулево значение `preserve_whitespace` является некорректной metadata.
 
 Новые правила metadata должны добавляться вместе с backend support и новой
 миграцией.

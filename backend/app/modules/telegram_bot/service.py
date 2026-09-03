@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import hmac
+import html
 import json
 import re
 import secrets
 import uuid
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,7 +24,12 @@ from app.modules.notifications.service import (
     enqueue_telegram_call,
     notification_dedupe_key,
 )
-from app.modules.telegram_bot.models import AccessDecisionCallback, TelegramUpdate
+from app.modules.telegram_bot.models import (
+    START_WELCOME_DEDUPE_PREFIX,
+    AccessDecisionCallback,
+    TelegramChatState,
+    TelegramUpdate,
+)
 
 CALLBACK_PREFIX = "access:"
 _CALLBACK_TOKEN_PATTERN = re.compile(r"^[A-Za-z0-9_-]{20,48}$")
@@ -232,24 +238,128 @@ async def enqueue_access_request_admin_notification(
     )
 
 
-async def enqueue_start_message(
+_START_WELCOME_DELETE_WINDOW = timedelta(hours=48)
+_START_WELCOME_SEND_DELAY = timedelta(milliseconds=150)
+
+
+def _start_welcome_dedupe_key(update_id: int, chat_id: int) -> str:
+    return f"{START_WELCOME_DEDUPE_PREFIX}{update_id}:{chat_id}"
+
+
+def _start_welcome_text(first_name: str, settings: Settings) -> str:
+    safe_name = html.escape(first_name.strip() or "коллега")
+    safe_support = html.escape(settings.support_telegram_username)
+    return (
+        f"<b>Привет, {safe_name}! 👋</b>\n\n"
+        "Добро пожаловать в <b>Spikatel Inventory</b> — внутреннюю "
+        "систему учёта оборудования ЦОД.\n\n"
+        "Здесь можно найти оборудование, проверить остатки, посмотреть, "
+        "у кого оно находится, а также работать с выдачей, возвратом "
+        "и историей движений.\n\n"
+        "По вопросам доступа и работы сервиса — "
+        f"<b>@{safe_support}</b>."
+    )
+
+
+async def _register_latest_start(
     db: AsyncSession,
     *,
     chat_id: int,
     update_id: int,
+) -> tuple[int, int | None, datetime | None]:
+    insert_statement = pg_insert(TelegramChatState).values(
+        chat_id=chat_id,
+        latest_start_update_id=update_id,
+    )
+    statement = (
+        insert_statement.on_conflict_do_update(
+            index_elements=[TelegramChatState.chat_id],
+            set_={
+                "latest_start_update_id": func.greatest(
+                    TelegramChatState.latest_start_update_id,
+                    insert_statement.excluded.latest_start_update_id,
+                ),
+                "updated_at": func.now(),
+            },
+        )
+        .returning(
+            TelegramChatState.latest_start_update_id,
+            TelegramChatState.last_welcome_message_id,
+            TelegramChatState.last_welcome_sent_at,
+        )
+    )
+    row = (await db.execute(statement)).one()
+    return row[0], row[1], row[2]
+
+
+async def enqueue_start_message(
+    db: AsyncSession,
+    *,
+    chat_id: int,
+    command_message_id: int,
+    first_name: str,
+    update_id: int,
     settings: Settings,
+    now: datetime | None = None,
 ) -> None:
+    current_time = now or datetime.now(UTC)
+
+    await enqueue_telegram_call(
+        db,
+        method="deleteMessage",
+        payload={
+            "chat_id": chat_id,
+            "message_id": command_message_id,
+        },
+        dedupe_key=notification_dedupe_key(
+            "telegram-update",
+            update_id,
+            "delete-start",
+        ),
+        available_at=current_time,
+    )
+
+    latest_update_id, previous_message_id, previous_sent_at = (
+        await _register_latest_start(
+            db,
+            chat_id=chat_id,
+            update_id=update_id,
+        )
+    )
+
+    # Webhook deliveries can overlap. An older /start still gets its command
+    # removed, but it must not enqueue another welcome after a newer update won.
+    if latest_update_id != update_id:
+        return
+
+    if (
+        previous_message_id is not None
+        and previous_sent_at is not None
+        and current_time - previous_sent_at < _START_WELCOME_DELETE_WINDOW
+    ):
+        await enqueue_telegram_call(
+            db,
+            method="deleteMessage",
+            payload={
+                "chat_id": chat_id,
+                "message_id": previous_message_id,
+            },
+            dedupe_key=notification_dedupe_key(
+                "telegram-start",
+                chat_id,
+                previous_message_id,
+                "delete-previous",
+            ),
+            available_at=current_time,
+        )
+
     await enqueue_telegram_call(
         db,
         method="sendMessage",
         payload={
             "chat_id": chat_id,
-            "text": (
-                "Добро пожаловать в Spik Inventory.\n\n"
-                "Здесь ведётся учёт оборудования ЦОД: остатки, выдачи "
-                "и история движений.\n\n"
-                f"По вопросам доступа: @{settings.support_telegram_username}"
-            ),
+            "text": _start_welcome_text(first_name, settings),
+            "parse_mode": "HTML",
             "reply_markup": {
                 "inline_keyboard": [
                     [
@@ -257,17 +367,12 @@ async def enqueue_start_message(
                             "text": "Открыть приложение",
                             "web_app": {"url": settings.telegram_web_app_url},
                         }
-                    ],
-                    [
-                        {
-                            "text": f"@{settings.support_telegram_username}",
-                            "url": settings.support_telegram_url,
-                        }
-                    ],
+                    ]
                 ]
             },
         },
-        dedupe_key=notification_dedupe_key("telegram-update", update_id, "start"),
+        dedupe_key=_start_welcome_dedupe_key(update_id, chat_id),
+        available_at=current_time + _START_WELCOME_SEND_DELAY,
     )
 
 
@@ -536,10 +641,20 @@ async def process_telegram_update(
             and isinstance(chat, dict)
         ):
             chat_id = _integer(chat.get("id"))
-            if chat_id is not None:
+            command_message_id = _integer(message.get("message_id"))
+            sender = message.get("from")
+            first_name = ""
+            if isinstance(sender, dict):
+                raw_first_name = sender.get("first_name")
+                if isinstance(raw_first_name, str):
+                    first_name = raw_first_name
+
+            if chat_id is not None and command_message_id is not None:
                 await enqueue_start_message(
                     db,
                     chat_id=chat_id,
+                    command_message_id=command_message_id,
+                    first_name=first_name,
                     update_id=update_id,
                     settings=settings,
                 )

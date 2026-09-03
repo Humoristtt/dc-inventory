@@ -21,14 +21,14 @@ class TelegramGatewayClient:
         self,
         method: str,
         payload: dict[str, object],
-    ) -> None:
-        await asyncio.to_thread(self._send_sync, method, payload)
+    ) -> object:
+        return await asyncio.to_thread(self._send_sync, method, payload)
 
     def _send_sync(
         self,
         method: str,
         payload: dict[str, object],
-    ) -> None:
+    ) -> object:
         body = json.dumps(
             payload,
             ensure_ascii=False,
@@ -65,3 +65,5 @@ class TelegramGatewayClient:
 
         if not isinstance(result, dict) or result.get("ok") is not True:
             raise TelegramGatewayError("Telegram Bot API call failed")
+
+        return result.get("result")

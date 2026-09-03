@@ -193,6 +193,26 @@ SELECT format(
 )
 \gexec
 
+SELECT format(
+    'GRANT SELECT ON TABLE telegram_chat_states TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT INSERT (chat_id, latest_start_update_id) '
+    'ON TABLE telegram_chat_states TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT UPDATE (latest_start_update_id, updated_at) '
+    'ON TABLE telegram_chat_states TO %I',
+    :'runtime_user'
+)
+\gexec
+
 -- Backend may only revive a terminal DEAD delivery when the
 -- same business request is explicitly retried. It does not
 -- receive table-level UPDATE on the outbox.
@@ -277,9 +297,23 @@ WHERE pg_get_serial_sequence(
 \gexec
 
 
--- Telegram delivery worker: exactly one application table.
+-- Telegram delivery worker: outbox plus start-welcome chat state.
 SELECT format(
     'GRANT SELECT, UPDATE ON TABLE notification_outbox TO %I',
+    :'worker_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT SELECT ON TABLE telegram_chat_states TO %I',
+    :'worker_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT UPDATE '
+    '(last_welcome_message_id, last_welcome_sent_at, updated_at) '
+    'ON TABLE telegram_chat_states TO %I',
     :'worker_user'
 )
 \gexec

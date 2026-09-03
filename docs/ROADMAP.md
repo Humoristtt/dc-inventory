@@ -1729,6 +1729,15 @@ Backup/restore остаётся отдельным production-data gate и не 
 
 **STATUS: IN PROGRESS — Stage 8A catalog UX implemented; Stage 8B/admin and final viewport/E2E gates remain.**
 
+Telegram entry UX (parallel Stage 8 slice):
+
+- [ ] Branded `/start` welcome: Telegram `first_name` personalization, one
+  `Открыть приложение` CTA, deletion of the incoming `/start`, refresh of the
+  previous welcome while it is inside Telegram's 48-hour delete window,
+  stale/concurrent `/start` collapse, and best-effort animated reaction.
+- [ ] Final welcome media card using the Spikatel mascot/sticker visual after
+  the text/behavior flow is production-proven.
+
 ### Stage 8A — Working catalog UX
 
 - [x] Replace runtime hero with the operational application shell.

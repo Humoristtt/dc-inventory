@@ -64,3 +64,37 @@ test("forwards allowed Telegram method", async () => {
     globalThis.fetch = originalFetch;
   }
 });
+
+
+test("forwards start cleanup and reaction methods", async () => {
+  const originalFetch = globalThis.fetch;
+  const upstreamUrls = [];
+  globalThis.fetch = async (url) => {
+    upstreamUrls.push(String(url));
+    return new Response(JSON.stringify({ ok: true, result: true }), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  };
+
+  try {
+    for (const method of ["deleteMessage", "setMessageReaction"]) {
+      const response = await worker.fetch(
+        makeRequest(`/telegram/${method}`, env.GATEWAY_SECRET, {
+          chat_id: 42,
+          message_id: 7,
+        }),
+        env,
+      );
+      assert.equal(response.status, 200);
+      assert.equal((await response.json()).ok, true);
+    }
+
+    assert.deepEqual(upstreamUrls, [
+      `https://api.telegram.org/bot${env.BOT_TOKEN}/deleteMessage`,
+      `https://api.telegram.org/bot${env.BOT_TOKEN}/setMessageReaction`,
+    ]);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});

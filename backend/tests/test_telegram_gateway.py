@@ -15,7 +15,7 @@ class _Response:
         return None
 
     def read(self, _limit: int) -> bytes:
-        return b'{"ok":true}'
+        return b'{"ok":true,"result":{"message_id":321}}'
 
 
 def test_gateway_client_sets_service_user_agent(
@@ -39,7 +39,7 @@ def test_gateway_client_sets_service_user_agent(
         secret="test-secret",
     )
 
-    client._send_sync(
+    result = client._send_sync(
         "sendMessage",
         {
             "chat_id": 1,
@@ -47,4 +47,5 @@ def test_gateway_client_sets_service_user_agent(
         },
     )
 
+    assert result == {"message_id": 321}
     assert captured["user_agent"] == "dc-inventory-telegram-worker/1.0"

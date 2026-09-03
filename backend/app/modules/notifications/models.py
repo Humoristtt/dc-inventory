@@ -14,7 +14,7 @@ class NotificationOutbox(Base):
     __tablename__ = "notification_outbox"
     __table_args__ = (
         CheckConstraint(
-            "method IN ('sendMessage', 'editMessageText', "
+            "method IN ('sendMessage', 'deleteMessage', 'editMessageText', "
             "'editMessageReplyMarkup', 'answerCallbackQuery')",
             name="telegram_method",
         ),

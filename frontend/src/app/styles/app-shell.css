@@ -104,46 +104,58 @@
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 10px;
+  gap: clamp(14px, 2vw, 28px);
 }
 
 .compact-brand__logo {
   display: block;
-  width: 112px;
+  width: clamp(118px, 13vw, 168px);
   height: auto;
-  flex: 0 0 112px;
+  flex: 0 0 auto;
   object-fit: contain;
 }
 
-.compact-brand > div {
+.compact-brand__title {
   min-width: 0;
-}
-
-.compact-brand strong,
-.compact-brand small {
-  display: block;
   overflow: hidden;
+  font-size: clamp(14px, 1.45vw, 20px);
+  font-weight: 720;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.compact-brand strong {
-  font-size: 13px;
-  font-weight: 780;
-}
-
-.compact-brand small {
-  margin-top: 2px;
-  color: var(--color-muted);
-  font-size: 10px;
 }
 
 .compact-brand--inverse {
   color: #fff;
 }
 
-.compact-brand--inverse small {
-  color: rgb(255 255 255 / 58%);
+@media (max-width: 430px) {
+  .compact-brand {
+    gap: 12px;
+  }
+
+  .compact-brand__logo {
+    width: 112px;
+  }
+
+  .compact-brand__title {
+    font-size: 13px;
+  }
+}
+
+.placeholder-page__header {
+  margin:
+    calc(-1 * (var(--safe-area-top) + var(--page-block)))
+    calc(-1 * max(var(--page-inline), var(--safe-area-right)))
+    0
+    calc(-1 * max(var(--page-inline), var(--safe-area-left)));
+  padding:
+    calc(var(--safe-area-top) + 18px)
+    max(var(--page-inline), var(--safe-area-right))
+    20px
+    max(var(--page-inline), var(--safe-area-left));
+  background: var(--brand-header-background);
 }
 
 .placeholder-page__card {
@@ -155,7 +167,11 @@
   margin: clamp(42px, 10vh, 110px) auto 0;
   padding: clamp(24px, 6vw, 42px);
   border-radius: 30px;
-  background: linear-gradient(135deg, rgb(252 255 46 / 92%), rgb(255 102 0 / 90%));
+  background: linear-gradient(
+    135deg,
+    var(--color-brand-soft),
+    var(--color-brand-primary)
+  );
   box-shadow: var(--shadow-card);
 }
 

@@ -255,6 +255,9 @@ it("после approved access gate показывает рабочий shell и
     "src",
     "/brand/spikatel-logo-white.svg",
   );
+  expect(
+    screen.getByText("Инвентаризация ЦОД"),
+  ).toBeInTheDocument();
   expect(await screen.findByRole("link", { name: /SFP-модули/ })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Диски и накопители/ })).toBeInTheDocument();
   expect(screen.getByRole("navigation", { name: "Основная навигация" })).toBeInTheDocument();

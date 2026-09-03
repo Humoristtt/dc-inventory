@@ -56,7 +56,17 @@ export default defineConfig({
     },
     {
       name: "desktop-admin",
-      use: { browserName: "chromium", viewport: { width: 1280, height: 900 } },
+      use: {
+        browserName: "chromium",
+        viewport: { width: 1280, height: 900 },
+      },
+    },
+    {
+      name: "desktop-ultrawide",
+      use: {
+        browserName: "chromium",
+        viewport: { width: 2560, height: 1440 },
+      },
     },
   ],
 });

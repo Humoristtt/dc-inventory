@@ -1,14 +1,20 @@
 type SpikatelBrandProps = {
   inverse?: boolean;
-  subtitle: string;
+  title: string;
 };
 
 export function SpikatelBrand({
   inverse = false,
-  subtitle,
+  title,
 }: SpikatelBrandProps) {
   return (
-    <div className={inverse ? "compact-brand compact-brand--inverse" : "compact-brand"}>
+    <div
+      className={
+        inverse
+          ? "compact-brand compact-brand--inverse"
+          : "compact-brand"
+      }
+    >
       <img
         alt="Спикател"
         className="compact-brand__logo"
@@ -18,10 +24,9 @@ export function SpikatelBrand({
             : "/brand/spikatel-logo-black.svg"
         }
       />
-      <div>
-        <strong>Inventory</strong>
-        <small>{subtitle}</small>
-      </div>
+      <strong className="compact-brand__title">
+        {title}
+      </strong>
     </div>
   );
 }

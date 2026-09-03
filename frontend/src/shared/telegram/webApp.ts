@@ -41,6 +41,7 @@ const DESKTOP_TELEGRAM_PLATFORMS = new Set([
   "linux",
   "macos",
   "tdesktop",
+  "unigram",
   "web",
   "weba",
   "webk",

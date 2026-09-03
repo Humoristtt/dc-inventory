@@ -883,7 +883,7 @@ export function ItemFormPage() {
           <section aria-labelledby="duplicate-title" aria-modal="true" className="sheet duplicate-sheet" role="dialog">
             <header className="sheet__header">
               <div><span className="section-kicker">Проверка дублей</span><h2 id="duplicate-title">Похожие позиции уже есть</h2></div>
-              <button aria-label="Закрыть предупреждение" className="icon-button" onClick={() => setDuplicateReview(null)} type="button">×</button>
+              <button aria-label="Закрыть предупреждение" className="icon-button" data-escape-dismiss="" onClick={() => setDuplicateReview(null)} type="button">×</button>
             </header>
             <div className="sheet__body duplicate-sheet__body">
               <p>Проверьте совпадения. Введённые данные сохранены в форме.</p>

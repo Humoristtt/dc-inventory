@@ -210,7 +210,10 @@
 .catalog-switch > span::after { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 2px 5px rgb(0 0 0 / 20%); content: ""; transition: transform 140ms ease; }
 .catalog-switch input:checked + span { background: var(--color-success); }
 .catalog-switch input:checked + span::after { transform: translateX(18px); }
-.catalog-switch input:focus-visible + span { outline: 3px solid rgb(255 102 0 / 48%); outline-offset: 2px; }
+.catalog-switch input:focus-visible + span {
+  outline: 2px solid rgb(254 170 19 / 78%);
+  outline-offset: 3px;
+}
 .catalog-switch strong { font-size: 11px; }
 
 .catalog-form__submit-error {

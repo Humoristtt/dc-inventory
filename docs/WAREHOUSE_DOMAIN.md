@@ -266,6 +266,10 @@ source/state после ожидания concurrent transaction.
 - `GET /api/inventory/units/{id}` обычному USER разрешён только для unit,
   который сейчас числится за ним; чужой или складской unit detail возвращает
   `403`;
+- catalog search/facets применяют тот же privacy scope к serial/WWN:
+  `ADMIN` ищет по всем physical units, обычный `USER` — только по текущим
+  `ISSUED` units, которые числятся за ним; stored, foreign, `WRITTEN_OFF` и
+  `VOIDED` identifiers не участвуют в USER search;
 - immutable movement journal не является пользовательским read API:
   `GET /api/inventory/movements[/{id}]` доступен только `ADMIN`.
 

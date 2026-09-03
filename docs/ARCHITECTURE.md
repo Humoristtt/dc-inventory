@@ -414,7 +414,11 @@ Pagination и total поэтому работают по unique Item rows; attri
 Immutable `CatalogQuerySpec` является единым validated input для item list и
 facets. Category behavior определяется CategoryAttribute metadata. Facet base
 query переиспользует тот же predicate builder и исключает только predicate
-вычисляемого facet. Contains search использует escaped bound LIKE/ILIKE values;
+вычисляемого facet. Contains search использует escaped bound LIKE/ILIKE values.
+Serial/WWN predicate дополнительно viewer-scoped: `ADMIN` может искать по всем
+physical units, а обычный `USER` — только по текущим `ISSUED` units с
+`current_holder_user_id == self`. Stored, foreign, `WRITTEN_OFF` и `VOIDED`
+identifiers не участвуют в USER catalog search или facets.
 `pg_trgm` GIN indexes и typed EAV indexes добавлены migration
 `d9e0f1a2b3c4`. Warehouse journal/projection write path Stage 6 не изменён.
 

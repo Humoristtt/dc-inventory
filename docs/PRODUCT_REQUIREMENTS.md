@@ -203,7 +203,9 @@ catalog UX:
 
 - единый application shell и Telegram-aware navigation;
 - API-driven catalog categories;
-- global/category debounced search, включая backend serial/WWN search;
+- global/category debounced search; backend serial/WWN search соблюдает
+  privacy scope: `ADMIN` ищет по всем physical units, обычный `USER` — только
+  по текущим `ISSUED` units, которые числятся за ним;
 - metadata/facet-driven exact, boolean и range filters;
 - sorting и progressive pagination;
 - compact item cards и Item detail;

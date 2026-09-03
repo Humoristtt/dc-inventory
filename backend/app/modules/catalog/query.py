@@ -63,6 +63,7 @@ class AttributeFilter:
 @dataclass(frozen=True, slots=True)
 class CatalogQuerySpec:
     tokens: tuple[str, ...]
+    serial_identity_holder_user_id: uuid.UUID | None
     category_id: uuid.UUID | None
     category_key: str | None
     status: ItemStatus
@@ -144,6 +145,7 @@ async def build_catalog_query_spec(
     db: AsyncSession,
     *,
     q: str | None = None,
+    serial_identity_holder_user_id: uuid.UUID | None = None,
     category_key: str | None = None,
     item_status: ItemStatus = ItemStatus.ACTIVE,
     manufacturer_ids: Sequence[uuid.UUID] = (),
@@ -254,6 +256,7 @@ async def build_catalog_query_spec(
 
     return CatalogQuerySpec(
         tokens=_normalize_query_tokens(q),
+        serial_identity_holder_user_id=serial_identity_holder_user_id,
         category_id=category.id if category is not None else None,
         category_key=category.key if category is not None else None,
         status=item_status,
@@ -350,8 +353,27 @@ def _safe_decimal_token(token: str) -> Decimal | None:
     return value
 
 
-def _search_predicate(token: str) -> ColumnElement[bool]:
+def _search_predicate(
+    token: str,
+    serial_identity_holder_user_id: uuid.UUID | None,
+) -> ColumnElement[bool]:
     pattern = _escaped_contains_pattern(token)
+    serial_identity_conditions: list[ColumnElement[bool]] = [
+        InventoryUnit.item_id == Item.id,
+        or_(
+            InventoryUnit.normalized_serial_number.like(pattern, escape="\\"),
+            InventoryUnit.normalized_wwn.like(pattern, escape="\\"),
+        ),
+    ]
+    if serial_identity_holder_user_id is not None:
+        serial_identity_conditions.extend(
+            [
+                InventoryUnit.state == InventoryUnitState.ISSUED,
+                InventoryUnit.current_holder_user_id
+                == serial_identity_holder_user_id,
+            ]
+        )
+
     common = or_(
         Item.normalized_name.like(pattern, escape="\\"),
         Item.normalized_model.like(pattern, escape="\\"),
@@ -367,13 +389,7 @@ def _search_predicate(token: str) -> ColumnElement[bool]:
         ),
         exists(
             select(literal(1))
-            .where(
-                InventoryUnit.item_id == Item.id,
-                or_(
-                    InventoryUnit.normalized_serial_number.like(pattern, escape="\\"),
-                    InventoryUnit.normalized_wwn.like(pattern, escape="\\"),
-                ),
-            )
+            .where(*serial_identity_conditions)
             .correlate(Item)
         ),
     )
@@ -504,7 +520,13 @@ def _item_predicates(
                 ),
             )
         )
-    predicates.extend(_search_predicate(token) for token in spec.tokens)
+    predicates.extend(
+        _search_predicate(
+            token,
+            spec.serial_identity_holder_user_id,
+        )
+        for token in spec.tokens
+    )
 
     by_key: dict[str, list[AttributeFilter]] = defaultdict(list)
     for attribute_filter in spec.attribute_filters:

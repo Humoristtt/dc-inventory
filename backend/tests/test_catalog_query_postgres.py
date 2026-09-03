@@ -39,6 +39,7 @@ pytestmark = pytest.mark.skipif(
 
 class QueryArgs(TypedDict, total=False):
     q: str | None
+    serial_identity_holder_user_id: uuid.UUID | None
     category_key: str | None
     item_status: ItemStatus
     manufacturer_ids: list[uuid.UUID]
@@ -266,6 +267,12 @@ async def test_stage7_search_filters_inventory_facets_and_pagination() -> None:
                     access_status=UserAccessStatus.APPROVED,
                     approved_at=datetime.now(UTC),
                 )
+                foreign_holder = User(
+                    id=uuid.uuid4(),
+                    role=UserRole.USER,
+                    access_status=UserAccessStatus.APPROVED,
+                    approved_at=datetime.now(UTC),
+                )
                 location_a = Location(
                     id=uuid.uuid4(),
                     code=f"A-{marker[:8]}",
@@ -287,7 +294,15 @@ async def test_stage7_search_filters_inventory_facets_and_pagination() -> None:
                     name="Other warehouse",
                     status=LocationStatus.ACTIVE,
                 )
-                db.add_all([holder, location_a, location_b, location_other])
+                db.add_all(
+                    [
+                        holder,
+                        foreign_holder,
+                        location_a,
+                        location_b,
+                        location_other,
+                    ]
+                )
                 await db.flush()
                 db.add_all(
                     [
@@ -337,6 +352,13 @@ async def test_stage7_search_filters_inventory_facets_and_pagination() -> None:
                     ("NIC-B-1", "5000CCA000000003", InventoryUnitState.STORED, location_b.id, None),
                     ("NIC-I-1", None, InventoryUnitState.ISSUED, None, holder.id),
                     ("NIC-I-2", None, InventoryUnitState.ISSUED, None, holder.id),
+                    (
+                        "NIC-FOREIGN-1",
+                        "5000CCA0FOREIGN1",
+                        InventoryUnitState.ISSUED,
+                        None,
+                        foreign_holder.id,
+                    ),
                     ("HIST-WRITTEN", None, InventoryUnitState.WRITTEN_OFF, None, None),
                     ("HIST-VOIDED", None, InventoryUnitState.VOIDED, None, None),
                 ]
@@ -387,6 +409,59 @@ async def test_stage7_search_filters_inventory_facets_and_pagination() -> None:
                 assert await ids(q="HIST-VOIDED") == [nic]
                 assert await ids(q="disk-issued-1") == [disk]
                 assert await ids(q="5000cca099999999") == [disk]
+                assert await ids(q="NIC-FOREIGN-1") == [nic]
+                assert await ids(q="5000cca0foreign1") == [nic]
+
+                async def user_ids(q: str) -> list[uuid.UUID]:
+                    return await ids(
+                        q=q,
+                        serial_identity_holder_user_id=holder.id,
+                    )
+
+                # Own currently-issued identities remain searchable.
+                assert await user_ids("NIC-I-1") == [nic]
+                assert await user_ids("disk-issued-1") == [disk]
+                assert await user_ids("5000cca099999999") == [disk]
+
+                # Stored, foreign and historical identities must not act as
+                # a catalog oracle for a regular USER.
+                assert await user_ids("abc12345") == []
+                assert await user_ids("5000cca000000001") == []
+                assert await user_ids("NIC-FOREIGN-1") == []
+                assert await user_ids("5000cca0foreign1") == []
+                assert await user_ids("HIST-WRITTEN") == []
+                assert await user_ids("HIST-VOIDED") == []
+
+                # Facets must use the identical viewer-scoped predicate.
+                foreign_facets = await query_catalog_facets(
+                    db,
+                    await build_catalog_query_spec(
+                        db,
+                        q="NIC-FOREIGN-1",
+                        serial_identity_holder_user_id=holder.id,
+                    ),
+                )
+                assert _facet_by_key(
+                    foreign_facets,
+                    "category",
+                ).values == ()
+
+                own_facets = await query_catalog_facets(
+                    db,
+                    await build_catalog_query_spec(
+                        db,
+                        q="NIC-I-1",
+                        serial_identity_holder_user_id=holder.id,
+                    ),
+                )
+                assert {
+                    value.value
+                    for value in _facet_by_key(
+                        own_facets,
+                        "category",
+                    ).values
+                } == {"nic"}
+
                 assert await ids(q=f"RACK:{marker.upper()}") == [copper]
                 assert await ids(q=f"{marker} :") == [copper]
                 assert await ids(q="ОПТИЧЕСКИЙ") == [optics]
@@ -530,8 +605,8 @@ async def test_stage7_search_filters_inventory_facets_and_pagination() -> None:
                 serial_spec = await build_catalog_query_spec(db, q=f"Intel adapter {marker}")
                 serial_page = await query_catalog_items(db, serial_spec, limit=10, offset=0)
                 assert serial_page.items[0].inventory.available_count == 3
-                assert serial_page.items[0].inventory.custody_count == 2
-                assert serial_page.items[0].inventory.total_count == 5
+                assert serial_page.items[0].inventory.custody_count == 3
+                assert serial_page.items[0].inventory.total_count == 6
                 assert await ids(location_ids=[location_a.id], q=f"Intel adapter {marker}") == [nic]
                 assert await ids(location_ids=[location_b.id], q=f"Intel adapter {marker}") == [nic]
                 assert await ids(availability="OUT_OF_STOCK", q=f"Seagate SSD {marker}") == [disk]

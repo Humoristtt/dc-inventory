@@ -57,6 +57,7 @@ from app.modules.catalog.service import (
     set_item_archived,
     update_item,
 )
+from app.modules.identity.enums import UserRole
 
 read_router = APIRouter(prefix="/api/catalog", tags=["catalog"])
 admin_router = APIRouter(prefix="/api/admin/catalog", tags=["admin-catalog"])
@@ -209,6 +210,7 @@ def _facet_out(facet: FacetRecord) -> FacetOut:
 async def _query_spec(
     db: DbSession,
     *,
+    approved: Approved,
     q: str | None,
     category: str | None,
     item_status: ItemStatus,
@@ -222,6 +224,11 @@ async def _query_spec(
     return await build_catalog_query_spec(
         db,
         q=q,
+        serial_identity_holder_user_id=(
+            None
+            if approved.user.role == UserRole.ADMIN
+            else approved.user.id
+        ),
         category_key=category,
         item_status=item_status,
         manufacturer_ids=manufacturer_ids or (),
@@ -295,7 +302,7 @@ async def get_manufacturers(
 @read_router.get("/items", response_model=ItemListOut)
 async def get_items(
     db: DbSession,
-    _approved: Approved,
+    approved: Approved,
     q: Annotated[str | None, Query(max_length=200)] = None,
     category: Annotated[str | None, Query(max_length=64)] = None,
     item_status: Annotated[ItemStatus, Query(alias="status")] = ItemStatus.ACTIVE,
@@ -314,6 +321,7 @@ async def get_items(
     try:
         spec = await _query_spec(
             db,
+            approved=approved,
             q=q,
             category=category,
             item_status=item_status,
@@ -343,7 +351,7 @@ async def get_items(
 @read_router.get("/items/facets", response_model=FacetListOut)
 async def get_item_facets(
     db: DbSession,
-    _approved: Approved,
+    approved: Approved,
     q: Annotated[str | None, Query(max_length=200)] = None,
     category: Annotated[str | None, Query(max_length=64)] = None,
     item_status: Annotated[ItemStatus, Query(alias="status")] = ItemStatus.ACTIVE,
@@ -358,6 +366,7 @@ async def get_item_facets(
     try:
         spec = await _query_spec(
             db,
+            approved=approved,
             q=q,
             category=category,
             item_status=item_status,

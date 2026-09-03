@@ -15,6 +15,9 @@ from app.modules.catalog.models import Item, ItemAttributeValue, Manufacturer
 from app.modules.catalog.service import normalize_comparison
 from app.modules.identity.enums import UserAccessStatus, UserRole
 from app.modules.identity.models import TelegramIdentity, User
+from app.modules.inventory.enums import InventoryUnitState, LocationStatus
+from app.modules.inventory.models import InventoryUnit, Location
+from app.modules.inventory.service import normalize_identity
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 POSTGRES_INTEGRATION_ENABLED = os.getenv("RUN_POSTGRES_INTEGRATION") == "1"
@@ -41,7 +44,9 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
         ("admin", UserAccessStatus.APPROVED, UserRole.ADMIN),
     ]
     user_ids: list[uuid.UUID] = []
+    user_ids_by_key: dict[str, uuid.UUID] = {}
     tokens: dict[str, str] = {}
+    privacy_location_id: uuid.UUID | None = None
     manufacturer_normalized_name = normalize_comparison(
         f"API Manufacturer {marker}"
     )
@@ -81,6 +86,7 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
                     ]
                 )
                 user_ids.append(user_id)
+                user_ids_by_key[key] = user_id
                 tokens[key] = token
             await db.commit()
 
@@ -232,6 +238,224 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
             )
             assert item_response.json()["attributes"]["nominal_wavelength_nm"] == (
                 "1310.0000000000"
+            )
+
+            privacy_item_response = await client.post(
+                "/api/admin/catalog/items",
+                cookies={settings.auth_cookie_name: tokens["admin"]},
+                json={
+                    "category_key": "sfp",
+                    "manufacturer_id": manufacturer_id,
+                    "name": f"API privacy serial {marker}",
+                    "accounting_mode": "SERIAL",
+                    "attributes": {
+                        "form_factor": "SFP+",
+                        "speed_mbps": 10000,
+                        "speed_profile": "10 Гбит/с",
+                    },
+                },
+            )
+            assert privacy_item_response.status_code == 201
+            privacy_item_id = uuid.UUID(
+                privacy_item_response.json()["id"]
+            )
+
+            own_serial = f"API-OWN-{marker}"
+            own_wwn = f"5000-OWN-{marker}"
+            stored_serial = f"API-STORED-{marker}"
+            stored_wwn = f"5000-STORED-{marker}"
+            foreign_serial = f"API-FOREIGN-{marker}"
+            foreign_wwn = f"5000-FOREIGN-{marker}"
+            written_serial = f"API-WRITTEN-{marker}"
+            voided_serial = f"API-VOIDED-{marker}"
+
+            async with AsyncSession(
+                engine,
+                expire_on_commit=False,
+            ) as db:
+                privacy_location = Location(
+                    id=uuid.uuid4(),
+                    code=f"F32-{marker[:8]}",
+                    normalized_code=f"f32-{marker[:8]}",
+                    name="F32 privacy warehouse",
+                    status=LocationStatus.ACTIVE,
+                )
+                privacy_location_id = privacy_location.id
+                db.add(privacy_location)
+                await db.flush()
+
+                db.add_all(
+                    [
+                        InventoryUnit(
+                            item_id=privacy_item_id,
+                            serial_number=own_serial,
+                            normalized_serial_number=normalize_identity(
+                                own_serial,
+                                field="serial_number",
+                                max_length=255,
+                            ),
+                            wwn=own_wwn,
+                            normalized_wwn=normalize_identity(
+                                own_wwn,
+                                field="wwn",
+                                max_length=255,
+                            ),
+                            state=InventoryUnitState.ISSUED,
+                            current_holder_user_id=user_ids_by_key["user"],
+                        ),
+                        InventoryUnit(
+                            item_id=privacy_item_id,
+                            serial_number=stored_serial,
+                            normalized_serial_number=normalize_identity(
+                                stored_serial,
+                                field="serial_number",
+                                max_length=255,
+                            ),
+                            wwn=stored_wwn,
+                            normalized_wwn=normalize_identity(
+                                stored_wwn,
+                                field="wwn",
+                                max_length=255,
+                            ),
+                            state=InventoryUnitState.STORED,
+                            current_location_id=privacy_location.id,
+                        ),
+                        InventoryUnit(
+                            item_id=privacy_item_id,
+                            serial_number=foreign_serial,
+                            normalized_serial_number=normalize_identity(
+                                foreign_serial,
+                                field="serial_number",
+                                max_length=255,
+                            ),
+                            wwn=foreign_wwn,
+                            normalized_wwn=normalize_identity(
+                                foreign_wwn,
+                                field="wwn",
+                                max_length=255,
+                            ),
+                            state=InventoryUnitState.ISSUED,
+                            current_holder_user_id=user_ids_by_key["admin"],
+                        ),
+                        InventoryUnit(
+                            item_id=privacy_item_id,
+                            serial_number=written_serial,
+                            normalized_serial_number=normalize_identity(
+                                written_serial,
+                                field="serial_number",
+                                max_length=255,
+                            ),
+                            state=InventoryUnitState.WRITTEN_OFF,
+                        ),
+                        InventoryUnit(
+                            item_id=privacy_item_id,
+                            serial_number=voided_serial,
+                            normalized_serial_number=normalize_identity(
+                                voided_serial,
+                                field="serial_number",
+                                max_length=255,
+                            ),
+                            state=InventoryUnitState.VOIDED,
+                        ),
+                    ]
+                )
+                await db.commit()
+
+            async def catalog_search_total(
+                query: str,
+                *,
+                token: str,
+            ) -> int:
+                response = await client.get(
+                    "/api/catalog/items",
+                    params={"q": query},
+                    cookies={settings.auth_cookie_name: token},
+                )
+                assert response.status_code == 200
+                return int(response.json()["total"])
+
+            # Regular USER may use only identities of units currently
+            # issued to that exact internal User.id.
+            assert await catalog_search_total(
+                own_serial,
+                token=tokens["user"],
+            ) == 1
+            assert await catalog_search_total(
+                own_wwn,
+                token=tokens["user"],
+            ) == 1
+
+            assert await catalog_search_total(
+                stored_serial,
+                token=tokens["user"],
+            ) == 0
+            assert await catalog_search_total(
+                stored_wwn,
+                token=tokens["user"],
+            ) == 0
+            assert await catalog_search_total(
+                foreign_serial,
+                token=tokens["user"],
+            ) == 0
+            assert await catalog_search_total(
+                foreign_wwn,
+                token=tokens["user"],
+            ) == 0
+            assert await catalog_search_total(
+                written_serial,
+                token=tokens["user"],
+            ) == 0
+            assert await catalog_search_total(
+                voided_serial,
+                token=tokens["user"],
+            ) == 0
+
+            # ADMIN retains the full operational serial/WWN search.
+            for admin_query in (
+                own_serial,
+                own_wwn,
+                stored_serial,
+                stored_wwn,
+                foreign_serial,
+                foreign_wwn,
+                written_serial,
+                voided_serial,
+            ):
+                assert await catalog_search_total(
+                    admin_query,
+                    token=tokens["admin"],
+                ) == 1
+
+            # Facets must not reintroduce the same oracle.
+            user_foreign_facets = await client.get(
+                "/api/catalog/items/facets",
+                params={"q": foreign_serial},
+                cookies={settings.auth_cookie_name: tokens["user"]},
+            )
+            admin_foreign_facets = await client.get(
+                "/api/catalog/items/facets",
+                params={"q": foreign_serial},
+                cookies={settings.auth_cookie_name: tokens["admin"]},
+            )
+
+            assert user_foreign_facets.status_code == 200
+            assert admin_foreign_facets.status_code == 200
+
+            user_category_facet = next(
+                facet
+                for facet in user_foreign_facets.json()["facets"]
+                if facet["key"] == "category"
+            )
+            admin_category_facet = next(
+                facet
+                for facet in admin_foreign_facets.json()["facets"]
+                if facet["key"] == "category"
+            )
+
+            assert user_category_facet["values"] == []
+            assert any(
+                value["value"] == "sfp"
+                for value in admin_category_facet["values"]
             )
 
             stage7_listing = await client.get(
@@ -443,12 +667,23 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
                 )
                 if item_ids:
                     await db.execute(
+                        delete(InventoryUnit).where(
+                            InventoryUnit.item_id.in_(item_ids)
+                        )
+                    )
+                    await db.execute(
                         delete(ItemAttributeValue).where(
                             ItemAttributeValue.item_id.in_(item_ids)
                         )
                     )
                     await db.execute(delete(Item).where(Item.id.in_(item_ids)))
                 await db.delete(manufacturer)
+            if privacy_location_id is not None:
+                await db.execute(
+                    delete(Location).where(
+                        Location.id == privacy_location_id
+                    )
+                )
             if user_ids:
                 await db.execute(
                     delete(AuthSession).where(AuthSession.user_id.in_(user_ids))

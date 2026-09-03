@@ -236,30 +236,6 @@ async def _finalize_failure(
         )
 
 
-async def _best_effort_start_reaction(
-    client: TelegramGatewayClient,
-    *,
-    chat_id: int,
-    message_id: int,
-) -> None:
-    try:
-        await client.send(
-            "setMessageReaction",
-            {
-                "chat_id": chat_id,
-                "message_id": message_id,
-                "reaction": [{"type": "emoji", "emoji": "⚡"}],
-                "is_big": True,
-            },
-        )
-    except Exception as exc:
-        logger.warning(
-            "Start welcome reaction failed chat_id=%s message_id=%s error=%s",
-            chat_id,
-            message_id,
-            type(exc).__name__,
-        )
-
 
 async def _best_effort_delete_superseded_welcome(
     client: TelegramGatewayClient,
@@ -361,13 +337,7 @@ async def run_worker_once(
                         update_id=start_update_id,
                         message_id=message_id,
                     )
-                    if is_current:
-                        await _best_effort_start_reaction(
-                            client,
-                            chat_id=start_chat_id,
-                            message_id=message_id,
-                        )
-                    else:
+                    if not is_current:
                         await _best_effort_delete_superseded_welcome(
                             client,
                             chat_id=start_chat_id,

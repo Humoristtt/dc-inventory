@@ -4,7 +4,6 @@ const ALLOWED_METHODS = new Set([
   "editMessageText",
   "editMessageReplyMarkup",
   "answerCallbackQuery",
-  "setMessageReaction",
 ]);
 
 const MAX_BODY_BYTES = 64 * 1024;

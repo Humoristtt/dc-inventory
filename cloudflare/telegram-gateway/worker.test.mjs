@@ -66,7 +66,7 @@ test("forwards allowed Telegram method", async () => {
 });
 
 
-test("forwards start cleanup and reaction methods", async () => {
+test("forwards start cleanup method", async () => {
   const originalFetch = globalThis.fetch;
   const upstreamUrls = [];
   globalThis.fetch = async (url) => {
@@ -78,7 +78,7 @@ test("forwards start cleanup and reaction methods", async () => {
   };
 
   try {
-    for (const method of ["deleteMessage", "setMessageReaction"]) {
+    for (const method of ["deleteMessage"]) {
       const response = await worker.fetch(
         makeRequest(`/telegram/${method}`, env.GATEWAY_SECRET, {
           chat_id: 42,
@@ -92,7 +92,6 @@ test("forwards start cleanup and reaction methods", async () => {
 
     assert.deepEqual(upstreamUrls, [
       `https://api.telegram.org/bot${env.BOT_TOKEN}/deleteMessage`,
-      `https://api.telegram.org/bot${env.BOT_TOKEN}/setMessageReaction`,
     ]);
   } finally {
     globalThis.fetch = originalFetch;

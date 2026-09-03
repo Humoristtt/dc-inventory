@@ -31,7 +31,7 @@ SFP_PROFILE_ATTRIBUTE_IDS = {
 }
 
 PREVIOUS_TIMESTAMP = datetime(2026, 9, 1, 21, 0, tzinfo=UTC)
-REFINEMENT_TIMESTAMP = datetime(2026, 9, 3, 21, 0, tzinfo=UTC)
+REFINEMENT_TIMESTAMP = datetime(2026, 9, 3, 9, 31, 11, tzinfo=UTC)
 
 PREVIOUS_CONNECTORS = [
     "LC Duplex",

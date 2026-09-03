@@ -401,3 +401,42 @@
 - Stage 8 implementation complete locally / ready for review. Production
   baseline `c8d77f8cf34f89b7e54f668619319db26de5fc0b` и production migration
   head `f1a2b3c4d5e6` не изменялись; production acceptance не заявляется.
+
+## 2026-09-03 — Stage 8B production close
+
+- Второй ручной audit/remediation cycle закрыт: все findings F01–F35
+  разобраны, `SECOND_AUDIT_FINDINGS_REMAINING=0`.
+- Final pre-PR consolidated gate PASS: backend Ruff/mypy/migrations PASS,
+  PostgreSQL integration suite `277/277` PASS, frontend Vitest `64/64` PASS,
+  production-Nginx Playwright PASS, Telegram Gateway PASS и
+  production-shaped runtime PASS.
+- PR #22 `Stage 8B: catalog UX, runtime hardening and audit remediation`
+  прошёл четыре required checks: backend, frontend, runtime и
+  telegram-gateway; merge commit `d7a95f6f6d7b5a232fa545ab9011f86858e7da08`.
+- Push CI merge-коммита также завершён успешно четырьмя jobs.
+- Перед production migration подтверждён head `f1a2b3c4d5e6`; warehouse
+  journal/projections были пусты: movements, movement_lines, inventory_units
+  и stock_balances — по `0`.
+- Создан локальный rollback checkpoint
+  `/opt/dc-inventory/backups/pre-stage8b-d7a95f6.dump`, размер около 106K, SHA-256
+  `f595c6211f2ed40c4267555131d093e0d5e4a98ee8e45e10e3bb2a6339dc9d78`; `pg_restore --list` PASS.
+- Production checkout обновлён на runtime source
+  `d7a95f6f6d7b5a232fa545ab9011f86858e7da08`.
+- PostgreSQL runtime переведён на pinned PostgreSQL 18 image digest из
+  production Compose.
+- Production migration `f1a2b3c4d5e6 -> a2b3c4d5e6f7` PASS;
+  least-privilege grants повторно применены.
+- Backend, web, telegram-worker и maintenance-worker пересозданы;
+  backend/web/PostgreSQL healthy, health/live/ready PASS.
+- После deploy подтверждены runtime UID boundaries, secret isolation,
+  отсутствие host listeners `8000/5432`, CSP/Permissions-Policy и
+  maintenance `technical retention` iteration.
+- Warehouse counts до/после deploy совпали: `0/0/0/0`.
+- `cloudflared` active; production checkout clean.
+- Реальный Telegram `/start` acceptance PASS: branded welcome приходит,
+  кнопка открывает Mini App, актуальный Stage 8B интерфейс открывается
+  успешно.
+- Stage 8B production accepted 2026-09-03.
+- Automated off-VM PostgreSQL backup, real isolated restore и projection
+  reconciliation остаются незакрытым Stage 15 production-data gate;
+  `REAL_INVENTORY_ENTRY=BLOCKED`.

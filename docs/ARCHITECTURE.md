@@ -211,10 +211,11 @@ Alembic использует тот же async PostgreSQL driver `asyncpg`, чт
     a6b7c8d9e0f1  Source-backed catalog metadata refinement
     b7c8d9e0f1a2  Warehouse ledger + current-state projections
     c8d9e0f1a2b3  Technical-retention indexes
+    d9e0f1a2b3c4  Catalog search, typed filters and inventory/facet read model
 
 Текущий migration head:
 
-    c8d9e0f1a2b3
+    d9e0f1a2b3c4
 
 Следующие предметные схемы добавляются отдельными миграциями.
 
@@ -528,6 +529,43 @@ Frontend cache не является authorization boundary: backend `Approved` 
 - переход `REJECTED -> PENDING` после успешного повторного запроса синхронизируется
   в auth cache явно;
 - polling останавливается после выхода из `PENDING`.
+
+## Frontend catalog navigation and server state
+
+`TelegramAccessGate` остаётся внешней границей всего React-приложения. После
+`APPROVED` внутри неё работает единый application shell с URL routes
+`/catalog`, `/catalog/:categoryKey`, `/catalog/items/:itemId` и placeholder
+routes будущих разделов. Второй auth state или frontend tokens не создаются.
+
+Catalog frontend разделяет два вида состояния:
+
+- search/filter/sort navigation state хранится в нормализованных
+  `URLSearchParams`, поэтому history, reload и возврат из Item detail
+  воспроизводимы;
+- server responses хранятся в TanStack Query cache с детерминированными keys;
+  limit/offset pages добавляются без дублирования Item.
+
+URL navigation state изменяется ownership-specific updates: search меняет
+только `q`, sort — только `sort/order`, filter sheet — только status,
+manufacturer/location/availability и metadata filters. Каждый update сначала
+читает актуальные `URLSearchParams`, поэтому отложенный debounce или старый
+filter draft не может откатить более новое состояние другого owner. Search
+input синхронизируется с back/reload/external URL без принудительного remount.
+
+Item list сохраняет previous pages во время progressive refetch. Facets этого
+не делают: при смене facet query UI показывает loading state и не выдаёт counts
+предыдущего query за актуальные.
+
+Catalog API encoding централизован в typed same-origin client. Repeated
+`manufacturer_id`, `location_id` и metadata attribute `filter` parameters
+сортируются и кодируются детерминированно. Filter UI получает common/dynamic
+facets от backend и CategoryAttribute metadata; category-specific query logic в
+React не допускается.
+
+Telegram wrapper владеет `ready`/`expand`, runtime safe-area values и полным
+BackButton subscribe/unsubscribe lifecycle. На `/catalog` BackButton скрыт; на
+внутреннем route он возвращает по SPA history, а direct deep link безопасно
+возвращается на `/catalog` без закрытия Mini App.
 
 
 ## Telegram delivery и access decisions

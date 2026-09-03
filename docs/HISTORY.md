@@ -314,3 +314,37 @@
 - Реальные canonical inventory data не вводились; automated off-VM backup +
   verified real restore остаются обязательным Stage 15 production-data gate.
 - Stage 7 завершён. Текущий продуктовый этап — Stage 8 Working Mini App UX.
+
+## 2026-09-03 — Stage 8A Working Mini App Catalog UX
+
+- Runtime hero заменён рабочим mobile-first shell с постоянной нижней навигацией
+  и осмысленными placeholder-состояниями для ещё не реализованных разделов.
+- Catalog landing, global search, generic category list и Item detail используют
+  только Stage 7 API и существующую same-origin HttpOnly session/access gate.
+- Category filters строятся из facet response и CategoryAttribute metadata;
+  exact/boolean/range значения, manufacturer/location/availability, sorting и
+  progressive loading сохраняются в детерминированном URL state.
+- Equipment cards показывают dynamic `card_visible` attributes и ясные
+  available/custody/total summaries; detail использует `detail_visible`
+  attributes и безопасную внешнюю datasheet-ссылку.
+- Telegram wrapper расширен BackButton lifecycle и safe-area integration без
+  изменения vendored SDK loading/failure behavior.
+- Добавлены focused behavior tests для API encoding, catalog shell, фильтров,
+  карточек, detail/back navigation и Telegram BackButton.
+- Focused remediation устранил cross-owner URL-state races: debounced search
+  меняет только `q`, sorting — только `sort/order`, FilterSheet — только
+  filter-owned state; updates применяются поверх актуальных `URLSearchParams`.
+- Search input больше не remount-ится после debounce commit; regression tests
+  покрывают сохранение focus, pending search + sort/filter и внешний URL state.
+- Facets больше не показывают previous-query counts как актуальные во время
+  перехода на новый query; item-list progressive loading при этом сохранён.
+- Выдуманный `SI` brand mark заменён официальными black/white Spikatel SVG из
+  предоставленного brand archive; assets поставляются локально same-origin.
+- Backend, migrations, infrastructure и реальные inventory data не изменялись.
+- Stage 8A remediation local gate PASS: frontend lint `0 warnings / 0 errors`,
+  typecheck PASS, focused regressions `17/17`, full frontend suite `39/39`,
+  production build PASS и `git diff --check` PASS.
+- Focused remediation review закрыт с `P0=0`, `P1=0`.
+- Stage 8 остаётся текущим: Stage 8A ожидает PR CI / merge / production deploy;
+  Stage 8B Admin catalog forms, stock/holder/«Моё» и финальный browser
+  viewport/Playwright gate ещё не выполнены.

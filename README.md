@@ -20,8 +20,11 @@
 
 ## Текущее состояние
 
-В production развёрнуты runtime foundation и Stage 4 Telegram/access
-foundation:
+В production развёрнуты Stages 4–7: Telegram/auth/access, Catalog Foundation,
+Inventory Ledger и Catalog Read API / Search / Filters. Текущий production
+migration head — `d9e0f1a2b3c4`.
+
+Production runtime включает:
 
 - Python 3.12 + FastAPI;
 - SQLAlchemy 2 async + asyncpg;
@@ -48,6 +51,10 @@ foundation:
 - Ruff, mypy strict, Pytest, Oxlint, TypeScript, Vitest;
 - GitHub Actions CI;
 - Cloudflare Tunnel для публикации Mini App.
+- metadata-driven catalog API, global/category search и facets;
+- глобальный поиск по model/PN/internal code/manufacturer, serial и WWN;
+- warehouse journal, quantity balances, serial custody и projection
+  reconciliation.
 
 Production runtime публикует на host только `127.0.0.1:8080`; backend и PostgreSQL доступны только внутри Docker-сетей.
 
@@ -63,8 +70,7 @@ Stage 4 Telegram/auth/access foundation закрыт production smoke 2026-09-01
 неизвестный пользователь запросил доступ, ADMIN получил Telegram-уведомление,
 одобрил запрос inline-кнопкой, пользователь получил уведомление и вошёл в Mini App.
 
-В текущем исходном коде реализованы Stage 5 Catalog Foundation и Stage 6
-Warehouse Core, но они ещё не развёрнуты в production:
+Stage 5 Catalog Foundation и Stage 6 Warehouse Core развёрнуты в production:
 
 - Category, Manufacturer и Item;
 - metadata-driven CategoryAttribute и typed ItemAttributeValue;
@@ -84,13 +90,21 @@ Warehouse Core, но они ещё не развёрнуты в production:
 - same-origin vendored Telegram Web App SDK с фиксированным SHA-256 и явным
   frontend failure state.
 
+Stage 7 также завершён и развёрнут: реализованы и протестированы deterministic
+sorting/pagination, global/category search, включая serial/WWN, availability,
+location и metadata-driven filters/facets.
+
+Текущий продуктовый этап — Stage 8 Working Mini App UX. В текущем source уже
+есть рабочий frontend catalog: application shell, API-driven categories,
+debounced global/category search, facet filters, sorting, progressive item list,
+compact cards, Item detail и URL-preserving navigation. Stage 8 целиком не
+закрыт: Admin catalog forms, stock/holder/«Моё», viewport acceptance и
+Playwright visual/E2E остаются в roadmap.
+
 Item остаётся каталожной позицией; физические serial units и balances существуют
 только в warehouse domain. Три локальных workbook сверены только как reference
 examples для catalog design. Quantities, balances и serial identities из них не
-импортируются. Stage 6 не добавляет frontend warehouse UI. Полный independent audit и
-application-level remediation закрыты локально в ветке
-`audit/stage6-final-review-20260902`: `P0=0`, `P1=0`. Перед merge/deployment
-остаётся один общий final local gate, затем commit/push и Pull Request CI.
+импортируются. Stage 6 не добавляет frontend warehouse UI.
 
 Ввод реальных inventory данных в production заблокирован до автоматизированного
 PostgreSQL backup и успешного real restore test в отдельное окружение. После

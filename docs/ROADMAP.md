@@ -143,7 +143,7 @@ CUSTODY  → у конкретного пользователя
 - [x] Поддержан serial mode.
 - [x] Один serial не может находиться одновременно в двух местах.
 - [x] Уже выданный serial нельзя выдать повторно.
-- [ ] Serial можно искать глобальным поиском.
+- [x] Serial можно искать глобальным поиском.
 - [x] Backend history фильтруется по конкретному InventoryUnit.
 
 ---
@@ -1727,24 +1727,35 @@ Backup/restore остаётся отдельным production-data gate и не 
 
 ## Stage 8 — Working Mini App UX
 
-- [ ] Replace runtime hero.
-- [ ] Telegram viewport integration.
-- [ ] Safe areas.
-- [ ] Home.
-- [ ] Categories.
-- [ ] Global search.
-- [ ] Category listing.
-- [ ] Filters.
-- [ ] Sorting.
-- [ ] Compact cards.
-- [ ] Item detail.
-- [ ] Manufacturer specs.
+**STATUS: IN PROGRESS — Stage 8A catalog UX implemented; Stage 8B/admin and final viewport/E2E gates remain.**
+
+### Stage 8A — Working catalog UX
+
+- [x] Replace runtime hero with the operational application shell.
+- [x] Telegram viewport integration (`ready`, `expand`).
+- [x] Browser/Telegram safe areas.
+- [x] Catalog landing as the authenticated default screen.
+- [x] API-driven categories.
+- [x] Debounced global search.
+- [x] Generic category listing for all metadata-defined categories.
+- [x] Facet- and metadata-driven exact/boolean/range filters.
+- [x] Deterministic sorting and progressive `limit`/`offset` loading.
+- [x] Compact cards with availability/custody/total summaries.
+- [x] Item detail with dynamic attributes, technical source and datasheet link.
+- [x] Intentional placeholders for later navigation sections.
+- [x] Loading/error/empty/retry states.
+- [x] Telegram BackButton and URL-preserving internal navigation.
+- [x] Mobile/narrow-first responsive implementation.
+
+### Remaining Stage 8B / final Stage 8 scope
+
+- [ ] Role-aware Admin catalog create/edit/archive forms.
+- [ ] Inline manufacturer creation and duplicate-check UX.
 - [ ] Stock by location.
 - [ ] Holder summary.
 - [ ] «Моё».
-- [ ] Loading/error/empty states.
-- [ ] Telegram BackButton.
-- [ ] Responsive tests.
+- [ ] Browser viewport acceptance for Telegram Desktop narrow, Android-like,
+  iPhone-like and normal desktop widths.
 - [ ] Playwright visual/E2E.
 
 **GATE:** UI комфортен в Telegram Desktop narrow и mobile viewports; данные отображаются без обрезки.
@@ -1974,15 +1985,15 @@ Stage 7–14 feature development, production deploy и synthetic/test data не
 
 # 42. Следующий фактический шаг
 
-**CURRENT: Stage 7 — implemented locally; focused review / PR CI / deploy pending**
+**CURRENT: Stage 8 — Working Mini App UX; Stage 8A local remediation complete, PR CI / production deploy pending**
 
-Stage 6 полностью закрыт: source → review → CI → merge → production deploy → Telegram smoke → Git cleanup → branch protection.
+Stages 4–7 полностью закрыты: source → review → CI → merge → production deploy → Telegram smoke → Git cleanup → branch protection.
 
 Backup/restore не забыты, но сознательно вынесены из текущего критического пути: они обязательны перед real inventory entry, а не перед разработкой рабочего UI.
 
 ## 42.1. Product-first execution order
 
-1. **Stage 7 — Search / Filters / Sorting / Facets**
+1. **Stage 7 — Search / Filters / Sorting / Facets — DONE / production**
    - global/category search;
    - serial / WWN search;
    - sorting;
@@ -1993,7 +2004,7 @@ Backup/restore не забыты, но сознательно вынесены �
    - deterministic pagination;
    - filter fixture matrices.
 
-2. **Stage 8 — Working Mini App UX**
+2. **Stage 8 — Working Mini App UX — CURRENT**
    - Home / Catalog / global search;
    - category lists;
    - compact cards / Item detail;
@@ -2090,10 +2101,18 @@ production deploy
 Не проводить бесконечный full-source audit после каждой продуктовой фичи.
 Большой end-to-end/security/data-integrity review возвращается перед снятием production-data gate.
 
-## 42.3. Следующая ветка
+## 42.3. Текущая ветка и следующий шаг
 
-`feature/stage7-search-filters`
+Текущая feature-ветка:
 
-Stage 7 не должен тянуть в change set: Warehouse Operations UI, media, Excel, stocktake, S3 backup, QR/barcode, NetBox integration или новые микросервисы.
+`feature/stage8a-catalog-ux`
 
-Следующий фактический шаг: передать Codex детальное ТЗ Stage 7, реализовать backend search/filter/facet contract и regression tests.
+Stage 8A использует уже закрытый Stage 7 backend contract и не должен тянуть в
+change set Warehouse Operations UI, media, Excel, stocktake, S3 backup,
+QR/barcode, NetBox integration или новые микросервисы.
+
+Следующий фактический шаг: зафиксировать завершённый Stage 8A remediation,
+push feature-ветки, пройти PR / required CI / merge / production deploy. После
+Stage 8A production close продолжить оставшийся Stage 8 scope, включая Stage 8B
+Admin catalog forms, stock/holder/«Моё» и финальный viewport/Playwright
+acceptance.

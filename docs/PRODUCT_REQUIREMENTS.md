@@ -15,6 +15,9 @@ Spikatel Inventory — внутреннее Telegram Mini App для склад�
 
 PostgreSQL — канонический источник данных.
 
+В production развёрнуты Stages 4–7; migration head — `d9e0f1a2b3c4`.
+Текущий продуктовый этап — Stage 8 Working Mini App UX.
+
 ## Пользователи и роли
 
 Базовые роли:
@@ -190,7 +193,17 @@ Bot token хранится в Cloudflare Worker Secret.
 
 ## Frontend
 
-Текущий frontend реализует runtime/auth/access foundation.
+Текущий frontend сохраняет runtime/auth/access boundary и реализует рабочий
+catalog UX:
+
+- единый application shell и Telegram-aware navigation;
+- API-driven catalog categories;
+- global/category debounced search, включая backend serial/WWN search;
+- metadata/facet-driven exact, boolean и range filters;
+- sorting и progressive pagination;
+- compact item cards и Item detail;
+- URL-owned search/filter/sort navigation state;
+- loading/error/empty/retry states.
 
 Telegram SDK поставляется same-origin:
 
@@ -198,9 +211,10 @@ Telegram SDK поставляется same-origin:
 
 CI проверяет SHA-256 vendored SDK.
 
-Frontend отдельно обрабатывает SDK load error и timeout.
-
-Warehouse/search/history UI развивается следующими stages.
+Frontend отдельно обрабатывает SDK load error и timeout. Backend остаётся
+authorization boundary. Admin catalog forms, warehouse operations/history,
+stock/holder/«Моё», final viewport acceptance и Playwright E2E относятся к
+оставшейся Stage 8 и следующим stages.
 
 ## Technical retention
 
@@ -223,14 +237,13 @@ Real inventory entry запрещён до:
 4. projection reconciliation;
 5. zero drift.
 
-Stage 5/6 deploy сам по себе этот gate не снимает.
+Deploy Stages 5–8 сам по себе этот gate не снимает.
 
 ## Deferred
 
-В текущий Stage 6 не входят:
+В текущую Stage 8 не входят:
 
 - frontend warehouse operations;
-- global search/facets;
 - stocktake;
 - procurement/reservations;
 - opening balance / Excel inventory import;

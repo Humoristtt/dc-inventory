@@ -51,7 +51,10 @@ Warehouse mutation privileges отсутствуют.
 
 ## Current migration head
 
-    c8d9e0f1a2b3
+    d9e0f1a2b3c4
+
+Stages 4–7 развёрнуты в production. Stage 7 Catalog Read API / Search / Filters
+закрыт; текущий продуктовый этап — Stage 8 Working Mini App UX.
 
 ## Deploy sequence
 
@@ -236,17 +239,17 @@ Data-integrity blocker. Inventory mutations останавливаются.
 
 ## Перед первым real inventory entry
 
-- [ ] Stage 6 merged;
-- [ ] production deploy PASS;
-- [ ] migration head verified;
-- [ ] DB roles verified;
-- [ ] Telegram smoke PASS;
-- [ ] maintenance iteration PASS;
+- [x] Stage 6 merged;
+- [x] production deploy Stages 4–7 PASS;
+- [x] migration head `d9e0f1a2b3c4` verified;
+- [x] DB roles verified;
+- [x] Telegram smoke PASS;
+- [x] maintenance iteration PASS;
 - [ ] automated PostgreSQL backup PASS;
 - [ ] artifact off-VM;
 - [ ] real restore PASS;
 - [ ] reconciliation zero drift;
-- [ ] branch protection configured;
-- [ ] production source clean/current.
+- [x] branch protection configured;
+- [x] production source clean/current на Stage 7 production SHA.
 
 Только после этого production-data gate можно снять.

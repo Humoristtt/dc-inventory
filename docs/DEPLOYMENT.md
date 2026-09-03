@@ -99,7 +99,9 @@ Backend Telegram/auth boundary использует:
     TELEGRAM_WEB_APP_URL
 
 `TELEGRAM_BOT_TOKEN` нужен backend для server-side HMAC-проверки Telegram
-`initData`. Frontend его никогда не получает.
+`initData`. Это тот же Telegram-issued credential, который Cloudflare Worker
+хранит независимо как secret `BOT_TOKEN` для Bot API. Frontend его никогда не
+получает.
 
 В production `TELEGRAM_WEB_APP_URL` задаёт ровно публичный HTTPS origin Mini
 App: без credentials, path, query, fragment и surrounding whitespace. Допустим
@@ -125,13 +127,19 @@ credentials, query, fragment или surrounding whitespace. HTTP разрешё�
 для development/internal test configuration.
 
 
-Cloudflare Worker имеет собственные secrets:
+Cloudflare Worker имеет собственное secret storage:
 
     BOT_TOKEN
     GATEWAY_SECRET
 
-Значение `GATEWAY_SECRET` является отдельным shared secret между production
-worker и Cloudflare Worker. Секреты Cloudflare не хранятся в Git.
+`BOT_TOKEN` должен содержать то же значение Telegram bot token, что backend
+получает через `TELEGRAM_BOT_TOKEN`; secret stores при этом независимы.
+`GATEWAY_SECRET` — другой credential: отдельный shared secret между production
+`telegram-worker` и Cloudflare Worker.
+
+При ротации Telegram bot token необходимо согласованно заменить backend
+`TELEGRAM_BOT_TOKEN` и Cloudflare `BOT_TOKEN`. Секреты Cloudflare не хранятся
+в Git.
 
 Migration container получает owner/migration DB-конфигурацию.
 После успешного Alembic upgrade одноразовый `db-permissions` container

@@ -191,7 +191,10 @@ Application transaction не вызывает Telegram Bot API напрямую.
 
 Production gateway URL обязан использовать HTTPS.
 
-Bot token хранится в Cloudflare Worker Secret.
+Для Bot API Cloudflare Worker хранит Telegram bot token как secret
+`BOT_TOKEN`. Тот же credential независимо доступен backend как
+`TELEGRAM_BOT_TOKEN` только для server-side HMAC-проверки Mini App `initData`;
+`telegram-worker` bot token не получает.
 
 ## Frontend
 

@@ -134,9 +134,15 @@ Telegram authentication и webhook используют backend-only настр�
     NOTIFICATION_WORKER_MAX_ATTEMPTS
 
 `TELEGRAM_BOT_TOKEN` нужен backend для серверной проверки подписи Telegram
-`initData`. Он не передаётся frontend и не нужен migration container.
-`telegram-worker` bot token также не получает: Bot API token хранится
-Cloudflare Worker Secret.
+`initData`. Тот же Telegram-issued bot token независимо provisioned в
+Cloudflare Worker Secret как `BOT_TOKEN` для вызовов Bot API. Это две secret
+storage copies одного credential, а не два разных bot token.
+
+Frontend, migration container и `telegram-worker` bot token не получают.
+`telegram-worker` обращается к Cloudflare Gateway только через
+`TELEGRAM_GATEWAY_URL` и отдельный `TELEGRAM_GATEWAY_SECRET`. При ротации
+Telegram bot token backend `TELEGRAM_BOT_TOKEN` и Cloudflare `BOT_TOKEN`
+должны обновляться согласованно.
 
 Секреты не имеют production-default значений и не хранятся в Git.
 
@@ -604,10 +610,11 @@ Inline callback содержит только opaque token. Request/user/action 
 сервером, а решение может выполнять только Telegram identity с
 `ADMIN + APPROVED`. AccessRequest и User блокируются `FOR UPDATE`.
 
-Исходящая доставка идёт через Cloudflare Telegram Gateway. Bot token хранится
-как Cloudflare Worker Secret; production `telegram-worker` получает только
-gateway URL и отдельный gateway secret. Gateway имеет фиксированный allowlist
-Bot API methods.
+Исходящая доставка идёт через Cloudflare Telegram Gateway. Cloudflare хранит
+свою copy того же Telegram-issued bot token как Worker Secret `BOT_TOKEN`;
+production `telegram-worker` получает только gateway URL и отдельный gateway
+secret. Backend copy используется только на auth boundary для `initData`
+validation. Gateway имеет фиксированный allowlist Bot API methods.
 
 
 Telegram `update_id` является внешним natural key и не генерируется PostgreSQL:

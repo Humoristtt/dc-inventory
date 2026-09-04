@@ -5,12 +5,12 @@
 > **Правило:** завершённые пункты отмечаются `[x]`, текущие — `[~]`, запланированные — `[ ]`.
 > Если решение меняется, старый пункт не удаляется бесследно: он переносится в раздел «Изменённые / отложенные решения» с короткой причиной.
 >
-> **Последнее обновление:** 2026-09-03
-> **Production runtime code baseline:** `d7a95f6f6d7b5a232fa545ab9011f86858e7da08` — Stage 8B production-accepted runtime.
-> **Production:** Stages 4–8B и branded Telegram entry flow развёрнуты и приняты в production. Production migration head: `a2b3c4d5e6f7`.
+> **Последнее обновление:** 2026-09-04
+> **Production runtime code baseline:** `9a9ec6a705473d8bd3521b01e6f602284ed9c375` — post-8B UX production-accepted runtime.
+> **Production:** Stages 4–8B, branded Telegram entry flow и post-8B UX foundations развёрнуты и приняты в production. Production migration head: `a2b3c4d5e6f7`.
 > **Git/GitHub:** local, remote и production checkout синхронизируются через protected `main`; обязательны PR и четыре CI checks: `CI/backend`, `CI/frontend`, `CI/runtime`, `CI/telegram-gateway`.
-> **Current product stage:** Stage 8B production accepted; следующий feature slice ещё не начат.
-> **Production-data gate:** automated off-VM PostgreSQL backup + real restore test намеренно отложены до подготовки к вводу настоящих складских остатков. Это блокирует только real inventory entry, но не дальнейшую feature-разработку, deploy и synthetic/test data.
+> **Current product stage:** Stage 8B + post-8B UX production accepted; Stage 15 preparation активирована перед первым real inventory entry.
+> **Production-data gate:** ACTIVE. Automated off-VM PostgreSQL backup, verified artifact, isolated real restore и zero-drift reconciliation обязательны до первого ввода настоящих складских остатков. Feature backlog Stage 9–14 остаётся независимым и не обязан быть завершён до Stage 15.
 > **Repository visibility:** repository остаётся public до последнего GitHub-dependent шага; перевод в private выполняется отдельно в конце.
 
 ---
@@ -1155,23 +1155,23 @@ ADMIN в «Ещё»:
 - Экспорт;
 - Audit / служебные разделы при необходимости.
 
-- [ ] Mobile-first.
-- [ ] Telegram safe areas.
-- [ ] Корректный viewport.
-- [ ] Telegram Desktop narrow window.
-- [ ] Android-like viewport.
-- [ ] iPhone-like viewport.
-- [ ] Telegram BackButton semantics.
-- [ ] BackButton закрывает внутренний экран / карточку, а не ломает навигацию.
-- [ ] Если используется Escape на Desktop — закрывает только modal/card, не Mini App.
-- [ ] Bottom navigation не перекрывает контент.
-- [ ] Keyboard поиска не перекрывает primary action.
-- [ ] Loading states.
-- [ ] Empty states.
-- [ ] Error states.
-- [ ] Offline / network error с понятным retry.
-- [ ] Skeletons там, где они реально улучшают UX.
-- [ ] Никаких огромных hero-заголовков в рабочем интерфейсе.
+- [x] Mobile-first.
+- [x] Telegram safe areas.
+- [x] Корректный viewport.
+- [x] Telegram Desktop narrow window.
+- [x] Android-like viewport.
+- [x] iPhone-like viewport.
+- [x] Telegram BackButton semantics.
+- [x] BackButton закрывает внутренний экран / карточку, а не ломает навигацию.
+- [x] Escape на Desktop закрывает только внутренний dismissable layer.
+- [x] Bottom navigation не перекрывает контент.
+- [ ] Keyboard поиска не перекрывает primary action — отдельный acceptance нужен при появлении operation forms.
+- [x] Loading states.
+- [x] Empty states.
+- [x] Error states.
+- [x] Network/API error имеет понятный retry.
+- [ ] Skeletons добавлять только при доказанной UX-пользе.
+- [x] Рабочий интерфейс не использует огромный runtime hero.
 
 ---
 
@@ -1526,7 +1526,7 @@ Viewport profiles:
 - [x] Production Swagger/OpenAPI отключён.
 - [x] app/db Docker networks разделены.
 - [x] CI backend/frontend/runtime зелёный.
-- [x] Production runtime baseline принят на `d7a95f6f6d7b5a232fa545ab9011f86858e7da08`; production checkout clean.
+- [x] Production runtime baseline принят на `9a9ec6a705473d8bd3521b01e6f602284ed9c375`; production checkout clean.
 
 До реальных данных:
 
@@ -1740,9 +1740,9 @@ Backup/restore остаётся отдельным production-data gate и не 
 
 ## Stage 8 — Working Mini App UX
 
-**STATUS: IMPLEMENTED LOCALLY / READY FOR REVIEW — Stage 8A production accepted;
-Stage 8B and final Playwright multi-viewport browser-acceptance gates pass
-locally. Stage 8B production acceptance remains pending.**
+**STATUS: DONE — Stage 8A/8B и post-8B UX foundations production accepted.
+Final Playwright multi-viewport gates, protected-main CI и live Telegram smoke
+пройдены.**
 
 Telegram entry UX (parallel Stage 8 slice):
 
@@ -1803,6 +1803,26 @@ Telegram entry UX (parallel Stage 8 slice):
 **GATE:** UI комфортен в Telegram Desktop narrow и mobile viewports; данные отображаются без обрезки.
 
 **STAGE 8B STATUS: DONE — PR #22 merged, production deploy and Telegram acceptance completed 2026-09-03.**
+
+### Post-8B UX foundations — production accepted 2026-09-04
+
+- [x] Unified Spikatel palette/header/search focus.
+- [x] Manual create entry points скрыты из primary UI без удаления admin routes.
+- [x] Desktop baseline 1920×1080 и ultrawide responsive behavior.
+- [x] Default Telegram mode остаётся expanded/windowed, без auto fullscreen.
+- [x] User-triggered fullscreen CTA.
+- [x] Fullscreen CTA становится exit action после `fullscreenChanged`.
+- [x] Fullscreen CTA виден от 400 CSS px и скрыт ниже.
+- [x] Search растягивается по рабочей ширине и отключает browser autocomplete hints.
+- [x] Mobile category cards text-first; индексы `01`, `02`, ... сохранены.
+- [x] Initial landing → category scroll reset.
+- [x] Desktop catalog toolbar sizing исправлен.
+- [x] Catalog side-border/gutter artifact удалён.
+- [x] PR #24–27 required CI и main CI PASS.
+- [x] Production source `9a9ec6a705473d8bd3521b01e6f602284ed9c375`.
+- [x] Live Telegram desktop/mobile smoke PASS.
+
+**STATUS: DONE / ACCEPTED.**
 
 ## Stage 9 — Warehouse Operations UI
 
@@ -1921,13 +1941,13 @@ Import:
 PostgreSQL automated backup + verified artifact + real restore test в отдельное
 окружение.
 
-**CURRENT PRIORITY POLICY:** Stage 15 backup/restore сейчас намеренно отложен.
-Stage 7–14 feature development, production deploy и synthetic/test data не
-блокируются. Gate возвращается в active work перед первым вводом настоящих
-канонических складских остатков.
+**CURRENT PRIORITY POLICY:** Stage 15 активирован 2026-09-04. Текущий
+приоритет — закрыть production-data gate до первого ввода authoritative SFP
+остатков. Незавершённые feature stages 9–14 остаются backlog и не являются
+предусловием для backup/restore hardening.
 
 - [ ] PostgreSQL automated backup.
-- [ ] Media backup.
+- [ ] Media backup — conditional; не блокирует первый SFP entry, пока canonical media subsystem отсутствует.
 - [ ] Off-VM storage.
 - [x] Technical runtime-data retention worker.
 - [ ] Backup artifact retention policy.
@@ -1940,7 +1960,7 @@ Stage 7–14 feature development, production deploy и synthetic/test data не
 - [ ] Full Playwright E2E.
 - [ ] Security pass.
 - [ ] Production smoke.
-- [ ] Documentation audit.
+- [~] Documentation audit — canonical pre-Stage15 sync начат 2026-09-04.
 - [ ] Final archive/source audit if required.
 
 **GATE:** систему можно использовать как реальный источник складского учёта, а не только демонстрационную Mini App.
@@ -2029,15 +2049,16 @@ Stage 7–14 feature development, production deploy и synthetic/test data не
 
 # 42. Следующий фактический шаг
 
-**CURRENT: Stage 8 implemented locally / ready for review; Stage 8A production
-accepted, Stage 8B production acceptance pending**
+**CURRENT: Stage 8B + post-8B UX foundations production accepted.
+Stage 15 production-data hardening preparation ACTIVE.**
 
-Stages 4–7 и Stage 8A полностью закрыты по release-cycle:
+Stages 4–8B и post-8B UX закрыты по release-cycle:
 source → review → CI → merge → production deploy → Telegram/viewport smoke →
-Git cleanup. Branded Telegram `/start` entry UX также развёрнут и принят в
-production.
+Git cleanup. Текущий production source — `9a9ec6a705473d8bd3521b01e6f602284ed9c375`, migration head —
+`a2b3c4d5e6f7`.
 
-Backup/restore не забыты, но сознательно вынесены из текущего критического пути: они обязательны перед real inventory entry, а не перед разработкой рабочего UI.
+Backup/restore теперь возвращены в критический путь, потому что следующий
+операционный milestone — controlled ввод authoritative SFP inventory.
 
 ## 42.1. Product-first execution order
 
@@ -2153,14 +2174,15 @@ production deploy
 
 ## 42.3. Development baseline и следующий шаг
 
-Stage 8B принят в production 2026-09-03. Production runtime code baseline —
-`d7a95f6f6d7b5a232fa545ab9011f86858e7da08`; production migration head — `a2b3c4d5e6f7`.
+Stage 8B и post-8B UX foundations приняты в production. Production runtime
+code baseline — `9a9ec6a705473d8bd3521b01e6f602284ed9c375`; production migration head — `a2b3c4d5e6f7`.
 
-PR #22 прошёл required backend/frontend/runtime/telegram-gateway CI, был merged
-в protected `main`, после чего merge commit также прошёл push CI. Production
-deploy, runtime acceptance и реальный Telegram `/start` smoke завершены успешно.
+PR #22 закрыл Stage 8B. PR #24–27 закрыли desktop/mobile UX foundations,
+windowed/fullscreen semantics и live-smoke findings. Required PR CI и main CI
+прошли; production Telegram smoke принят владельцем 2026-09-04.
 
-Следующий продуктовый slice — Stage 9 Warehouse Operations UI. Media, Excel,
-stocktake и production-data hardening остаются в своих последующих stages.
-Real inventory entry по-прежнему запрещён до Stage 15: automated off-VM
-PostgreSQL backup, isolated real restore и projection reconciliation.
+Текущий engineering priority — Stage 15 production-data hardening. Stage 9–14
+остаются product backlog и могут продолжаться после снятия data gate, но не
+блокируют backup/restore implementation. Real inventory entry запрещён до
+automated off-VM PostgreSQL backup, verified isolated restore и projection
+reconciliation с zero drift.

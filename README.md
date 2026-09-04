@@ -20,10 +20,11 @@
 
 ## Текущее состояние
 
-В production развёрнуты Stages 4–8B, включая Working Catalog UX,
-Admin catalog management, экран «Моё оборудование» и актуальный Telegram
-`/start` entry flow. Production runtime code baseline —
-`d7a95f6f6d7b5a232fa545ab9011f86858e7da08`; текущий migration head —
+В production развёрнуты и приняты Stages 4–8B, branded Telegram
+`/start` entry flow и post-8B UX foundations: responsive desktop/mobile shell,
+windowed Telegram mode, optional fullscreen toggle, catalog viewport fixes и
+финальный live Telegram smoke. Production runtime code baseline —
+`9a9ec6a705473d8bd3521b01e6f602284ed9c375`; текущий migration head —
 `a2b3c4d5e6f7`.
 
 Production runtime включает:
@@ -112,7 +113,7 @@ stock/custody detail, рабочий экран «Моё оборудовани�
 privacy/auth/runtime hardening и production-Nginx Playwright acceptance
 прошли local gate, PR #22 required CI и production smoke. Chromium и WebKit
 покрывают mobile/browser acceptance. Production runtime code baseline —
-`d7a95f6f6d7b5a232fa545ab9011f86858e7da08`, migration head — `a2b3c4d5e6f7`.
+`9a9ec6a705473d8bd3521b01e6f602284ed9c375`, migration head — `a2b3c4d5e6f7`.
 
 Item остаётся каталожной позицией; физические serial units и balances существуют
 только в warehouse domain. Старые локальные workbook остаются только reference
@@ -138,11 +139,20 @@ PostgreSQL backup и успешного real restore test в отдельное 
 - сетевые карты;
 - другие категории, которые будут добавляться позднее.
 
-Исходные Excel-файлы используются только как reference material для границ
-категорий, терминологии и технических атрибутов. Они не являются inventory
-database или обязательным import source. Существующие количества/остатки не
-импортируются; фактический stock проверяется владельцем вручную при вводе
-оборудования. После запуска PostgreSQL остаётся единственным источником истины.
+Исторические Excel-файлы используются только как reference material для
+границ категорий, терминологии и технических атрибутов и не являются
+authoritative inventory source.
+
+Для первого реального SFP-ввода существует отдельный внешний read-only
+`~/dc-inventory-input/sfp-authoritative.xlsx`. Его рабочий лист `На складе`
+содержит 23 позиции и суммарное количество 265 модулей. Этот workbook не
+коммитится в Git и до закрытия Stage 15 не импортируется в production.
+
+Для authoritative SFP dataset действуют отдельные lossless mapping rules:
+`Модель` → `Item.model`; отсутствующий P/N остаётся `NULL`; serial units не
+создаются; accounting mode — `QUANTITY`; Location не выдумывается из
+отсутствующих данных. После controlled opening inventory PostgreSQL остаётся
+единственным runtime source of truth.
 
 ## Технологический стек
 
@@ -190,4 +200,5 @@ Production VM:
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
 - [`docs/OPERATIONS.md`](docs/OPERATIONS.md)
+- [`docs/STAGE15_PLAN.md`](docs/STAGE15_PLAN.md)
 - [`docs/ROADMAP.md`](docs/ROADMAP.md)

@@ -53,16 +53,21 @@ Warehouse mutation privileges отсутствуют.
 
 Runtime source:
 
-    d7a95f6f6d7b5a232fa545ab9011f86858e7da08
+    9a9ec6a705473d8bd3521b01e6f602284ed9c375
 
 Migration head:
 
     a2b3c4d5e6f7
 
-Stages 4–8B и branded Telegram `/start` entry flow развёрнуты и приняты
-в production. Stage 8B production acceptance завершён 2026-09-03.
-Следующий feature slice ещё не начат; real inventory entry остаётся
-заблокирован Stage 15 backup/restore gate.
+Stages 4–8B, branded Telegram `/start` и post-8B UX foundations развёрнуты и
+приняты в production. Финальный live Telegram UX smoke завершён 2026-09-04:
+windowed default, user-triggered fullscreen toggle с обратным выходом,
+visibility threshold 400 CSS px, responsive desktop/mobile layout и catalog
+edge/initial-scroll remediation подтверждены.
+
+Следующий активный production-data этап — Stage 15. Real inventory entry
+остаётся заблокирован до automated off-VM PostgreSQL backup, isolated real
+restore и zero-drift reconciliation.
 
 ## Deploy sequence
 
@@ -135,6 +140,22 @@ Mini App открывается по WebApp CTA.
 4. user notification;
 5. approved login.
 
+### Telegram Mini App UX acceptance
+
+Текущий accepted desktop/mobile contract:
+
+- обычный старт — `expand()` без автоматического true fullscreen;
+- при viewport >= 400 CSS px доступен явный fullscreen toggle;
+- `requestFullscreen()` вызывается только действием пользователя;
+- в fullscreen CTA переключается на `exitFullscreen()`;
+- при viewport < 400 CSS px fullscreen CTA скрыт;
+- Escape используется только для внутренних dismissable layers;
+- catalog не создаёт декоративных боковых borders при расширении desktop окна;
+- первый переход landing → category начинается с верхней позиции страницы;
+- mobile category cards сохраняют индексы `01`, `02`, ... без тяжёлых glyph blocks.
+
+Cloudflare Telegram Gateway при этих frontend-only UX изменениях не менялся.
+
 ## Technical retention
 
 Defaults:
@@ -198,7 +219,7 @@ restore acceptance. Последний pre-deploy rollback checkpoint для Sta
 
 Следовательно:
 
-    REAL_INVENTORY_ENTRY=BLOCKED
+    REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
 
 Backup implementation должна обеспечить:
 
@@ -208,6 +229,9 @@ Backup implementation должна обеспечить:
 - retention policy;
 - observable success/failure;
 - documented restore procedure.
+
+Stage 15 implementation и acceptance ведутся по
+`docs/STAGE15_PLAN.md`.
 
 ## Restore acceptance
 
@@ -273,7 +297,7 @@ Data-integrity blocker. Inventory mutations останавливаются.
 - [ ] real restore PASS;
 - [ ] reconciliation zero drift;
 - [x] branch protection configured;
-- [x] production runtime code baseline `d7a95f6f6d7b5a232fa545ab9011f86858e7da08` accepted;
+- [x] production runtime code baseline `9a9ec6a705473d8bd3521b01e6f602284ed9c375` accepted;
 - [x] production checkout clean и синхронизируется с protected `main`.
 
 Только после этого production-data gate можно снять.

@@ -14,6 +14,17 @@ Production VM не является development-машиной.
 
 Production VM имеет read-only GitHub Deploy Key. Deploy выполняется только из конкретного SHA, успешно прошедшего CI.
 
+Текущий accepted production source:
+
+    9a9ec6a705473d8bd3521b01e6f602284ed9c375
+
+Текущий Alembic head:
+
+    a2b3c4d5e6f7
+
+Stage 15 preparation активна. До снятия production-data gate real inventory
+entry запрещён; backup/restore acceptance описан в `docs/STAGE15_PLAN.md`.
+
 ## Production runtime
 
 Production Compose находится в `compose.yaml`.

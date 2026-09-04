@@ -440,3 +440,25 @@
 - Automated off-VM PostgreSQL backup, real isolated restore и projection
   reconciliation остаются незакрытым Stage 15 production-data gate;
   `REAL_INVENTORY_ENTRY=BLOCKED`.
+## 2026-09-04 — Post-8B UX production acceptance
+
+- PR #24 добавил desktop UX foundations, unified Spikatel palette/header/search
+  focus, responsive grids и скрытие primary manual-create controls.
+- PR #25 закрепил default `expand()` windowed Telegram mode без автоматического
+  true fullscreen, desktop baseline 1920×1080, full-width search и mobile
+  text-first category cards.
+- PR #26 закрыл live-smoke findings: initial category scroll reset, desktop
+  toolbar sizing, restored mobile category indices и explicit fullscreen CTA.
+- PR #27 превратил fullscreen CTA в полноценный enter/exit toggle через
+  `requestFullscreen()` / `exitFullscreen()` + `fullscreenChanged`, снизил
+  visibility threshold до 400 CSS px и удалил catalog side-border artifact.
+- Все PR #24–27 прошли required backend/frontend/runtime/telegram-gateway CI.
+- Финальный PR #27 merge commit и main CI PASS.
+- Production web-only deploy завершён без restart backend/PostgreSQL/workers и
+  без изменения Cloudflare Telegram Gateway.
+- Финальный accepted production source: `9a9ec6a705473d8bd3521b01e6f602284ed9c375`.
+- Alembic head остаётся `a2b3c4d5e6f7`.
+- Live Telegram desktop/mobile smoke принят владельцем: fullscreen toggle,
+  responsive layout, catalog edge, initial scroll и mobile indices PASS.
+- `REAL_INVENTORY_ENTRY=BLOCKED_STAGE15`.
+- Следующий engineering priority переведён на Stage 15 preparation.

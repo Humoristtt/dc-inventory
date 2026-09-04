@@ -15,6 +15,35 @@
   opening balances; Stage 6 реализует первые четыре понятия в отдельном
   warehouse domain, но эти workbook по-прежнему ничего туда не импортируют.
 
+## Authoritative SFP opening source — отдельный contract
+
+Исторические workbook ниже остаются только source reference для Stage 5 и их
+inventory quantities по-прежнему не импортируются.
+
+Отдельно от них для будущего первого реального SFP-ввода зафиксирован
+authoritative workbook:
+
+    ~/dc-inventory-input/sfp-authoritative.xlsx
+
+Operational contract:
+
+- файл внешний и read-only;
+- файл и его копии `sfp-authoritative*.xlsx/.xlsm/.xls` не коммитятся в Git;
+- рабочий sheet: `На складе`;
+- 23 data rows;
+- суммарное фактическое количество: 265;
+- `Модель` маппится в `Item.model`, а не в manufacturer part number;
+- отсутствующий P/N остаётся `NULL`;
+- serial units для этого dataset не создаются;
+- accounting mode — `QUANTITY`;
+- Location нельзя выводить или придумывать из отсутствующего source field;
+- старые S/N, WWN, P/N и historical HP/HPE grouping не переносятся;
+- до закрытия Stage 15 workbook не импортируется в production;
+- после ввода PostgreSQL становится runtime source of truth.
+
+Этот authoritative dataset не отменяет historical source-reference решения
+ниже: это другой файл с другой ролью и отдельным acceptance gate.
+
 ## Покрытие анализа
 
 Проверены три workbook, шесть непустых sheets и 176 непустых data rows:

@@ -59,6 +59,8 @@ for needle, label in (
     ('get_bucket_lifecycle_configuration', "lifecycle preflight"),
     ('get_object_retention', "remote retention verification"),
     ('head_object', "remote metadata verification"),
+    ('get_object(', "remote content verification"),
+    ('downloaded_sha256', "remote SHA-256 verification"),
     ('"Metadata": {', "remote checksum metadata"),
     ('"sha256": sha256', "SHA-256 upload metadata"),
     ('S3_OBJECT_LOCK=GOVERNANCE_7D_PASS', "Object Lock marker"),

@@ -222,6 +222,33 @@ def verify_object(
             f"Remote SHA-256 metadata mismatch for {key}"
         )
 
+    response = client.get_object(
+        Bucket=bucket,
+        Key=key,
+    )
+
+    body = response["Body"]
+    digest = hashlib.sha256()
+
+    try:
+        while True:
+            chunk = body.read(1024 * 1024)
+
+            if not chunk:
+                break
+
+            digest.update(chunk)
+    finally:
+        body.close()
+
+    downloaded_sha256 = digest.hexdigest()
+
+    if downloaded_sha256 != expected_sha256:
+        raise RuntimeError(
+            f"Remote object SHA-256 mismatch for {key}: "
+            f"{downloaded_sha256} != {expected_sha256}"
+        )
+
     retention = client.get_object_retention(
         Bucket=bucket,
         Key=key,

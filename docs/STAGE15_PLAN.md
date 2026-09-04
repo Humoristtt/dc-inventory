@@ -6,6 +6,8 @@
     PRODUCTION_SOURCE=9a9ec6a705473d8bd3521b01e6f602284ed9c375
     ALEMBIC_HEAD=a2b3c4d5e6f7
     REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
+    STAGE15A_STORAGE=PASS
+    STAGE15A_AUTOMATION=IN_IMPLEMENTATION
 
 Stage 15 является production-data gate. Feature backlog Stage 9–14 не обязан
 быть завершён до этого hardening, но никакие настоящие складские остатки нельзя
@@ -37,12 +39,30 @@ Production storage interface:
 
     S3-compatible object storage
 
-Planned production provider:
+Accepted production provider:
 
-    Cloudflare R2
+    NetApp StorageGRID S3
+
+Production storage coordinates:
+
+    endpoint: https://s3-msk-1.cloudstack.ru
+    bucket: dc-inventory-prod-backups
+    prefix: postgres/
 
 Provider-specific API не должен проникать в backup domain: endpoint, bucket,
 credentials и region задаются configuration/secrets.
+
+Storage boundary acceptance 2026-09-04:
+
+- S3 authentication/read/write PASS;
+- Object Lock enabled;
+- default retention `GOVERNANCE`, 7 days;
+- current object lifecycle expiration 30 days;
+- noncurrent version expiration 1 day;
+- expired delete-marker cleanup enabled;
+- backup identity cannot modify lifecycle;
+- backup identity cannot delete objects;
+- `BypassGovernanceRetention` не предоставлен.
 
 Backup artifact contract:
 
@@ -59,14 +79,17 @@ Backup artifact contract:
 - local temporary artifact удаляется после verified off-VM upload;
 - manual pre-risky-migration backup использует тот же implementation.
 
-Initial schedule policy:
+Accepted schedule policy:
 
     daily
-    03:30 UTC
+    02:30 Europe/Moscow
+    Persistent=true
 
-Initial retention policy:
+Accepted retention policy:
 
-    30 days
+    current versions: 30 days
+    Object Lock GOVERNANCE: 7 days
+    noncurrent versions: 1 day
 
 Retention выполняется контролируемо по backup prefix; незавершённый upload не
 может удалить последний verified artifact.

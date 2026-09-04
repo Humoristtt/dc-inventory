@@ -1,0 +1,20 @@
+[Unit]
+Description=Spikatel Inventory PostgreSQL backup to S3
+After=network-online.target docker.service
+Wants=network-online.target
+Requires=docker.service
+
+[Service]
+Type=oneshot
+User=root
+WorkingDirectory=/opt/dc-inventory
+ExecStart=/opt/dc-inventory/ops/backup/dc-inventory-backup-s3
+UMask=0077
+Nice=10
+IOSchedulingClass=best-effort
+IOSchedulingPriority=7
+TimeoutStartSec=2h
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=full
+NoNewPrivileges=true

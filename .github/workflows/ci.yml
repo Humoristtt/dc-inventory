@@ -152,6 +152,10 @@ jobs:
             exit 1
           fi
 
+      - name: Stage 15 backup contract
+        shell: bash
+        run: python3 ops/tests/test_stage15_backup_contract.py
+
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"

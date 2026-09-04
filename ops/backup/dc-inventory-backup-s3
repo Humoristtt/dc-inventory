@@ -1,0 +1,345 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+umask 077
+
+ROOT_DIR="/opt/dc-inventory"
+ENV_FILE="/etc/dc-inventory/stage15-backup.env"
+STATE_DIR="/var/lib/dc-inventory-backup"
+LOCK_FILE="/run/lock/dc-inventory-backup.lock"
+S3_HELPER="${ROOT_DIR}/ops/backup/s3_stage15.py"
+
+if [ "${EUID}" -ne 0 ]; then
+    echo "[FATAL] Backup must run as root" >&2
+    exit 1
+fi
+
+install -d -o root -g root -m 700 "${STATE_DIR}"
+
+WORK_DIR=""
+
+cleanup() {
+    if [ -n "${WORK_DIR}" ] && [ -d "${WORK_DIR}" ]; then
+        rm -rf "${WORK_DIR}"
+    fi
+}
+
+write_failure_state() {
+    local rc="$1"
+    local failed_at="$2"
+    local failed_line="$3"
+
+    python3 - \
+        "${STATE_DIR}/status.json" \
+        "${STATE_DIR}/last-failure.json" \
+        "${failed_at}" \
+        "${rc}" \
+        "${failed_line}" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+payload = {
+    "state": "failure",
+    "failed_at_utc": sys.argv[3],
+    "exit_code": int(sys.argv[4]),
+    "shell_line": sys.argv[5],
+}
+
+for filename in sys.argv[1:3]:
+    target = Path(filename)
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    )
+    os.chmod(temporary, 0o600)
+    temporary.replace(target)
+PY
+}
+
+on_error() {
+    local rc=$?
+    local failed_at
+    local failed_line
+
+    trap - ERR
+    set +e
+
+    failed_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+    failed_line="${BASH_LINENO[0]:-unknown}"
+
+    write_failure_state \
+        "${rc}" \
+        "${failed_at}" \
+        "${failed_line}"
+
+    echo \
+        "[FATAL] Stage15A backup failed: rc=${rc} line=${failed_line}" \
+        >&2
+
+    exit "${rc}"
+}
+
+trap cleanup EXIT
+trap on_error ERR
+
+for command_name in \
+    awk \
+    date \
+    docker \
+    flock \
+    git \
+    install \
+    mktemp \
+    python3 \
+    sha256sum \
+    stat
+do
+    command -v "${command_name}" >/dev/null
+done
+
+test -r "${ENV_FILE}"
+test -r "${S3_HELPER}"
+
+exec 9>"${LOCK_FILE}"
+
+if ! flock -n 9; then
+    echo "[FATAL] Another dc-inventory backup is already running" >&2
+    exit 75
+fi
+
+WORK_DIR="$(mktemp -d /var/tmp/dc-inventory-backup.XXXXXX)"
+
+STARTED_AT_UTC="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+KEY_TIMESTAMP="$(date -u '+%Y%m%dT%H%M%SZ')"
+DATE_PATH="$(date -u '+%Y/%m/%d')"
+
+echo "[INFO] Stage15A storage preflight"
+
+python3 "${S3_HELPER}" \
+    preflight \
+    --env "${ENV_FILE}"
+
+cd "${ROOT_DIR}"
+
+SOURCE_SHA="$(
+    git         -c safe.directory="${ROOT_DIR}"         -C "${ROOT_DIR}"         rev-parse HEAD
+)"
+
+WORKTREE_STATUS="$(
+    git         -c safe.directory="${ROOT_DIR}"         -C "${ROOT_DIR}"         status --porcelain
+)"
+
+if [ -n "${WORKTREE_STATUS}" ]; then
+    echo "[FATAL] Production worktree is dirty" >&2
+    false
+fi
+
+POSTGRES_ID="$(docker compose ps -q postgres)"
+
+if [ -z "${POSTGRES_ID}" ]; then
+    echo "[FATAL] PostgreSQL container was not found" >&2
+    false
+fi
+
+POSTGRES_RUNNING="$(
+    docker inspect \
+        --format '{{.State.Running}}' \
+        "${POSTGRES_ID}"
+)"
+
+POSTGRES_HEALTH="$(
+    docker inspect \
+        --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' \
+        "${POSTGRES_ID}"
+)"
+
+if [ "${POSTGRES_RUNNING}" != "true" ]; then
+    echo "[FATAL] PostgreSQL container is not running" >&2
+    false
+fi
+
+if [ "${POSTGRES_HEALTH}" != "healthy" ]; then
+    echo \
+        "[FATAL] PostgreSQL container health is ${POSTGRES_HEALTH}" \
+        >&2
+    false
+fi
+
+POSTGRES_VERSION="$(
+    docker exec \
+        "${POSTGRES_ID}" \
+        pg_dump --version
+)"
+
+ALEMBIC_HEAD="$(
+    docker exec \
+        "${POSTGRES_ID}" \
+        sh -ec '
+            export PGPASSWORD="$POSTGRES_PASSWORD"
+            exec psql \
+                --no-align \
+                --tuples-only \
+                --username="$POSTGRES_USER" \
+                --dbname="$POSTGRES_DB" \
+                --command="SELECT version_num FROM alembic_version;"
+        '
+)"
+
+ALEMBIC_HEAD="$(
+    printf '%s' "${ALEMBIC_HEAD}" |
+    tr -d '[:space:]'
+)"
+
+if [ -z "${ALEMBIC_HEAD}" ]; then
+    echo "[FATAL] Alembic head is empty" >&2
+    false
+fi
+
+DB_FILE="${WORK_DIR}/dc-inventory-${KEY_TIMESTAMP}.dump"
+MANIFEST_FILE="${WORK_DIR}/dc-inventory-${KEY_TIMESTAMP}.manifest.json"
+
+DUMP_KEY="postgres/full/${DATE_PATH}/dc-inventory-${KEY_TIMESTAMP}.dump"
+MANIFEST_KEY="postgres/full/${DATE_PATH}/dc-inventory-${KEY_TIMESTAMP}.manifest.json"
+
+echo "[INFO] Creating PostgreSQL full custom-format dump"
+
+docker exec \
+    "${POSTGRES_ID}" \
+    sh -ec '
+        export PGPASSWORD="$POSTGRES_PASSWORD"
+        exec pg_dump \
+            --username="$POSTGRES_USER" \
+            --dbname="$POSTGRES_DB" \
+            --format=custom \
+            --compress=9 \
+            --no-owner \
+            --no-acl
+    ' > "${DB_FILE}"
+
+if [ ! -s "${DB_FILE}" ]; then
+    echo "[FATAL] PostgreSQL dump is empty" >&2
+    false
+fi
+
+DUMP_COMPLETED_AT_UTC="$(
+    date -u '+%Y-%m-%dT%H:%M:%SZ'
+)"
+
+echo "[INFO] Validating PostgreSQL archive"
+
+docker exec \
+    -i \
+    "${POSTGRES_ID}" \
+    pg_restore --list \
+    < "${DB_FILE}" \
+    > /dev/null
+
+echo "[OK] pg_restore --list"
+
+DB_SHA256="$(
+    sha256sum "${DB_FILE}" |
+    awk '{print $1}'
+)"
+
+DB_SIZE="$(
+    stat -c '%s' "${DB_FILE}"
+)"
+
+python3 - \
+    "${MANIFEST_FILE}" \
+    "${STARTED_AT_UTC}" \
+    "${DUMP_COMPLETED_AT_UTC}" \
+    "${SOURCE_SHA}" \
+    "${ALEMBIC_HEAD}" \
+    "${POSTGRES_VERSION}" \
+    "${DUMP_KEY}" \
+    "${DB_SHA256}" \
+    "${DB_SIZE}" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+manifest = {
+    "schema_version": 1,
+    "application": "dc-inventory",
+    "backup_type": "full",
+    "started_at_utc": sys.argv[2],
+    "dump_completed_at_utc": sys.argv[3],
+    "source_checkout_sha": sys.argv[4],
+    "alembic_head": sys.argv[5],
+    "postgresql_tools": sys.argv[6],
+    "artifact": {
+        "key": sys.argv[7],
+        "sha256": sys.argv[8],
+        "size_bytes": int(sys.argv[9]),
+        "format": "pg_dump-custom",
+    },
+}
+
+path = Path(sys.argv[1])
+path.write_text(
+    json.dumps(manifest, indent=2, sort_keys=True) + "\n"
+)
+os.chmod(path, 0o600)
+PY
+
+echo "[INFO] Uploading verified backup to S3"
+
+python3 "${S3_HELPER}" \
+    upload \
+    --env "${ENV_FILE}" \
+    --dump "${DB_FILE}" \
+    --manifest "${MANIFEST_FILE}" \
+    --dump-key "${DUMP_KEY}" \
+    --manifest-key "${MANIFEST_KEY}" \
+    --dump-sha256 "${DB_SHA256}"
+
+VERIFIED_AT_UTC="$(
+    date -u '+%Y-%m-%dT%H:%M:%SZ'
+)"
+
+python3 - \
+    "${STATE_DIR}/status.json" \
+    "${STATE_DIR}/last-success.json" \
+    "${STARTED_AT_UTC}" \
+    "${VERIFIED_AT_UTC}" \
+    "${SOURCE_SHA}" \
+    "${ALEMBIC_HEAD}" \
+    "${DUMP_KEY}" \
+    "${MANIFEST_KEY}" \
+    "${DB_SHA256}" \
+    "${DB_SIZE}" <<'PY'
+import json
+import os
+import sys
+from pathlib import Path
+
+payload = {
+    "state": "success",
+    "started_at_utc": sys.argv[3],
+    "verified_at_utc": sys.argv[4],
+    "source_checkout_sha": sys.argv[5],
+    "alembic_head": sys.argv[6],
+    "dump_key": sys.argv[7],
+    "manifest_key": sys.argv[8],
+    "dump_sha256": sys.argv[9],
+    "dump_size_bytes": int(sys.argv[10]),
+}
+
+for filename in sys.argv[1:3]:
+    target = Path(filename)
+    temporary = target.with_suffix(target.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    )
+    os.chmod(temporary, 0o600)
+    temporary.replace(target)
+PY
+
+echo "[DONE] Stage15A verified off-VM PostgreSQL backup"
+echo "[DONE] dump_key=${DUMP_KEY}"
+echo "[DONE] sha256=${DB_SHA256}"
+echo "[DONE] size=${DB_SIZE}"
+echo "STAGE15A_BACKUP=PASS"

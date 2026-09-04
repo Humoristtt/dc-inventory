@@ -462,3 +462,21 @@
   responsive layout, catalog edge, initial scroll и mobile indices PASS.
 - `REAL_INVENTORY_ENTRY=BLOCKED_STAGE15`.
 - Следующий engineering priority переведён на Stage 15 preparation.
+
+## 2026-09-04 — Stage 15A — Off-VM backup storage boundary
+
+- Создан отдельный StorageGRID tenant `dc-inventory-prod`.
+- Создан bucket `dc-inventory-prod-backups` с S3 Object Lock.
+- Default Object Lock подтверждён через S3 API: `GOVERNANCE`, 7 days.
+- Для `postgres/` настроен lifecycle: current versions 30 days,
+  noncurrent versions 1 day и cleanup expired delete markers.
+- Создан отдельный backup identity `dc-inventory-backup`.
+- Реальный S3 probe прошёл `HEAD/LIST/PUT/HEAD`.
+- После least-privilege hardening backup identity успешно читает Object Lock
+  и lifecycle configuration, но `PutLifecycleConfiguration` и `DeleteObject`
+  возвращают `403 AccessDenied`.
+- Production S3 endpoint подтверждён:
+  `https://s3-msk-1.cloudstack.ru`, addressing style `path`.
+- Stage15A storage boundary: `PASS`.
+- Automated PostgreSQL backup implementation подготовлен в feature branch;
+  Stage15A ещё не закрыт до первого verified off-VM dump и isolated restore.

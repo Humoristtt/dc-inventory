@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily Spikatel Inventory PostgreSQL backup
+
+[Timer]
+OnCalendar=*-*-* 02:30:00 Europe/Moscow
+Persistent=true
+AccuracySec=1min
+RandomizedDelaySec=0
+Unit=dc-inventory-backup-s3.service
+
+[Install]
+WantedBy=timers.target

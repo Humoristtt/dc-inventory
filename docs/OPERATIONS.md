@@ -205,8 +205,29 @@ Canonical script:
 
 ## Backup gate
 
+Stage15A storage boundary принят 2026-09-04:
+
+- StorageGRID S3 endpoint `https://s3-msk-1.cloudstack.ru`;
+- bucket `dc-inventory-prod-backups`;
+- backup prefix `postgres/`;
+- Object Lock `GOVERNANCE`, 7 days;
+- lifecycle current versions 30 days;
+- backup identity не имеет `DeleteObject`;
+- backup identity не может изменять lifecycle.
+
+Automation implementation:
+
+- `ops/backup/dc-inventory-backup-s3`;
+- `ops/backup/s3_stage15.py`;
+- `dc-inventory-backup-s3.service`;
+- `dc-inventory-backup-s3.timer`;
+- daily schedule `02:30 Europe/Moscow`;
+- `Persistent=true`;
+- state files в `/var/lib/dc-inventory-backup`.
+
 Automated production PostgreSQL backup пока не является закрытым acceptance
-gate.
+gate: требуется merge/production install, первый verified off-VM artifact и
+реальный isolated restore.
 
 Локальные pre-deploy rollback dumps на production VM используются как
 операционный checkpoint, но **не заменяют** automated off-VM backup и real

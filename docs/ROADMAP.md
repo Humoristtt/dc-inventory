@@ -9,7 +9,7 @@
 > **Production runtime code baseline:** `9a9ec6a705473d8bd3521b01e6f602284ed9c375` — post-8B UX production-accepted runtime.
 > **Production:** Stages 4–8B, branded Telegram entry flow и post-8B UX foundations развёрнуты и приняты в production. Production migration head: `a2b3c4d5e6f7`.
 > **Git/GitHub:** local, remote и production checkout синхронизируются через protected `main`; обязательны PR и четыре CI checks: `CI/backend`, `CI/frontend`, `CI/runtime`, `CI/telegram-gateway`.
-> **Current product stage:** Stage 8B + post-8B UX production accepted; Stage 15 preparation активирована перед первым real inventory entry.
+> **Current product stage:** Stage 8B + post-8B UX production accepted; Stage 15 активен. Stage15A StorageGRID storage boundary PASS, automated PostgreSQL backup implementation в работе.
 > **Production-data gate:** ACTIVE. Automated off-VM PostgreSQL backup, verified artifact, isolated real restore и zero-drift reconciliation обязательны до первого ввода настоящих складских остатков. Feature backlog Stage 9–14 остаётся независимым и не обязан быть завершён до Stage 15.
 > **Repository visibility:** repository остаётся public до последнего GitHub-dependent шага; перевод в private выполняется отдельно в конце.
 

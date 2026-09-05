@@ -480,3 +480,41 @@
 - Stage15A storage boundary: `PASS`.
 - Automated PostgreSQL backup implementation подготовлен в feature branch;
   Stage15A ещё не закрыт до первого verified off-VM dump и isolated restore.
+
+
+## 2026-09-04 — Stage 15A/B production backup and restore acceptance
+
+- PR #29 merged в `main`; merge commit:
+  `01ff357593eef12e4c47ddc7f3cd9ded70c926ed`.
+- Main CI run `33888073302`: backend/frontend/runtime/telegram-gateway PASS.
+- Production checkout синхронизирован до `01ff357...` без rebuild/restart
+  application containers.
+- `dc-inventory-backup-s3.service` и timer установлены в production.
+- Первый verified off-VM PostgreSQL backup создан:
+  `postgres/full/2026/09/04/dc-inventory-20260904T152348Z.dump`.
+- Dump SHA-256:
+  `9c5367121865e7e747115f59073e3c031f2fba52b827ae0a7dba915fbed99f37`;
+  size `100822` bytes; Alembic `a2b3c4d5e6f7`.
+- Dump и manifest после upload прочитаны обратно из StorageGRID; remote
+  content SHA-256 verification PASS; Object Lock retention PASS.
+- Daily timer `02:30 Europe/Moscow`, `Persistent=true`, active/enabled.
+- Тот же S3 artifact скачан для real isolated restore; checksum и manifest
+  reconciliation PASS.
+- Restore выполнен в отдельный PostgreSQL 18 container/volume/network без
+  host-published PostgreSQL port.
+- `pg_restore` PASS; restored DB открылась; `19` public tables;
+  Alembic head `a2b3c4d5e6f7`.
+- Tables/columns/constraints/indexes/triggers/extensions parity PASS.
+- Critical row-count parity production/restored PASS.
+- Real inventory reconciliation:
+  `items=0`, `inventory_units=0`, `stock_balances=0`,
+  `movements=0`, `movement_lines=0`; QUANTITY/SERIAL drift `0`.
+- Exact production backend image успешно стартовал против restored DB;
+  `/api/health/ready` PASS, host ports не публиковались.
+- Production PostgreSQL/backend/web оставались healthy и не перезапускались.
+- Temporary Stage15B restore environment после acceptance удалён.
+- Старые локальные pre-Stage15 rollback dumps удалены только после доказанного
+  S3 restore; recovery source — verified off-VM backup.
+- `STAGE15A=PASS`.
+- `STAGE15B=PASS`.
+- `REAL_INVENTORY_ENTRY=BLOCKED_STAGE15`: остаётся Stage15C final gate.

@@ -2,12 +2,18 @@
 
 ## Status
 
-    STAGE15=ACTIVE_PREPARATION
+    STAGE15=ACTIVE_15C
     PRODUCTION_SOURCE=9a9ec6a705473d8bd3521b01e6f602284ed9c375
+    PRODUCTION_CHECKOUT=01ff357593eef12e4c47ddc7f3cd9ded70c926ed
     ALEMBIC_HEAD=a2b3c4d5e6f7
     REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
     STAGE15A_STORAGE=PASS
-    STAGE15A_AUTOMATION=IN_IMPLEMENTATION
+    STAGE15A_AUTOMATION=PASS
+    STAGE15A_VERIFIED_BACKUP=PASS
+    STAGE15B_REAL_RESTORE=PASS
+    STAGE15B_SCHEMA_PARITY=PASS
+    STAGE15B_RECONCILIATION=PASS
+    STAGE15B_APP_COMPATIBILITY=PASS
 
 Stage 15 является production-data gate. Feature backlog Stage 9–14 не обязан
 быть завершён до этого hardening, но никакие настоящие складские остатки нельзя
@@ -104,14 +110,32 @@ Failure visibility must include:
 
 Secrets не хранятся в Git, backup artifact или logs.
 
+Production acceptance 2026-09-04:
+
+- PR #29 merged в `main`, production checkout:
+  `01ff357593eef12e4c47ddc7f3cd9ded70c926ed`;
+- первый verified full artifact:
+  `postgres/full/2026/09/04/dc-inventory-20260904T152348Z.dump`;
+- manifest:
+  `postgres/full/2026/09/04/dc-inventory-20260904T152348Z.manifest.json`;
+- dump SHA-256:
+  `9c5367121865e7e747115f59073e3c031f2fba52b827ae0a7dba915fbed99f37`;
+- dump size: `100822` bytes;
+- manifest source checkout:
+  `01ff357593eef12e4c47ddc7f3cd9ded70c926ed`;
+- manifest Alembic head: `a2b3c4d5e6f7`;
+- remote object body read-back и SHA-256 verification PASS;
+- Object Lock retention на созданном artifact подтверждён;
+- systemd timer `02:30 Europe/Moscow` active и enabled;
+- Stage15A automated off-VM backup: `PASS`.
+
 ## Stage 15B — Real isolated restore acceptance
 
 Restore использует настоящий off-VM artifact, а не same-VM pre-deploy dump.
 
 Temporary restore environment:
 
-- отдельный Docker Compose project;
-- отдельная PostgreSQL 18 container/volume/network;
+- отдельный isolated PostgreSQL 18 container/volume/network;
 - нет host-published PostgreSQL port;
 - production PostgreSQL volume не подключается;
 - production runtime containers не меняются;
@@ -136,6 +160,35 @@ Acceptance:
 
 Restore test is invalid if it only validates archive syntax without restoring
 and opening the database.
+
+Production acceptance 2026-09-04:
+
+- использован настоящий verified S3 artifact
+  `dc-inventory-20260904T152348Z.dump`;
+- download SHA-256 и manifest reconciliation PASS;
+- восстановление выполнено в отдельный PostgreSQL 18 container с отдельными
+  volume/network и без host-published port;
+- `pg_restore` PASS, восстановленная БД открывается;
+- public tables: `19`;
+- restored Alembic head: `a2b3c4d5e6f7`;
+- tables/columns/constraints/indexes/triggers/extensions parity PASS;
+- эквивалентные PostgreSQL CHECK-expression cast forms нормализованы при
+  semantic comparison; structural constraint parity PASS;
+- critical production/restored row-count parity PASS;
+- restored baseline:
+  `categories=6`, `category_attributes=55`, `items=0`,
+  `inventory_units=0`, `stock_balances=0`, `movements=0`,
+  `movement_lines=0`;
+- QUANTITY drift = `0`;
+- SERIAL drift = `0`;
+- exact production backend image
+  `sha256:4fdb493b9ded2c0dd2fc16f139f16a901189e0b8f8d82552d371ccda31827087`
+  успешно поднят против restored DB;
+- restored backend `/api/health/ready` PASS без host exposure;
+- production runtime оставался healthy и не изменялся;
+- temporary restore container/volume/network удалены после acceptance;
+- старые same-VM rollback dumps удалены только после успешного S3 restore;
+- Stage15B real isolated restore acceptance: `PASS`.
 
 ## Stage 15C — Final pre-data hardening
 
@@ -166,8 +219,11 @@ production acceptance.
 
 ## Rollback policy
 
-Existing same-VM PostgreSQL dumps and Docker image tags remain useful
-deploy-specific rollback checkpoints but do not satisfy disaster recovery.
+Deploy-specific same-VM PostgreSQL dumps from pre-Stage15 checkpoints were
+removed on 2026-09-04 only after the verified S3 artifact passed real isolated
+restore and application compatibility. Disaster recovery now relies on verified
+off-VM S3 artifacts; Docker image/source rollback references remain separate
+deployment checkpoints.
 
 Stage 15 requires:
 

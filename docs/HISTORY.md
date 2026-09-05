@@ -518,3 +518,43 @@
 - `STAGE15A=PASS`.
 - `STAGE15B=PASS`.
 - `REAL_INVENTORY_ENTRY=BLOCKED_STAGE15`: остаётся Stage15C final gate.
+
+## 2026-09-06 — Stage 15C — Production backup hygiene checkpoint
+
+- Production Git checkout синхронизирован docs-only fast-forward:
+  `01ff357593eef12e4c47ddc7f3cd9ded70c926ed` →
+  `7d46920c659a86ef919cc2b1f64decce973d39ab`.
+- Между этими checkout изменились только `docs/HISTORY.md` и
+  `docs/STAGE15_PLAN.md`; application runtime не пересоздавался.
+- Container IDs production runtime остались неизменными;
+  health/live/ready после checkout sync — PASS.
+- Подтверждён первый автоматический scheduled Stage15A backup по systemd timer:
+  `2026-09-04T23:30:01Z` (`2026-09-05 02:30 Europe/Moscow`).
+- Scheduled artifact:
+  `postgres/full/2026/09/04/dc-inventory-20260904T233001Z.dump`;
+  размер `100901` bytes; SHA-256
+  `4c54098b53a2636614373b44f7894d3f95a32e334c964900a14dec3b5539ce74`;
+  Alembic head `a2b3c4d5e6f7`; remote verification PASS.
+- Выполнен read-only inventory локальных backup/rollback artifacts production VM.
+- Постоянных локальных PostgreSQL dump/backup artifacts не найдено:
+  `LOCAL_DB_BACKUPS=0`.
+- Stage15 temporary workdirs `/var/tmp/dc-inventory-backup.*` отсутствуют.
+- После проверки на пустоту через `find` удалены только `rmdir` две legacy
+  directories:
+  `/home/install/.dc-inventory-db-backups` и
+  `/opt/dc-inventory/backups`.
+- Единственный намеренно сохранённый local rollback artifact:
+  `/home/install/.dc-inventory-env-backups/env-pre-stage6-deploy`.
+  Это environment/config rollback checkpoint, а не PostgreSQL backup.
+- Сохранённый artifact: размер `698` bytes, mode `600`,
+  owner `install:install`, SHA-256
+  `350535df2631887159486587c13758ceb83c376cecb02967ab0d671cf3bd29f7`.
+- `/var/lib/dc-inventory-backup/status.json` и
+  `/var/lib/dc-inventory-backup/last-success.json` сохранены как operational
+  state/observability; они не являются backup storage.
+- Authoritative PostgreSQL disaster-recovery storage — verified off-VM
+  StorageGRID S3. Постоянная коллекция ручных local DB dumps на production VM
+  не ведётся.
+- Stage15C остаётся активным; этот cleanup является только отдельным
+  hardening checkpoint.
+- `REAL_INVENTORY_ENTRY=BLOCKED_STAGE15`.

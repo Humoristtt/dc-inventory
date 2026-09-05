@@ -5,12 +5,13 @@
 > **Правило:** завершённые пункты отмечаются `[x]`, текущие — `[~]`, запланированные — `[ ]`.
 > Если решение меняется, старый пункт не удаляется бесследно: он переносится в раздел «Изменённые / отложенные решения» с короткой причиной.
 >
-> **Последнее обновление:** 2026-09-04
+> **Последнее обновление:** 2026-09-06
 > **Production runtime code baseline:** `9a9ec6a705473d8bd3521b01e6f602284ed9c375` — post-8B UX production-accepted runtime.
+> **Stage15C checkout-sync checkpoint (2026-09-06):** production checkout `7d46920c659a86ef919cc2b1f64decce973d39ab`; docs-only sync, application runtime containers не пересоздавались.
 > **Production:** Stages 4–8B, branded Telegram entry flow и post-8B UX foundations развёрнуты и приняты в production. Production migration head: `a2b3c4d5e6f7`.
 > **Git/GitHub:** local, remote и production checkout синхронизируются через protected `main`; обязательны PR и четыре CI checks: `CI/backend`, `CI/frontend`, `CI/runtime`, `CI/telegram-gateway`.
-> **Current product stage:** Stage 8B + post-8B UX production accepted; Stage 15 активен. Stage15A StorageGRID storage boundary PASS, automated PostgreSQL backup implementation в работе.
-> **Production-data gate:** ACTIVE. Automated off-VM PostgreSQL backup, verified artifact, isolated real restore и zero-drift reconciliation обязательны до первого ввода настоящих складских остатков. Feature backlog Stage 9–14 остаётся независимым и не обязан быть завершён до Stage 15.
+> **Current product stage:** Stage 8B + post-8B UX production accepted; Stage 15 активен. Stage15A automated off-VM backup PASS, Stage15B real isolated restore PASS, Stage15C final pre-data hardening ACTIVE.
+> **Production-data gate:** ACTIVE. Stage15A и Stage15B приняты; первый ввод настоящих складских остатков остаётся запрещён до полного Stage15C acceptance, включая final migration/CI/security/runtime checks, production zero-drift reconciliation, authoritative source guard и canonical documentation sync. Feature backlog Stage 9–14 остаётся независимым.
 > **Repository visibility:** repository остаётся public до последнего GitHub-dependent шага; перевод в private выполняется отдельно в конце.
 
 ---
@@ -1498,16 +1499,16 @@ Viewport profiles:
 
 До реального production учёта:
 
-- [ ] Автоматический PostgreSQL backup.
-- [ ] Backup media.
-- [ ] Retention policy.
-- [ ] Backup вне самой VM.
-- [ ] Проверка backup artifact.
-- [ ] Реальный restore test в отдельное окружение.
-- [ ] После restore запуск migrations/status checks.
-- [ ] Проверка row counts / key invariants.
-- [ ] Документированный runbook восстановления.
-- [ ] Нельзя считать backup готовым без restore test.
+- [x] Автоматический PostgreSQL backup.
+- [ ] Backup media — conditional до появления canonical Stage 11 media subsystem.
+- [x] Retention policy.
+- [x] Backup вне самой VM.
+- [x] Проверка backup artifact.
+- [x] Реальный restore test в отдельное окружение.
+- [x] После restore запуск migrations/status checks.
+- [x] Проверка row counts / key invariants.
+- [~] Restore acceptance procedure документирована; command-level recovery runbook финализируется в Stage15C.
+- [x] Нельзя считать backup готовым без restore test.
 
 ---
 
@@ -1937,22 +1938,25 @@ Import:
 
 ## Stage 15 — Production Hardening Before Real Inventory
 
-**BLOCKING POLICY:** real inventory entry остаётся запрещён до выполненных
-PostgreSQL automated backup + verified artifact + real restore test в отдельное
-окружение.
+**BLOCKING POLICY:** Stage15A automated off-VM PostgreSQL backup и Stage15B
+real isolated restore приняты. Real inventory entry остаётся запрещён до полного
+Stage15C final pre-data hardening и явного снятия production-data gate.
 
 **CURRENT PRIORITY POLICY:** Stage 15 активирован 2026-09-04. Текущий
 приоритет — закрыть production-data gate до первого ввода authoritative SFP
 остатков. Незавершённые feature stages 9–14 остаются backlog и не являются
 предусловием для backup/restore hardening.
 
-- [ ] PostgreSQL automated backup.
+- [x] PostgreSQL automated backup.
 - [ ] Media backup — conditional; не блокирует первый SFP entry, пока canonical media subsystem отсутствует.
-- [ ] Off-VM storage.
+- [x] Off-VM storage.
 - [x] Technical runtime-data retention worker.
-- [ ] Backup artifact retention policy.
-- [ ] Real restore test.
-- [ ] Restore runbook.
+- [x] Backup artifact retention policy.
+- [x] Real restore test.
+- [~] Restore acceptance procedure documented; command-level recovery runbook pending final Stage15C documentation.
+- [x] Stage15A first scheduled automatic production run verified.
+- [x] Stage15C production checkout docs-only sync без restart runtime.
+- [x] Stage15C local backup hygiene: permanent local DB dumps = 0; empty legacy backup directories removed.
 - [ ] Image pinning / immutable deployment decision.
 - [ ] Rollback.
 - [ ] Full migration check.
@@ -1960,7 +1964,7 @@ PostgreSQL automated backup + verified artifact + real restore test в отде�
 - [ ] Full Playwright E2E.
 - [ ] Security pass.
 - [ ] Production smoke.
-- [~] Documentation audit — canonical pre-Stage15 sync начат 2026-09-04.
+- [~] Documentation audit — Stage15A/B acceptance и Stage15C backup hygiene sync обновляются 2026-09-06.
 - [ ] Final archive/source audit if required.
 
 **GATE:** систему можно использовать как реальный источник складского учёта, а не только демонстрационную Mini App.

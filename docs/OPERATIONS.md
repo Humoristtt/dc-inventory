@@ -55,6 +55,17 @@ Runtime source:
 
     9a9ec6a705473d8bd3521b01e6f602284ed9c375
 
+Stage15C checkout-sync checkpoint, verified 2026-09-06:
+
+    7d46920c659a86ef919cc2b1f64decce973d39ab
+
+Этот SHA фиксирует доказанный docs-only Stage15 acceptance checkpoint:
+application containers при его синхронизации не пересоздавались.
+
+Точный текущий production Git checkout не поддерживается как самоссылочный SHA
+в versioned documentation. Перед deploy/acceptance его всегда проверять
+непосредственно на production VM через `git rev-parse HEAD`.
+
 Migration head:
 
     a2b3c4d5e6f7
@@ -205,17 +216,20 @@ Canonical script:
 
 ## Backup gate
 
-Stage15A storage boundary принят 2026-09-04:
+Stage15A automated off-VM PostgreSQL backup принят в production.
+
+Storage boundary:
 
 - StorageGRID S3 endpoint `https://s3-msk-1.cloudstack.ru`;
 - bucket `dc-inventory-prod-backups`;
 - backup prefix `postgres/`;
 - Object Lock `GOVERNANCE`, 7 days;
 - lifecycle current versions 30 days;
+- noncurrent versions 1 day;
 - backup identity не имеет `DeleteObject`;
 - backup identity не может изменять lifecycle.
 
-Automation implementation:
+Automation:
 
 - `ops/backup/dc-inventory-backup-s3`;
 - `ops/backup/s3_stage15.py`;
@@ -223,49 +237,73 @@ Automation implementation:
 - `dc-inventory-backup-s3.timer`;
 - daily schedule `02:30 Europe/Moscow`;
 - `Persistent=true`;
+- timer active и enabled;
 - state files в `/var/lib/dc-inventory-backup`.
 
-Automated production PostgreSQL backup пока не является закрытым acceptance
-gate: требуется merge/production install, первый verified off-VM artifact и
-реальный isolated restore.
+Первый verified off-VM artifact и реальный isolated restore приняты в Stage15A/B.
 
-Локальные pre-deploy rollback dumps на production VM используются как
-операционный checkpoint, но **не заменяют** automated off-VM backup и real
-restore acceptance. Последний pre-deploy rollback checkpoint для Stage 8B:
-`/opt/dc-inventory/backups/pre-stage8b-d7a95f6.dump`, SHA-256
-`f595c6211f2ed40c4267555131d093e0d5e4a98ee8e45e10e3bb2a6339dc9d78`, `pg_restore --list` PASS.
+Первый автоматический scheduled production run также доказан:
 
-Этот artifact остаётся локальным rollback checkpoint конкретного deploy и
-не заменяет automated off-VM backup / restore acceptance Stage 15.
+- started `2026-09-04T23:30:01Z`
+  (`2026-09-05 02:30 Europe/Moscow`);
+- dump
+  `postgres/full/2026/09/04/dc-inventory-20260904T233001Z.dump`;
+- size `100901` bytes;
+- SHA-256
+  `4c54098b53a2636614373b44f7894d3f95a32e334c964900a14dec3b5539ce74`;
+- Alembic `a2b3c4d5e6f7`;
+- remote verification PASS.
+
+Local backup policy после Stage15C hygiene checkpoint:
+
+- permanent local PostgreSQL dump collection отсутствует;
+- verified StorageGRID S3 artifacts являются authoritative DB recovery source;
+- backup execution создаёт только temporary
+  `/var/tmp/dc-inventory-backup.XXXXXX` workdir;
+- temporary dump удаляется cleanup trap после завершения процесса;
+- `/var/lib/dc-inventory-backup/status.json` и `last-success.json` являются
+  state/observability, а не backup artifacts;
+- unmanaged manual PostgreSQL dumps на production VM не должны накапливаться;
+- пустые legacy directories `/home/install/.dc-inventory-db-backups` и
+  `/opt/dc-inventory/backups` удалены 2026-09-06;
+- единственный сохранённый local rollback artifact:
+  `/home/install/.dc-inventory-env-backups/env-pre-stage6-deploy`;
+- этот artifact относится к environment/config rollback, не к PostgreSQL;
+- его SHA-256:
+  `350535df2631887159486587c13758ceb83c376cecb02967ab0d671cf3bd29f7`.
 
 Следовательно:
 
+    STAGE15A=PASS
+    STAGE15B=PASS
+    STAGE15C=ACTIVE
     REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
-
-Backup implementation должна обеспечить:
-
-- automated schedule;
-- artifact off-VM;
-- controlled access;
-- retention policy;
-- observable success/failure;
-- documented restore procedure.
 
 Stage 15 implementation и acceptance ведутся по
 `docs/STAGE15_PLAN.md`.
 
 ## Restore acceptance
 
-До первого real inventory entry:
+Stage15B real isolated restore acceptance: `PASS`.
 
-1. взять настоящий backup artifact;
-2. создать isolated restore environment;
-3. восстановить artifact;
-4. проверить schema/Alembic state;
-5. выполнить application consistency checks;
-6. выполнить projection reconciliation;
-7. получить zero drift;
-8. записать результат в `docs/HISTORY.md`.
+Accepted procedure:
+
+1. взять настоящий verified off-VM backup artifact;
+2. проверить manifest и SHA-256;
+3. создать isolated PostgreSQL restore environment;
+4. не публиковать PostgreSQL host port;
+5. восстановить artifact через `pg_restore`;
+6. проверить schema/Alembic state;
+7. проверить critical row counts/invariants;
+8. выполнить application compatibility check;
+9. выполнить canonical projection reconciliation;
+10. получить QUANTITY drift = 0 и SERIAL drift = 0;
+11. удалить temporary restore environment только после сохранения evidence;
+12. записать acceptance в `docs/HISTORY.md`.
+
+Эта процедура реально выполнена для Stage15B. Повторная final production
+reconciliation и остальные Stage15C checks остаются обязательными перед снятием
+production-data gate.
 
 ## Failure boundaries
 
@@ -309,15 +347,29 @@ Data-integrity blocker. Inventory mutations останавливаются.
 
 - [x] Stage 8B merged через PR #22;
 - [x] production deploy Stages 4–8B + Telegram entry UX PASS;
-- [x] migration head `a2b3c4d5e6f7` verified;
-- [x] DB roles verified;
+- [x] current migration head `a2b3c4d5e6f7` verified;
+- [x] existing production DB role boundary previously verified;
 - [x] Telegram smoke PASS;
 - [x] maintenance iteration PASS;
-- [ ] automated PostgreSQL backup PASS;
-- [ ] artifact off-VM;
-- [ ] real restore PASS;
-- [ ] reconciliation zero drift;
+- [x] Stage15A automated PostgreSQL backup PASS;
+- [x] verified artifact off-VM;
+- [x] backup retention policy PASS;
+- [x] first scheduled automatic backup PASS;
+- [x] Stage15B real isolated restore PASS;
+- [x] Stage15B restore reconciliation zero drift;
+- [x] Stage15C local backup hygiene PASS;
 - [x] branch protection configured;
+- [ ] Stage15C final migration status/check;
+- [ ] Stage15C final DB roles/host exposure re-verification;
+- [ ] Stage15C final production projection reconciliation zero drift;
+- [ ] Stage15C full backend/integration/concurrency gate;
+- [ ] Stage15C frontend unit/build/Playwright gate;
+- [ ] Stage15C runtime/Telegram gateway CI gate;
+- [ ] Stage15C security/source audit;
+- [ ] Stage15C final production smoke;
+- [ ] authoritative SFP source guard;
+- [~] final canonical documentation synchronization;
+- [ ] `REAL_INVENTORY_ENTRY=ALLOWED` only after complete Stage15C acceptance;
 - [x] production runtime code baseline `9a9ec6a705473d8bd3521b01e6f602284ed9c375` accepted;
 - [x] production checkout clean и синхронизируется с protected `main`.
 

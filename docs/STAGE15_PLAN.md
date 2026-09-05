@@ -4,16 +4,19 @@
 
     STAGE15=ACTIVE_15C
     PRODUCTION_SOURCE=9a9ec6a705473d8bd3521b01e6f602284ed9c375
-    PRODUCTION_CHECKOUT=01ff357593eef12e4c47ddc7f3cd9ded70c926ed
+    STAGE15C_CHECKOUT_SYNC_BASELINE=7d46920c659a86ef919cc2b1f64decce973d39ab
     ALEMBIC_HEAD=a2b3c4d5e6f7
     REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
     STAGE15A_STORAGE=PASS
     STAGE15A_AUTOMATION=PASS
     STAGE15A_VERIFIED_BACKUP=PASS
+    STAGE15A_SCHEDULED_RUN=PASS
     STAGE15B_REAL_RESTORE=PASS
     STAGE15B_SCHEMA_PARITY=PASS
     STAGE15B_RECONCILIATION=PASS
     STAGE15B_APP_COMPATIBILITY=PASS
+    STAGE15C_CHECKOUT_SYNC=PASS
+    STAGE15C_LOCAL_BACKUP_HYGIENE=PASS
 
 Stage 15 является production-data gate. Feature backlog Stage 9–14 не обязан
 быть завершён до этого hardening, но никакие настоящие складские остатки нельзя
@@ -127,6 +130,15 @@ Production acceptance 2026-09-04:
 - remote object body read-back и SHA-256 verification PASS;
 - Object Lock retention на созданном artifact подтверждён;
 - systemd timer `02:30 Europe/Moscow` active и enabled;
+- первый автоматический scheduled production run подтверждён:
+  `2026-09-04T23:30:01Z` (`2026-09-05 02:30 Europe/Moscow`);
+- scheduled dump:
+  `postgres/full/2026/09/04/dc-inventory-20260904T233001Z.dump`;
+- scheduled dump SHA-256:
+  `4c54098b53a2636614373b44f7894d3f95a32e334c964900a14dec3b5539ce74`;
+- scheduled dump size: `100901` bytes;
+- scheduled run Alembic head: `a2b3c4d5e6f7`;
+- scheduled remote verification PASS;
 - Stage15A automated off-VM backup: `PASS`.
 
 ## Stage 15B — Real isolated restore acceptance
@@ -192,6 +204,30 @@ Production acceptance 2026-09-04:
 
 ## Stage 15C — Final pre-data hardening
 
+Completed checkpoints 2026-09-06:
+
+- production Git checkout docs-only fast-forward:
+  `01ff357593eef12e4c47ddc7f3cd9ded70c926ed` →
+  `7d46920c659a86ef919cc2b1f64decce973d39ab`;
+- changed checkout content was documentation only;
+- production runtime container IDs remained unchanged;
+- health/live/ready after checkout sync PASS;
+- permanent local PostgreSQL backup artifacts: `0`;
+- Stage15 temporary backup workdirs: `0`;
+- empty legacy directories
+  `/home/install/.dc-inventory-db-backups` and
+  `/opt/dc-inventory/backups` removed with `rmdir` only after emptiness check;
+- one explicit environment/config rollback artifact preserved:
+  `/home/install/.dc-inventory-env-backups/env-pre-stage6-deploy`;
+- preserved env rollback size `698` bytes; SHA-256
+  `350535df2631887159486587c13758ceb83c376cecb02967ab0d671cf3bd29f7`;
+- `/var/lib/dc-inventory-backup` remains operational state/observability,
+  not backup artifact storage;
+- verified off-VM StorageGRID S3 remains authoritative PostgreSQL recovery
+  storage;
+- permanent accumulation of manual local PostgreSQL dumps on production VM is
+  prohibited.
+
 Before gate removal:
 
 - full migration status/check;
@@ -219,11 +255,43 @@ production acceptance.
 
 ## Rollback policy
 
+Rollback/recovery boundaries are intentionally separate.
+
+### PostgreSQL recovery
+
+Verified off-VM StorageGRID S3 artifacts are the authoritative PostgreSQL
+disaster-recovery source.
+
 Deploy-specific same-VM PostgreSQL dumps from pre-Stage15 checkpoints were
-removed on 2026-09-04 only after the verified S3 artifact passed real isolated
-restore and application compatibility. Disaster recovery now relies on verified
-off-VM S3 artifacts; Docker image/source rollback references remain separate
-deployment checkpoints.
+removed only after successful real isolated restore acceptance. Permanent local
+PostgreSQL dump accumulation on production VM is not part of the accepted
+operating model.
+
+Manual pre-risky-migration database backup must use the canonical Stage15
+backup implementation/off-VM policy rather than create a new unmanaged
+collection of local dumps.
+
+### Application source/image rollback
+
+Application source/image rollback references are deployment checkpoints and are
+separate from database disaster recovery. Final immutable application image
+deployment/rollback decision remains a Stage15C item.
+
+### Environment/config rollback
+
+The explicitly preserved local environment/config rollback checkpoint is:
+
+    /home/install/.dc-inventory-env-backups/env-pre-stage6-deploy
+
+It is not a PostgreSQL backup.
+
+Recorded properties:
+
+- size: `698` bytes;
+- mode: `600`;
+- owner: `install:install`;
+- SHA-256:
+  `350535df2631887159486587c13758ceb83c376cecb02967ab0d671cf3bd29f7`.
 
 Stage 15 requires:
 

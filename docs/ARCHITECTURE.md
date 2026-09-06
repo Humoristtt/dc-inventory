@@ -221,7 +221,7 @@ Alembic использует тот же async PostgreSQL driver `asyncpg`, чт
     d9e0f1a2b3c4  Catalog search, typed filters and inventory/facet read model
     e0f1a2b3c4d5  Telegram start welcome state and deleteMessage
     f1a2b3c4d5e6  Telegram sendPhoto delivery
-    a2b3c4d5e6f7  Authoritative SFP metadata refinement
+    a2b3c4d5e6f7  SFP metadata refinement
 
 Текущий source migration head:
 

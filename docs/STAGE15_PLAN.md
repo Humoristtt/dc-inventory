@@ -2,7 +2,7 @@
 
 ## Status
 
-    STAGE15=ACTIVE_15C
+    STAGE15=TECHNICAL_HARDENING_COMPLETE
     ALEMBIC_HEAD=a2b3c4d5e6f7
     REAL_INVENTORY_MUTATIONS_ENABLED=false
     REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
@@ -23,10 +23,20 @@
     AUD_06=PASS
     AUD_08_13=PASS
     BATCH_A=PASS
+    BATCH_B=PASS
+    AUD_14_19=PASS
+    BATCH_C=PASS
+    AUD_20=PASS
+    AUD_21=PASS
+    AUD_22=PASS
+    STAGE15_GATE_DECISION=KEEP_DISABLED_NEXT_ROADMAP
+    AUD_23=PASS_KEEP_DISABLED
+    AUD_24=DEFERRED_NEXT_ROADMAP
+    BATCH_D=PASS
 
-Stage 15 является production-data gate. Feature backlog Stage 9–14 не обязан
-быть завершён до этого hardening, но никакие настоящие складские остатки нельзя
-вводить до полного acceptance ниже.
+Stage 15 technical hardening завершён. Feature backlog Stage 9–14 не является
+частью этого acceptance. Реальные складские данные по-прежнему нельзя вводить:
+отдельный fail-closed operational gate намеренно оставлен закрытым до следующего roadmap.
 
 ## Real inventory source boundary
 
@@ -253,14 +263,47 @@ Before gate removal:
 - production DB roles/host exposure unchanged;
 - production projection reconciliation zero drift;
 - canonical docs synchronized;
-- authoritative SFP source guard verified.
+- real-inventory source remains intentionally undefined and stale source assumptions are retired.
+
+## Final Stage 15C technical acceptance
+
+Production acceptance base:
+
+    MERGE_SHA=b53c4213f474073c230eab24bdc70891a7ffd7f7
+    ALEMBIC_HEAD=a2b3c4d5e6f7
+    BATCH_C_PRODUCTION_ACCEPTANCE=PASS
+    AUD17_FINAL_HOST_RECHECK=PASS
+    AUD23_PRECONDITION_HOST_RECHECK=PASS
+    REAL_INVENTORY_MUTATIONS_ENABLED=false
+
+Accepted runtime evidence:
+
+- backend, web, PostgreSQL and both workers healthy;
+- migrate and db-permissions exited `0`;
+- backend/web OCI revisions equal accepted merge SHA;
+- PostgreSQL remains on the pinned digest and persistent named volume;
+- post-deploy DB counts unchanged;
+- QUANTITY reconciliation drift `0`;
+- SERIAL reconciliation drift `0`;
+- worker heartbeat healthchecks PASS;
+- runtime logging/PID/security boundaries PASS;
+- no PostgreSQL/backend/worker host ports published;
+- web published only on `127.0.0.1:8080`;
+- `/healthz`, live and ready health endpoints PASS;
+- runtime restart counters `0`;
+- SSH root/password/kbd-interactive authentication disabled;
+- UFW inactive, X11 forwarding enabled and TCP forwarding enabled remain
+  recorded host findings rather than silently changed policy.
+
+Repository visibility remains `public` with mandatory reassessment before any
+real inventory dataset or gate removal.
 
 ## Media backup policy
 
 Canonical media subsystem is not yet active.
 
-Therefore media backup is conditional and does not block the first controlled
-SFP inventory entry while no canonical user media exists. When Stage 11 media
+Therefore media backup is conditional and does not block technical hardening
+closure while no canonical user media exists. When Stage 11 media
 becomes canonical, media off-VM backup becomes mandatory before media-dependent
 production acceptance.
 
@@ -285,8 +328,8 @@ collection of local dumps.
 ### Application source/image rollback
 
 Application source/image rollback references are deployment checkpoints and are
-separate from database disaster recovery. Final immutable application image
-deployment/rollback decision remains a Stage15C item.
+separate from database disaster recovery. Immutable application rollback artifact and exact runtime provenance were
+accepted during Stage15C.
 
 ### Environment/config rollback
 
@@ -313,20 +356,24 @@ Stage 15 requires:
 
 No destructive schema downgrade may be used where migration guards prohibit it.
 
-## Gate removal
+## Gate decision and technical closure
 
-`REAL_INVENTORY_ENTRY=ALLOWED` may be set only when all are true:
+Stage15 technical hardening is complete, but completion does not authorize real
+inventory entry.
 
-- automated backup PASS;
-- verified off-VM artifact PASS;
-- retention PASS;
-- observable failure path PASS;
-- isolated real restore PASS;
-- Alembic/schema/invariant verification PASS;
-- application compatibility PASS;
-- production reconciliation ZERO_DRIFT;
-- final CI/security/runtime smoke PASS;
-- docs/history updated.
+Current explicit decision:
 
-Only after this gate removal may authoritative SFP opening inventory be
-performed.
+    STAGE15_GATE_DECISION=KEEP_DISABLED_NEXT_ROADMAP
+    REAL_INVENTORY_MUTATIONS_ENABLED=false
+    REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
+    CURRENT_AUTHORITATIVE_INVENTORY_SOURCE=NOT_DEFINED
+    REAL_DATA_IMPORT=DEFERRED_NEXT_ROADMAP
+
+AUD-23 is closed by an explicit decision to keep the fail-closed gate disabled.
+AUD-24 is closed as a deferral decision: no import, opening balance load or
+manual real-inventory population is performed by Stage15.
+
+The next product roadmap must define the updated product vision, domain/data
+entry contract and real-inventory source. Only after that separate design and a
+new explicit operational decision may the mutation/data-entry gate be
+reconsidered.

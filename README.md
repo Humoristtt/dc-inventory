@@ -22,7 +22,7 @@
 
 В production приняты Stages 4–8B, branded Telegram `/start` flow и
 post-8B UX foundations. Stage15A automated off-VM PostgreSQL backup и Stage15B
-real isolated restore — `PASS`; Stage15C final pre-data hardening активен.
+real isolated restore — `PASS`; Stage15 technical hardening завершён. Production-data gate намеренно остаётся закрытым до следующего roadmap.
 
 AUD-01 fail-closed server-side real-inventory mutation gate принят в
 production. Runtime остаётся заблокирован:

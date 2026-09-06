@@ -359,12 +359,12 @@ Data-integrity blocker. Inventory mutations останавливаются.
 - [x] AUD-04 durable immutable application rollback artifact;
 - [x] AUD-05 controlled backup failure drill;
 - [x] AUD-07 stale inventory-source assumptions retired;
-- [ ] remaining host/security hardening;
-- [ ] final full source + production re-audit;
-- [ ] explicit Stage15 gate-removal decision;
-- [ ] separate explicit real inventory operator action.
+- [x] host/security hardening accepted; recorded findings retained;
+- [x] final full source + production re-audit;
+- [x] explicit Stage15 gate decision: KEEP_DISABLED_NEXT_ROADMAP;
+- [x] real inventory operator action explicitly deferred to next roadmap; no import executed.
 
-До последних двух пунктов:
+После technical hardening сохраняется fail-closed operational state:
 
     REAL_INVENTORY_MUTATIONS_ENABLED=false
     REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
@@ -404,9 +404,9 @@ UFW во время read-only audit выключен. Это записанны�
 автоматически внутри Stage15 audit. Необходимость обновления оценивается
 вместе с vulnerability scan и final production acceptance.
 
-Перед `AUD-23` обязательна повторная проверка listeners, SSH effective config,
-host firewall/perimeter decision и отсутствия новых host-published application
-ports.
+AUD-23 precondition recheck completed 2026-09-07: listeners, SSH effective
+config, host firewall state и host-published application ports проверены
+повторно; recorded findings не изменились.
 
 ## Repository visibility boundary — AUD-19
 

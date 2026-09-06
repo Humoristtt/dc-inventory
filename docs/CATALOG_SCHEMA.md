@@ -10,11 +10,9 @@ Stage 7 — Catalog Read API / Search / Filters.
 `f4a5b6c7d8e9`; source-backed refinement создаётся следующей миграцией
 `a6b7c8d9e0f1`.
 
-Три локальных reference workbook сверены с contract. Они являются примерами
-для проектирования каталога, а не авторитетной inventory database или import
-source. Существующие количества/остатки не импортируются; фактический stock
-проверяется владельцем вручную при вводе оборудования. Подробное сопоставление
-зафиксировано в `docs/CATALOG_SOURCE_REFERENCE.md`.
+Исторические source-reference материалы не являются operational inventory
+source и не определяют будущий import contract. Текущий источник реальных
+складских данных намеренно не определён.
 
 ## Предметные сущности
 
@@ -786,37 +784,14 @@ deferred:
 - frontend catalog/Admin/stock/«Моё» UI (реализовано Stage 8);
 - Redis, Elasticsearch, queues или новые services.
 
-## Source reference reconciliation
+## Operational inventory source boundary
 
-Legacy source reference review выполнен для трёх workbook, шести sheets и 176
-непустых data rows. Результат и классификация A–F находятся в
-`docs/CATALOG_SOURCE_REFERENCE.md`.
+Исторические source-review решения не являются контрактом будущего импорта
+реального inventory.
 
-Подтверждены current Item/Manufacturer/identifier semantics, четыре
-представленные initial category boundaries и metadata-driven typed EAV.
-Recurring copper network cables потребовали отдельной system Category;
-power-conductor semantics и два SFP tokens потребовали versioned metadata
-refinement. Backend domain contract не менялся.
+    CURRENT_AUTHORITATIVE_INVENTORY_SOURCE=NOT_DEFINED
+    REAL_DATA_IMPORT=DEFERRED_NEXT_ROADMAP
 
-Для SFP этот legacy review superseded внешним read-only workbook
-`~/dc-inventory-input/sfp-authoritative.xlsx`, sheet `На складе`. Audit всех 23
-строк (265 физических модулей, 10 manufacturers) подтвердил lossless contract
-выше: source `Модель` отображается только в `Item.model`, а
-`manufacturer_part_number` и `internal_code` остаются `NULL` без отдельного
-authoritative source. SFP остаётся `QUANTITY`; InventoryUnit не создаются.
-Workbook не скопирован в repository и данные/количества не импортированы.
-Будущий Stage 12 import обязан запросить явную destination Location и провести
-opening quantities через movement semantics после снятия production-data gate.
-
-Для остальных категорий остаются provisional или требуют human verification:
-
-- optics connector/product-type/color/polarity vocabularies;
-- power connector/color vocabularies;
-- NIC PCIe/media notation, поскольку прямых NIC examples нет;
-- disk sector format/endurance notation;
-- ambiguous disk vendor/model/MPN strings.
-
-Reference files не становятся runtime source of truth и не предназначены для
-импорта существующего inventory. Quantity, balance, server placement, serial,
-location и holder относятся к отдельному Stage 6 inventory domain, но source
-workbooks по-прежнему не импортируются в него.
+Формат нового источника, mapping, правила initial inventory и необходимая
+эволюция catalog/warehouse domain будут определены после Stage 15 отдельным
+roadmap. До этого никакой внешний dataset не используется для real-data import.

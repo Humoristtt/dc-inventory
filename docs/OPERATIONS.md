@@ -352,13 +352,13 @@ Data-integrity blocker. Inventory mutations останавливаются.
 - [x] production DB roles/journal/host-exposure audit;
 - [x] production reconciliation zero drift;
 - [x] AUD-01 fail-closed mutation gate;
-- [~] AUD-02 runtime provenance v2;
-- [~] AUD-03 exact S3 lifecycle-prefix validation;
-- [~] AUD-06 command-level recovery runbook;
-- [~] AUD-08..13 canonical docs + freshness CI;
+- [x] AUD-02 runtime provenance v2;
+- [x] AUD-03 exact S3 lifecycle-prefix validation;
+- [x] AUD-06 command-level recovery runbook;
+- [x] AUD-08..13 canonical docs + freshness CI;
 - [ ] AUD-04 durable immutable application rollback artifact;
 - [ ] AUD-05 controlled backup failure drill;
-- [ ] AUD-07 authoritative workbook fresh fingerprint;
+- [x] AUD-07 stale inventory-source assumptions retired;
 - [ ] remaining host/security hardening;
 - [ ] final full source + production re-audit;
 - [ ] explicit Stage15 gate-removal decision;

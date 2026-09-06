@@ -18,31 +18,31 @@
     STAGE15C_LOCAL_BACKUP_HYGIENE=PASS
     AUD_00=PASS
     AUD_01=PASS
-    BATCH_A=ACTIVE
+    AUD_02=PASS
+    AUD_03=PASS
+    AUD_06=PASS
+    AUD_08_13=PASS
+    BATCH_A=PASS
 
 Stage 15 является production-data gate. Feature backlog Stage 9–14 не обязан
 быть завершён до этого hardening, но никакие настоящие складские остатки нельзя
 вводить до полного acceptance ниже.
 
-## Authoritative first dataset
+## Real inventory source boundary
 
-Первый planned real inventory dataset:
+Источник первого реального наполнения склада сейчас намеренно не определён.
 
-    ~/dc-inventory-input/sfp-authoritative.xlsx
+    CURRENT_AUTHORITATIVE_INVENTORY_SOURCE=NOT_DEFINED
+    REAL_DATA_IMPORT=DEFERRED_NEXT_ROADMAP
 
-Он остаётся внешним read-only source и не коммитится в Git.
+Ни один существующий spreadsheet, workbook или локальный файл не является
+accepted real-inventory source.
 
-Contract:
+Новый domain/import contract, mapping и способ первоначального наполнения будут
+определены после Stage 15 в следующем roadmap.
 
-- sheet `На складе`;
-- 23 позиции;
-- total quantity 265;
-- `Модель` → `Item.model`;
-- absent P/N → `NULL`;
-- QUANTITY accounting;
-- no serial-unit synthesis;
-- no invented Location;
-- no import до снятия Stage 15 gate.
+AUD-24 не выполняет импорт автоматически и остаётся отдельным explicit operator
+action после нового продуктового решения.
 
 ## Stage 15A — Automated off-VM PostgreSQL backup
 

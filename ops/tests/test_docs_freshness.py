@@ -31,6 +31,34 @@ def forbid(name: str, value: str) -> None:
 require("README.md", "REAL_INVENTORY_MUTATIONS_ENABLED=false")
 require("README.md", "Stage15B")
 
+for stale_doc in (
+    "README.md",
+    "docs/ARCHITECTURE.md",
+    "docs/CATALOG_SCHEMA.md",
+    "docs/CATALOG_SOURCE_REFERENCE.md",
+    "docs/HISTORY.md",
+    "docs/OPERATIONS.md",
+    "docs/PRODUCT_REQUIREMENTS.md",
+    "docs/STAGE15_AUDIT_REMEDIATION.md",
+    "docs/STAGE15_PLAN.md",
+):
+    for stale_value in (
+        "sfp-authoritative",
+        "authoritative SFP workbook",
+        "authoritative workbook fingerprint",
+        "Инвентаризация SFP модулей.xlsx",
+    ):
+        forbid(stale_doc, stale_value)
+
+require(
+    "docs/STAGE15_PLAN.md",
+    "CURRENT_AUTHORITATIVE_INVENTORY_SOURCE=NOT_DEFINED",
+)
+require(
+    "docs/STAGE15_PLAN.md",
+    "REAL_DATA_IMPORT=DEFERRED_NEXT_ROADMAP",
+)
+
 require(
     "docs/PRODUCT_REQUIREMENTS.md",
     "Stage15C final pre-data hardening активен",

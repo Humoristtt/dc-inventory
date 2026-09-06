@@ -15,72 +15,23 @@
   opening balances; Stage 6 реализует первые четыре понятия в отдельном
   warehouse domain, но эти workbook по-прежнему ничего туда не импортируют.
 
-## Authoritative SFP opening source — отдельный contract
+## Operational inventory boundary
 
-Исторические workbook ниже остаются только source reference для Stage 5 и их
-inventory quantities по-прежнему не импортируются.
+Этот документ хранит только исторический design context и не определяет
+источник реальных складских данных или будущий import contract.
 
-Отдельно от них для будущего первого реального SFP-ввода зафиксирован
-authoritative workbook:
+    CURRENT_AUTHORITATIVE_INVENTORY_SOURCE=NOT_DEFINED
+    REAL_DATA_IMPORT=DEFERRED_NEXT_ROADMAP
 
-    ~/dc-inventory-input/sfp-authoritative.xlsx
+Формат источника, mapping и opening-inventory semantics будут спроектированы
+после Stage 15 в следующем roadmap.
 
-Operational contract:
+## Исторический source-review
 
-- файл внешний и read-only;
-- файл и его копии `sfp-authoritative*.xlsx/.xlsm/.xls` не коммитятся в Git;
-- рабочий sheet: `На складе`;
-- 23 data rows;
-- суммарное фактическое количество: 265;
-- `Модель` маппится в `Item.model`, а не в manufacturer part number;
-- отсутствующий P/N остаётся `NULL`;
-- serial units для этого dataset не создаются;
-- accounting mode — `QUANTITY`;
-- Location нельзя выводить или придумывать из отсутствующего source field;
-- старые S/N, WWN, P/N и historical HP/HPE grouping не переносятся;
-- до закрытия Stage 15 workbook не импортируется в production;
-- после ввода PostgreSQL становится runtime source of truth.
-
-Этот authoritative dataset не отменяет historical source-reference решения
-ниже: это другой файл с другой ролью и отдельным acceptance gate.
-
-## Покрытие анализа
-
-Проверены три workbook, шесть непустых sheets и 176 непустых data rows:
-
-| Workbook | Sheets | Data rows | Полезный контекст |
-|---|---|---:|---|
-| `Инвентаризация SFP модулей.xlsx` | `На складе`, `IXcellerate` | 33 | SFP manufacturer и технические форматы |
-| `Инвентаризация дисков в серверах.xlsx` | `Свод общих типов дисков`, `Диски`, `Общий список` | 109 | типы накопителей, интерфейсы, form factor, ёмкости, vendor/model formats |
-| `Оптика и медь.xlsx` | `Лист1` | 34 | оптика, кабели питания и медные сетевые кабели |
-
-Семь строк в `Общий список` не содержат disk product identity и полезны только
-как operational context. Все остальные строки имеют хотя бы один catalog-bearing
-field. Количество строк — coverage metric анализа, а не inventory quantity.
+Старые coverage metrics и локальные spreadsheets не являются current inventory
+acceptance criteria и не используются для первоначального наполнения склада.
 
 ## Source-to-canonical mapping
-
-### SFP / трансиверы
-
-| Source semantic | Canonical contract | Решение |
-|---|---|---|
-| Производитель | `Manufacturer` | `Не указан` означает отсутствие manufacturer, а не отдельный бренд |
-| Скорость, Gbit/s | `speed_mbps` | единица нормализуется в Mbps; single-rate decimal format поддерживается |
-| Форм-фактор | `form_factor` | canonical uppercase form-factor token |
-| Волокно | `medium` | `SM` → `SMF`, `MM` → `MMF`, медь → `Copper` |
-| Дальность | `reach_m` | plain m/km переводится в metres; условные значения требуют ручного решения |
-| Разъём | `connector` | polish/lane suffix не смешивается с canonical connector token |
-| Длина волны | `tx_wavelength_nm`, `rx_wavelength_nm` | split выполняется только когда TX/RX явно указаны или подтверждены specs |
-| Количество | Stage 6 inventory domain | не импортируется из reference source |
-
-Reference подтверждает текущие SFP/SFP+/SFP28/QSFP+/QSFP28 formats и добавляет
-стандартизованные `XFP` и `SC Simplex`. `MPO` и `MPO-12` канонизируются как
-connector family `MPO/MTP`; lane/fiber count не выводится автоматически.
-
-Одна multi-rate запись использует notation `10/25`. Required scalar
-`speed_mbps` не меняется по одной строке: конкретное canonical значение требует
-проверки product specs. Аналогично условная reach по OM3/OM4 и multi-wavelength
-CWDM notation не преобразуются догадкой.
 
 ### Оптические кабели
 

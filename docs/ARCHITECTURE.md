@@ -420,12 +420,12 @@ ledger и остаётся отдельной задачей.
 - network interface cards;
 - disks/drives.
 
-Три legacy source workbook сверены как reference examples и не являются
-inventory database/import source. Единственный authoritative input для будущего
-SFP-ввода — внешний read-only `sfp-authoritative.xlsx`; migration
-`a2b3c4d5e6f7` version-controls только lossless profile/scalar metadata и exact
-connector vocabulary. Workbook rows, quantities и physical units в migration
-не входят.
+Исторические source materials не определяют operational inventory database
+или import contract. Текущий authoritative input для реальных складских данных
+намеренно не определён. Его формат, mapping и opening-inventory semantics будут
+спроектированы в следующем roadmap после Stage 15. Существующая migration
+history остаётся только историей versioned catalog metadata и не является
+контрактом будущего импорта.
 
 ## Catalog read/query layer
 

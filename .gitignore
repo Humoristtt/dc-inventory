@@ -32,8 +32,3 @@ tmp/
 
 # Python packaging
 *.egg-info/
-
-# Authoritative operational inventory sources
-sfp-authoritative*.xlsx
-sfp-authoritative*.xlsm
-sfp-authoritative*.xls

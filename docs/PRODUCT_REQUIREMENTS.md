@@ -17,7 +17,7 @@ PostgreSQL — канонический источник данных.
 
 В production приняты Stages 4–8B и post-8B Telegram/catalog UX.
 Migration head — `a2b3c4d5e6f7`. Stage15A automated off-VM backup и Stage15B
-real isolated restore — `PASS`; Stage15C final pre-data hardening активен.
+real isolated restore — `PASS`; Stage15 technical hardening завершён. Production-data gate намеренно остаётся закрытым до следующего roadmap.
 AUD-01 fail-closed mutation gate принят в production.
 
 ## Пользователи и роли

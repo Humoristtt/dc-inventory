@@ -5,14 +5,14 @@
 > **Правило:** завершённые пункты отмечаются `[x]`, текущие — `[~]`, запланированные — `[ ]`.
 > Если решение меняется, старый пункт не удаляется бесследно: он переносится в раздел «Изменённые / отложенные решения» с короткой причиной.
 >
-> **Последнее обновление:** 2026-09-06
+> **Последнее обновление:** 2026-09-07
 > **Production:** Stages 4–8B и post-8B UX приняты; migration head `a2b3c4d5e6f7`.
-> **Stage 15:** Stage15A backup PASS, Stage15B isolated restore PASS, Stage15C ACTIVE.
+> **Stage 15:** technical hardening COMPLETE; real-inventory gate KEEP_DISABLED_NEXT_ROADMAP.
 > **AUD-01:** production fail-closed mutation gate PASS; `REAL_INVENTORY_MUTATIONS_ENABLED=false`.
 > **Production-data gate:** `REAL_INVENTORY_ENTRY=BLOCKED_STAGE15`.
 > **Runtime provenance:** Git checkout и backend/web runtime image revision проверяются отдельно.
 > **Git/GitHub:** protected `main`; required CI: backend, frontend, runtime, telegram-gateway.
-> **Repository visibility:** public до отдельного финального hardening decision.
+> **Repository visibility:** public; обязательный reassessment перед любыми real inventory data.
 
 ---
 
@@ -1788,7 +1788,7 @@ Telegram entry UX (parallel Stage 8 slice):
 
 ### Stage 8B / final Stage 8 scope
 
-- [x] Authoritative SFP contract audit and versioned lossless metadata refinement.
+- [x] SFP metadata contract audit and versioned lossless metadata refinement.
 - [x] Role-aware Admin catalog create/edit/archive forms.
 - [x] Inline manufacturer creation and duplicate-check UX.
 - [x] Stock by location.
@@ -1939,13 +1939,12 @@ Import:
 ## Stage 15 — Production Hardening Before Real Inventory
 
 **BLOCKING POLICY:** Stage15A automated off-VM PostgreSQL backup и Stage15B
-real isolated restore приняты. Real inventory entry остаётся запрещён до полного
-Stage15C final pre-data hardening и явного снятия production-data gate.
+real isolated restore и Stage15C technical hardening приняты. Real inventory
+entry остаётся запрещён отдельным fail-closed production-data gate.
 
-**CURRENT PRIORITY POLICY:** Stage 15 активирован 2026-09-04. Текущий
-приоритет — закрыть production-data gate до первого ввода authoritative SFP
-остатков. Незавершённые feature stages 9–14 остаются backlog и не являются
-предусловием для backup/restore hardening.
+**CURRENT PRIORITY POLICY:** Stage 15 technical hardening завершён. Gate
+намеренно оставлен закрытым. Следующий roadmap определит обновлённую product
+vision, domain contract, источник реальных данных и отдельное решение о вводе.
 
 - [x] PostgreSQL automated backup.
 - [ ] Media backup — conditional; не блокирует первый SFP entry, пока canonical media subsystem отсутствует.
@@ -1953,21 +1952,21 @@ Stage15C final pre-data hardening и явного снятия production-data g
 - [x] Technical runtime-data retention worker.
 - [x] Backup artifact retention policy.
 - [x] Real restore test.
-- [~] Restore acceptance procedure documented; command-level recovery runbook pending final Stage15C documentation.
+- [x] Restore acceptance procedure and command-level recovery runbook.
 - [x] Stage15A first scheduled automatic production run verified.
 - [x] Stage15C production checkout docs-only sync без restart runtime.
 - [x] Stage15C local backup hygiene: permanent local DB dumps = 0; empty legacy backup directories removed.
-- [ ] Image pinning / immutable deployment decision.
-- [ ] Rollback.
-- [ ] Full migration check.
-- [ ] Full concurrency suite.
-- [ ] Full Playwright E2E.
-- [ ] Security pass.
-- [ ] Production smoke.
-- [~] Documentation audit — Stage15A/B acceptance и Stage15C backup hygiene sync обновляются 2026-09-06.
-- [ ] Final archive/source audit if required.
+- [x] Image pinning / immutable deployment and provenance policy.
+- [x] Immutable application rollback artifact.
+- [x] Full migration check.
+- [x] Full backend/integration/concurrency suite.
+- [x] Full frontend/Playwright acceptance.
+- [x] Security pass with scoped PostgreSQL exception policy.
+- [x] Production smoke and runtime acceptance.
+- [x] Documentation audit and final Stage15 closure reconciliation.
+- [x] Final source/security re-audit.
 
-**GATE:** систему можно использовать как реальный источник складского учёта, а не только демонстрационную Mini App.
+**GATE:** technical hardening завершён; использование реальных складских данных остаётся отдельно заблокировано до следующего roadmap и explicit operator decision.
 
 ---
 
@@ -2053,16 +2052,16 @@ Stage15C final pre-data hardening и явного снятия production-data g
 
 # 42. Следующий фактический шаг
 
-**CURRENT: Stage 8B + post-8B UX foundations production accepted.
-Stage 15 production-data hardening preparation ACTIVE.**
+**CURRENT: Stage 15 technical hardening COMPLETE. Real inventory gate remains disabled pending next roadmap.**
 
 Stages 4–8B и post-8B UX закрыты по release-cycle:
 source → review → CI → merge → production deploy → Telegram/viewport smoke →
-Git cleanup. Текущий production source — `9a9ec6a705473d8bd3521b01e6f602284ed9c375`, migration head —
-`a2b3c4d5e6f7`.
+Git cleanup. Final Stage15 production runtime acceptance выполнен на
+`b53c4213f474073c230eab24bdc70891a7ffd7f7`; migration head — `a2b3c4d5e6f7`.
 
-Backup/restore теперь возвращены в критический путь, потому что следующий
-операционный milestone — controlled ввод authoritative SFP inventory.
+Stage15 hardening больше не является активным implementation stage. Следующий
+фактический шаг — новое продуктовое ТЗ/roadmap; real inventory source и способ
+первоначального наполнения пока намеренно не определены.
 
 ## 42.1. Product-first execution order
 
@@ -2077,16 +2076,16 @@ Backup/restore теперь возвращены в критический пу�
    - deterministic pagination;
    - filter fixture matrices.
 
-2. **Stage 8 — Working Mini App UX — IMPLEMENTED LOCALLY / REVIEW PENDING**
+2. **Stage 8 — Working Mini App UX — DONE / production**
    - Stage 8A catalog shell / search / category lists / filters / sorting /
      compact cards / Item detail — DONE / production;
    - Telegram BackButton, safe areas, loading/error/empty states and live narrow
      viewport acceptance — DONE / production;
    - branded Telegram `/start` entry UX — DONE / production;
    - Stage 8B stock by location / holder summary / «Моё» / Admin catalog UX —
-     DONE locally;
+     DONE / production;
    - final Playwright multi-viewport/E2E acceptance — PASS locally;
-   - PR/CI/deploy/production acceptance — pending human control.
+   - PR/CI/deploy/production acceptance — PASS.
 
 3. **Stage 9 — Warehouse Operations UI**
    - receipt;
@@ -2147,7 +2146,7 @@ Backup/restore теперь возвращены в критический пу�
    - projection reconciliation;
    - media backup when media becomes canonical;
    - rollback/security/full E2E;
-   - only then `REAL_INVENTORY_ENTRY=ALLOWED`.
+   - technical hardening COMPLETE; `REAL_INVENTORY_ENTRY` remains blocked by explicit `KEEP_DISABLED_NEXT_ROADMAP` decision.
 
 ## 42.2. Feature delivery workflow
 

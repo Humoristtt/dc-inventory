@@ -572,3 +572,26 @@
 - Production live/ready PASS.
 - `AUD_01=PASS`.
 - `REAL_INVENTORY_ENTRY=BLOCKED_STAGE15` сохранён.
+
+
+## 2026-09-07 — Stage 15 technical hardening closure
+
+- PR #36 runtime/security remediation accepted in production at
+  `b53c4213f474073c230eab24bdc70891a7ffd7f7`.
+- Required CI backend/frontend/runtime/telegram-gateway PASS.
+- Final production runtime acceptance PASS.
+- PostgreSQL Alembic head remains `a2b3c4d5e6f7`.
+- Post-deploy inventory movement/projection counts unchanged and reconciliation
+  returned zero QUANTITY/SERIAL drift.
+- Backend, web, PostgreSQL, telegram-worker and maintenance-worker healthy.
+- Worker heartbeat, logging/PID policy, container security boundaries and host
+  port boundary PASS.
+- Final SSH/UFW/listener read-only recheck PASS with previously recorded host
+  findings unchanged.
+- AUD-14..AUD-22 accepted.
+- AUD-23 explicit decision: `KEEP_DISABLED_NEXT_ROADMAP`.
+- AUD-24: real data entry/import deferred to next roadmap; no real inventory
+  source is currently defined.
+- `REAL_INVENTORY_MUTATIONS_ENABLED=false`.
+- `REAL_INVENTORY_ENTRY=BLOCKED_STAGE15`.
+- `STAGE15=TECHNICAL_HARDENING_COMPLETE`.

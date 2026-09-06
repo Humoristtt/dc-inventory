@@ -41,10 +41,10 @@ for stale_doc in (
     "docs/PRODUCT_REQUIREMENTS.md",
     "docs/STAGE15_AUDIT_REMEDIATION.md",
     "docs/STAGE15_PLAN.md",
+    "docs/ROADMAP.md",
 ):
     for stale_value in (
         "sfp-authoritative",
-        "authoritative SFP workbook",
         "authoritative workbook fingerprint",
         "Инвентаризация SFP модулей.xlsx",
     ):
@@ -61,7 +61,7 @@ require(
 
 require(
     "docs/PRODUCT_REQUIREMENTS.md",
-    "Stage15C final pre-data hardening активен",
+    "Stage15 technical hardening завершён",
 )
 forbid(
     "docs/PRODUCT_REQUIREMENTS.md",
@@ -125,5 +125,36 @@ for assertion in (
         "docs/RECOVERY_RUNBOOK.md",
         assertion,
     )
+
+
+require(
+    "docs/STAGE15_PLAN.md",
+    "STAGE15=TECHNICAL_HARDENING_COMPLETE",
+)
+require(
+    "docs/STAGE15_PLAN.md",
+    "STAGE15_GATE_DECISION=KEEP_DISABLED_NEXT_ROADMAP",
+)
+require(
+    "docs/STAGE15_AUDIT_REMEDIATION.md",
+    "- [x] AUD-24",
+)
+require(
+    "docs/STAGE15_AUDIT_REMEDIATION.md",
+    "BATCH_D=PASS",
+)
+require(
+    "docs/ROADMAP.md",
+    "Stage 15 technical hardening COMPLETE",
+)
+for name in (
+    "README.md",
+    "docs/PRODUCT_REQUIREMENTS.md",
+    "docs/DEPLOYMENT.md",
+    "docs/ROADMAP.md",
+    "docs/STAGE15_PLAN.md",
+):
+    forbid(name, "STAGE15=ACTIVE_15C")
+    forbid(name, "Stage15C final pre-data hardening активен")
 
 print("DOCS_FRESHNESS_CONTRACT=PASS")

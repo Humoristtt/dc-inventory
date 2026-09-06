@@ -3,8 +3,10 @@
 This document tracks findings from the full-project audit performed before
 real inventory entry.
 
-Hard invariant:
+Closure state:
 
+    STAGE15=TECHNICAL_HARDENING_COMPLETE
+    STAGE15_GATE_DECISION=KEEP_DISABLED_NEXT_ROADMAP
     REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
 
 No real inventory import or manual real inventory entry is allowed until the
@@ -31,17 +33,17 @@ complete Stage 15C acceptance and a separate explicit operational decision.
 - [x] AUD-11 — README / DEPLOYMENT Stage 15 wording reconciliation.
 - [x] AUD-12 — OPERATIONS / ROADMAP / STAGE15_PLAN / HISTORY reconciliation.
 - [x] AUD-13 — current-state documentation freshness CI guard.
-- [ ] AUD-14 — dependency/container vulnerability scanning policy.
-- [ ] AUD-15 — worker health/observability.
-- [ ] AUD-16 — Docker logging/resource policy.
-- [ ] AUD-17 — production host-level read-only security audit.
-- [ ] AUD-18 — Telegram at-least-once delivery semantics documentation.
-- [ ] AUD-19 — repository visibility decision before real inventory.
-- [ ] AUD-20 — final full source/security re-audit after remediation.
-- [ ] AUD-21 — final production acceptance.
-- [ ] AUD-22 — final Stage 15 documentation closure.
-- [ ] AUD-23 — explicit Stage 15 gate removal decision.
-- [ ] AUD-24 — real data entry deferred to next roadmap; separate explicit operator action only.
+- [x] AUD-14 — dependency/container vulnerability scanning policy.
+- [x] AUD-15 — worker health/observability.
+- [x] AUD-16 — Docker logging/resource policy.
+- [x] AUD-17 — production host-level read-only security audit.
+- [x] AUD-18 — Telegram at-least-once delivery semantics documentation.
+- [x] AUD-19 — repository visibility decision before real inventory.
+- [x] AUD-20 — final full source/security re-audit after remediation.
+- [x] AUD-21 — final production acceptance.
+- [x] AUD-22 — final Stage 15 documentation closure.
+- [x] AUD-23 — explicit Stage 15 gate removal decision.
+- [x] AUD-24 — real data entry deferred to next roadmap; separate explicit operator action only.
 
 ## AUD-00 evidence
 
@@ -124,8 +126,8 @@ enabled and does not silently change SSH/network policy.
     REPOSITORY_VISIBILITY_BEFORE_REAL_INVENTORY=REASSESS_REQUIRED
     AUD19_DECISION=REASSESS_BEFORE_REAL_INVENTORY
 
-Real inventory remains blocked while Batch C and final Stage15 acceptance
-are incomplete.
+Real inventory remains blocked by the explicit fail-closed gate decision even
+though technical Stage15 hardening is complete.
 
 ### AUD-14 first CI evidence
 
@@ -175,3 +177,36 @@ All other fixable CRITICAL vulnerabilities remain blocking.
 
 POSTGRES_SCOPED_EXCEPTION=PASS
 AUD14_POSTGRES_SCAN_POLICY=PASS
+
+
+## Batch C acceptance
+
+    PR_36=MERGED
+    MERGE_SHA=b53c4213f474073c230eab24bdc70891a7ffd7f7
+    REQUIRED_CI=PASS
+    AUD_14=PASS
+    AUD_15=PASS
+    AUD_16=PASS
+    AUD_17=PASS_RECORDED_FINDINGS
+    AUD_18=PASS
+    AUD_19=PASS_REASSESS_BEFORE_REAL_INVENTORY
+    BATCH_C_PRODUCTION_ACCEPTANCE=PASS
+    BATCH_C=PASS
+
+## Batch D closure
+
+    AUD_20=PASS
+    AUD_21=PASS
+    AUD_22=PASS
+    AUD_23=PASS_KEEP_DISABLED
+    AUD_24=DEFERRED_NEXT_ROADMAP
+    STAGE15_GATE_DECISION=KEEP_DISABLED_NEXT_ROADMAP
+    CURRENT_AUTHORITATIVE_INVENTORY_SOURCE=NOT_DEFINED
+    REAL_DATA_IMPORT=DEFERRED_NEXT_ROADMAP
+    REAL_INVENTORY_MUTATIONS_ENABLED=false
+    REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
+    BATCH_D=PASS
+    STAGE15=TECHNICAL_HARDENING_COMPLETE
+
+No real inventory import or manual real-inventory entry was performed as part of
+Stage15 closure.

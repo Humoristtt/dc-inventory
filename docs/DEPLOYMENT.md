@@ -23,7 +23,7 @@ Production VM имеет read-only GitHub Deploy Key. Deploy выполняет�
     a2b3c4d5e6f7
 
 Stage15A automated off-VM backup и Stage15B real isolated restore — `PASS`.
-Stage15C активен.
+Stage15 technical hardening завершён; production-data gate остаётся закрытым до отдельного решения следующего roadmap.
 
 Production safety:
 

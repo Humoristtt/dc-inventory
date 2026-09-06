@@ -89,17 +89,8 @@ require(
 
 for assertion in (
     "## 10A. Guarded command-level rehearsal",
-    "RESTORE_DOWNLOAD_VERIFICATION=PASS",
-    "pg_restore --list",
-    "docker network create --internal",
-    "docker volume create",
-    "ISOLATED_RESTORE=PASS",
-    "reconcile_inventory_projections.sql",
-    "docker image inspect",
-    "docker rm -f",
-    "docker volume rm",
-    "docker network rm",
-    "ISOLATED_RESTORE_CLEANUP=PASS",
+    "ops/recovery/rehearse_restore.sh",
+    "sudo -n bash ops/recovery/rehearse_restore.sh",
     "## 11. Production cutover boundary",
 ):
     require(

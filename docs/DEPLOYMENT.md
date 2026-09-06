@@ -14,16 +14,23 @@ Production VM не является development-машиной.
 
 Production VM имеет read-only GitHub Deploy Key. Deploy выполняется только из конкретного SHA, успешно прошедшего CI.
 
-Текущий accepted production source:
-
-    9a9ec6a705473d8bd3521b01e6f602284ed9c375
+Точный production Git checkout и реально запущенные backend/web artifacts
+проверяются отдельно; один SHA не используется как смешанная checkout/runtime
+истина.
 
 Текущий Alembic head:
 
     a2b3c4d5e6f7
 
-Stage 15 preparation активна. До снятия production-data gate real inventory
-entry запрещён; backup/restore acceptance описан в `docs/STAGE15_PLAN.md`.
+Stage15A automated off-VM backup и Stage15B real isolated restore — `PASS`.
+Stage15C активен.
+
+Production safety:
+
+    REAL_INVENTORY_MUTATIONS_ENABLED=false
+    REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
+
+Stage15 acceptance описан в `docs/STAGE15_PLAN.md`.
 
 ## Production runtime
 
@@ -78,6 +85,14 @@ Uvicorn доверяет proxy headers, потому что production backend �
 Nginx применяет rate limiting после нормализации `CF-Connecting-IP`: общий API ограничен до 30 запросов/с на клиента с burst 60; `POST /api/auth/telegram` и `POST /api/access-requests` дополнительно ограничены до 10 запросов/мин с burst 5. Telegram webhook вынесен в отдельный лимит 50 запросов/с с burst 100, чтобы Telegram delivery burst не конкурировал с пользовательским API. Превышение ingress-лимита возвращает HTTP `429`.
 
 ## Supply-chain pinning
+
+Runtime-changing application build выполняется с exact Git revision:
+
+    REVISION="$(git rev-parse HEAD)"
+    APP_REVISION="$REVISION" docker compose build backend web
+
+Backend/frontend Dockerfiles сохраняют revision в
+`org.opencontainers.image.revision`.
 
 Внешние container images в production/runtime, development и CI фиксируются одновременно human-readable tag и immutable `sha256` manifest digest. GitHub Actions фиксируются полным commit SHA; major version остаётся только комментарием для читаемости.
 
@@ -281,7 +296,14 @@ request → ADMIN approve → user notification → вход в Mini App.
 
 ## Backup
 
-До загрузки первых канонических складских данных должен быть реализован PostgreSQL backup/restore runbook и выполнен хотя бы один тест восстановления.
+Stage15A automated off-VM PostgreSQL backup и Stage15B real isolated restore
+приняты.
+
+Canonical command-level recovery procedure:
+
+    docs/RECOVERY_RUNBOOK.md
+
+До первого real inventory entry полный Stage15C всё равно обязан завершиться.
 ## Technical data retention
 
 Production uses a dedicated `maintenance-worker` and a separate
@@ -308,15 +330,11 @@ movement journal remains immutable and is never pruned by this worker.
 
 ## Production-data gate
 
-Deploy Stage 5/6 сам по себе не разрешает ввод реальных inventory данных.
+Stage15A/B prerequisites выполнены, но production-data gate остаётся закрыт до
+полного Stage15C.
 
-До первого production stock entry обязательны:
+`REAL_INVENTORY_MUTATIONS_ENABLED=false` остаётся независимым fail-closed
+server-side safety boundary.
 
-1. automated PostgreSQL backup;
-2. проверяемый backup artifact вне production VM;
-3. real restore test в отдельное окружение;
-4. Alembic/schema verification после restore;
-5. read-only projection reconciliation;
-6. zero drift для QUANTITY и SERIAL.
-
-Operational procedure находится в `docs/OPERATIONS.md`.
+Operational procedure находится в `docs/OPERATIONS.md`, recovery procedure —
+в `docs/RECOVERY_RUNBOOK.md`.

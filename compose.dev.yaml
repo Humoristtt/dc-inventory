@@ -4,6 +4,8 @@ x-backend-image: &backend-image
   image: dc-inventory-backend:dev
   build:
     context: ./backend
+    args:
+      APP_REVISION: ${APP_REVISION:-unknown}
 
 x-backend-environment: &backend-environment
   APP_ENV: development
@@ -104,6 +106,8 @@ services:
     image: dc-inventory-web:dev
     build:
       context: ./frontend
+      args:
+        APP_REVISION: ${APP_REVISION:-unknown}
     ports:
       - "127.0.0.1:${WEB_PORT:-8080}:8080"
     depends_on:

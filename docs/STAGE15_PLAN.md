@@ -3,9 +3,8 @@
 ## Status
 
     STAGE15=ACTIVE_15C
-    PRODUCTION_SOURCE=9a9ec6a705473d8bd3521b01e6f602284ed9c375
-    STAGE15C_CHECKOUT_SYNC_BASELINE=7d46920c659a86ef919cc2b1f64decce973d39ab
     ALEMBIC_HEAD=a2b3c4d5e6f7
+    REAL_INVENTORY_MUTATIONS_ENABLED=false
     REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
     STAGE15A_STORAGE=PASS
     STAGE15A_AUTOMATION=PASS
@@ -17,6 +16,9 @@
     STAGE15B_APP_COMPATIBILITY=PASS
     STAGE15C_CHECKOUT_SYNC=PASS
     STAGE15C_LOCAL_BACKUP_HYGIENE=PASS
+    AUD_00=PASS
+    AUD_01=PASS
+    BATCH_A=ACTIVE
 
 Stage 15 является production-data gate. Feature backlog Stage 9–14 не обязан
 быть завершён до этого hardening, но никакие настоящие складские остатки нельзя
@@ -79,7 +81,12 @@ Backup artifact contract:
 - custom archive format (`-Fc`);
 - no plaintext credentials in command line/logs;
 - UTC timestamp in immutable object key;
-- source commit SHA in manifest;
+- manifest schema v2;
+- production Git checkout SHA;
+- backend immutable image ID + source revision;
+- telegram-worker immutable image ID + source revision;
+- maintenance-worker immutable image ID + source revision;
+- web immutable image ID + source revision;
 - Alembic head in manifest;
 - SHA-256 checksum;
 - artifact size;
@@ -140,6 +147,10 @@ Production acceptance 2026-09-04:
 - scheduled run Alembic head: `a2b3c4d5e6f7`;
 - scheduled remote verification PASS;
 - Stage15A automated off-VM backup: `PASS`.
+
+Canonical command-level recovery/rehearsal procedure:
+
+    docs/RECOVERY_RUNBOOK.md
 
 ## Stage 15B — Real isolated restore acceptance
 

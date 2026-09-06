@@ -156,6 +156,22 @@ jobs:
         shell: bash
         run: python3 ops/tests/test_stage15_backup_contract.py
 
+      - name: Stage 15 runtime provenance contract
+        shell: bash
+        run: python3 ops/tests/test_runtime_provenance_contract.py
+
+      - name: Stage 15 S3 lifecycle prefix contract
+        shell: bash
+        run: python3 ops/tests/test_s3_lifecycle_prefix.py
+
+      - name: Documentation freshness contract
+        shell: bash
+        run: python3 ops/tests/test_docs_freshness.py
+
+      - name: Stage 15 recovery runbook contract
+        shell: bash
+        run: python3 ops/tests/test_recovery_runbook_contract.py
+
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
           python-version: "3.12"
@@ -294,6 +310,7 @@ jobs:
       - name: Create runtime environment
         run: |
           cat > .env.ci <<'EOF'
+          APP_REVISION=${{ github.sha }}
           POSTGRES_DB=dc_inventory
           POSTGRES_USER=dc_inventory
           POSTGRES_PASSWORD=ci-runtime-only-password
@@ -336,6 +353,27 @@ jobs:
           backend_cid="$(docker compose --env-file .env.ci -f compose.yaml ps -q backend)"
           postgres_cid="$(docker compose --env-file .env.ci -f compose.yaml ps -q postgres)"
           web_cid="$(docker compose --env-file .env.ci -f compose.yaml ps -q web)"
+
+          python3 ops/backup/runtime_provenance.py             --root "$PWD"             --env-file .env.ci             --output /tmp/runtime-provenance.json             --production-checkout-sha "${{ github.sha }}"
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(
+              Path("/tmp/runtime-provenance.json").read_text()
+          )
+
+          expected = "${{ github.sha }}"
+
+          assert data["production_checkout_sha"] == expected
+
+          for runtime in data["runtime"].values():
+              assert runtime["source_revision"] == expected
+              assert runtime["image_id"].startswith("sha256:")
+
+          print("CI_RUNTIME_PROVENANCE=PASS")
+          PY
 
           python3 - "$backend_cid" "$postgres_cid" "$web_cid" <<'PY'
           import json

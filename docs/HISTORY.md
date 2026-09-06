@@ -558,3 +558,20 @@
 - Stage15C остаётся активным; этот cleanup является только отдельным
   hardening checkpoint.
 - `REAL_INVENTORY_ENTRY=BLOCKED_STAGE15`.
+
+## 2026-09-06 — Stage 15C AUD-01 — fail-closed mutation gate
+
+- PR #32 merged в protected `main`.
+- Merge commit:
+  `cdfd1b7f9b3c5a6fb225ed52f92dcaed86313872`.
+- Server-side `REAL_INVENTORY_MUTATIONS_ENABLED=false` добавлен как fail-closed
+  deployment policy.
+- Protected real-inventory mutations возвращают HTTP 423 при закрытом gate.
+- Все 10 mutation routes подтверждены в production.
+- Alembic head `a2b3c4d5e6f7`.
+- Real inventory baseline остался пустым:
+  `items=0`, `inventory_units=0`, `stock_balances=0`,
+  `movements=0`, `movement_lines=0`.
+- Production live/ready PASS.
+- `AUD_01=PASS`.
+- `REAL_INVENTORY_ENTRY=BLOCKED_STAGE15` сохранён.

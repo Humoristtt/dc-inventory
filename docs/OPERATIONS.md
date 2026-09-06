@@ -51,34 +51,25 @@ Warehouse mutation privileges отсутствуют.
 
 ## Current production baseline
 
-Runtime source:
-
-    9a9ec6a705473d8bd3521b01e6f602284ed9c375
-
-Stage15C checkout-sync checkpoint, verified 2026-09-06:
-
-    7d46920c659a86ef919cc2b1f64decce973d39ab
-
-Этот SHA фиксирует доказанный docs-only Stage15 acceptance checkpoint:
-application containers при его синхронизации не пересоздавались.
-
-Точный текущий production Git checkout не поддерживается как самоссылочный SHA
-в versioned documentation. Перед deploy/acceptance его всегда проверять
-непосредственно на production VM через `git rev-parse HEAD`.
+Stages 4–8B, branded Telegram `/start` и post-8B UX приняты в production.
 
 Migration head:
 
     a2b3c4d5e6f7
 
-Stages 4–8B, branded Telegram `/start` и post-8B UX foundations развёрнуты и
-приняты в production. Финальный live Telegram UX smoke завершён 2026-09-04:
-windowed default, user-triggered fullscreen toggle с обратным выходом,
-visibility threshold 400 CSS px, responsive desktop/mobile layout и catalog
-edge/initial-scroll remediation подтверждены.
+Stage15A automated off-VM backup: `PASS`.
+Stage15B real isolated restore: `PASS`.
+Stage15C: `ACTIVE`.
 
-Следующий активный production-data этап — Stage 15. Real inventory entry
-остаётся заблокирован до automated off-VM PostgreSQL backup, isolated real
-restore и zero-drift reconciliation.
+AUD-01 production acceptance:
+
+    REAL_INVENTORY_MUTATIONS_ENABLED=false
+    REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
+    pre-real-data inventory rows=0
+    production health=PASS
+
+Exact production checkout и runtime image provenance являются отдельным
+operational evidence.
 
 ## Deploy sequence
 
@@ -225,6 +216,7 @@ Storage boundary:
 - backup prefix `postgres/`;
 - Object Lock `GOVERNANCE`, 7 days;
 - lifecycle current versions 30 days;
+- lifecycle rules обязаны покрывать exact configured prefix `postgres/`;
 - noncurrent versions 1 day;
 - backup identity не имеет `DeleteObject`;
 - backup identity не может изменять lifecycle.
@@ -286,6 +278,10 @@ Stage 15 implementation и acceptance ведутся по
 
 Stage15B real isolated restore acceptance: `PASS`.
 
+Canonical command-level recovery procedure:
+
+    docs/RECOVERY_RUNBOOK.md
+
 Accepted procedure:
 
 1. взять настоящий verified off-VM backup artifact;
@@ -345,32 +341,30 @@ Data-integrity blocker. Inventory mutations останавливаются.
 
 ## Перед первым real inventory entry
 
-- [x] Stage 8B merged через PR #22;
-- [x] production deploy Stages 4–8B + Telegram entry UX PASS;
-- [x] current migration head `a2b3c4d5e6f7` verified;
-- [x] existing production DB role boundary previously verified;
-- [x] Telegram smoke PASS;
-- [x] maintenance iteration PASS;
-- [x] Stage15A automated PostgreSQL backup PASS;
-- [x] verified artifact off-VM;
-- [x] backup retention policy PASS;
-- [x] first scheduled automatic backup PASS;
-- [x] Stage15B real isolated restore PASS;
-- [x] Stage15B restore reconciliation zero drift;
-- [x] Stage15C local backup hygiene PASS;
-- [x] branch protection configured;
-- [ ] Stage15C final migration status/check;
-- [ ] Stage15C final DB roles/host exposure re-verification;
-- [ ] Stage15C final production projection reconciliation zero drift;
-- [ ] Stage15C full backend/integration/concurrency gate;
-- [ ] Stage15C frontend unit/build/Playwright gate;
-- [ ] Stage15C runtime/Telegram gateway CI gate;
-- [ ] Stage15C security/source audit;
-- [ ] Stage15C final production smoke;
-- [ ] authoritative SFP source guard;
-- [~] final canonical documentation synchronization;
-- [ ] `REAL_INVENTORY_ENTRY=ALLOWED` only after complete Stage15C acceptance;
-- [x] production runtime code baseline `9a9ec6a705473d8bd3521b01e6f602284ed9c375` accepted;
-- [x] production checkout clean и синхронизируется с protected `main`.
+- [x] Stage 8B + post-8B UX production accepted;
+- [x] migration head `a2b3c4d5e6f7`;
+- [x] Stage15A automated off-VM backup;
+- [x] first scheduled automatic backup;
+- [x] Stage15B real isolated restore;
+- [x] restore reconciliation zero drift;
+- [x] local backup hygiene;
+- [x] branch protection + four required CI checks;
+- [x] production DB roles/journal/host-exposure audit;
+- [x] production reconciliation zero drift;
+- [x] AUD-01 fail-closed mutation gate;
+- [~] AUD-02 runtime provenance v2;
+- [~] AUD-03 exact S3 lifecycle-prefix validation;
+- [~] AUD-06 command-level recovery runbook;
+- [~] AUD-08..13 canonical docs + freshness CI;
+- [ ] AUD-04 durable immutable application rollback artifact;
+- [ ] AUD-05 controlled backup failure drill;
+- [ ] AUD-07 authoritative workbook fresh fingerprint;
+- [ ] remaining host/security hardening;
+- [ ] final full source + production re-audit;
+- [ ] explicit Stage15 gate-removal decision;
+- [ ] separate explicit real inventory operator action.
 
-Только после этого production-data gate можно снять.
+До последних двух пунктов:
+
+    REAL_INVENTORY_MUTATIONS_ENABLED=false
+    REAL_INVENTORY_ENTRY=BLOCKED_STAGE15

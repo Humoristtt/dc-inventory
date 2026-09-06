@@ -137,21 +137,6 @@ jobs:
           PY
 
 
-      - name: Reject authoritative inventory workbooks
-        shell: bash
-        run: |
-          forbidden="$(
-            git ls-files |
-              grep -Ei '(^|/)sfp-authoritative[^/]*\.(xlsx|xlsm|xls)$' ||
-              true
-          )"
-
-          if [ -n "$forbidden" ]; then
-            echo "Authoritative operational workbook must remain outside Git:"
-            printf '%s\n' "$forbidden"
-            exit 1
-          fi
-
       - name: Stage 15 backup contract
         shell: bash
         run: python3 ops/tests/test_stage15_backup_contract.py

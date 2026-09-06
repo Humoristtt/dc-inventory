@@ -257,7 +257,7 @@ Production-data gate остаётся закрыт до полного Stage15C 
 4. durable application rollback artifact;
 5. controlled backup failure drill;
 6. command-level recovery rehearsal;
-7. authoritative workbook fingerprint guard;
+7. stale inventory-source assumptions retired; real-data source remains undefined;
 8. final CI/security/runtime/host acceptance;
 9. zero-drift production reconciliation;
 10. canonical documentation closure.

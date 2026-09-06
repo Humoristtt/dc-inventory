@@ -123,11 +123,10 @@ privacy/auth/runtime hardening и production-Nginx Playwright acceptance
 проверяется по image provenance, а не выводится только из Git checkout.
 
 Item остаётся каталожной позицией; физические serial units и balances существуют
-только в warehouse domain. Старые локальные workbook остаются только reference
-examples для catalog design. Для будущего SFP-ввода единственный операционный
-источник — внешний read-only `sfp-authoritative.xlsx`; его 265 модулей не
-импортированы и не входят в migrations. Stage 8B не добавляет warehouse mutation
-UI.
+только в warehouse domain. Источник реальных складских данных сейчас намеренно
+не определён. Его contract, mapping и способ первоначального ввода будут
+спроектированы после Stage 15 в следующем roadmap. Stage 8B не добавляет
+warehouse mutation UI.
 
 Stage15A/B уже доказали automated off-VM backup и real isolated restore,
 но ввод real inventory остаётся заблокирован до полного Stage15C acceptance и
@@ -147,20 +146,10 @@ read-only projection reconciliation из
 - сетевые карты;
 - другие категории, которые будут добавляться позднее.
 
-Исторические Excel-файлы используются только как reference material для
-границ категорий, терминологии и технических атрибутов и не являются
-authoritative inventory source.
-
-Для первого реального SFP-ввода существует отдельный внешний read-only
-`~/dc-inventory-input/sfp-authoritative.xlsx`. Его рабочий лист `На складе`
-содержит 23 позиции и суммарное количество 265 модулей. Этот workbook не
-коммитится в Git и до закрытия Stage 15 не импортируется в production.
-
-Для authoritative SFP dataset действуют отдельные lossless mapping rules:
-`Модель` → `Item.model`; отсутствующий P/N остаётся `NULL`; serial units не
-создаются; accounting mode — `QUANTITY`; Location не выдумывается из
-отсутствующих данных. После controlled opening inventory PostgreSQL остаётся
-единственным runtime source of truth.
+Никакой внешний файл или таблица сейчас не является authoritative inventory
+source. Правила будущего импорта, первоначального наполнения и source-to-domain
+mapping намеренно не зафиксированы и будут определены после завершения Stage 15
+в следующем roadmap. До этого реальные складские данные не импортируются.
 
 ## Технологический стек
 

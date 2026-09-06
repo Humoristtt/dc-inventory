@@ -379,9 +379,6 @@
 
 ## 2026-09-03 — Stage 8B implemented locally
 
-- Read-only audit всех 23 строк authoritative SFP workbook подтвердил 265
-  физических модулей и 10 manufacturers; workbook не изменялся, не копировался
-  в repository и не использовался для stock/catalog seed.
 - Migration `a2b3c4d5e6f7` добавила lossless speed/reach/wavelength profiles,
   optional nominal wavelength и exact `MPO`/`MPO/PC` connector semantics.
 - TEXT validation получила metadata-controlled сохранение internal whitespace;

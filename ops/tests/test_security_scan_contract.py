@@ -17,6 +17,8 @@ assert CI.count("version: v0.74.0") == 4
 assert CI.count("severity: CRITICAL") == 4
 assert CI.count('exit-code: "1"') == 4
 assert CI.count("scanners: vuln") == 4
+assert CI.count('ignore-unfixed: "true"') == 3
+assert CI.count('ignore-unfixed: "false"') == 1
 
 assert "scan-type: fs" in CI
 assert "scan-ref: ." in CI

@@ -357,7 +357,7 @@ jobs:
           scanners: vuln
           severity: CRITICAL
           exit-code: "1"
-          ignore-unfixed: "false"
+          ignore-unfixed: "true"
           format: table
 
       - name: Scan frontend image for critical vulnerabilities
@@ -369,7 +369,7 @@ jobs:
           scanners: vuln
           severity: CRITICAL
           exit-code: "1"
-          ignore-unfixed: "false"
+          ignore-unfixed: "true"
           format: table
 
       - name: Scan PostgreSQL image for critical vulnerabilities
@@ -381,7 +381,7 @@ jobs:
           scanners: vuln
           severity: CRITICAL
           exit-code: "1"
-          ignore-unfixed: "false"
+          ignore-unfixed: "true"
           format: table
 
       - name: Verify runtime

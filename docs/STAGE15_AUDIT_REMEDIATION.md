@@ -126,3 +126,24 @@ enabled and does not silently change SSH/network policy.
 
 Real inventory remains blocked while Batch C and final Stage15 acceptance
 are incomplete.
+
+### AUD-14 first CI evidence
+
+Initial Trivy runtime scan on PR #36 correctly blocked the backend image.
+
+Detected Debian 12.15 CRITICAL findings without an available fixed version:
+
+    CVE-2025-7458  libsqlite3-0  status=affected
+    CVE-2026-13221 perl-base     status=affected
+    CVE-2026-42496 perl-base     status=fix_deferred
+    CVE-2026-8376  perl-base     status=affected
+    CVE-2023-45853 zlib1g        status=will_not_fix
+
+CI policy therefore distinguishes current upstream-unfixed findings from
+remediable CRITICAL vulnerabilities:
+
+    CRITICAL_FIX_AVAILABLE=BLOCK
+    CRITICAL_NO_FIX_AVAILABLE=RECORDED_NOT_BLOCKING
+
+The findings remain subject to review when pinned base-image digests are
+updated or during the final Stage15 security re-audit.

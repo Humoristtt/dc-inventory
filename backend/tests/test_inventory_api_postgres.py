@@ -39,7 +39,11 @@ def _auth_headers(
 @pytest.mark.asyncio
 async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
     engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
-    settings = Settings(database_url=DATABASE_URL, app_env="test")
+    settings = Settings(
+        database_url=DATABASE_URL,
+        app_env="test",
+        real_inventory_mutations_enabled=True,
+    )
     application = create_app(settings)
     application.state.db_engine = engine
     now = datetime.now(UTC)
@@ -128,6 +132,65 @@ async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
                 json=movement_body,
             )
             assert user_mutation.status_code == 403
+
+            settings.real_inventory_mutations_enabled = False
+
+            user_mutation_while_locked = await client.post(
+                "/api/admin/inventory/movements",
+                headers=_auth_headers(settings, tokens["user"]),
+                json=movement_body,
+            )
+            assert user_mutation_while_locked.status_code == 403
+
+            read_while_locked = await client.get(
+                "/api/inventory/locations",
+                headers=_auth_headers(settings, tokens["admin"]),
+            )
+            assert read_while_locked.status_code == 200
+
+            locked_location = await client.post(
+                "/api/admin/inventory/locations",
+                headers=_auth_headers(settings, tokens["admin"]),
+                json={
+                    "code": f"LOCK-{marker[:10]}",
+                    "name": "Locked location",
+                },
+            )
+            locked_archive = await client.post(
+                f"/api/admin/inventory/locations/{scenario.location_one_id}/archive",
+                headers=_auth_headers(settings, tokens["admin"]),
+            )
+            locked_unarchive = await client.post(
+                f"/api/admin/inventory/locations/{scenario.location_one_id}/unarchive",
+                headers=_auth_headers(settings, tokens["admin"]),
+            )
+            locked_movement = await client.post(
+                "/api/admin/inventory/movements",
+                headers=_auth_headers(settings, tokens["admin"]),
+                json=movement_body,
+            )
+            locked_reversal = await client.post(
+                f"/api/admin/inventory/movements/{uuid.uuid4()}/reversal",
+                headers=_auth_headers(settings, tokens["admin"]),
+                json={
+                    "client_request_id": f"locked-reversal-{marker}",
+                    "purpose": "mutation gate test",
+                },
+            )
+
+            for response in (
+                locked_location,
+                locked_archive,
+                locked_unarchive,
+                locked_movement,
+                locked_reversal,
+            ):
+                assert response.status_code == 423
+                assert response.json()["detail"]["code"] == (
+                    "real_inventory_mutations_disabled"
+                )
+
+            settings.real_inventory_mutations_enabled = True
 
             location_response = await client.post(
                 "/api/admin/inventory/locations",

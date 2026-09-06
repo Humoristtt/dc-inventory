@@ -1,9 +1,10 @@
 from typing import Annotated, NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
+from app.core.safety import require_real_inventory_mutations_enabled
 from app.db.errors import (
     POSTGRES_UNIQUE_VIOLATION_SQLSTATE,
     RETRYABLE_POSTGRES_SQLSTATES,
@@ -498,9 +499,11 @@ async def get_movement(
 )
 async def post_location(
     payload: LocationCreate,
+    request: Request,
     db: DbSession,
     _admin: Admin,
 ) -> LocationOut:
+    require_real_inventory_mutations_enabled(request)
     try:
         location = await create_location(db, payload)
         await db.commit()
@@ -519,9 +522,11 @@ async def post_location(
 @admin_router.post("/locations/{location_id}/archive", response_model=LocationOut)
 async def archive_location(
     location_id: UUID,
+    request: Request,
     db: DbSession,
     _admin: Admin,
 ) -> LocationOut:
+    require_real_inventory_mutations_enabled(request)
     try:
         location = await set_location_archived(db, location_id, archived=True)
         await db.commit()
@@ -537,9 +542,11 @@ async def archive_location(
 @admin_router.post("/locations/{location_id}/unarchive", response_model=LocationOut)
 async def unarchive_location(
     location_id: UUID,
+    request: Request,
     db: DbSession,
     _admin: Admin,
 ) -> LocationOut:
+    require_real_inventory_mutations_enabled(request)
     try:
         location = await set_location_archived(db, location_id, archived=False)
         await db.commit()
@@ -559,9 +566,11 @@ async def unarchive_location(
 )
 async def post_movement(
     payload: MovementCreate,
+    request: Request,
     db: DbSession,
     admin: Admin,
 ) -> MovementOut:
+    require_real_inventory_mutations_enabled(request)
     try:
         result = await create_movement(
             db,
@@ -590,9 +599,11 @@ async def post_movement(
 async def post_movement_reversal(
     movement_id: UUID,
     payload: MovementReversalCreate,
+    request: Request,
     db: DbSession,
     admin: Admin,
 ) -> MovementOut:
+    require_real_inventory_mutations_enabled(request)
     try:
         result = await reverse_movement(
             db,

@@ -1,9 +1,10 @@
 from typing import Annotated, NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy.exc import IntegrityError
 
+from app.core.safety import require_real_inventory_mutations_enabled
 from app.db.errors import (
     POSTGRES_UNIQUE_VIOLATION_SQLSTATE,
     postgres_sqlstate,
@@ -410,9 +411,11 @@ async def get_item(
 )
 async def post_manufacturer(
     payload: ManufacturerCreate,
+    request: Request,
     db: DbSession,
     _admin: Admin,
 ) -> ManufacturerOut:
+    require_real_inventory_mutations_enabled(request)
     try:
         manufacturer = await create_manufacturer(db, payload)
         await db.commit()
@@ -467,9 +470,11 @@ async def post_duplicate_check(
 )
 async def post_item(
     payload: ItemCreate,
+    request: Request,
     db: DbSession,
     _admin: Admin,
 ) -> ItemOut:
+    require_real_inventory_mutations_enabled(request)
     try:
         item_id = await create_item(db, payload)
         await db.commit()
@@ -486,9 +491,11 @@ async def post_item(
 async def patch_item(
     item_id: UUID,
     payload: ItemPatch,
+    request: Request,
     db: DbSession,
     _admin: Admin,
 ) -> ItemOut:
+    require_real_inventory_mutations_enabled(request)
     try:
         await update_item(
             db,
@@ -509,9 +516,11 @@ async def patch_item(
 @admin_router.post("/items/{item_id}/archive", response_model=ItemOut)
 async def archive_item(
     item_id: UUID,
+    request: Request,
     db: DbSession,
     _admin: Admin,
 ) -> ItemOut:
+    require_real_inventory_mutations_enabled(request)
     try:
         await set_item_archived(db, item_id, archived=True)
         await db.commit()
@@ -524,9 +533,11 @@ async def archive_item(
 @admin_router.post("/items/{item_id}/unarchive", response_model=ItemOut)
 async def unarchive_item(
     item_id: UUID,
+    request: Request,
     db: DbSession,
     _admin: Admin,
 ) -> ItemOut:
+    require_real_inventory_mutations_enabled(request)
     try:
         await set_item_archived(db, item_id, archived=False)
         await db.commit()

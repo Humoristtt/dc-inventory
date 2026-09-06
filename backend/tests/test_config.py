@@ -17,6 +17,7 @@ def test_database_runtime_defaults() -> None:
     assert settings.database_lock_timeout_seconds == 5
     assert settings.migration_statement_timeout_seconds == 300
     assert settings.migration_lock_timeout_seconds == 5
+    assert settings.real_inventory_mutations_enabled is False
 
 
 @pytest.mark.parametrize(

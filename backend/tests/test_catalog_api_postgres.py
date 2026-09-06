@@ -50,7 +50,11 @@ def _auth_headers(
 @pytest.mark.asyncio
 async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
     engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
-    settings = Settings(database_url=DATABASE_URL, app_env="test")
+    settings = Settings(
+        database_url=DATABASE_URL,
+        app_env="test",
+        real_inventory_mutations_enabled=True,
+    )
     application = create_app(settings)
     application.state.db_engine = engine
     marker = uuid.uuid4().hex
@@ -176,6 +180,73 @@ async def test_catalog_api_enforces_approved_and_admin_boundaries() -> None:
                 json={"name": f"API Manufacturer {marker}"},
             )
             assert user_mutation.status_code == 403
+
+            settings.real_inventory_mutations_enabled = False
+
+            user_mutation_while_locked = await client.post(
+                "/api/admin/catalog/manufacturers",
+                headers=_auth_headers(settings, tokens["user"]),
+                json={"name": f"Locked User Manufacturer {marker}"},
+            )
+            assert user_mutation_while_locked.status_code == 403
+
+            read_while_locked = await client.get(
+                "/api/catalog/categories",
+                headers=_auth_headers(settings, tokens["admin"]),
+            )
+            assert read_while_locked.status_code == 200
+
+            duplicate_check_while_locked = await client.post(
+                "/api/admin/catalog/items/check-duplicates",
+                headers=_auth_headers(settings, tokens["admin"]),
+                json={
+                    "category_key": "sfp",
+                    "name": f"Duplicate Check While Locked {marker}",
+                },
+            )
+            assert duplicate_check_while_locked.status_code == 200
+
+            locked_manufacturer = await client.post(
+                "/api/admin/catalog/manufacturers",
+                headers=_auth_headers(settings, tokens["admin"]),
+                json={"name": f"Locked Manufacturer {marker}"},
+            )
+            locked_item = await client.post(
+                "/api/admin/catalog/items",
+                headers=_auth_headers(settings, tokens["admin"]),
+                json={
+                    "category_key": "sfp",
+                    "name": f"Locked Item {marker}",
+                    "attributes": {},
+                },
+            )
+            locked_patch = await client.patch(
+                f"/api/admin/catalog/items/{uuid.uuid4()}",
+                headers=_auth_headers(settings, tokens["admin"]),
+                json={"comment": "locked"},
+            )
+            locked_archive = await client.post(
+                f"/api/admin/catalog/items/{uuid.uuid4()}/archive",
+                headers=_auth_headers(settings, tokens["admin"]),
+            )
+            locked_unarchive = await client.post(
+                f"/api/admin/catalog/items/{uuid.uuid4()}/unarchive",
+                headers=_auth_headers(settings, tokens["admin"]),
+            )
+
+            for response in (
+                locked_manufacturer,
+                locked_item,
+                locked_patch,
+                locked_archive,
+                locked_unarchive,
+            ):
+                assert response.status_code == 423
+                assert response.json()["detail"]["code"] == (
+                    "real_inventory_mutations_disabled"
+                )
+
+            settings.real_inventory_mutations_enabled = True
 
             manufacturer_response = await client.post(
                 "/api/admin/catalog/manufacturers",

@@ -123,7 +123,8 @@ python3 - \
   "$ROOT/ops/backup/s3_stage15.py" \
   "$ENV_FILE" \
   "$MANIFEST_KEY" \
-  "$WORK_DIR" <<'PY'
+  "$WORK_DIR" \
+  "$PRODUCTION_CHECKOUT_SHA" <<'PY'
 import importlib.util
 import json
 import sys
@@ -132,6 +133,7 @@ helper_path = Path(sys.argv[1])
 env_path = Path(sys.argv[2])
 manifest_key = sys.argv[3]
 work_dir = Path(sys.argv[4])
+production_checkout_sha = sys.argv[5]
 sys.path.insert(0, str(helper_path.parent))
 spec = importlib.util.spec_from_file_location(
     "stage15_s3",
@@ -178,6 +180,14 @@ if manifest.get("schema_version") != 2:
     raise RuntimeError(
         "Stage15 final recovery requires manifest schema v2"
     )
+
+if manifest.get("production_checkout_sha") != production_checkout_sha:
+    raise RuntimeError(
+        "backup manifest does not match current production checkout"
+    )
+
+print("RESTORE_MANIFEST_CHECKOUT=PASS")
+
 dump_key = manifest["artifact"]["key"]
 expected_dump_sha = manifest["artifact"]["sha256"]
 if not dump_key.startswith(prefix):
@@ -258,13 +268,35 @@ docker exec "$RESTORE_PG" \
   --no-acl \
   /restore/selected.dump
 echo "ISOLATED_RESTORE=PASS"
-docker exec "$RESTORE_PG" \
-  psql \
-  -U dc_inventory_restore \
-  -d dc_inventory_restore \
-  -v ON_ERROR_STOP=1 \
-  -At \
-  -c 'SELECT version_num FROM alembic_version;'
+RESTORED_ALEMBIC_HEAD="$(
+    docker exec "$RESTORE_PG" \
+      psql \
+      -U dc_inventory_restore \
+      -d dc_inventory_restore \
+      -v ON_ERROR_STOP=1 \
+      -At \
+      -c 'SELECT version_num FROM alembic_version;' \
+      | tr -d '[:space:]'
+)"
+
+EXPECTED_ALEMBIC_HEAD="$(
+    python3 -c '
+import json
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text())
+print(manifest["alembic_head"])
+' "$WORK_DIR/selected.manifest.json"
+)"
+
+test -n "$RESTORED_ALEMBIC_HEAD"
+test -n "$EXPECTED_ALEMBIC_HEAD"
+test "$RESTORED_ALEMBIC_HEAD" = "$EXPECTED_ALEMBIC_HEAD"
+
+echo "RESTORE_ALEMBIC=PASS"
+echo "RESTORED_ALEMBIC_HEAD=$RESTORED_ALEMBIC_HEAD"
+
 docker exec "$RESTORE_PG" \
   psql \
   -U dc_inventory_restore \
@@ -281,12 +313,27 @@ docker exec "$RESTORE_PG" \
 docker cp \
   "$ROOT/backend/scripts/reconcile_inventory_projections.sql" \
   "$RESTORE_PG:/tmp/reconcile_inventory_projections.sql"
-docker exec "$RESTORE_PG" \
-  psql \
-  -U dc_inventory_restore \
-  -d dc_inventory_restore \
-  -v ON_ERROR_STOP=1 \
-  -f /tmp/reconcile_inventory_projections.sql
+RECONCILE_OUTPUT="$(
+    docker exec "$RESTORE_PG" \
+      psql \
+      -U dc_inventory_restore \
+      -d dc_inventory_restore \
+      -v ON_ERROR_STOP=1 \
+      -At \
+      -f /tmp/reconcile_inventory_projections.sql
+)"
+
+if [ -n "$(
+    printf '%s' "$RECONCILE_OUTPUT" |
+      tr -d '[:space:]'
+)" ]; then
+    echo "[FATAL] restored database projection drift detected" >&2
+    printf '%s\n' "$RECONCILE_OUTPUT" >&2
+    exit 1
+fi
+
+echo "RESTORE_RECONCILIATION=ZERO_DRIFT"
+
 BACKEND_IMAGE_ID="$(
     python3 -c '
 import json
@@ -336,6 +383,10 @@ docker run -d \
   --security-opt no-new-privileges:true \
   --init \
   -e APP_ENV=production \
+  -e TELEGRAM_BOT_TOKEN=restore-rehearsal-placeholder \
+  -e ADMIN_TELEGRAM_USER_ID=1 \
+  -e TELEGRAM_WEBHOOK_SECRET=restore-rehearsal-placeholder \
+  -e TELEGRAM_WEB_APP_URL=https://app.spik-inventory.ru \
   -e DATABASE_URL="postgresql+asyncpg://dc_inventory_restore:${RESTORE_PASSWORD}@${RESTORE_PG}:5432/dc_inventory_restore" \
   -e REAL_INVENTORY_MUTATIONS_ENABLED=false \
   "$BACKEND_IMAGE_ID" \
@@ -361,6 +412,7 @@ docker inspect \
   "$RESTORE_APP" \
   | grep -qx 'REAL_INVENTORY_MUTATIONS_ENABLED=false'
 
+echo "RESTORE_RUNTIME_CONFIG=ISOLATED_PLACEHOLDERS"
 echo "RESTORE_APP_COMPATIBILITY=PASS"
 
 cleanup_runtime

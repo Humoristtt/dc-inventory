@@ -7,7 +7,7 @@ if [ "${EUID}" -ne 0 ]; then
     exit 1
 fi
 
-for command_name in docker git grep mktemp python3 seq sleep tr; do
+for command_name in date docker git grep mktemp python3 rm seq sleep tr; do
     command -v "${command_name}" >/dev/null
 done
 ROOT=/opt/dc-inventory
@@ -44,7 +44,13 @@ cleanup_runtime() (
             docker network rm "$RESTORE_NET" >/dev/null 2>&1 || true
             ;;
     esac
-}
+
+    case "${WORK_DIR:-}" in
+        /var/tmp/dc-inventory-restore.*)
+            rm -rf -- "$WORK_DIR" >/dev/null 2>&1 || true
+            ;;
+    esac
+)
 trap cleanup_runtime EXIT
 test -r "$STATE"
 test -r "$ENV_FILE"
@@ -53,6 +59,50 @@ cd "$ROOT"
 test -z "$(
     git -c safe.directory="$ROOT" status --porcelain
 )"
+
+production_id() {
+    local service="$1"
+    local container_id
+
+    container_id="$(docker compose ps -q "$service")"
+    test -n "$container_id"
+    printf '%s' "$container_id"
+}
+
+production_health() {
+    python3 - <<'HEALTH'
+import json
+import urllib.request
+
+for path, expected in (
+    ("/api/health/live", "ok"),
+    ("/api/health/ready", "ready"),
+):
+    with urllib.request.urlopen(
+        "http://127.0.0.1:8080" + path,
+        timeout=5,
+    ) as response:
+        payload = json.load(response)
+
+    if payload.get("status") != expected:
+        raise SystemExit(
+            f"{path}: unexpected payload {payload!r}"
+        )
+HEALTH
+}
+
+PROD_BACKEND_BEFORE="$(production_id backend)"
+PROD_WEB_BEFORE="$(production_id web)"
+PROD_TELEGRAM_BEFORE="$(production_id telegram-worker)"
+PROD_MAINTENANCE_BEFORE="$(production_id maintenance-worker)"
+PROD_POSTGRES_BEFORE="$(production_id postgres)"
+
+production_health
+
+docker inspect     --format '{{range .Config.Env}}{{println .}}{{end}}'     "$PROD_BACKEND_BEFORE"     | grep -qx 'REAL_INVENTORY_MUTATIONS_ENABLED=false'
+
+echo "PRODUCTION_PRECHECK=PASS"
+
 PRODUCTION_CHECKOUT_SHA="$(
     git -c safe.directory="$ROOT" rev-parse HEAD
 )"
@@ -257,9 +307,87 @@ print(manifest["runtime"]["web"]["image_id"])
 )"
 docker image inspect "$BACKEND_IMAGE_ID" >/dev/null
 docker image inspect "$WEB_IMAGE_ID" >/dev/null
+
 echo "EXACT_RUNTIME_ARTIFACTS_LOCAL=PASS"
+
+BACKEND_REVISION="$(
+    python3 -c '
+import json
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text())
+print(manifest["runtime"]["backend"]["source_revision"])
+' "$WORK_DIR/selected.manifest.json"
+)"
+
+test "$(
+    docker image inspect \
+      -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
+      "$BACKEND_IMAGE_ID"
+)" = "$BACKEND_REVISION"
+
+docker run -d \
+  --name "$RESTORE_APP" \
+  --network "$RESTORE_NET" \
+  --read-only \
+  --tmpfs /tmp \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --init \
+  -e APP_ENV=production \
+  -e DATABASE_URL="postgresql+asyncpg://dc_inventory_restore:${RESTORE_PASSWORD}@${RESTORE_PG}:5432/dc_inventory_restore" \
+  -e REAL_INVENTORY_MUTATIONS_ENABLED=false \
+  "$BACKEND_IMAGE_ID" \
+  >/dev/null
+
+for attempt in $(seq 1 60); do
+    if docker exec "$RESTORE_APP" \
+      python -c \
+      "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health/ready', timeout=2).read()" \
+      >/dev/null 2>&1; then
+        break
+    fi
+
+    sleep 1
+done
+
+docker exec "$RESTORE_APP" \
+  python -c \
+  "import json,urllib.request; d=json.load(urllib.request.urlopen('http://127.0.0.1:8000/api/health/ready', timeout=2)); assert d.get('status') == 'ready'"
+
+docker inspect \
+  --format '{{range .Config.Env}}{{println .}}{{end}}' \
+  "$RESTORE_APP" \
+  | grep -qx 'REAL_INVENTORY_MUTATIONS_ENABLED=false'
+
+echo "RESTORE_APP_COMPATIBILITY=PASS"
+
 cleanup_runtime
 trap - EXIT
-rm -rf "$WORK_DIR"
+
+test -z "$(
+    docker ps -aq --filter "name=^/${RESTORE_APP}$"
+)"
+
+test -z "$(
+    docker ps -aq --filter "name=^/${RESTORE_PG}$"
+)"
+
+! docker volume inspect "$RESTORE_VOL" >/dev/null 2>&1
+! docker network inspect "$RESTORE_NET" >/dev/null 2>&1
+test ! -e "$WORK_DIR"
+
+test "$(production_id backend)" = "$PROD_BACKEND_BEFORE"
+test "$(production_id web)" = "$PROD_WEB_BEFORE"
+test "$(production_id telegram-worker)" = "$PROD_TELEGRAM_BEFORE"
+test "$(production_id maintenance-worker)" = "$PROD_MAINTENANCE_BEFORE"
+test "$(production_id postgres)" = "$PROD_POSTGRES_BEFORE"
+
+production_health
+
 echo "ISOLATED_RESTORE_CLEANUP=PASS"
+echo "PRODUCTION_RUNTIME_UNCHANGED=PASS"
+echo "REAL_INVENTORY_MUTATIONS_ENABLED=false"
 echo "REAL_INVENTORY_ENTRY=BLOCKED_STAGE15"
+echo "AUD_06_REHEARSAL=PASS"

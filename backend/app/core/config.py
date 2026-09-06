@@ -26,6 +26,11 @@ class Settings(BaseSettings):
         le=60,
     )
 
+    # Hard production-data safety gate.
+    # Real catalog/warehouse mutations remain disabled until an explicit
+    # operational enablement after Stage 15 acceptance.
+    real_inventory_mutations_enabled: bool = False
+
     telegram_bot_token: SecretStr | None = None
     telegram_init_data_max_age_seconds: int = Field(default=300, ge=30, le=3600)
     admin_telegram_user_id: int | None = Field(default=None, gt=0, le=2**52)

@@ -382,6 +382,7 @@ jobs:
           severity: CRITICAL
           exit-code: "1"
           ignore-unfixed: "true"
+          trivyignores: ops/security/trivy-postgres.ignore.yaml
           format: table
 
       - name: Verify runtime

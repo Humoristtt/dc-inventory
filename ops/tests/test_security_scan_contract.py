@@ -19,6 +19,37 @@ assert CI.count('exit-code: "1"') == 4
 assert CI.count("scanners: vuln") == 4
 assert CI.count('ignore-unfixed: "true"') == 3
 assert CI.count('ignore-unfixed: "false"') == 1
+assert CI.count(
+    "trivyignores: ops/security/trivy-postgres.ignore.yaml"
+) == 1
+
+POSTGRES_IGNORE = (
+    ROOT / "ops/security/trivy-postgres.ignore.yaml"
+).read_text()
+
+assert "CVE-2025-68121" in POSTGRES_IGNORE
+assert '      - "usr/local/bin/gosu"' in POSTGRES_IGNORE
+assert "expired_at: 2026-10-07" in POSTGRES_IGNORE
+
+postgres_marker = (
+    "      - name: Scan PostgreSQL image for critical vulnerabilities\n"
+)
+postgres_start = CI.index(postgres_marker)
+postgres_end = CI.find(
+    "\n      - name:",
+    postgres_start + len(postgres_marker),
+)
+if postgres_end == -1:
+    postgres_end = len(CI)
+
+postgres_block = CI[postgres_start:postgres_end]
+
+assert (
+    "trivyignores: ops/security/trivy-postgres.ignore.yaml"
+    in postgres_block
+)
+
+assert "trivyignores:" not in CI[:postgres_start]
 
 assert "scan-type: fs" in CI
 assert "scan-ref: ." in CI

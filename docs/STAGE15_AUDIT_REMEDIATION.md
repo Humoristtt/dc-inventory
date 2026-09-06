@@ -147,3 +147,31 @@ remediable CRITICAL vulnerabilities:
 
 The findings remain subject to review when pinned base-image digests are
 updated or during the final Stage15 security re-audit.
+
+### AUD-14 PostgreSQL scoped exception
+
+The pinned official PostgreSQL 18 image currently contains:
+
+    TARGET=/usr/local/bin/gosu
+    CVE=CVE-2025-68121
+    SEVERITY=CRITICAL
+    INSTALLED_GO=v1.24.6
+    FIX_AVAILABLE=YES
+
+The current upstream `postgres:18` tag still resolves to the already pinned
+digest, so an image refresh does not remediate the finding.
+
+A narrowly scoped Trivy exception is therefore recorded in:
+
+    ops/security/trivy-postgres.ignore.yaml
+
+The exception applies only to:
+
+    CVE-2025-68121
+    path=/usr/local/bin/gosu
+    expires=2026-10-07
+
+All other fixable CRITICAL vulnerabilities remain blocking.
+
+POSTGRES_SCOPED_EXCEPTION=PASS
+AUD14_POSTGRES_SCAN_POLICY=PASS

@@ -87,9 +87,24 @@ require(
     "REAL_INVENTORY_MUTATIONS_ENABLED=false",
 )
 
-require(
-    "docs/RECOVERY_RUNBOOK.md",
+for assertion in (
+    "## 10A. Guarded command-level rehearsal",
+    "RESTORE_DOWNLOAD_VERIFICATION=PASS",
+    "pg_restore --list",
+    "docker network create --internal",
+    "docker volume create",
+    "ISOLATED_RESTORE=PASS",
+    "reconcile_inventory_projections.sql",
+    "docker image inspect",
+    "docker rm -f",
+    "docker volume rm",
+    "docker network rm",
+    "ISOLATED_RESTORE_CLEANUP=PASS",
     "## 11. Production cutover boundary",
-)
+):
+    require(
+        "docs/RECOVERY_RUNBOOK.md",
+        assertion,
+    )
 
 print("DOCS_FRESHNESS_CONTRACT=PASS")

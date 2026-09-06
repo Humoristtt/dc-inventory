@@ -6,13 +6,13 @@
 > Если решение меняется, старый пункт не удаляется бесследно: он переносится в раздел «Изменённые / отложенные решения» с короткой причиной.
 >
 > **Последнее обновление:** 2026-09-06
-> **Production runtime code baseline:** `9a9ec6a705473d8bd3521b01e6f602284ed9c375` — post-8B UX production-accepted runtime.
-> **Stage15C checkout-sync checkpoint (2026-09-06):** production checkout `7d46920c659a86ef919cc2b1f64decce973d39ab`; docs-only sync, application runtime containers не пересоздавались.
-> **Production:** Stages 4–8B, branded Telegram entry flow и post-8B UX foundations развёрнуты и приняты в production. Production migration head: `a2b3c4d5e6f7`.
-> **Git/GitHub:** local, remote и production checkout синхронизируются через protected `main`; обязательны PR и четыре CI checks: `CI/backend`, `CI/frontend`, `CI/runtime`, `CI/telegram-gateway`.
-> **Current product stage:** Stage 8B + post-8B UX production accepted; Stage 15 активен. Stage15A automated off-VM backup PASS, Stage15B real isolated restore PASS, Stage15C final pre-data hardening ACTIVE.
-> **Production-data gate:** ACTIVE. Stage15A и Stage15B приняты; первый ввод настоящих складских остатков остаётся запрещён до полного Stage15C acceptance, включая final migration/CI/security/runtime checks, production zero-drift reconciliation, authoritative source guard и canonical documentation sync. Feature backlog Stage 9–14 остаётся независимым.
-> **Repository visibility:** repository остаётся public до последнего GitHub-dependent шага; перевод в private выполняется отдельно в конце.
+> **Production:** Stages 4–8B и post-8B UX приняты; migration head `a2b3c4d5e6f7`.
+> **Stage 15:** Stage15A backup PASS, Stage15B isolated restore PASS, Stage15C ACTIVE.
+> **AUD-01:** production fail-closed mutation gate PASS; `REAL_INVENTORY_MUTATIONS_ENABLED=false`.
+> **Production-data gate:** `REAL_INVENTORY_ENTRY=BLOCKED_STAGE15`.
+> **Runtime provenance:** Git checkout и backend/web runtime image revision проверяются отдельно.
+> **Git/GitHub:** protected `main`; required CI: backend, frontend, runtime, telegram-gateway.
+> **Repository visibility:** public до отдельного финального hardening decision.
 
 ---
 

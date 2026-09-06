@@ -15,10 +15,10 @@ Spikatel Inventory — внутреннее Telegram Mini App для склад�
 
 PostgreSQL — канонический источник данных.
 
-В production развёрнуты Stages 4–7, Stage 8A и branded Telegram entry flow;
-production source — `c8d77f8cf34f89b7e54f668619319db26de5fc0b`, migration
-head — `f1a2b3c4d5e6`. Stage 8B реализован локально и ожидает
-human-controlled review/CI/deploy/acceptance.
+В production приняты Stages 4–8B и post-8B Telegram/catalog UX.
+Migration head — `a2b3c4d5e6f7`. Stage15A automated off-VM backup и Stage15B
+real isolated restore — `PASS`; Stage15C final pre-data hardening активен.
+AUD-01 fail-closed mutation gate принят в production.
 
 ## Пользователи и роли
 
@@ -29,7 +29,12 @@ human-controlled review/CI/deploy/acceptance.
 
 Backend, а не frontend, является authorization boundary.
 
-`ADMIN` выполняет administrative/catalog/warehouse mutations.
+`ADMIN` выполняет administrative/catalog/warehouse mutations только когда
+deployment safety policy разрешает mutations.
+
+Production до отдельного operator decision работает с
+`REAL_INVENTORY_MUTATIONS_ENABLED=false`; authorization и deployment safety
+gate являются независимыми boundaries.
 
 `USER` после `APPROVED` работает только в разрешённых пользовательских
 сценариях. Полный self-service warehouse UI относится к следующим roadmap
@@ -242,15 +247,23 @@ Bounded cleanup применяется только к:
 
 ## Production-data gate
 
-Real inventory entry запрещён до:
+Stage15A backup и Stage15B isolated restore уже приняты.
 
-1. automated PostgreSQL backup;
-2. off-VM backup artifact;
-3. successful real restore test;
-4. projection reconciliation;
-5. zero drift.
+Production-data gate остаётся закрыт до полного Stage15C acceptance, включая:
 
-Deploy Stages 5–8 сам по себе этот gate не снимает.
+1. fail-closed server-side mutation gate;
+2. unambiguous checkout/runtime backup provenance;
+3. exact S3 lifecycle-prefix validation;
+4. durable application rollback artifact;
+5. controlled backup failure drill;
+6. command-level recovery rehearsal;
+7. authoritative workbook fingerprint guard;
+8. final CI/security/runtime/host acceptance;
+9. zero-drift production reconciliation;
+10. canonical documentation closure.
+
+Даже после policy-разрешения real inventory остаётся отдельным explicit
+operator action.
 
 ## Deferred
 

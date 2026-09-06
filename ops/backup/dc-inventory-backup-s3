@@ -7,6 +7,7 @@ ENV_FILE="/etc/dc-inventory/stage15-backup.env"
 STATE_DIR="/var/lib/dc-inventory-backup"
 LOCK_FILE="/run/lock/dc-inventory-backup.lock"
 S3_HELPER="${ROOT_DIR}/ops/backup/s3_stage15.py"
+PROVENANCE_HELPER="${ROOT_DIR}/ops/backup/runtime_provenance.py"
 
 if [ "${EUID}" -ne 0 ]; then
     echo "[FATAL] Backup must run as root" >&2
@@ -100,6 +101,7 @@ done
 
 test -r "${ENV_FILE}"
 test -r "${S3_HELPER}"
+test -r "${PROVENANCE_HELPER}"
 
 exec 9>"${LOCK_FILE}"
 
@@ -122,7 +124,7 @@ python3 "${S3_HELPER}" \
 
 cd "${ROOT_DIR}"
 
-SOURCE_SHA="$(
+PRODUCTION_CHECKOUT_SHA="$(
     git         -c safe.directory="${ROOT_DIR}"         -C "${ROOT_DIR}"         rev-parse HEAD
 )"
 
@@ -134,6 +136,13 @@ if [ -n "${WORKTREE_STATUS}" ]; then
     echo "[FATAL] Production worktree is dirty" >&2
     false
 fi
+
+PROVENANCE_FILE="${WORK_DIR}/runtime-provenance.json"
+
+python3 "${PROVENANCE_HELPER}" \
+    --root "${ROOT_DIR}" \
+    --output "${PROVENANCE_FILE}" \
+    --production-checkout-sha "${PRODUCTION_CHECKOUT_SHA}"
 
 POSTGRES_ID="$(docker compose ps -q postgres)"
 
@@ -250,7 +259,7 @@ python3 - \
     "${MANIFEST_FILE}" \
     "${STARTED_AT_UTC}" \
     "${DUMP_COMPLETED_AT_UTC}" \
-    "${SOURCE_SHA}" \
+    "${PROVENANCE_FILE}" \
     "${ALEMBIC_HEAD}" \
     "${POSTGRES_VERSION}" \
     "${DUMP_KEY}" \
@@ -261,13 +270,23 @@ import os
 import sys
 from pathlib import Path
 
+provenance = json.loads(
+    Path(sys.argv[4]).read_text()
+)
+
+if provenance.get("schema_version") != 1:
+    raise RuntimeError(
+        "unsupported runtime provenance schema"
+    )
+
 manifest = {
-    "schema_version": 1,
+    "schema_version": 2,
     "application": "dc-inventory",
     "backup_type": "full",
     "started_at_utc": sys.argv[2],
     "dump_completed_at_utc": sys.argv[3],
-    "source_checkout_sha": sys.argv[4],
+    "production_checkout_sha": provenance["production_checkout_sha"],
+    "runtime": provenance["runtime"],
     "alembic_head": sys.argv[5],
     "postgresql_tools": sys.argv[6],
     "artifact": {
@@ -305,7 +324,7 @@ python3 - \
     "${STATE_DIR}/last-success.json" \
     "${STARTED_AT_UTC}" \
     "${VERIFIED_AT_UTC}" \
-    "${SOURCE_SHA}" \
+    "${PROVENANCE_FILE}" \
     "${ALEMBIC_HEAD}" \
     "${DUMP_KEY}" \
     "${MANIFEST_KEY}" \
@@ -316,11 +335,22 @@ import os
 import sys
 from pathlib import Path
 
+provenance = json.loads(
+    Path(sys.argv[5]).read_text()
+)
+
+if provenance.get("schema_version") != 1:
+    raise RuntimeError(
+        "unsupported runtime provenance schema"
+    )
+
 payload = {
+    "schema_version": 2,
     "state": "success",
     "started_at_utc": sys.argv[3],
     "verified_at_utc": sys.argv[4],
-    "source_checkout_sha": sys.argv[5],
+    "production_checkout_sha": provenance["production_checkout_sha"],
+    "runtime": provenance["runtime"],
     "alembic_head": sys.argv[6],
     "dump_key": sys.argv[7],
     "manifest_key": sys.argv[8],

@@ -111,6 +111,7 @@ Backend использует `pydantic-settings`.
     DATABASE_POOL_TIMEOUT_SECONDS
     DATABASE_STATEMENT_TIMEOUT_SECONDS
     DATABASE_LOCK_TIMEOUT_SECONDS
+    REAL_INVENTORY_MUTATIONS_ENABLED
 
 Telegram authentication и webhook используют backend-only настройки:
 
@@ -226,11 +227,35 @@ Alembic использует тот же async PostgreSQL driver `asyncpg`, чт
 
     a2b3c4d5e6f7
 
-Production migration head до Stage 8B release:
+Production migration head:
 
-    f1a2b3c4d5e6
+    a2b3c4d5e6f7
 
 Следующие предметные схемы добавляются отдельными миграциями.
+
+## Runtime provenance и production safety
+
+Production Git checkout и реально запущенный application image — разные
+operational facts.
+
+Runtime-changing backend/web images получают OCI label:
+
+    org.opencontainers.image.revision=<Git SHA>
+
+Stage15 backup provenance фиксирует отдельно:
+
+- `production_checkout_sha`;
+- backend image ID + source revision;
+- telegram-worker image ID + source revision;
+- maintenance-worker image ID + source revision;
+- web image ID + source revision;
+- Alembic head.
+
+Backend-family workers обязаны использовать тот же immutable image/revision,
+что и backend.
+
+`REAL_INVENTORY_MUTATIONS_ENABLED=false` является fail-closed deployment policy
+поверх обычной `Admin` authorization boundary.
 
 ## Health checks
 

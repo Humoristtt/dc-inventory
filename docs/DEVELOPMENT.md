@@ -36,7 +36,7 @@ Frontend использует Node.js 24:
     npm run typecheck
     npm test
     npm run build
-    npx playwright install chromium
+    npx playwright install chromium webkit
     npm run test:e2e
 
 ## Конфигурация
@@ -82,7 +82,7 @@ Baseline Alembic:
 
     a2b3c4d5e6f7
 
-Production остаётся на `f1a2b3c4d5e6` до Stage 8B release.
+Production migration head принят на `a2b3c4d5e6f7`.
 
 ## Локальный backend
 
@@ -181,6 +181,15 @@ Production VM не используется как development-машина.
 
 Production VM имеет read-only GitHub Deploy Key.
 
+Runtime-changing application images обязаны получать source revision:
+
+    APP_REVISION="$(git rev-parse HEAD)" docker compose build backend web
+
+Dockerfiles сохраняют его в OCI label
+`org.opencontainers.image.revision`.
+
+Production Git checkout не используется как замена runtime image provenance.
+
 ## Telegram authentication в development
 
 Для реального Telegram login backend нужны `TELEGRAM_BOT_TOKEN` и числовой
@@ -258,10 +267,9 @@ Movement/MovementLine journal. Оба result set должны содержать
 строка означает data-integrity blocker: остановить inventory mutations,
 сохранить backup artifact и расследовать причину; скрипт сам ничего не чинит.
 
-Это не снимает production-data gate. Реальные inventory данные запрещено
-вводить, пока PostgreSQL automated backup не реализован и реальный restore этого
-artifact не прошёл в отдельном окружении. Stage 6 deployment сам по себе не
-разрешает production stock entry.
+Stage15A automated backup и Stage15B real isolated restore уже приняты.
+Это всё ещё не снимает production-data gate: real inventory запрещён до полного
+Stage15C acceptance и отдельного explicit operator action.
 
 ## Checkpoint и source audit
 

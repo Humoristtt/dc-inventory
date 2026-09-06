@@ -18,7 +18,7 @@ complete Stage 15C acceptance and a separate explicit operational decision.
 ## Remediation queue
 
 - [x] AUD-00 — scheduled backup from current main verified.
-- [ ] AUD-01 — server-side real-inventory mutation gate.
+- [x] AUD-01 — server-side real-inventory mutation gate.
 - [ ] AUD-02 — backup manifest runtime provenance v2.
 - [ ] AUD-03 — S3 lifecycle prefix validation.
 - [ ] AUD-04 — durable immutable application rollback artifact.
@@ -58,3 +58,34 @@ Accepted scheduled production backup:
     temp_cleanup=PASS
     backup_lock=FREE
     production_health=PASS
+
+## AUD-01 evidence
+
+Production acceptance 2026-09-06:
+
+    PR=32
+    MERGE_SHA=cdfd1b7f9b3c5a6fb225ed52f92dcaed86313872
+    RUNTIME_GATE_HTTP_423=PASS
+    MUTATION_ROUTE_REGISTRATION=PASS
+    ALEMBIC_HEAD=a2b3c4d5e6f7
+    items=0
+    inventory_units=0
+    stock_balances=0
+    movements=0
+    movement_lines=0
+    PRODUCTION_HEALTH=PASS
+    AUD_01=PASS
+    REAL_INVENTORY_MUTATIONS_ENABLED=false
+    REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
+
+## Batch A
+
+Grouped source remediation:
+
+    AUD-02
+    AUD-03
+    AUD-06
+    AUD-08..AUD-13
+
+Individual items are closed only after their required CI and operational
+acceptance/rehearsal evidence.

@@ -10,6 +10,9 @@ import boto3
 from botocore.config import Config
 
 
+from lifecycle_policy import require_rule_applies_to_prefix
+
+
 REQUIRED_ENV = {
     "S3_ENDPOINT",
     "S3_REGION",
@@ -111,6 +114,12 @@ def validate_storage(client, env: dict[str, str]) -> None:
             "30-day current-version lifecycle rule is missing"
         )
 
+    require_rule_applies_to_prefix(
+        current,
+        expected_prefix=prefix,
+        rule_id="postgres-current-expire-30d",
+    )
+
     if current.get("Status") != "Enabled":
         raise RuntimeError(
             "30-day current-version lifecycle rule is disabled"
@@ -129,6 +138,12 @@ def validate_storage(client, env: dict[str, str]) -> None:
         raise RuntimeError(
             "Noncurrent-version lifecycle rule is missing"
         )
+
+    require_rule_applies_to_prefix(
+        noncurrent,
+        expected_prefix=prefix,
+        rule_id="postgres-noncurrent-expire-1d",
+    )
 
     if noncurrent.get("Status") != "Enabled":
         raise RuntimeError(
@@ -154,6 +169,12 @@ def validate_storage(client, env: dict[str, str]) -> None:
             "Expired delete-marker lifecycle rule is missing"
         )
 
+    require_rule_applies_to_prefix(
+        markers,
+        expected_prefix=prefix,
+        rule_id="postgres-expired-delete-markers",
+    )
+
     if markers.get("Status") != "Enabled":
         raise RuntimeError(
             "Expired delete-marker lifecycle rule is disabled"
@@ -172,6 +193,7 @@ def validate_storage(client, env: dict[str, str]) -> None:
     print("S3_HEAD_BUCKET=PASS")
     print("S3_LIST_PREFIX=PASS")
     print("S3_OBJECT_LOCK=GOVERNANCE_7D_PASS")
+    print("S3_LIFECYCLE_PREFIX=PASS")
     print("S3_RETENTION_30D=PASS")
 
 

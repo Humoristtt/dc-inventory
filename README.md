@@ -14,18 +14,25 @@
 - Категории оборудования расширяемы без переделки всей системы.
 - Доступ пользователей осуществляется через Telegram.
 - Базовые роли: `ADMIN` и `USER`.
-- Уведомления о складской выдаче запланированы отдельно и ещё не реализованы.
+- Transactional Telegram notification infrastructure реализована; конкретные product notifications развиваются по roadmap.
 - Production разворачивается только из зафиксированного Git commit.
 - Production VM имеет только read-only доступ к GitHub-репозиторию.
 
 ## Текущее состояние
 
-В production развёрнуты и приняты Stages 4–8B, branded Telegram
-`/start` entry flow и post-8B UX foundations: responsive desktop/mobile shell,
-windowed Telegram mode, optional fullscreen toggle, catalog viewport fixes и
-финальный live Telegram smoke. Production runtime code baseline —
-`9a9ec6a705473d8bd3521b01e6f602284ed9c375`; текущий migration head —
-`a2b3c4d5e6f7`.
+В production приняты Stages 4–8B, branded Telegram `/start` flow и
+post-8B UX foundations. Stage15A automated off-VM PostgreSQL backup и Stage15B
+real isolated restore — `PASS`; Stage15C final pre-data hardening активен.
+
+AUD-01 fail-closed server-side real-inventory mutation gate принят в
+production. Runtime остаётся заблокирован:
+
+    REAL_INVENTORY_MUTATIONS_ENABLED=false
+    REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
+
+Текущий migration head — `a2b3c4d5e6f7`. Production Git checkout и реально
+запущенные application images рассматриваются как разные operational facts;
+Stage15 backup provenance фиксирует их отдельно.
 
 Production runtime включает:
 
@@ -112,8 +119,8 @@ create/edit/archive/unarchive, inline Manufacturer и duplicate-check UX,
 stock/custody detail, рабочий экран «Моё оборудование», bounded facets,
 privacy/auth/runtime hardening и production-Nginx Playwright acceptance
 прошли local gate, PR #22 required CI и production smoke. Chromium и WebKit
-покрывают mobile/browser acceptance. Production runtime code baseline —
-`9a9ec6a705473d8bd3521b01e6f602284ed9c375`, migration head — `a2b3c4d5e6f7`.
+покрывают mobile/browser acceptance. Production migration head — `a2b3c4d5e6f7`; exact runtime source
+проверяется по image provenance, а не выводится только из Git checkout.
 
 Item остаётся каталожной позицией; физические serial units и balances существуют
 только в warehouse domain. Старые локальные workbook остаются только reference
@@ -122,9 +129,10 @@ examples для catalog design. Для будущего SFP-ввода един�
 импортированы и не входят в migrations. Stage 8B не добавляет warehouse mutation
 UI.
 
-Ввод реальных inventory данных в production заблокирован до автоматизированного
-PostgreSQL backup и успешного real restore test в отдельное окружение. После
-этого перед вводом stock должен пройти read-only projection reconciliation из
+Stage15A/B уже доказали automated off-VM backup и real isolated restore,
+но ввод real inventory остаётся заблокирован до полного Stage15C acceptance и
+отдельного explicit operator action. Перед первым вводом снова выполняется
+read-only projection reconciliation из
 `backend/scripts/reconcile_inventory_projections.sql`.
 
 ## Номенклатура
@@ -201,4 +209,6 @@ Production VM:
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
 - [`docs/OPERATIONS.md`](docs/OPERATIONS.md)
 - [`docs/STAGE15_PLAN.md`](docs/STAGE15_PLAN.md)
+- [`docs/STAGE15_AUDIT_REMEDIATION.md`](docs/STAGE15_AUDIT_REMEDIATION.md)
+- [`docs/RECOVERY_RUNBOOK.md`](docs/RECOVERY_RUNBOOK.md)
 - [`docs/ROADMAP.md`](docs/ROADMAP.md)

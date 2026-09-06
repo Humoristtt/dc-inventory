@@ -9,6 +9,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.core.config import Settings, get_settings
+from app.core.worker_health import heartbeat_forever
 from app.db.engine import create_engine
 from app.modules.notifications.gateway import TelegramGatewayClient
 from app.modules.notifications.service import (
@@ -349,21 +350,47 @@ async def run_worker_once(
     return processed
 
 
+async def _run_worker_loop(
+    engine: AsyncEngine,
+    client: TelegramGatewayClient,
+    settings: Settings,
+) -> None:
+    while True:
+        try:
+            processed = await run_worker_once(
+                engine,
+                client,
+                settings,
+            )
+        except Exception:
+            logger.exception("Notification worker iteration failed")
+            processed = 0
+
+        if processed == 0:
+            await asyncio.sleep(
+                settings.notification_worker_poll_seconds
+            )
+
+
 async def run_worker() -> None:
     settings = get_settings()
     client = configured_gateway_client(settings)
     engine = create_engine(settings)
 
     try:
-        while True:
-            try:
-                processed = await run_worker_once(engine, client, settings)
-            except Exception:
-                logger.exception("Notification worker iteration failed")
-                processed = 0
-
-            if processed == 0:
-                await asyncio.sleep(settings.notification_worker_poll_seconds)
+        async with asyncio.TaskGroup() as tasks:
+            tasks.create_task(
+                heartbeat_forever(),
+                name="notification-worker-heartbeat",
+            )
+            tasks.create_task(
+                _run_worker_loop(
+                    engine,
+                    client,
+                    settings,
+                ),
+                name="notification-worker-loop",
+            )
     finally:
         await engine.dispose()
 

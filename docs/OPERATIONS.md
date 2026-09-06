@@ -337,7 +337,7 @@ Data-integrity blocker. Inventory mutations останавливаются.
 2. required CI;
 3. запрет непроверенного direct push;
 4. clean/current `main`;
-5. repository private — самым последним действием.
+5. repository visibility — отдельное explicit решение перед снятием real-inventory gate и перед любой операцией с реальными данными.
 
 ## Перед первым real inventory entry
 
@@ -356,8 +356,8 @@ Data-integrity blocker. Inventory mutations останавливаются.
 - [x] AUD-03 exact S3 lifecycle-prefix validation;
 - [x] AUD-06 command-level recovery runbook;
 - [x] AUD-08..13 canonical docs + freshness CI;
-- [ ] AUD-04 durable immutable application rollback artifact;
-- [ ] AUD-05 controlled backup failure drill;
+- [x] AUD-04 durable immutable application rollback artifact;
+- [x] AUD-05 controlled backup failure drill;
 - [x] AUD-07 stale inventory-source assumptions retired;
 - [ ] remaining host/security hardening;
 - [ ] final full source + production re-audit;
@@ -368,3 +368,64 @@ Data-integrity blocker. Inventory mutations останавливаются.
 
     REAL_INVENTORY_MUTATIONS_ENABLED=false
     REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
+
+
+## Stage15C host security baseline — AUD-17
+
+Read-only production audit recorded the following state:
+
+    HOST_OS=Ubuntu_24.04.4_LTS
+    HOST_KERNEL=6.8.0-139-generic
+    SSH_PORT=22
+    SSH_ROOT_LOGIN=DISABLED
+    SSH_PASSWORD_AUTH=DISABLED
+    SSH_KBD_INTERACTIVE_AUTH=DISABLED
+    SSH_PUBKEY_AUTH=ENABLED
+    SSH_X11_FORWARDING=ENABLED_RECORDED_FINDING
+    SSH_TCP_FORWARDING=ENABLED_RECORDED_FINDING
+    UFW_STATUS=INACTIVE_RECORDED_FINDING
+    APP_HOST_BIND=127.0.0.1:8080
+    POSTGRES_HOST_PORT=NONE
+    AUD17_HOST_AUDIT=READ_ONLY_RECORDED
+
+На всех интерфейсах из постоянных TCP listeners доступен SSH `22/tcp`.
+Web runtime опубликован только на loopback `127.0.0.1:8080`.
+PostgreSQL host port не публикуется.
+
+`cloudflared` использует outbound tunnel sockets и loopback listener
+`127.0.0.1:20241`; это не application host publication.
+
+UFW во время read-only audit выключен. Это записанный finding, а не утверждение
+о включённом host firewall. `X11Forwarding=yes` и `AllowTcpForwarding=yes`
+также не менялись в рамках read-only проверки.
+
+На момент audit доступны обновления Docker/containerd, включая Docker
+`29.8.0` при production `29.7.2`. Обновление daemon не выполняется
+автоматически внутри Stage15 audit. Необходимость обновления оценивается
+вместе с vulnerability scan и final production acceptance.
+
+Перед `AUD-23` обязательна повторная проверка listeners, SSH effective config,
+host firewall/perimeter decision и отсутствия новых host-published application
+ports.
+
+## Repository visibility boundary — AUD-19
+
+Текущее состояние:
+
+    REPOSITORY_VISIBILITY_CURRENT=public
+
+Принятое правило до любых реальных складских данных:
+
+    REPOSITORY_VISIBILITY_BEFORE_REAL_INVENTORY=REASSESS_REQUIRED
+    AUD19_DECISION=REASSESS_BEFORE_REAL_INVENTORY
+
+Пока repository public, в Git нельзя помещать реальные inventory datasets,
+exports, database dumps, backup artifacts, credentials, tokens или production
+environment files.
+
+До снятия `REAL_INVENTORY_MUTATIONS_ENABLED=false` и до любой отдельной
+real-data operator action repository visibility должна быть явно пересмотрена.
+Решение public/private принимается отдельно с повторной проверкой Git
+history/current tree на secrets и операционные artifacts. Независимо от
+visibility реальные inventory datasets, dumps, credentials и production
+environment files в Git не помещаются.

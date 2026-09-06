@@ -21,8 +21,8 @@ complete Stage 15C acceptance and a separate explicit operational decision.
 - [x] AUD-01 — server-side real-inventory mutation gate.
 - [x] AUD-02 — backup manifest runtime provenance v2.
 - [x] AUD-03 — S3 lifecycle prefix validation.
-- [ ] AUD-04 — durable immutable application rollback artifact.
-- [ ] AUD-05 — controlled production backup failure drill.
+- [x] AUD-04 — durable immutable application rollback artifact.
+- [x] AUD-05 — controlled production backup failure drill.
 - [x] AUD-06 — command-level disaster-recovery runbook.
 - [x] AUD-07 — stale inventory-source assumptions retired; no real-data source defined.
 - [x] AUD-08 — PRODUCT_REQUIREMENTS current-state reconciliation.
@@ -96,3 +96,33 @@ Accepted after required CI and production evidence:
     AUD_06=PASS
     AUD_08_13=PASS
     BATCH_A=PASS
+
+
+## Batch B
+
+Accepted production evidence:
+
+    AUD_04=PASS
+    ROLLBACK_OBJECT_LOCK=PASS
+    ROLLBACK_BUNDLE_SHA256=731b20644c41351e302f58b9bbeea0279f73823bd80f5ef48bc299f1df0fc94a
+    AUD_05=PASS
+    AUD05_FAILURE_DRILL=PASS
+    AUD05_RECOVERY_AFTER_FAILURE=PASS
+    LAST_SUCCESS_DUMP=postgres/full/2026/09/06/dc-inventory-20260906T215601Z.dump
+    LAST_SUCCESS_SHA256=62c3e71d3921968865dae3e4bb10e82c09228b22ecfa80fa5befdd61b4ce01a3
+    AUD_07=PASS
+    BATCH_B=PASS
+
+## Batch C security decisions
+
+Host audit is read-only. Recorded baseline does not claim that UFW is
+enabled and does not silently change SSH/network policy.
+
+    AUD17_HOST_AUDIT=READ_ONLY_RECORDED
+    UFW_STATUS=INACTIVE_RECORDED_FINDING
+    REPOSITORY_VISIBILITY_CURRENT=public
+    REPOSITORY_VISIBILITY_BEFORE_REAL_INVENTORY=REASSESS_REQUIRED
+    AUD19_DECISION=REASSESS_BEFORE_REAL_INVENTORY
+
+Real inventory remains blocked while Batch C and final Stage15 acceptance
+are incomplete.

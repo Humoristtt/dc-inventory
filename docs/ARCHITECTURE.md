@@ -642,6 +642,20 @@ command в PostgreSQL, а отдельный worker выполняет сете�
 (`claimed_at` + `claim_token`) и at-least-once semantics. Incoming webhook
 защищён Telegram secret token и persistent `telegram_updates.update_id` dedupe.
 
+Граница гарантии исходящей доставки фиксируется явно:
+
+    TELEGRAM_DELIVERY_GUARANTEE=AT_LEAST_ONCE_NOT_EXACTLY_ONCE
+
+`dedupe_key` предотвращает повторное создание одной и той же outbox-команды,
+но не может обеспечить exactly-once во внешнем Telegram Bot API. Duplicate
+delivery window существует, если Telegram уже принял запрос, а worker не успел
+зафиксировать `SENT` в PostgreSQL, потерял соединение или lease истёк до
+финализации. После reclaim такая команда может быть отправлена повторно.
+
+Поэтому Telegram notification не является уникальным ledger event.
+Server-side warehouse transaction/journal остаётся authoritative state, а
+получатель и UX должны допускать повтор одного и того же уведомления.
+
 Inline callback содержит только opaque token. Request/user/action разрешаются
 сервером, а решение может выполнять только Telegram identity с
 `ADMIN + APPROVED`. AccessRequest и User блокируются `FOR UPDATE`.

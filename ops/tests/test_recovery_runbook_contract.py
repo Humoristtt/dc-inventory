@@ -30,6 +30,7 @@ for required in (
     "reconcile_inventory_projections.sql",
     "RESTORE_APP_COMPATIBILITY=PASS",
     "REAL_INVENTORY_MUTATIONS_ENABLED=false",
+    "REAL_INVENTORY_ENTRY=BLOCKED_PENDING_NEXT_ROADMAP",
     "cleanup_runtime() (",
     "docker rm -f",
     "docker volume rm",
@@ -43,6 +44,7 @@ for forbidden in (
     "docker compose down -v",
     "BypassGovernanceRetention",
     "REAL_INVENTORY_MUTATIONS_ENABLED=true",
+    "REAL_INVENTORY_ENTRY=BLOCKED_STAGE15",
     "backup manifest does not match current production checkout",
 ):
     assert forbidden not in source, forbidden

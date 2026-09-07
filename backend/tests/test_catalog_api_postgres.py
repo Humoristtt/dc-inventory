@@ -18,14 +18,20 @@ async def test_catalog_api_read_admin_and_gate_boundaries(warehouse_db):
         payload = cable_payload().model_dump(mode="json")
         path = "/api/admin/catalog/items"
         assert (await client.post(path, headers=users["user"][1], json=payload)).status_code == 403
-        assert (await client.post(path, headers={**users["admin"][1], "Origin": "https://evil.example"}, json=payload)).status_code == 403
+        assert (
+            await client.post(
+                path, headers={**users["admin"][1], "Origin": "https://evil.example"}, json=payload
+            )
+        ).status_code == 403
         response = await client.post(path, headers=users["admin"][1], json=payload)
         assert response.status_code == 201, response.text
         item_id = response.json()["id"]
         assert response.json()["category"]["key"] == "optical_patch_cord"
         duplicate = await client.post(path, headers=users["admin"][1], json=payload)
         assert duplicate.status_code == 409
-        patch = await client.patch(f"{path}/{item_id}", headers=users["admin"][1], json={"name": "Updated"})
+        patch = await client.patch(
+            f"{path}/{item_id}", headers=users["admin"][1], json={"name": "Updated"}
+        )
         assert patch.status_code == 200 and patch.json()["name"] == "Updated"
         for action, expected in [("archive", "ARCHIVED"), ("unarchive", "ACTIVE")]:
             response = await client.post(f"{path}/{item_id}/{action}", headers=users["admin"][1])

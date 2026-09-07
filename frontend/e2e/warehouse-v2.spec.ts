@@ -1,15 +1,14 @@
 import { expect, type Page, type Route, test } from "@playwright/test";
-import type { CatalogItem, CategoryDetail, CategorySummary } from "../src/shared/api/catalog";
 
 const userId = "00000000-0000-4000-8000-000000000111";
 const now = "2026-09-07T12:00:00Z";
-const family: CategorySummary = {id:"family",key:"transceivers",display_name:"Трансиверы",description:"Оптические трансиверы",parent_id:null,sort_order:0,is_system:true};
-const category: CategorySummary = {id:"leaf",key:"transceiver_ethernet",display_name:"Ethernet",description:null,parent_id:family.id,sort_order:0,is_system:true};
+const family = {id:"family",key:"transceivers",display_name:"Трансиверы",description:"Оптические трансиверы",parent_id:null,sort_order:0,is_system:true};
+const category = {id:"leaf",key:"transceiver_ethernet",display_name:"Ethernet",description:null,parent_id:family.id,sort_order:0,is_system:true};
 const attributes = {speed:"10 Гбит/с",wavelength:"1310 нм",reach:"до 10 км",form_factor:"SFP+",fiber:"SMF",connector:"LC"};
 const labels: Record<string,string> = {speed:"Скорость",wavelength:"Длина волны",reach:"Дальность",form_factor:"Форм-фактор",fiber:"Волокно / среда",connector:"Разъём"};
-const categoryDetail: CategoryDetail = {...category,attributes:Object.keys(attributes).map((key,index)=>({id:key,key,label:labels[key],data_type:"TEXT",unit:null,required:true,filterable:true,searchable:true,card_visible:true,detail_visible:true,table_visible:true,excel_visible:true,sort_order:index,filter_type:"EXACT",allowed_values:null,validation_metadata:{max_length:2000},is_system:true}))};
+const categoryDetail = {...category,attributes:Object.keys(attributes).map((key,index)=>({id:key,key,label:labels[key],data_type:"TEXT",unit:null,required:true,filterable:true,searchable:true,card_visible:true,detail_visible:true,table_visible:true,excel_visible:true,sort_order:index,filter_type:"EXACT",allowed_values:null,validation_metadata:{max_length:2000},is_system:true}))};
 const location = {id:"location-1",code:"A-01",name:"Тестовый склад",location_type:"WAREHOUSE",address:null,status:"ACTIVE",archived_at:null,created_at:now,updated_at:now};
-function fixtureItem(): CatalogItem {return {id:"item-1",category:{id:category.id,key:category.key,display_name:category.display_name},manufacturer:{id:"maker",name:"Synthetic"},name:"Тестовый трансивер",model:"TEST-10G",status:"ACTIVE",archived_at:null,created_at:now,updated_at:now,attributes:{...attributes,reach_m:10000}};}
+function fixtureItem() {return {id:"item-1",category:{id:category.id,key:category.key,display_name:category.display_name},manufacturer:{id:"maker",name:"Synthetic"},name:"Тестовый трансивер",model:"TEST-10G",status:"ACTIVE",archived_at:null,created_at:now,updated_at:now,attributes:{...attributes,reach_m:10000}};}
 function json(route:Route, body:unknown, status=200) {return route.fulfill({json:body,status});}
 async function installTelegramMock(
   page: Page,
@@ -149,7 +148,7 @@ async function installApiMock(page:Page, role:"USER"|"ADMIN", failures=0) {
       const maker={id:"new-maker",name:String(request.postDataJSON().name),created_at:now,updated_at:now};makers.push(maker);return json(route,maker,201);
     }
     if(path === "/api/admin/catalog/items" || request.method() === "PATCH") {
-      const payload=request.postDataJSON() as Partial<CatalogItem>;mutations.push(payload);
+      const payload=request.postDataJSON() as Record<string, unknown>;mutations.push(payload);
       item={...item,...payload,manufacturer:makers.at(-1)!,category:item.category};return json(route,item,path.endsWith("items") ? 201 : 200);
     }
     if(path.endsWith("/archive") || path.endsWith("/unarchive")) {item={...item,status:path.endsWith("/unarchive")?"ACTIVE":"ARCHIVED"};return json(route,item);}
@@ -163,17 +162,23 @@ test("USER browses hierarchy, retains server filters, and uses Telegram back", a
   await page.goto("/catalog/new?category=transceiver_ethernet");
   await expect(page).toHaveURL(/\/catalog$/);
   await page.getByRole("link",{name:/Трансиверы/}).click();
+  await page.getByRole("link",{name:"Ethernet",exact:true}).click();
   await page.getByRole("button",{name:"Фильтры"}).click();
   await page.getByLabel("В наличии",{exact:true}).check();
   await page.getByRole("button",{name:"Применить"}).click();
   await expect(page).toHaveURL(/availability=IN_STOCK/);
-  expect(api.requests.some(url=>url.includes("category=transceivers") && url.includes("availability=IN_STOCK"))).toBe(true);
+  await expect.poll(
+    () => api.requests.some(
+      url => url.includes("category=transceiver_ethernet")
+        && url.includes("availability=IN_STOCK"),
+    ),
+  ).toBe(true);
   await page.getByRole("heading",{name:/TEST-10G/}).click();
   await expect(page.getByText("В наличии: 10")).toBeVisible();
   await expect(page.getByText(location.name,{exact:true})).toBeVisible();
   await expect(page.getByRole("button",{name:"Переместить"})).toHaveCount(0);
   await page.evaluate(()=>{(window as unknown as {__stage8Telegram:{callback:(()=>void)|null}}).__stage8Telegram.callback?.();});
-  await expect(page).toHaveURL(/\/catalog\/transceivers\?.*availability=IN_STOCK/);
+  await expect(page).toHaveURL(/\/catalog\/transceiver_ethernet\?.*availability=IN_STOCK/);
   await assertNoHorizontalOverflow(page);await assertBottomNavigationClearance(page);
 });
 
@@ -190,7 +195,7 @@ test("USER issues and returns quantities, then reads movement history",async({pa
   await expect(page.getByText("В наличии: 22")).toBeVisible();
   expect(api.mutations[0]).toMatchObject({movement_type:"ISSUE",source_location_id:location.id,lines:[{item_id:"item-1",quantity:4}]});
   expect(api.mutations[1]).toMatchObject({movement_type:"RETURN",destination_location_id:location.id,lines:[{item_id:"item-1",quantity:16}]});
-  await page.getByRole("link",{name:/Движения/}).click();
+  await page.locator('.bottom-nav__item[href="/movements"]').click();
   await expect(page.getByLabel("Период")).toHaveValue("3m");
   await expect(page.locator(".movement-entry")).toHaveCount(2);
   await page.getByLabel("Период").selectOption("30d");
@@ -204,10 +209,12 @@ test("USER issues and returns quantities, then reads movement history",async({pa
 test("ADMIN creates metadata-driven equipment, edits and archives",async({page})=>{
   await installTelegramMock(page);const api=await installApiMock(page,"ADMIN");
   await page.goto("/catalog/new");
-  await page.getByLabel("Семейство",{exact:true}).selectOption(family.id);
-  await page.getByLabel("Категория",{exact:true}).selectOption(category.key);
+  await page.getByRole("combobox",{name:"Семейство"}).selectOption("family");
+  await page.getByRole("combobox",{name:"Категория"}).selectOption("transceiver_ethernet");
   await page.getByLabel("Название оборудования",{exact:true}).fill("Synthetic new item");
-  await page.getByLabel("Производитель",{exact:true}).selectOption("maker");
+  const manufacturerSelect = page.getByRole("combobox",{name:"Производитель"});
+  await expect(manufacturerSelect.locator('option[value="maker"]')).toHaveCount(1);
+  await manufacturerSelect.selectOption("maker");
   await page.getByLabel("Модель",{exact:true}).fill("NEW-10G");
   for(const [key,value] of Object.entries(attributes)) await page.getByLabel(new RegExp("^"+labels[key])).fill(value);
   await page.getByRole("button",{name:"Сохранить",exact:true}).click();
@@ -376,6 +383,11 @@ test(
       { name: /Трансиверы/ },
     ).click();
 
+    await page.getByRole(
+      "link",
+      { name: "Ethernet", exact: true },
+    ).click();
+
     await expect.poll(
       () => page.evaluate(() => window.scrollY),
     ).toBe(0);
@@ -416,7 +428,7 @@ test(
       ),
     ).toHaveCount(0);
 
-    await expect(page).toHaveURL(/\/catalog\/transceivers/);
+    await expect(page).toHaveURL(/\/catalog\/transceiver_ethernet/);
 
     await expect(
       page.getByRole(

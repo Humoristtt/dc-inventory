@@ -16,10 +16,7 @@ class _StopLoop(Exception):
 def test_safe_delivery_error_keeps_safe_gateway_reason() -> None:
     error = TelegramGatewayError("gateway returned HTTP 503")
 
-    assert (
-        worker._safe_delivery_error(error)
-        == "TelegramGatewayError: gateway returned HTTP 503"
-    )
+    assert worker._safe_delivery_error(error) == "TelegramGatewayError: gateway returned HTTP 503"
 
 
 def test_safe_delivery_error_hides_generic_exception_message() -> None:

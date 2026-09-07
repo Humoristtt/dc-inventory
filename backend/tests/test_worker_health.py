@@ -19,10 +19,13 @@ def test_worker_heartbeat_freshness(
 
     assert heartbeat.stat().st_mtime == 1000.0
 
-    assert heartbeat_age_seconds(
-        heartbeat,
-        now=1005.0,
-    ) == 5
+    assert (
+        heartbeat_age_seconds(
+            heartbeat,
+            now=1005.0,
+        )
+        == 5
+    )
 
     assert heartbeat_is_fresh(
         heartbeat,

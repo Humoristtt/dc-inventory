@@ -11,10 +11,7 @@ from app.modules.notifications import worker
 from app.modules.notifications.gateway import TelegramGatewayClient
 from app.modules.notifications.service import ClaimedNotification
 
-DATABASE_URL = (
-    "postgresql+asyncpg://dc_inventory:test@postgres:5432/"
-    "dc_inventory"
-)
+DATABASE_URL = "postgresql+asyncpg://dc_inventory:test@postgres:5432/dc_inventory"
 
 
 class FakeBegin:
@@ -58,9 +55,7 @@ class FakeGatewayClient:
         method: str,
         payload: dict[str, object],
     ) -> object:
-        self.events.append(
-            f"send:{payload['sequence']}"
-        )
+        self.events.append(f"send:{payload['sequence']}")
         return None
 
 
@@ -115,9 +110,7 @@ async def test_worker_claims_each_notification_just_before_delivery(
 
         if claims:
             claim = claims.pop(0)
-            events.append(
-                f"claim:{claim.payload['sequence']}"
-            )
+            events.append(f"claim:{claim.payload['sequence']}")
             return [claim]
 
         events.append("claim:empty")
@@ -127,9 +120,7 @@ async def test_worker_claims_each_notification_just_before_delivery(
         engine: object,
         claim: ClaimedNotification,
     ) -> None:
-        events.append(
-            f"finalize:{claim.payload['sequence']}"
-        )
+        events.append(f"finalize:{claim.payload['sequence']}")
 
     monkeypatch.setattr(
         worker,
@@ -173,7 +164,6 @@ async def test_worker_claims_each_notification_just_before_delivery(
     ]
 
 
-
 def test_start_welcome_context_is_strict() -> None:
     valid = ClaimedNotification(
         id=uuid.uuid4(),
@@ -211,6 +201,7 @@ def test_telegram_message_id_rejects_invalid_shapes() -> None:
     assert worker._telegram_message_id({"message_id": 0}) is None
     assert worker._telegram_message_id({}) is None
     assert worker._telegram_message_id(None) is None
+
 
 @pytest.mark.asyncio
 async def test_current_start_welcome_finalizes_state_without_followup_reaction(

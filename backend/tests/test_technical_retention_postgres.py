@@ -28,16 +28,11 @@ from app.modules.telegram_bot.models import (
 )
 
 DATABASE_URL = os.environ["DATABASE_URL"]
-POSTGRES_INTEGRATION_ENABLED = (
-    os.getenv("RUN_POSTGRES_INTEGRATION") == "1"
-)
+POSTGRES_INTEGRATION_ENABLED = os.getenv("RUN_POSTGRES_INTEGRATION") == "1"
 
 pytestmark = pytest.mark.skipif(
     not POSTGRES_INTEGRATION_ENABLED,
-    reason=(
-        "set RUN_POSTGRES_INTEGRATION=1 against a migrated "
-        "PostgreSQL test DB"
-    ),
+    reason=("set RUN_POSTGRES_INTEGRATION=1 against a migrated PostgreSQL test DB"),
 )
 
 
@@ -289,27 +284,12 @@ async def test_retention_deletes_only_old_terminal_technical_rows() -> None:
             assert counts.access_decision_callbacks >= 1
 
         async with AsyncSession(engine) as db:
-            assert (
-                await db.get(AuthSession, old_session_id)
-                is None
-            )
-            assert (
-                await db.get(AuthSession, revoked_session_id)
-                is None
-            )
-            assert (
-                await db.get(AuthSession, live_session_id)
-                is not None
-            )
+            assert await db.get(AuthSession, old_session_id) is None
+            assert await db.get(AuthSession, revoked_session_id) is None
+            assert await db.get(AuthSession, live_session_id) is not None
 
-            assert (
-                await db.get(TelegramUpdate, old_update_id)
-                is None
-            )
-            assert (
-                await db.get(TelegramUpdate, recent_update_id)
-                is not None
-            )
+            assert await db.get(TelegramUpdate, old_update_id) is None
+            assert await db.get(TelegramUpdate, recent_update_id) is not None
             assert (
                 await db.get(
                     TelegramUpdate,
@@ -318,14 +298,8 @@ async def test_retention_deletes_only_old_terminal_technical_rows() -> None:
                 is not None
             )
 
-            assert (
-                await db.get(NotificationOutbox, old_sent_id)
-                is None
-            )
-            assert (
-                await db.get(NotificationOutbox, old_dead_id)
-                is None
-            )
+            assert await db.get(NotificationOutbox, old_sent_id) is None
+            assert await db.get(NotificationOutbox, old_dead_id) is None
             assert (
                 await db.get(
                     NotificationOutbox,
@@ -333,10 +307,7 @@ async def test_retention_deletes_only_old_terminal_technical_rows() -> None:
                 )
                 is not None
             )
-            assert (
-                await db.get(NotificationOutbox, recent_sent_id)
-                is not None
-            )
+            assert await db.get(NotificationOutbox, recent_sent_id) is not None
 
             assert (
                 await db.get(
@@ -483,9 +454,7 @@ async def test_retention_batch_size_is_a_hard_limit() -> None:
                 (
                     await db.scalars(
                         select(TelegramUpdate.update_id).where(
-                            TelegramUpdate.update_id.in_(
-                                update_ids
-                            )
+                            TelegramUpdate.update_id.in_(update_ids)
                         )
                     )
                 ).all()
@@ -495,11 +464,7 @@ async def test_retention_batch_size_is_a_hard_limit() -> None:
 
     finally:
         async with AsyncSession(engine) as db:
-            await db.execute(
-                delete(TelegramUpdate).where(
-                    TelegramUpdate.update_id.in_(update_ids)
-                )
-            )
+            await db.execute(delete(TelegramUpdate).where(TelegramUpdate.update_id.in_(update_ids)))
             await db.commit()
 
         await engine.dispose()
@@ -524,25 +489,16 @@ async def test_retention_is_singleton_per_database_transaction() -> None:
             lock_db.begin(),
         ):
             acquired = await lock_db.scalar(
-                text(
-                    "SELECT "
-                    "pg_try_advisory_xact_lock(:lock_key)"
-                ),
-                {
-                    "lock_key": (
-                        TECHNICAL_RETENTION_ADVISORY_LOCK_KEY
-                    )
-                },
+                text("SELECT pg_try_advisory_xact_lock(:lock_key)"),
+                {"lock_key": (TECHNICAL_RETENTION_ADVISORY_LOCK_KEY)},
             )
 
             assert acquired is True
 
             async with runner_db.begin():
-                counts = (
-                    await run_technical_retention_once(
-                        runner_db,
-                        settings,
-                    )
+                counts = await run_technical_retention_once(
+                    runner_db,
+                    settings,
                 )
 
             assert counts.total == 0

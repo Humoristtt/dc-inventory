@@ -57,10 +57,7 @@ def test_downgrade_without_profile_values_removes_only_metadata(
     migration.downgrade()
 
     assert execute.call_count == 2
-    statements = [
-        str(call.args[0])
-        for call in execute.call_args_list
-    ]
+    statements = [str(call.args[0]) for call in execute.call_args_list]
     assert all("item_attribute_values" not in statement for statement in statements)
     assert any("DELETE FROM category_attributes" in statement for statement in statements)
     assert any("UPDATE category_attributes" in statement for statement in statements)

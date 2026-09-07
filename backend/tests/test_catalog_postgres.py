@@ -8,7 +8,11 @@ from app.modules.catalog.configuration import FAMILIES, LEAVES
 from app.modules.catalog.models import Category, CategoryAttribute, Item, ItemAttributeValue
 from app.modules.catalog.schemas import ItemCreate, ItemPatch
 from app.modules.catalog.service import (
-    CatalogValidationError, create_item, get_item_record, set_item_archived, update_item,
+    CatalogValidationError,
+    create_item,
+    get_item_record,
+    set_item_archived,
+    update_item,
 )
 from tests.warehouse_helpers import cable_payload
 
@@ -23,8 +27,11 @@ async def test_fixed_hierarchy_and_metadata(warehouse_db):
     for key, (parent, label, attributes) in LEAVES.items():
         assert by_key[key].parent_id == by_key[parent].id
         assert by_key[key].display_name == label
-        definitions = (await db.scalars(select(CategoryAttribute).where(
-            CategoryAttribute.category_id == by_key[key].id))).all()
+        definitions = (
+            await db.scalars(
+                select(CategoryAttribute).where(CategoryAttribute.category_id == by_key[key].id)
+            )
+        ).all()
         assert {a.key for a in definitions} == {a.key for a in attributes}
         for expected in attributes:
             actual = next(a for a in definitions if a.key == expected.key)
@@ -35,13 +42,22 @@ async def test_fixed_hierarchy_and_metadata(warehouse_db):
         await create_item(db, ItemCreate(category_key="optics", name="invalid"))
     with pytest.raises(DBAPIError):
         async with db.begin_nested():
-            db.add(Item(category_id=by_key["optics"].id, name="invalid", normalized_name="invalid",
-                identity_signature=uuid.uuid4().hex * 2))
+            db.add(
+                Item(
+                    category_id=by_key["optics"].id,
+                    name="invalid",
+                    normalized_name="invalid",
+                    identity_signature=uuid.uuid4().hex * 2,
+                )
+            )
             await db.flush()
     with pytest.raises(DBAPIError):
         async with db.begin_nested():
-            await db.execute(update(Category).where(Category.key == "optical_patch_cord")
-                .values(parent_id=by_key["storage"].id))
+            await db.execute(
+                update(Category)
+                .where(Category.key == "optical_patch_cord")
+                .values(parent_id=by_key["storage"].id)
+            )
 
 
 async def test_identity_color_and_edit_archive_semantics(warehouse_db):
@@ -70,17 +86,31 @@ async def test_identity_color_and_edit_archive_semantics(warehouse_db):
 
 async def test_optional_blank_color_omitted_and_typed_db_constraints(warehouse_db):
     db = warehouse_db
-    item_id = await create_item(db, cable_payload(color="  ", length_m=str(uuid.uuid4().int % 100000 + 1)))
+    item_id = await create_item(
+        db, cable_payload(color="  ", length_m=str(uuid.uuid4().int % 100000 + 1))
+    )
     assert "color" not in (await get_item_record(db, item_id)).attributes
-    value = await db.scalar(select(ItemAttributeValue).where(ItemAttributeValue.item_id == item_id,
-        ItemAttributeValue.text_value.is_not(None)))
+    value = await db.scalar(
+        select(ItemAttributeValue).where(
+            ItemAttributeValue.item_id == item_id, ItemAttributeValue.text_value.is_not(None)
+        )
+    )
     with pytest.raises(DBAPIError):
         async with db.begin_nested():
-            await db.execute(update(ItemAttributeValue).where(ItemAttributeValue.id == value.id)
-                .values(integer_value=1))
-    other_attribute = await db.scalar(select(CategoryAttribute).join(Category).where(
-        Category.key == "power_cable", CategoryAttribute.key == "color"))
+            await db.execute(
+                update(ItemAttributeValue)
+                .where(ItemAttributeValue.id == value.id)
+                .values(integer_value=1)
+            )
+    other_attribute = await db.scalar(
+        select(CategoryAttribute)
+        .join(Category)
+        .where(Category.key == "power_cable", CategoryAttribute.key == "color")
+    )
     with pytest.raises(DBAPIError):
         async with db.begin_nested():
-            await db.execute(update(ItemAttributeValue).where(ItemAttributeValue.id == value.id)
-                .values(category_attribute_id=other_attribute.id))
+            await db.execute(
+                update(ItemAttributeValue)
+                .where(ItemAttributeValue.id == value.id)
+                .values(category_attribute_id=other_attribute.id)
+            )

@@ -17,17 +17,26 @@ def test_quantity_requires_positive_exact_json_integer(quantity):
         MovementLineCreate(item_id=uuid.uuid4(), quantity=quantity)
 
 
-@pytest.mark.parametrize("kind,source,destination", [
-    ("RECEIPT", False, True), ("RETURN", False, True),
-    ("ISSUE", True, False), ("WRITE_OFF", True, False), ("TRANSFER", True, True),
-])
+@pytest.mark.parametrize(
+    "kind,source,destination",
+    [
+        ("RECEIPT", False, True),
+        ("RETURN", False, True),
+        ("ISSUE", True, False),
+        ("WRITE_OFF", True, False),
+        ("TRANSFER", True, True),
+    ],
+)
 def test_movement_shapes(kind, source, destination):
     for actual_source in (False, True):
         for actual_destination in (False, True):
-            payload = MovementCreate(movement_type=kind, client_request_id="test",
+            payload = MovementCreate(
+                movement_type=kind,
+                client_request_id="test",
                 source_location_id=uuid.uuid4() if actual_source else None,
                 destination_location_id=uuid.uuid4() if actual_destination else None,
-                lines=[MovementLineCreate(item_id=uuid.uuid4(), quantity=1)])
+                lines=[MovementLineCreate(item_id=uuid.uuid4(), quantity=1)],
+            )
             if (source, destination) == (actual_source, actual_destination):
                 validate_positions(payload)
             else:
@@ -38,9 +47,15 @@ def test_movement_shapes(kind, source, destination):
 def test_transfer_rejects_same_location():
     location = uuid.uuid4()
     with pytest.raises(InventoryValidationError, match="must differ"):
-        validate_positions(MovementCreate(movement_type="TRANSFER", client_request_id="same",
-            source_location_id=location, destination_location_id=location,
-            lines=[MovementLineCreate(item_id=uuid.uuid4(), quantity=1)]))
+        validate_positions(
+            MovementCreate(
+                movement_type="TRANSFER",
+                client_request_id="same",
+                source_location_id=location,
+                destination_location_id=location,
+                lines=[MovementLineCreate(item_id=uuid.uuid4(), quantity=1)],
+            )
+        )
 
 
 class _SqlstateError(Exception):

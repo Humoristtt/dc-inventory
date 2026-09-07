@@ -7,6 +7,7 @@ from fastapi import APIRouter, HTTPException, Query, Request, status
 from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
+from app.core.config import Settings
 from app.core.safety import require_real_inventory_mutations_enabled
 from app.db.errors import (
     POSTGRES_UNIQUE_VIOLATION_SQLSTATE,
@@ -55,9 +56,61 @@ from app.modules.inventory.service import (
     set_location_archived,
     update_location,
 )
+from app.modules.notifications.service import (
+    enqueue_telegram_call,
+    notification_dedupe_key,
+)
 
 read_router = APIRouter(prefix="/api/inventory", tags=["inventory"])
 admin_router = APIRouter(prefix="/api/admin/inventory", tags=["admin-inventory"])
+
+
+async def _enqueue_issue_admin_notification(
+    db: DbSession,
+    *,
+    record: MovementRecord,
+    settings: Settings,
+) -> None:
+    admin_id = settings.admin_telegram_user_id
+    if admin_id is None:
+        return
+
+    movement = record.movement
+    if movement.movement_type != MovementType.ISSUE:
+        return
+
+    lines = []
+    for line in record.lines:
+        title = line.item_name_snapshot
+        if line.manufacturer_name_snapshot:
+            title = f"{line.manufacturer_name_snapshot} {title}"
+        if line.model_snapshot:
+            title = f"{title} ({line.model_snapshot})"
+        lines.append(f"• {title} — {line.quantity} шт.")
+
+    location = (
+        movement.source_location_name_snapshot
+        or movement.source_location_code_snapshot
+        or "не указано"
+    )
+
+    await enqueue_telegram_call(
+        db,
+        method="sendMessage",
+        payload={
+            "chat_id": admin_id,
+            "text": (
+                "📦 Выдача оборудования\n\n"
+                f"Сотрудник: {movement.actor_display_name_snapshot}\n"
+                f"Со склада: {location}\n\n" + "\n".join(lines)
+            ),
+        },
+        dedupe_key=notification_dedupe_key(
+            "inventory-issue",
+            movement.id,
+            "admin",
+        ),
+    )
 
 
 def _raise_inventory_error(error: InventoryError) -> NoReturn:
@@ -401,6 +454,11 @@ async def post_movement(
             payload,
             actor_user_id=approved.user.id,
             actor_display_name=display_identity(approved.identity),
+        )
+        await _enqueue_issue_admin_notification(
+            db,
+            record=result.record,
+            settings=request.app.state.settings,
         )
         await db.commit()
     except InventoryError as error:

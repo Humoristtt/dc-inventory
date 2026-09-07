@@ -65,9 +65,9 @@ Production runtime включает:
 - GitHub Actions CI;
 - Cloudflare Tunnel для публикации Mini App.
 - metadata-driven catalog API, global/category search и facets;
-- глобальный поиск по model/PN/internal code/manufacturer, serial и WWN;
-- warehouse journal, quantity balances, serial custody и projection
-  reconciliation.
+- глобальный поиск и scoped catalog facets;
+- immutable warehouse journal, quantity balances по StorageLocation и
+  projection reconciliation.
 
 Production runtime публикует на host только `127.0.0.1:8080`; backend и PostgreSQL доступны только внутри Docker-сетей.
 
@@ -87,16 +87,16 @@ Stage 5 Catalog Foundation и Stage 6 Warehouse Core развёрнуты в pro
 
 - Category, Manufacturer и Item;
 - metadata-driven CategoryAttribute и typed ItemAttributeValue;
-- role-aware read API: Approved catalog/current inventory, USER custody
-  redaction и Admin-only movement journal; Admin mutation API;
+- role-aware API: Approved catalog/current inventory, USER own actor-history
+  и ISSUE/RETURN; ADMIN получает общий journal и administrative mutations;
 - пять initial versioned schemas: SFP, оптика, кабели питания, NIC и диски;
 - source-backed refinement: медные сетевые кабели, conductor attributes для
   кабелей питания и уточнённые SFP vocabularies.
 - first-class Location с non-destructive lifecycle;
 - append-only Movement/MovementLine journal: receipt, issue, return, transfer,
   write-off, correction и reversal;
-- integer StockBalance projection по Location/holder для QUANTITY;
-- physical InventoryUnit state/custody для SERIAL;
+- integer StockBalance projection только по Item × StorageLocation;
+- персональная custody/physical-unit projection в Warehouse V2 отсутствует;
 - PostgreSQL row/advisory locking, request idempotency и concurrency regression
   tests;
 - production-role database permission regressions для Telegram ingress,
@@ -105,8 +105,8 @@ Stage 5 Catalog Foundation и Stage 6 Warehouse Core развёрнуты в pro
   frontend failure state.
 
 Stage 7 также завершён и развёрнут: реализованы и протестированы deterministic
-sorting/pagination, global/category search, включая serial/WWN, availability,
-location и metadata-driven filters/facets.
+sorting/pagination, global/category search, availability, location и
+metadata-driven filters/facets.
 
 Stage 8A Working Mini App Catalog UX завершён и принят в production:
 application shell, API-driven categories, debounced global/category search,
@@ -116,8 +116,8 @@ Item detail, URL-preserving navigation, Telegram BackButton/safe-area integratio
 
 Stage 8B завершён и принят в production: metadata-driven Admin
 create/edit/archive/unarchive, inline Manufacturer и duplicate-check UX,
-stock/custody detail, рабочий экран «Моё оборудование», bounded facets,
-privacy/auth/runtime hardening и production-Nginx Playwright acceptance
+stock-by-location detail, bounded facets, privacy/auth/runtime hardening и
+production-Nginx Playwright acceptance
 прошли local gate, PR #22 required CI и production smoke. Chromium и WebKit
 покрывают mobile/browser acceptance. Production migration head — `a2b3c4d5e6f7`; exact runtime source
 проверяется по image provenance, а не выводится только из Git checkout.

@@ -40,9 +40,7 @@ def _signed_init_data(
     if extra:
         fields.update(extra)
 
-    data_check_string = "\n".join(
-        f"{key}={value}" for key, value in sorted(fields.items())
-    )
+    data_check_string = "\n".join(f"{key}={value}" for key, value in sorted(fields.items()))
     secret_key = hmac.new(
         b"WebAppData",
         BOT_TOKEN.encode(),
@@ -142,9 +140,7 @@ def test_missing_user_is_rejected_after_signature_validation() -> None:
         "auth_date": str(int(NOW.timestamp())),
         "query_id": "query",
     }
-    data_check_string = "\n".join(
-        f"{key}={value}" for key, value in sorted(fields.items())
-    )
+    data_check_string = "\n".join(f"{key}={value}" for key, value in sorted(fields.items()))
     secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
     fields["hash"] = hmac.new(
         secret_key,

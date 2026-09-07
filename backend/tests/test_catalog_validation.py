@@ -361,5 +361,3 @@ def test_normalize_comparison_checks_casefolded_storage_length() -> None:
         )
 
     assert exc_info.value.code == "model_too_long"
-
-

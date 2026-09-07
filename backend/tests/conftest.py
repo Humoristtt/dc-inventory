@@ -18,8 +18,9 @@ async def warehouse_db():
     engine = create_async_engine(os.environ["DATABASE_URL"])
     async with engine.connect() as connection:
         transaction = await connection.begin()
-        async with AsyncSession(connection, expire_on_commit=False,
-                                join_transaction_mode="create_savepoint") as db:
+        async with AsyncSession(
+            connection, expire_on_commit=False, join_transaction_mode="create_savepoint"
+        ) as db:
             yield db
         await transaction.rollback()
     await engine.dispose()
@@ -29,10 +30,14 @@ async def warehouse_db():
 async def migration_database():
     """Create and remove only our uniquely named disposable database."""
     import uuid
+
     from sqlalchemy import text
     from sqlalchemy.engine import make_url
-    if not any(os.getenv(flag) == "1" for flag in
-               ("RUN_POSTGRES_INTEGRATION", "RUN_SFP_DOWNGRADE_POSTGRES")):
+
+    if not any(
+        os.getenv(flag) == "1"
+        for flag in ("RUN_POSTGRES_INTEGRATION", "RUN_SFP_DOWNGRADE_POSTGRES")
+    ):
         pytest.skip("requires disposable PostgreSQL migration gate")
     base_url = make_url(os.environ["DATABASE_URL"])
     name = "warehouse_test_" + uuid.uuid4().hex

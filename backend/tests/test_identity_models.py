@@ -11,17 +11,11 @@ from app.modules.identity.enums import (
 
 def _constraint_names(table_name: str) -> set[str]:
     table = metadata.tables[table_name]
-    return {
-        str(constraint.name)
-        for constraint in table.constraints
-        if constraint.name is not None
-    }
+    return {str(constraint.name) for constraint in table.constraints if constraint.name is not None}
 
 
 def test_identity_tables_are_registered_in_shared_metadata() -> None:
-    assert {"users", "telegram_identities", "access_requests"} <= set(
-        metadata.tables
-    )
+    assert {"users", "telegram_identities", "access_requests"} <= set(metadata.tables)
 
 
 def test_identity_enum_values_are_stable() -> None:
@@ -66,9 +60,7 @@ def test_identity_constraints_have_stable_names() -> None:
 
 def test_access_request_has_single_pending_request_guard() -> None:
     table = metadata.tables["access_requests"]
-    index = next(
-        item for item in table.indexes if item.name == "ux_access_requests_user_pending"
-    )
+    index = next(item for item in table.indexes if item.name == "ux_access_requests_user_pending")
 
     assert index.unique is True
     assert [column.name for column in index.columns] == ["user_id"]
@@ -80,8 +72,7 @@ def test_access_request_decision_state_is_database_enforced() -> None:
     constraint = next(
         item
         for item in table.constraints
-        if isinstance(item, CheckConstraint)
-        and item.name == "ck_access_requests_decision_state"
+        if isinstance(item, CheckConstraint) and item.name == "ck_access_requests_decision_state"
     )
     expression = str(constraint.sqltext)
 

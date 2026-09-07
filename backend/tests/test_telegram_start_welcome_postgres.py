@@ -36,13 +36,9 @@ async def _cleanup(
 ) -> None:
     if dedupe_keys:
         await db.execute(
-            delete(NotificationOutbox).where(
-                NotificationOutbox.dedupe_key.in_(dedupe_keys)
-            )
+            delete(NotificationOutbox).where(NotificationOutbox.dedupe_key.in_(dedupe_keys))
         )
-    await db.execute(
-        delete(TelegramChatState).where(TelegramChatState.chat_id == chat_id)
-    )
+    await db.execute(delete(TelegramChatState).where(TelegramChatState.chat_id == chat_id))
     await db.commit()
 
 
@@ -55,9 +51,7 @@ async def test_start_refresh_personalizes_and_deletes_recent_previous() -> None:
     previous_message_id = 77
     now = datetime(2026, 9, 3, 1, 0, tzinfo=UTC)
 
-    command_key = notification_dedupe_key(
-        "telegram-update", update_id, "delete-start"
-    )
+    command_key = notification_dedupe_key("telegram-update", update_id, "delete-start")
     previous_key = notification_dedupe_key(
         "telegram-start",
         chat_id,
@@ -94,9 +88,7 @@ async def test_start_refresh_personalizes_and_deletes_recent_previous() -> None:
             rows = list(
                 (
                     await db.scalars(
-                        select(NotificationOutbox).where(
-                            NotificationOutbox.dedupe_key.in_(keys)
-                        )
+                        select(NotificationOutbox).where(NotificationOutbox.dedupe_key.in_(keys))
                     )
                 ).all()
             )
@@ -127,8 +119,7 @@ async def test_start_refresh_personalizes_and_deletes_recent_previous() -> None:
             assert isinstance(welcome_text, str)
             assert (
                 '<tg-emoji emoji-id="5444965061749644170">👨‍💻</tg-emoji> '
-                "<b>Привет, Вячеслав &lt;Ops&gt;! 👋</b>"
-                in welcome_text
+                "<b>Привет, Вячеслав &lt;Ops&gt;! 👋</b>" in welcome_text
             )
             assert "<b>Spikatel Inventory</b>" in welcome_text
             assert "<b>@Humoristttt</b>" in welcome_text
@@ -137,9 +128,7 @@ async def test_start_refresh_personalizes_and_deletes_recent_previous() -> None:
                     [
                         {
                             "text": "Открыть приложение",
-                            "web_app": {
-                                "url": "https://app.spik-inventory.ru"
-                            },
+                            "web_app": {"url": "https://app.spik-inventory.ru"},
                         }
                     ]
                 ]
@@ -164,9 +153,7 @@ async def test_start_refresh_keeps_previous_after_48_hour_window() -> None:
     previous_message_id = 78
     now = datetime(2026, 9, 3, 1, 0, tzinfo=UTC)
 
-    command_key = notification_dedupe_key(
-        "telegram-update", update_id, "delete-start"
-    )
+    command_key = notification_dedupe_key("telegram-update", update_id, "delete-start")
     previous_key = notification_dedupe_key(
         "telegram-start",
         chat_id,
@@ -201,21 +188,15 @@ async def test_start_refresh_keeps_previous_after_48_hour_window() -> None:
             await db.commit()
 
             previous_delete = await db.scalar(
-                select(NotificationOutbox).where(
-                    NotificationOutbox.dedupe_key == previous_key
-                )
+                select(NotificationOutbox).where(NotificationOutbox.dedupe_key == previous_key)
             )
             assert previous_delete is None
 
             command_delete = await db.scalar(
-                select(NotificationOutbox).where(
-                    NotificationOutbox.dedupe_key == command_key
-                )
+                select(NotificationOutbox).where(NotificationOutbox.dedupe_key == command_key)
             )
             welcome = await db.scalar(
-                select(NotificationOutbox).where(
-                    NotificationOutbox.dedupe_key == welcome_key
-                )
+                select(NotificationOutbox).where(NotificationOutbox.dedupe_key == welcome_key)
             )
             assert command_delete is not None
             assert welcome is not None
@@ -231,19 +212,11 @@ async def test_latest_start_wins_worker_state_guard() -> None:
     chat_id = 7_990_000_003
     old_update_id = 2_147_100_003
     new_update_id = old_update_id + 1
-    old_welcome_key = (
-        f"{START_WELCOME_DEDUPE_PREFIX}{old_update_id}:{chat_id}"
-    )
-    new_welcome_key = (
-        f"{START_WELCOME_DEDUPE_PREFIX}{new_update_id}:{chat_id}"
-    )
+    old_welcome_key = f"{START_WELCOME_DEDUPE_PREFIX}{old_update_id}:{chat_id}"
+    new_welcome_key = f"{START_WELCOME_DEDUPE_PREFIX}{new_update_id}:{chat_id}"
     keys = [
-        notification_dedupe_key(
-            "telegram-update", old_update_id, "delete-start"
-        ),
-        notification_dedupe_key(
-            "telegram-update", new_update_id, "delete-start"
-        ),
+        notification_dedupe_key("telegram-update", old_update_id, "delete-start"),
+        notification_dedupe_key("telegram-update", new_update_id, "delete-start"),
         old_welcome_key,
         new_welcome_key,
     ]

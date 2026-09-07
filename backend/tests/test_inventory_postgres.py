@@ -12,7 +12,10 @@ from app.modules.catalog.service import set_item_archived
 from app.modules.inventory.models import Movement, MovementLine, StockBalance
 from app.modules.inventory.schemas import MovementReversalCreate
 from app.modules.inventory.service import (
-    InventoryConflictError, InventoryValidationError, reverse_movement, set_location_archived,
+    InventoryConflictError,
+    InventoryValidationError,
+    reverse_movement,
+    set_location_archived,
 )
 from tests.warehouse_helpers import move, scenario
 
@@ -20,8 +23,14 @@ pytestmark = pytest.mark.asyncio
 
 
 async def quantity(db, item, location):
-    return await db.scalar(select(StockBalance.quantity).where(
-        StockBalance.item_id == item, StockBalance.location_id == location)) or 0
+    return (
+        await db.scalar(
+            select(StockBalance.quantity).where(
+                StockBalance.item_id == item, StockBalance.location_id == location
+            )
+        )
+        or 0
+    )
 
 
 async def test_lifecycle_idempotency_and_reconciliation(warehouse_db):
@@ -44,38 +53,64 @@ async def test_lifecycle_idempotency_and_reconciliation(warehouse_db):
     await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
     sql = (Path(__file__).parents[1] / "scripts/reconcile_inventory_projections.sql").read_text()
     assert not (await db.execute(text(sql))).all()
-    await db.execute(update(StockBalance).where(StockBalance.item_id == s[1],
-        StockBalance.location_id == s[3]).values(quantity=3))
+    await db.execute(
+        update(StockBalance)
+        .where(StockBalance.item_id == s[1], StockBalance.location_id == s[3])
+        .values(quantity=3)
+    )
     drift = (await db.execute(text(sql))).mappings().all()
     assert len(drift) == 1 and drift[0]["journal_quantity"] == 2
     assert drift[0]["projected_quantity"] == 3
 
 
-@pytest.mark.parametrize("kind", ["RECEIPT", "ISSUE", "TRANSFER", "RETURN", "WRITE_OFF", "CORRECTION"])
+@pytest.mark.parametrize(
+    "kind", ["RECEIPT", "ISSUE", "TRANSFER", "RETURN", "WRITE_OFF", "CORRECTION"]
+)
 async def test_reversal_restores_stock_and_is_idempotent(warehouse_db, kind):
     db = warehouse_db
     s = await scenario(db)
     initial = await move(db, s, "RECEIPT", 10, destination=s[2])
-    original = await move(db, s, kind, 3,
+    original = await move(
+        db,
+        s,
+        kind,
+        3,
         source=s[2] if kind in {"ISSUE", "TRANSFER", "WRITE_OFF", "CORRECTION"} else None,
         destination=s[3] if kind == "TRANSFER" else s[2] if kind in {"RECEIPT", "RETURN"} else None,
-        original=initial.record.movement.id if kind == "CORRECTION" else None)
+        original=initial.record.movement.id if kind == "CORRECTION" else None,
+    )
     reversal_args = dict(actor_user_id=s[0], actor_display_name="Synthetic actor")
-    result = await reverse_movement(db, original.record.movement.id,
-        MovementReversalCreate(client_request_id="reverse"), **reversal_args)
+    result = await reverse_movement(
+        db,
+        original.record.movement.id,
+        MovementReversalCreate(client_request_id="reverse"),
+        **reversal_args,
+    )
     assert result.record.movement.original_movement_id == original.record.movement.id
     assert result.record.lines[0].quantity == 3
     assert await quantity(db, s[1], s[2]) == 10
     assert await quantity(db, s[1], s[3]) == 0
-    replay = await reverse_movement(db, original.record.movement.id,
-        MovementReversalCreate(client_request_id="reverse"), **reversal_args)
+    replay = await reverse_movement(
+        db,
+        original.record.movement.id,
+        MovementReversalCreate(client_request_id="reverse"),
+        **reversal_args,
+    )
     assert replay.replayed and replay.record.movement.id == result.record.movement.id
     with pytest.raises(InventoryConflictError, match="already reversed"):
-        await reverse_movement(db, original.record.movement.id,
-            MovementReversalCreate(client_request_id="second"), **reversal_args)
+        await reverse_movement(
+            db,
+            original.record.movement.id,
+            MovementReversalCreate(client_request_id="second"),
+            **reversal_args,
+        )
     with pytest.raises(InventoryValidationError, match="invalid"):
-        await reverse_movement(db, result.record.movement.id,
-            MovementReversalCreate(client_request_id="reverse-reversal"), **reversal_args)
+        await reverse_movement(
+            db,
+            result.record.movement.id,
+            MovementReversalCreate(client_request_id="reverse-reversal"),
+            **reversal_args,
+        )
     await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
 
 
@@ -91,12 +126,18 @@ async def test_reversal_insufficient_stock_is_atomic(warehouse_db, kind):
     await move(db, s, "ISSUE", 1, source=destination)
     async with db.begin_nested() as savepoint:
         with pytest.raises(InventoryConflictError, match="insufficient"):
-            await reverse_movement(db, original.record.movement.id,
+            await reverse_movement(
+                db,
+                original.record.movement.id,
                 MovementReversalCreate(client_request_id="insufficient"),
-                actor_user_id=s[0], actor_display_name="Synthetic actor")
+                actor_user_id=s[0],
+                actor_display_name="Synthetic actor",
+            )
         await savepoint.rollback()
     assert await quantity(db, s[1], destination) == 4
-    assert not await db.scalar(select(Movement.id).where(Movement.client_request_id == "insufficient"))
+    assert not await db.scalar(
+        select(Movement.id).where(Movement.client_request_id == "insufficient")
+    )
 
 
 async def test_archive_policy(warehouse_db):
@@ -108,15 +149,27 @@ async def test_archive_policy(warehouse_db):
     await set_item_archived(db, s[1], archived=True)
     for kind in ("RECEIPT", "ISSUE"):
         with pytest.raises(InventoryConflictError, match="archived"):
-            await move(db, s, kind, 1, source=s[2] if kind == "ISSUE" else None,
-                destination=s[2] if kind == "RECEIPT" else None)
+            await move(
+                db,
+                s,
+                kind,
+                1,
+                source=s[2] if kind == "ISSUE" else None,
+                destination=s[2] if kind == "RECEIPT" else None,
+            )
     await move(db, s, "RETURN", 2, destination=s[2])
     await move(db, s, "TRANSFER", 1, source=s[2], destination=s[3])
     await move(db, s, "WRITE_OFF", 1, source=s[3])
-    correction = await move(db, s, "CORRECTION", 1, source=s[2], original=original.record.movement.id)
-    await reverse_movement(db, correction.record.movement.id,
+    correction = await move(
+        db, s, "CORRECTION", 1, source=s[2], original=original.record.movement.id
+    )
+    await reverse_movement(
+        db,
+        correction.record.movement.id,
         MovementReversalCreate(client_request_id="archive-reversal"),
-        actor_user_id=s[0], actor_display_name="Synthetic actor")
+        actor_user_id=s[0],
+        actor_display_name="Synthetic actor",
+    )
     await set_location_archived(db, s[3], archived=True)
     with pytest.raises(InventoryConflictError, match="archived location"):
         await move(db, s, "RETURN", 1, destination=s[3])
@@ -142,15 +195,30 @@ async def test_journal_is_immutable_at_database_level(warehouse_db, table, opera
             elif table is Movement:
                 # A header cannot commit without its declared lines.
                 row = result.record.movement
-                db.add(Movement(movement_type="RETURN", line_count=1, actor_user_id=s[0],
-                    actor_display_name_snapshot="Synthetic", client_request_id=uuid.uuid4().hex,
-                    request_fingerprint="a"*64, destination_location_id=s[2],
-                    destination_location_code_snapshot=row.destination_location_code_snapshot,
-                    destination_location_name_snapshot=row.destination_location_name_snapshot))
+                db.add(
+                    Movement(
+                        movement_type="RETURN",
+                        line_count=1,
+                        actor_user_id=s[0],
+                        actor_display_name_snapshot="Synthetic",
+                        client_request_id=uuid.uuid4().hex,
+                        request_fingerprint="a" * 64,
+                        destination_location_id=s[2],
+                        destination_location_code_snapshot=row.destination_location_code_snapshot,
+                        destination_location_name_snapshot=row.destination_location_name_snapshot,
+                    )
+                )
                 await db.flush()
             else:
-                db.add(MovementLine(movement_id=result.record.movement.id, line_no=2,
-                    item_id=s[1], quantity=1, item_name_snapshot="extra"))
+                db.add(
+                    MovementLine(
+                        movement_id=result.record.movement.id,
+                        line_no=2,
+                        item_id=s[1],
+                        quantity=1,
+                        item_name_snapshot="extra",
+                    )
+                )
                 await db.flush()
         await savepoint.rollback()
 
@@ -174,6 +242,7 @@ async def test_concurrent_issues_cannot_overspend():
             s = await scenario(db)
             await move(db, s, "RECEIPT", 5, destination=s[2])
             await db.commit()
+
         async def issue():
             async with AsyncSession(engine, expire_on_commit=False) as db:
                 try:
@@ -183,6 +252,7 @@ async def test_concurrent_issues_cannot_overspend():
                 except InventoryConflictError as error:
                     await db.rollback()
                     return error.code
+
         assert sorted(await asyncio.gather(issue(), issue())) == ["insufficient_stock", "ok"]
         async with AsyncSession(engine) as db:
             assert await quantity(db, s[1], s[2]) == 1

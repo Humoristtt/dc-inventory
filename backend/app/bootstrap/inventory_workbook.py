@@ -23,7 +23,12 @@ from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.modules.catalog.configuration import LEAVES
-from app.modules.catalog.normalization import clean_text, identity_text, item_signature, normalize_reach
+from app.modules.catalog.normalization import (
+    clean_text,
+    identity_text,
+    item_signature,
+    normalize_reach,
+)
 from app.modules.catalog.schemas import ItemCreate, ManufacturerCreate
 from app.modules.catalog.service import create_item, create_manufacturer
 from app.modules.identity.enums import UserAccessStatus, UserRole
@@ -410,7 +415,10 @@ async def import_inventory(
             manufacturer = await db.scalar(select(Manufacturer).where(
                 Manufacturer.normalized_name == identity_text(item.manufacturer)))
             if manufacturer is None:
-                manufacturer = await create_manufacturer(db, ManufacturerCreate(name=item.manufacturer))
+                manufacturer = await create_manufacturer(
+                    db,
+                    ManufacturerCreate(name=item.manufacturer),
+                )
         item_id = await create_item(
             db,
             ItemCreate(

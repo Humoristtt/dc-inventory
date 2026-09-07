@@ -149,7 +149,7 @@ test(
 
     expect(categories.length).toBeGreaterThan(0);
     expect(
-      categories.some((category) => category.key === "sfp"),
+      categories.some((category) => category.key === "transceiver_ethernet"),
     ).toBe(true);
 
     await expect(

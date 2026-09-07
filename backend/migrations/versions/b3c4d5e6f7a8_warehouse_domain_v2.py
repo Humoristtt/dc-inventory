@@ -324,6 +324,9 @@ def _new_constraints_and_configuration() -> None:
                 RAISE EXCEPTION 'invalid correction/reversal target' USING ERRCODE='23514';
             END IF;
             IF NEW.movement_type='REVERSAL' THEN
+                IF NEW.line_count <> original.line_count THEN
+                    RAISE EXCEPTION 'reversal must include every original line' USING ERRCODE='23514';
+                END IF;
                 IF NEW.source_location_id IS DISTINCT FROM original.destination_location_id
                    OR NEW.destination_location_id IS DISTINCT FROM original.source_location_id THEN
                     RAISE EXCEPTION 'reversal must invert original locations' USING ERRCODE='23514';

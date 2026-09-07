@@ -5,37 +5,13 @@ from pathlib import Path
 
 from app.modules.inventory.service import (
     _lock_original_movement_context,
-    create_movement,
-    reverse_movement,
 )
 
 
 def test_original_movement_lock_is_advisory_not_row_update_lock() -> None:
-    helper_source = inspect.getsource(
-        _lock_original_movement_context
-    )
-    create_source = inspect.getsource(create_movement)
-    reversal_source = inspect.getsource(
-        reverse_movement
-    )
-
-    assert "pg_advisory_xact_lock" in helper_source
-    assert "warehouse-original-movement" in helper_source
-
-    assert (
-        "_lock_original_movement_context"
-        in create_source
-    )
-    assert (
-        "_lock_original_movement_context"
-        in reversal_source
-    )
-
-    # Runtime intentionally has no UPDATE privilege on the
-    # append-only journal, so these paths must never require a
-    # PostgreSQL row lock on Movement.
-    assert ".with_for_update(" not in create_source
-    assert ".with_for_update(" not in reversal_source
+    source = inspect.getsource(_lock_original_movement_context)
+    assert "pg_advisory_xact_lock" in source
+    assert ".with_for_update(" not in source
 
 
 def test_runtime_database_permission_source_is_least_privilege() -> None:

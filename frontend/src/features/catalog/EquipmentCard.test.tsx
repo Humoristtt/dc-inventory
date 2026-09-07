@@ -9,7 +9,6 @@ import type {
 import { EquipmentCard } from "./EquipmentCard";
 
 const longModel = "OS2-LC-LC-ULTRA-LONG-MODEL-NAME-THAT-MUST-WRAP-SAFELY";
-const longPartNumber = "PN-1234567890-ABCDEFGHIJKLMNOPQRSTUVWXYZ-0987654321";
 
 const item: CatalogItemListEntry = {
   id: "item-1",
@@ -17,14 +16,7 @@ const item: CatalogItemListEntry = {
   manufacturer: null,
   name: "Оптический патч-корд",
   model: longModel,
-  manufacturer_part_number: longPartNumber,
-  internal_code: null,
-  description: null,
-  accounting_mode: "QUANTITY",
   status: "ACTIVE",
-  comment: null,
-  datasheet_url: null,
-  technical_data_source: null,
   archived_at: null,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-01T00:00:00Z",
@@ -34,8 +26,7 @@ const item: CatalogItemListEntry = {
     hidden: "secret",
   },
   inventory: {
-    available_count: 0,
-    custody_count: 4,
+    available_count: 4,
     total_count: 4,
   },
 };
@@ -100,7 +91,7 @@ const attributes: CategoryAttribute[] = [
   },
 ];
 
-it("устойчиво показывает nullable производителя, длинные идентификаторы и остатки", () => {
+it("устойчиво показывает nullable производителя, длинную модель и складской остаток", () => {
   render(
     <MemoryRouter>
       <EquipmentCard attributes={attributes} item={item} returnTo="/catalog/optics?q=lc" />
@@ -109,13 +100,10 @@ it("устойчиво показывает nullable производителя,
 
   expect(screen.getByText("Без производителя")).toBeInTheDocument();
   expect(screen.getByRole("heading", { name: longModel })).toBeInTheDocument();
-  expect(screen.getByText(`PN ${longPartNumber}`)).toBeInTheDocument();
   expect(screen.getByText("3,5 м")).toBeInTheDocument();
   expect(screen.getByText("Да")).toBeInTheDocument();
   expect(screen.queryByText("secret")).not.toBeInTheDocument();
 
-  const available = screen.getByText("Доступно").closest("div");
-  const custody = screen.getByText("У пользователей").closest("div");
-  expect(available).toHaveTextContent("0");
-  expect(custody).toHaveTextContent("4");
+  const available = screen.getByText("В наличии").closest("div");
+  expect(available).toHaveTextContent("4");
 });

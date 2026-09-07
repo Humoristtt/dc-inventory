@@ -4,7 +4,6 @@ import app.db.models  # noqa: F401  # регистрирует ORM-модели 
 from app.db.base import metadata
 from app.main import app as application
 from app.modules.catalog.enums import (
-    AccountingMode,
     AttributeDataType,
     FilterType,
     ItemStatus,
@@ -30,7 +29,6 @@ def test_catalog_tables_are_registered_in_shared_metadata() -> None:
 
 
 def test_catalog_structural_enum_values_are_stable() -> None:
-    assert [mode.value for mode in AccountingMode] == ["QUANTITY", "SERIAL"]
     assert [status.value for status in ItemStatus] == ["ACTIVE", "ARCHIVED"]
     assert [data_type.value for data_type in AttributeDataType] == [
         "TEXT",
@@ -50,7 +48,7 @@ def test_catalog_constraints_have_stable_names() -> None:
     assert {
         "pk_categories",
         "uq_categories_key",
-        "ck_categories_default_accounting_mode",
+        "fk_categories_parent_id_categories",
     } <= _constraint_names("categories")
     assert {
         "pk_manufacturers",
@@ -62,7 +60,7 @@ def test_catalog_constraints_have_stable_names() -> None:
     } <= _constraint_names("category_attributes")
     assert {
         "ck_items_archive_state",
-        "uq_items_normalized_internal_code",
+        "uq_items_identity_signature",
     } <= _constraint_names("items")
     assert {
         "uq_item_attribute_values_item_id_category_attribute_id",

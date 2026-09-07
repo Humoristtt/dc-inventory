@@ -28,9 +28,12 @@ from app.modules.inventory.schemas import (
 
 async def create_location(db: AsyncSession, payload: LocationCreate) -> Location:
     code = normalize_inline_text(payload.code, field="code", max_length=64)
+    normalized_code = identity_text(code)
+    if len(normalized_code) > 64:
+        raise InventoryValidationError("normalized location code exceeds 64 characters")
     location = Location(
         code=code,
-        normalized_code=identity_text(code),
+        normalized_code=normalized_code,
         name=normalize_inline_text(payload.name, field="name", max_length=255),
         location_type=payload.location_type,
         address=normalize_optional_text(payload.address),

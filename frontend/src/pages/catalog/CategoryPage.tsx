@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import {
+  Link,
   useLocation,
   useParams,
 } from "react-router-dom";
@@ -8,6 +9,7 @@ import {
 import {
   catalogQueryCacheKey,
   getCatalogCategory,
+  getCatalogCategories,
   getCatalogFacetPage,
   getCatalogFacets,
 } from "../../shared/api/catalog";
@@ -55,8 +57,12 @@ export function CategoryPage() {
     enabled: categoryKey !== "",
     staleTime: 5 * 60_000,
   });
-  const catalogQuery = toCatalogQuery(viewState, categoryKey);
-  const itemsQuery = useCatalogItems(catalogQuery, categoryKey !== "");
+  const longRange = new URLSearchParams(location.search).get("long_range") === "true";
+  const hierarchy = useQuery({queryKey: ["catalog", "categories"], queryFn: ({signal}) => getCatalogCategories(signal), staleTime: 300_000});
+  const family = categoryQuery.data?.parent_id === null && !longRange;
+  const children = hierarchy.data?.filter(child => child.parent_id === categoryQuery.data?.id) ?? [];
+  const catalogQuery = {...toCatalogQuery(viewState, categoryKey), longRange};
+  const itemsQuery = useCatalogItems(catalogQuery, categoryKey !== "" && categoryQuery.isSuccess && !family);
   const facetsQuery = useQuery({
     queryKey: ["catalog", "facets", catalogQueryCacheKey(catalogQuery)],
     queryFn: ({ signal }) => getCatalogFacets(catalogQuery, signal),
@@ -88,16 +94,16 @@ export function CategoryPage() {
         </div>
         <div className="category-header__title">
           <span className="section-kicker">Категория</span>
-          <h1>{categoryQuery.data?.display_name ?? "Оборудование"}</h1>
+          <h1>{longRange ? "Дальние трансиверы" : categoryQuery.data?.display_name ?? "Оборудование"}</h1>
           {categoryQuery.data?.description ? <p>{categoryQuery.data.description}</p> : null}
         </div>
-        <DebouncedSearchField
+        {!family ? <DebouncedSearchField
           busy={itemsQuery.isFetching}
           committedValue={viewState.q}
           label="Поиск внутри категории"
           onCommit={updateSearch}
           placeholder="Поиск внутри категории…"
-        />
+        /> : null}
       </header>
 
       <div className="catalog-page__body">
@@ -111,7 +117,11 @@ export function CategoryPage() {
           />
         ) : null}
 
-        {!categoryQuery.isError ? (
+        {family ? <div className="category-grid">
+          {children.map(child => <Link key={child.id} className="category-tile" to={`/catalog/${child.key}`}><strong>{child.display_name}</strong><i aria-hidden="true">↗</i></Link>)}
+          {categoryKey === "transceivers" ? <Link className="category-tile" to="/catalog/transceivers?long_range=true"><strong>Дальние</strong><p>Дальность от 2 км.</p><i aria-hidden="true">↗</i></Link> : null}
+        </div> : null}
+        {!categoryQuery.isError && !family ? (
           <section aria-labelledby="category-items-title" className="catalog-section">
             <div className="result-toolbar">
               <div>

@@ -1,3 +1,4 @@
+import { useAuthState } from "../../features/auth/useAuthState";
 import { useQuery } from "@tanstack/react-query";
 import {
   Link,
@@ -24,6 +25,7 @@ import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscre
 import "../../features/catalog/catalog.css";
 
 export function CatalogLandingPage() {
+  const auth = useAuthState();
   const { updateSearch, viewState } = useCatalogUrlState();
   const location = useLocation();
   const categoriesQuery = useQuery({
@@ -56,6 +58,7 @@ export function CatalogLandingPage() {
       </header>
 
       <div className="catalog-page__body">
+        {auth.data?.user.role === "ADMIN" ? <Link className="button button--dark" to="/catalog/new">+ Добавить оборудование</Link> : null}
         {searchActive ? (
           <section aria-labelledby="global-search-title" className="catalog-section">
             <div className="section-heading">
@@ -74,7 +77,7 @@ export function CatalogLandingPage() {
             ) : null}
             {!itemsQuery.isPending && !itemsQuery.isError && itemsQuery.items.length === 0 ? (
               <CatalogEmptyState title="Ничего не найдено">
-                Проверьте запрос или попробуйте другую модель, PN или серийный номер.
+                Проверьте запрос или попробуйте другую модель или характеристику.
               </CatalogEmptyState>
             ) : null}
             {itemsQuery.items.length > 0 ? (
@@ -104,7 +107,7 @@ export function CatalogLandingPage() {
                 <h2 id="category-list-title">Категории</h2>
               </div>
               {categoriesQuery.data ? (
-                <span className="result-count">{categoriesQuery.data.length}</span>
+                <span className="result-count">{categoriesQuery.data.filter(category => category.parent_id === null).length}</span>
               ) : null}
             </div>
 
@@ -128,7 +131,7 @@ export function CatalogLandingPage() {
             ) : null}
             {categoriesQuery.data && categoriesQuery.data.length > 0 ? (
               <div className="category-grid">
-                {[...categoriesQuery.data]
+                {[...categoriesQuery.data].filter(category => category.parent_id === null)
                   .sort((left, right) => left.sort_order - right.sort_order)
                   .map((category, index) => (
                     <Link
@@ -151,9 +154,6 @@ export function CatalogLandingPage() {
                       </span>
                       <strong>{category.display_name}</strong>
                       {category.description ? <p>{category.description}</p> : null}
-                      <span className="category-tile__mode">
-                        {category.default_accounting_mode === "SERIAL" ? "Серийный" : "Количество"}
-                      </span>
                       <i aria-hidden="true">↗</i>
                     </Link>
                   ))}

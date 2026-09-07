@@ -1,6 +1,5 @@
 import { ApiRequestError } from "./auth";
 
-export type AccountingMode = "QUANTITY" | "SERIAL";
 export type ItemStatus = "ACTIVE" | "ARCHIVED";
 export type AttributeDataType =
   | "TEXT"
@@ -20,9 +19,9 @@ export type CategorySummary = {
   key: string;
   display_name: string;
   description: string | null;
-  default_accounting_mode: AccountingMode;
   sort_order: number;
   is_system: boolean;
+  parent_id: string | null;
 };
 
 export type CategoryAttribute = {
@@ -80,14 +79,7 @@ export type CatalogItem = {
   manufacturer: ItemManufacturer | null;
   name: string;
   model: string | null;
-  manufacturer_part_number: string | null;
-  internal_code: string | null;
-  description: string | null;
-  accounting_mode: AccountingMode;
   status: ItemStatus;
-  comment: string | null;
-  datasheet_url: string | null;
-  technical_data_source: string | null;
   archived_at: string | null;
   created_at: string;
   updated_at: string;
@@ -96,7 +88,6 @@ export type CatalogItem = {
 
 export type InventorySummary = {
   available_count: number;
-  custody_count: number;
   total_count: number;
 };
 
@@ -146,18 +137,11 @@ export type ItemWritePayload = {
   manufacturer_id: string | null;
   name: string;
   model: string | null;
-  manufacturer_part_number: string | null;
-  internal_code: string | null;
-  description: string | null;
-  accounting_mode: AccountingMode | null;
-  comment: string | null;
-  datasheet_url: string | null;
-  technical_data_source: string | null;
   attributes: Record<string, CatalogScalar>;
 };
 
 export type ItemPatchPayload = Partial<
-  Omit<ItemWritePayload, "category_key" | "accounting_mode">
+  Omit<ItemWritePayload, "category_key">
 >;
 
 export type DuplicateCandidate = {
@@ -166,16 +150,15 @@ export type DuplicateCandidate = {
   model: string | null;
   manufacturer_id: string | null;
   manufacturer_name: string | null;
-  manufacturer_part_number: string | null;
   reason: string;
 };
 
 export type DuplicateCheckPayload = {
   category_key: string;
   manufacturer_id: string | null;
-  manufacturer_part_number: string | null;
   name: string;
   model: string | null;
+  attributes: Record<string, CatalogScalar>;
   exclude_item_id?: string;
 };
 
@@ -186,6 +169,7 @@ export type DuplicateCheckResult = {
 export type CatalogQuery = {
   q?: string;
   category?: string;
+  longRange?: boolean;
   status?: ItemStatus;
   manufacturerIds?: readonly string[];
   availability?: Availability;
@@ -234,6 +218,7 @@ export function encodeCatalogQuery(
   if (query.category) {
     params.set("category", query.category);
   }
+  if (query.longRange) params.set("long_range", "true");
   if (query.status) {
     params.set("status", query.status);
   }

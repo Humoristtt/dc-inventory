@@ -1,7 +1,10 @@
-from typing import Annotated, NoReturn
+import calendar
+from datetime import UTC, datetime, timedelta
+from typing import Annotated, Literal, NoReturn
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
+from sqlalchemy import select
 from sqlalchemy.exc import DBAPIError, IntegrityError
 
 from app.core.safety import require_real_inventory_mutations_enabled
@@ -11,55 +14,46 @@ from app.db.errors import (
     postgres_sqlstate,
 )
 from app.modules.auth.dependencies import Admin, Approved, DbSession
-from app.modules.auth.service import AuthenticatedContext
+from app.modules.catalog.api import _raise_catalog_error
+from app.modules.catalog.models import Item
+from app.modules.catalog.service import CatalogError
 from app.modules.identity.enums import UserRole
 from app.modules.inventory.enums import (
-    InventoryUnitState,
     LocationStatus,
     MovementType,
 )
-from app.modules.inventory.models import Location, MovementLine
+from app.modules.inventory.models import Location, Movement, StockBalance
 from app.modules.inventory.schemas import (
     InventoryCurrentSummaryOut,
-    InventoryUnitListOut,
-    InventoryUnitOut,
     LocationCreate,
     LocationListOut,
     LocationOut,
+    LocationPatch,
     LocationPositionOut,
     MovementCreate,
-    MovementLineOut,
     MovementListOut,
     MovementOut,
     MovementReversalCreate,
-    MyEquipmentListOut,
-    MyEquipmentPositionOut,
-    MyEquipmentSerialPreviewOut,
     StockBalanceListOut,
     StockBalanceOut,
-    UserPositionOut,
 )
 from app.modules.inventory.service import (
     InventoryConflictError,
     InventoryError,
     InventoryNotFoundError,
-    InventoryUnitRecord,
     MovementRecord,
     StockBalanceRecord,
     create_location,
     create_movement,
     display_identity,
-    get_current_inventory_summary,
-    get_inventory_unit_record,
     get_location,
     get_movement_record,
-    list_inventory_units,
     list_locations,
     list_movements,
     list_stock_balances,
-    list_user_holdings,
     reverse_movement,
     set_location_archived,
+    update_location,
 )
 
 read_router = APIRouter(prefix="/api/inventory", tags=["inventory"])
@@ -110,171 +104,32 @@ def _raise_retryable_db_conflict(error: DBAPIError) -> NoReturn:
 
 
 def _location_out(location: Location) -> LocationOut:
-    return LocationOut(
-        id=location.id,
-        code=location.code,
-        name=location.name,
-        description=location.description,
-        status=location.status,
-        archived_at=location.archived_at,
-        created_at=location.created_at,
-        updated_at=location.updated_at,
-    )
-
-
-def _can_view_private_inventory(
-    viewer: AuthenticatedContext,
-    holder_user_id: UUID | None,
-) -> bool:
-    return (
-        viewer.user.role == UserRole.ADMIN
-        or holder_user_id == viewer.user.id
-    )
-
-
-def _holder_out(
-    *,
-    holder_user_id: UUID | None,
-    display_name: str | None,
-    viewer: AuthenticatedContext,
-) -> UserPositionOut | None:
-    if holder_user_id is None or display_name is None:
-        return None
-
-    if _can_view_private_inventory(viewer, holder_user_id):
-        return UserPositionOut(
-            user_id=holder_user_id,
-            display_name=display_name,
-        )
-
-    return UserPositionOut(
-        user_id=None,
-        display_name="Сотрудник",
-    )
-
-
-def _forbid_other_holder_filter(
-    holder_user_id: UUID | None,
-    viewer: AuthenticatedContext,
-) -> None:
-    if (
-        holder_user_id is not None
-        and viewer.user.role != UserRole.ADMIN
-        and holder_user_id != viewer.user.id
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="cannot inspect another user's holdings",
-        )
-
-
-def _movement_line_out(line: MovementLine) -> MovementLineOut:
-    return MovementLineOut(
-        id=line.id,
-        line_no=line.line_no,
-        item_id=line.item_id,
-        accounting_mode=line.item_accounting_mode,
-        inventory_unit_id=line.inventory_unit_id,
-        quantity=line.quantity,
-        item_name_snapshot=line.item_name_snapshot,
-        manufacturer_name_snapshot=line.manufacturer_name_snapshot,
-        model_snapshot=line.model_snapshot,
-        manufacturer_part_number_snapshot=line.manufacturer_part_number_snapshot,
-        serial_number_snapshot=line.serial_number_snapshot,
-        wwn_snapshot=line.wwn_snapshot,
-    )
+    return LocationOut.model_validate(location)
 
 
 def _movement_out(record: MovementRecord) -> MovementOut:
-    movement = record.movement
-    return MovementOut(
-        id=movement.id,
-        journal_seq=movement.journal_seq,
-        movement_type=movement.movement_type,
-        actor_user_id=movement.actor_user_id,
-        actor_display_name_snapshot=movement.actor_display_name_snapshot,
-        source_location_id=movement.source_location_id,
-        source_location_code_snapshot=movement.source_location_code_snapshot,
-        source_location_name_snapshot=movement.source_location_name_snapshot,
-        destination_location_id=movement.destination_location_id,
-        destination_location_code_snapshot=(movement.destination_location_code_snapshot),
-        destination_location_name_snapshot=(movement.destination_location_name_snapshot),
-        source_holder_user_id=movement.source_holder_user_id,
-        source_holder_display_name_snapshot=(movement.source_holder_display_name_snapshot),
-        destination_holder_user_id=movement.destination_holder_user_id,
-        destination_holder_display_name_snapshot=(
-            movement.destination_holder_display_name_snapshot
-        ),
-        original_movement_id=movement.original_movement_id,
-        client_request_id=movement.client_request_id,
-        purpose=movement.purpose,
-        comment=movement.comment,
-        occurred_at=movement.occurred_at,
-        lines=[_movement_line_out(line) for line in record.lines],
+    return MovementOut.model_validate(
+        {
+            **{
+                key: getattr(record.movement, key)
+                for key in MovementOut.model_fields
+                if key != "lines"
+            },
+            "lines": record.lines,
+        }
     )
 
 
-def _stock_balance_out(
-    record: StockBalanceRecord,
-    viewer: AuthenticatedContext,
-) -> StockBalanceOut:
-    balance = record.balance
+def _stock_balance_out(record: StockBalanceRecord) -> StockBalanceOut:
     return StockBalanceOut(
-        id=balance.id,
-        item_id=balance.item_id,
+        id=record.balance.id,
+        item_id=record.item.id,
         item_name=record.item.name,
-        quantity=balance.quantity,
-        location=(
-            LocationPositionOut(
-                location_id=record.location.id,
-                code=record.location.code,
-                name=record.location.name,
-            )
-            if record.location is not None
-            else None
+        quantity=record.balance.quantity,
+        updated_at=record.balance.updated_at,
+        location=LocationPositionOut(
+            location_id=record.location.id, code=record.location.code, name=record.location.name
         ),
-        holder=_holder_out(
-            holder_user_id=balance.holder_user_id,
-            display_name=record.holder_display_name,
-            viewer=viewer,
-        ),
-        updated_at=balance.updated_at,
-    )
-
-
-def _inventory_unit_out(
-    record: InventoryUnitRecord,
-    viewer: AuthenticatedContext,
-) -> InventoryUnitOut:
-    unit = record.unit
-    private_visible = _can_view_private_inventory(
-        viewer,
-        unit.current_holder_user_id,
-    )
-    return InventoryUnitOut(
-        id=unit.id,
-        item_id=unit.item_id,
-        item_name=record.item.name,
-        serial_number=unit.serial_number if private_visible else None,
-        wwn=unit.wwn if private_visible else None,
-        comment=unit.comment if private_visible else None,
-        state=unit.state,
-        location=(
-            LocationPositionOut(
-                location_id=record.location.id,
-                code=record.location.code,
-                name=record.location.name,
-            )
-            if record.location is not None
-            else None
-        ),
-        holder=_holder_out(
-            holder_user_id=unit.current_holder_user_id,
-            display_name=record.holder_display_name,
-            viewer=viewer,
-        ),
-        created_at=unit.created_at,
-        updated_at=unit.updated_at,
     )
 
 
@@ -312,184 +167,148 @@ async def get_location_detail(
         _raise_inventory_error(error)
 
 
-@read_router.get(
-    "/items/{item_id}/summary",
-    response_model=InventoryCurrentSummaryOut,
-)
+@read_router.get("/items/{item_id}/summary", response_model=InventoryCurrentSummaryOut)
 async def get_item_inventory_summary(
-    item_id: UUID,
-    db: DbSession,
-    _approved: Approved,
+    item_id: UUID, db: DbSession, _approved: Approved
 ) -> InventoryCurrentSummaryOut:
-    try:
-        summary = await get_current_inventory_summary(db, item_id)
-    except InventoryError as error:
-        _raise_inventory_error(error)
-
+    if await db.get(Item, item_id) is None:
+        raise HTTPException(status_code=404, detail="item not found")
+    # Item detail includes the complete location breakdown, without a silent page cap.
+    rows = (
+        await db.execute(
+            select(StockBalance, Item, Location)
+            .join(Item, Item.id == StockBalance.item_id)
+            .join(Location, Location.id == StockBalance.location_id)
+            .where(StockBalance.item_id == item_id)
+            .order_by(Location.normalized_code)
+        )
+    ).all()
+    balances = [_stock_balance_out(StockBalanceRecord(*row)) for row in rows]
     return InventoryCurrentSummaryOut(
-        available_count=summary.available_count,
-        custody_count=summary.custody_count,
-        total_count=summary.total_count,
-    )
-
-
-@read_router.get(
-    "/mine",
-    response_model=MyEquipmentListOut,
-)
-async def get_my_equipment(
-    db: DbSession,
-    approved: Approved,
-    limit: Annotated[int, Query(ge=1, le=100)] = 20,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> MyEquipmentListOut:
-    page = await list_user_holdings(
-        db,
-        holder_user_id=approved.user.id,
-        limit=limit,
-        offset=offset,
-    )
-
-    return MyEquipmentListOut(
-        items=[
-            MyEquipmentPositionOut(
-                item_id=record.item.id,
-                item_name=record.item.name,
-                accounting_mode=record.item.accounting_mode,
-                quantity=record.quantity,
-                serial_count=record.serial_count,
-                serial_preview=[
-                    MyEquipmentSerialPreviewOut(
-                        id=unit.id,
-                        serial_number=unit.serial_number,
-                        wwn=unit.wwn,
-                    )
-                    for unit in record.serial_preview
-                ],
-            )
-            for record in page.items
-        ],
-        total=page.total,
-        limit=limit,
-        offset=offset,
+        total_count=sum(x.quantity for x in balances), locations=balances
     )
 
 
 @read_router.get("/stock", response_model=StockBalanceListOut)
 async def get_stock(
     db: DbSession,
-    approved: Approved,
+    _approved: Approved,
     item_id: UUID | None = None,
     location_id: UUID | None = None,
-    holder_user_id: UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> StockBalanceListOut:
-    _forbid_other_holder_filter(holder_user_id, approved)
     page = await list_stock_balances(
-        db,
-        item_id=item_id,
-        location_id=location_id,
-        holder_user_id=holder_user_id,
-        limit=limit,
-        offset=offset,
+        db, item_id=item_id, location_id=location_id, limit=limit, offset=offset
     )
     return StockBalanceListOut(
-        items=[_stock_balance_out(item, approved) for item in page.items],
+        items=[_stock_balance_out(x) for x in page.items],
         total=page.total,
         limit=limit,
         offset=offset,
     )
 
 
-@read_router.get("/units", response_model=InventoryUnitListOut)
-async def get_inventory_units(
-    db: DbSession,
-    approved: Approved,
-    item_id: UUID | None = None,
-    unit_state: Annotated[InventoryUnitState | None, Query(alias="state")] = None,
-    location_id: UUID | None = None,
-    holder_user_id: UUID | None = None,
-    limit: Annotated[int, Query(ge=1, le=200)] = 100,
-    offset: Annotated[int, Query(ge=0)] = 0,
-) -> InventoryUnitListOut:
-    _forbid_other_holder_filter(holder_user_id, approved)
-    page = await list_inventory_units(
-        db,
-        item_id=item_id,
-        state=unit_state,
-        location_id=location_id,
-        holder_user_id=holder_user_id,
-        limit=limit,
-        offset=offset,
-    )
-    return InventoryUnitListOut(
-        items=[_inventory_unit_out(item, approved) for item in page.items],
-        total=page.total,
-        limit=limit,
-        offset=offset,
-    )
-
-
-@read_router.get("/units/{unit_id}", response_model=InventoryUnitOut)
-async def get_inventory_unit(
-    unit_id: UUID,
-    db: DbSession,
-    approved: Approved,
-) -> InventoryUnitOut:
-    try:
-        record = await get_inventory_unit_record(db, unit_id)
-    except InventoryError as error:
-        _raise_inventory_error(error)
-
-    if (
-        approved.user.role != UserRole.ADMIN
-        and record.unit.current_holder_user_id != approved.user.id
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="inventory unit detail is limited to its holder",
-        )
-
-    return _inventory_unit_out(record, approved)
+@read_router.get("/movement-actors")
+async def get_movement_actors(db: DbSession, approved: Approved) -> list[dict[str, str]]:
+    query = select(Movement.actor_user_id, Movement.actor_display_name_snapshot).distinct()
+    if approved.user.role != UserRole.ADMIN:
+        query = query.where(Movement.actor_user_id == approved.user.id)
+    rows = (await db.execute(query.order_by(Movement.actor_display_name_snapshot))).all()
+    return [
+        {"id": str(key), "name": value} for key, value in {row[0]: row[1] for row in rows}.items()
+    ]
 
 
 @read_router.get("/movements", response_model=MovementListOut)
 async def get_movements(
     db: DbSession,
-    _admin: Admin,
+    approved: Approved,
     movement_type: MovementType | None = None,
     item_id: UUID | None = None,
-    inventory_unit_id: UUID | None = None,
+    actor_user_id: UUID | None = None,
+    category: str | None = None,
+    long_range: bool = False,
+    location_id: UUID | None = None,
+    period: Literal["7d", "30d", "3m", "year", "all"] = "3m",
+    since: datetime | None = None,
+    until: datetime | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> MovementListOut:
-    page = await list_movements(
-        db,
-        movement_type=movement_type,
-        item_id=item_id,
-        inventory_unit_id=inventory_unit_id,
-        limit=limit,
-        offset=offset,
-    )
+    # Existing journal policy restricted employee-wide history to ADMIN.
+    # Users can now see their own immutable actions; no cross-user disclosure.
+    if approved.user.role != UserRole.ADMIN:
+        if actor_user_id is not None and actor_user_id != approved.user.id:
+            raise HTTPException(status_code=403, detail="employee history requires administrator")
+        actor_user_id = approved.user.id
+    if since is None and period != "all":
+        now = datetime.now(UTC)
+        if period in {"7d", "30d"}:
+            since = now - timedelta(days=7 if period == "7d" else 30)
+        else:
+            months = 3 if period == "3m" else 12
+            month_index = now.year * 12 + now.month - 1 - months
+            year, month = divmod(month_index, 12)
+            since = now.replace(
+                year=year,
+                month=month + 1,
+                day=min(now.day, calendar.monthrange(year, month + 1)[1]),
+            )
+    if any(x is not None and x.tzinfo is None for x in (since, until)):
+        raise HTTPException(status_code=422, detail="timestamps require timezone")
+    if since and until and since >= until:
+        raise HTTPException(status_code=422, detail="invalid period")
+    try:
+        page = await list_movements(
+            db,
+            movement_type=movement_type,
+            item_id=item_id,
+            actor_user_id=actor_user_id,
+            category_key=category,
+            long_range=long_range,
+            location_id=location_id,
+            since=since,
+            until=until,
+            limit=limit,
+            offset=offset,
+        )
+    except CatalogError as error:
+        _raise_catalog_error(error)
     return MovementListOut(
-        items=[_movement_out(item) for item in page.items],
-        total=page.total,
-        limit=limit,
-        offset=offset,
+        items=[_movement_out(x) for x in page.items], total=page.total, limit=limit, offset=offset
     )
 
 
 @read_router.get("/movements/{movement_id}", response_model=MovementOut)
-async def get_movement(
-    movement_id: UUID,
-    db: DbSession,
-    _admin: Admin,
-) -> MovementOut:
+async def get_movement(movement_id: UUID, db: DbSession, approved: Approved) -> MovementOut:
     try:
-        return _movement_out(await get_movement_record(db, movement_id))
+        record = await get_movement_record(db, movement_id)
+        if (
+            approved.user.role != UserRole.ADMIN
+            and record.movement.actor_user_id != approved.user.id
+        ):
+            raise HTTPException(status_code=403, detail="employee history requires administrator")
+        return _movement_out(record)
     except InventoryError as error:
         _raise_inventory_error(error)
+
+
+@admin_router.patch("/locations/{location_id}", response_model=LocationOut)
+async def patch_location(
+    location_id: UUID, payload: LocationPatch, request: Request, db: DbSession, _admin: Admin
+) -> LocationOut:
+    require_real_inventory_mutations_enabled(request)
+    try:
+        location = await update_location(db, location_id, payload)
+        await db.commit()
+        return _location_out(location)
+    except InventoryError as error:
+        await db.rollback()
+        _raise_inventory_error(error)
+    except DBAPIError as error:
+        await db.rollback()
+        _raise_retryable_db_conflict(error)
 
 
 @admin_router.post(
@@ -559,7 +378,7 @@ async def unarchive_location(
     return _location_out(location)
 
 
-@admin_router.post(
+@read_router.post(
     "/movements",
     response_model=MovementOut,
     status_code=status.HTTP_201_CREATED,
@@ -568,15 +387,20 @@ async def post_movement(
     payload: MovementCreate,
     request: Request,
     db: DbSession,
-    admin: Admin,
+    approved: Approved,
 ) -> MovementOut:
+    if approved.user.role != UserRole.ADMIN and payload.movement_type not in {
+        MovementType.ISSUE,
+        MovementType.RETURN,
+    }:
+        raise HTTPException(status_code=403, detail="administrator operation")
     require_real_inventory_mutations_enabled(request)
     try:
         result = await create_movement(
             db,
             payload,
-            actor_user_id=admin.user.id,
-            actor_display_name=display_identity(admin.identity),
+            actor_user_id=approved.user.id,
+            actor_display_name=display_identity(approved.identity),
         )
         await db.commit()
     except InventoryError as error:

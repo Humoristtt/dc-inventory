@@ -261,7 +261,7 @@ SELECT format(
 
 -- Mutable current warehouse projections.
 SELECT format(
-    'GRANT SELECT, INSERT, UPDATE ON TABLE locations, inventory_units TO %I',
+    'GRANT SELECT, INSERT, UPDATE ON TABLE locations TO %I',
     :'runtime_user'
 )
 \gexec

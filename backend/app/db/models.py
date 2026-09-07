@@ -10,7 +10,6 @@ from app.modules.catalog.models import (
 )
 from app.modules.identity.models import AccessRequest, TelegramIdentity, User
 from app.modules.inventory.models import (
-    InventoryUnit,
     Location,
     Movement,
     MovementLine,
@@ -31,7 +30,6 @@ __all__ = [
     "CategoryAttribute",
     "Item",
     "ItemAttributeValue",
-    "InventoryUnit",
     "Location",
     "Manufacturer",
     "Movement",

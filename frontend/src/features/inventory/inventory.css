@@ -110,3 +110,14 @@
     gap: 14px;
   }
 }
+
+.warehouse-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-block: 1rem; }
+.warehouse-form { margin-top: 1rem; }
+.warehouse-form fieldset { border: 0; padding: 0; margin: 0; }
+.warehouse-form label, .history-filters label { display: grid; gap: 0.4rem; margin-block: 0.8rem; font-size: 0.9rem; }
+.warehouse-form input, .warehouse-form select, .warehouse-form textarea, .history-filters select { width: 100%; min-height: 44px; padding: 0.75rem; border: 1px solid #ccd2d8; border-radius: 10px; background: #fff; color: #15202b; font: inherit; }
+.history-filters { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 0.75rem; }
+.movement-entry { padding: 1rem 0; border-bottom: 1px solid #e3e6e8; }
+.movement-entry header { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: space-between; font-size: 0.8rem; color: #52616d; }
+.movement-entry p { margin: 0.5rem 0; }
+.movement-entry ul { padding-left: 1.2rem; }

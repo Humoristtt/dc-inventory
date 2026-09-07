@@ -1,11 +1,6 @@
 from enum import StrEnum
 
 
-class AccountingMode(StrEnum):
-    QUANTITY = "QUANTITY"
-    SERIAL = "SERIAL"
-
-
 class ItemStatus(StrEnum):
     ACTIVE = "ACTIVE"
     ARCHIVED = "ARCHIVED"

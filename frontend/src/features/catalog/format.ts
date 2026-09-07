@@ -1,5 +1,4 @@
 import type {
-  AccountingMode,
   CatalogScalar,
   ItemStatus,
 } from "../../shared/api/catalog";
@@ -21,22 +20,7 @@ export function formatAttributeValue(
   return unit ? `${formatted} ${unit}` : formatted;
 }
 
-export function formatAccountingMode(mode: AccountingMode): string {
-  return mode === "SERIAL" ? "Серийный учёт" : "Количественный учёт";
-}
-
 export function formatItemStatus(status: ItemStatus): string {
   return status === "ARCHIVED" ? "В архиве" : "Активная позиция";
 }
 
-export function safeExternalUrl(value: string | null): string | null {
-  if (value === null) {
-    return null;
-  }
-  try {
-    const url = new URL(value);
-    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
-  } catch {
-    return null;
-  }
-}

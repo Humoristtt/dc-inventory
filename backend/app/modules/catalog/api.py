@@ -58,7 +58,6 @@ from app.modules.catalog.service import (
     set_item_archived,
     update_item,
 )
-from app.modules.identity.enums import UserRole
 
 read_router = APIRouter(prefix="/api/catalog", tags=["catalog"])
 admin_router = APIRouter(prefix="/api/admin/catalog", tags=["admin-catalog"])
@@ -102,7 +101,7 @@ def _category_summary(category: Category) -> CategorySummaryOut:
         key=category.key,
         display_name=category.display_name,
         description=category.description,
-        default_accounting_mode=category.default_accounting_mode,
+        parent_id=category.parent_id,
         sort_order=category.sort_order,
         is_system=category.is_system,
     )
@@ -159,14 +158,7 @@ def _item_out(record: ItemRecord) -> ItemOut:
         ),
         name=item.name,
         model=item.model,
-        manufacturer_part_number=item.manufacturer_part_number,
-        internal_code=item.internal_code,
-        description=item.description,
-        accounting_mode=item.accounting_mode,
         status=item.status,
-        comment=item.comment,
-        datasheet_url=item.datasheet_url,
-        technical_data_source=item.technical_data_source,
         archived_at=item.archived_at,
         created_at=item.created_at,
         updated_at=item.updated_at,
@@ -180,7 +172,6 @@ def _item_list_out(record: CatalogListRecord) -> ItemListEntryOut:
         **item.model_dump(),
         inventory=InventorySummaryOut(
             available_count=record.inventory.available_count,
-            custody_count=record.inventory.custody_count,
             total_count=record.inventory.total_count,
         ),
     )
@@ -215,6 +206,7 @@ async def _query_spec(
     approved: Approved,
     q: str | None,
     category: str | None,
+    long_range: bool,
     item_status: ItemStatus,
     manufacturer_ids: list[UUID] | None,
     availability: str,
@@ -226,12 +218,8 @@ async def _query_spec(
     return await build_catalog_query_spec(
         db,
         q=q,
-        serial_identity_holder_user_id=(
-            None
-            if approved.user.role == UserRole.ADMIN
-            else approved.user.id
-        ),
         category_key=category,
+        long_range=long_range,
         item_status=item_status,
         manufacturer_ids=manufacturer_ids or (),
         availability=availability,
@@ -273,9 +261,7 @@ async def get_category(
     summary = _category_summary(record.category)
     return CategoryDetailOut(
         **summary.model_dump(),
-        attributes=[
-            _category_attribute(attribute) for attribute in record.attributes
-        ],
+        attributes=[_category_attribute(attribute) for attribute in record.attributes],
     )
 
 
@@ -307,6 +293,7 @@ async def get_items(
     approved: Approved,
     q: Annotated[str | None, Query(max_length=200)] = None,
     category: Annotated[str | None, Query(max_length=64)] = None,
+    long_range: bool = False,
     item_status: Annotated[ItemStatus, Query(alias="status")] = ItemStatus.ACTIVE,
     manufacturer_id: Annotated[list[UUID] | None, Query()] = None,
     availability: Annotated[str, Query(max_length=32)] = "ANY",
@@ -326,6 +313,7 @@ async def get_items(
             approved=approved,
             q=q,
             category=category,
+            long_range=long_range,
             item_status=item_status,
             manufacturer_ids=manufacturer_id,
             availability=availability,
@@ -356,6 +344,7 @@ async def get_item_facets(
     approved: Approved,
     q: Annotated[str | None, Query(max_length=200)] = None,
     category: Annotated[str | None, Query(max_length=64)] = None,
+    long_range: bool = False,
     item_status: Annotated[ItemStatus, Query(alias="status")] = ItemStatus.ACTIVE,
     manufacturer_id: Annotated[list[UUID] | None, Query()] = None,
     availability: Annotated[str, Query(max_length=32)] = "ANY",
@@ -377,6 +366,7 @@ async def get_item_facets(
             approved=approved,
             q=q,
             category=category,
+            long_range=long_range,
             item_status=item_status,
             manufacturer_ids=manufacturer_id,
             availability=availability,
@@ -449,12 +439,7 @@ async def post_duplicate_check(
                 model=candidate.item.model,
                 manufacturer_id=candidate.item.manufacturer_id,
                 manufacturer_name=(
-                    candidate.manufacturer.name
-                    if candidate.manufacturer is not None
-                    else None
-                ),
-                manufacturer_part_number=(
-                    candidate.item.manufacturer_part_number
+                    candidate.manufacturer.name if candidate.manufacturer is not None else None
                 ),
                 reason=candidate.reason,
             )

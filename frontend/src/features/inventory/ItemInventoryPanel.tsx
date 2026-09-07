@@ -1,305 +1,58 @@
-import {
-  useInfiniteQuery,
-  useQuery,
-} from "@tanstack/react-query";
-
-import type {
-  AccountingMode,
-} from "../../shared/api/catalog";
-import {
-  getInventoryStockPage,
-  getInventorySummary,
-  getInventoryUnitsPage,
-  type InventoryPage,
-} from "../../shared/api/inventory";
-import { CatalogErrorState } from "../catalog/CatalogState";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { Link } from "react-router-dom";
+import { useAuthState } from "../auth/useAuthState";
+import { createMovement, getInventorySummary, getLocations, inventoryError, type MovementType } from "../../shared/api/inventory";
 import "./inventory.css";
 
-type ItemInventoryPanelProps = {
-  itemId: string;
-  mode: AccountingMode;
-};
-
-const DETAIL_PAGE_SIZE = 50;
-
-function nextOffset<T>(
-  lastPage: InventoryPage<T>,
-): number | undefined {
-  if (lastPage.items.length === 0) {
-    return undefined;
-  }
-
-  const next = lastPage.offset + lastPage.items.length;
-  return next < lastPage.total ? next : undefined;
-}
-
-export function ItemInventoryPanel({
-  itemId,
-  mode,
-}: ItemInventoryPanelProps) {
-  const summaryQuery = useQuery({
-    queryKey: ["inventory", "summary", "item", itemId],
-    queryFn: ({ signal }) => getInventorySummary(itemId, signal),
+const actionNames = { ISSUE: "Взять", RETURN: "Вернуть", TRANSFER: "Переместить", RECEIPT: "Приход", WRITE_OFF: "Списать" } as const;
+type Action = keyof typeof actionNames;
+export function ItemInventoryPanel({itemId, archived = false}: {itemId: string; archived?: boolean}) {
+  const auth = useAuthState();
+  const client = useQueryClient();
+  const summary = useQuery({queryKey: ["inventory", "summary", itemId], queryFn: ({signal}) => getInventorySummary(itemId, signal)});
+  const locations = useQuery({queryKey: ["inventory", "locations"], queryFn: ({signal}) => getLocations(signal)});
+  const [action, setAction] = useState<Action | null>(null);
+  const [source, setSource] = useState("");
+  const [destination, setDestination] = useState("");
+  const [quantity, setQuantity] = useState("1");
+  const [requestId, setRequestId] = useState(() => crypto.randomUUID());
+  const [notice, setNotice] = useState("");
+  const active = locations.data?.filter(x => x.status === "ACTIVE") ?? [];
+  const stocked = active.filter(x => summary.data?.locations.some(row => row.location.location_id === x.id && row.quantity > 0));
+  const sourceId = source || (stocked.length === 1 ? stocked[0].id : "");
+  const destinations = active.filter(x => action !== "TRANSFER" || x.id !== sourceId);
+  const destinationId = destination || (destinations.length === 1 ? destinations[0].id : "");
+  const needsSource = action === "ISSUE" || action === "TRANSFER" || action === "WRITE_OFF";
+  const needsDestination = action === "RETURN" || action === "TRANSFER" || action === "RECEIPT";
+  const available = summary.data?.locations.find(row => row.location.location_id === sourceId)?.quantity ?? 0;
+  const amount = Number(quantity);
+  const valid = Number.isSafeInteger(amount) && amount > 0 && (!needsSource || (sourceId !== "" && amount <= available)) && (!needsDestination || destinationId !== "") && (action !== "TRANSFER" || sourceId !== destinationId);
+  const mutation = useMutation({
+    mutationFn: () => createMovement({movement_type: action as MovementType, client_request_id: requestId,
+      ...(needsSource ? {source_location_id: sourceId} : {}), ...(needsDestination ? {destination_location_id: destinationId} : {}), lines: [{item_id: itemId, quantity: amount}]}),
+    onSuccess: () => { setNotice("Операция записана в журнал."); setAction(null); setRequestId(crypto.randomUUID());
+      void client.invalidateQueries({queryKey: ["inventory"]}); void client.invalidateQueries({queryKey: ["catalog"]}); },
+    onError: () => { void client.invalidateQueries({queryKey: ["inventory", "summary", itemId]}); },
   });
-
-  const quantityQuery = useInfiniteQuery({
-    queryKey: ["inventory", "stock", "item", itemId],
-    queryFn: ({ pageParam, signal }) => getInventoryStockPage(
-      { itemId },
-      { limit: DETAIL_PAGE_SIZE, offset: pageParam },
-      signal,
-    ),
-    initialPageParam: 0,
-    getNextPageParam: nextOffset,
-    enabled: mode === "QUANTITY",
-  });
-
-  const storedQuery = useInfiniteQuery({
-    queryKey: ["inventory", "units", "item", itemId, "STORED"],
-    queryFn: ({ pageParam, signal }) => getInventoryUnitsPage(
-      { itemId, state: "STORED" },
-      { limit: DETAIL_PAGE_SIZE, offset: pageParam },
-      signal,
-    ),
-    initialPageParam: 0,
-    getNextPageParam: nextOffset,
-    enabled: mode === "SERIAL",
-  });
-
-  const issuedQuery = useInfiniteQuery({
-    queryKey: ["inventory", "units", "item", itemId, "ISSUED"],
-    queryFn: ({ pageParam, signal }) => getInventoryUnitsPage(
-      { itemId, state: "ISSUED" },
-      { limit: DETAIL_PAGE_SIZE, offset: pageParam },
-      signal,
-    ),
-    initialPageParam: 0,
-    getNextPageParam: nextOffset,
-    enabled: mode === "SERIAL",
-  });
-
-  const pending = summaryQuery.isPending || (
-    mode === "QUANTITY"
-      ? quantityQuery.isPending
-      : storedQuery.isPending || issuedQuery.isPending
-  );
-
-  const failed = summaryQuery.isError || (
-    mode === "QUANTITY"
-      ? quantityQuery.isError
-      : storedQuery.isError || issuedQuery.isError
-  );
-
-  const retry = () => {
-    void summaryQuery.refetch();
-
-    if (mode === "QUANTITY") {
-      void quantityQuery.refetch();
-      return;
-    }
-
-    void storedQuery.refetch();
-    void issuedQuery.refetch();
-  };
-
-  if (pending) {
-    return (
-      <section
-        aria-label="Загрузка складских позиций"
-        className="detail-panel detail-panel--loading"
-      >
-        <span /><span />
-      </section>
-    );
-  }
-
-  if (failed || summaryQuery.data === undefined) {
-    return (
-      <section className="detail-panel">
-        <CatalogErrorState
-          title="Не удалось загрузить остатки"
-          onRetry={retry}
-        />
-      </section>
-    );
-  }
-
-  const quantityRows = quantityQuery.data?.pages.flatMap(
-    (page) => page.items,
-  ) ?? [];
-
-  const locationRows = mode === "QUANTITY"
-    ? quantityRows.filter((row) => row.location !== null)
-    : storedQuery.data?.pages.flatMap((page) => page.items) ?? [];
-
-  const holderRows = mode === "QUANTITY"
-    ? quantityRows.filter((row) => row.holder !== null)
-    : issuedQuery.data?.pages.flatMap((page) => page.items) ?? [];
-
-  const resolvedSummary = summaryQuery.data;
-
-  return (
-    <section
-      aria-labelledby="stock-title"
-      className="detail-panel detail-panel--stock"
-    >
-      <div className="detail-panel__heading">
-        <div>
-          <span className="section-kicker">Текущая проекция</span>
-          <h2 id="stock-title">Наличие и хранение</h2>
-        </div>
-        <small>
-          {mode === "QUANTITY" ? "Количество" : "Серийный учёт"}
-        </small>
-      </div>
-
-      <dl className="stock-strip stock-strip--detail">
-        <div
-          className={
-            resolvedSummary.available_count > 0
-              ? "stock-strip__available"
-              : "stock-strip__zero"
-          }
-        >
-          <dt>Доступно</dt>
-          <dd>{resolvedSummary.available_count}</dd>
-        </div>
-        <div>
-          <dt>У пользователей</dt>
-          <dd>{resolvedSummary.custody_count}</dd>
-        </div>
-        <div>
-          <dt>Всего активно</dt>
-          <dd>{resolvedSummary.total_count}</dd>
-        </div>
-      </dl>
-
-      {resolvedSummary.total_count === 0 ? (
-        <div className="inventory-empty">
-          <strong>Текущих остатков нет</strong>
-          <p>
-            Позиция ещё не размещена на складе и не числится за сотрудниками.
-          </p>
-        </div>
-      ) : (
-        <div className="inventory-columns">
-          <div>
-            <h3>По локациям</h3>
-
-            {locationRows.length === 0 ? (
-              <p className="inventory-list-empty">
-                {resolvedSummary.available_count > 0
-                  ? "Остатки есть — загрузите следующие позиции"
-                  : "На складе нет"}
-              </p>
-            ) : (
-              <ul className="position-list">
-                {locationRows.map((row) => (
-                  <li key={row.id}>
-                    <div>
-                      <strong>
-                        {row.location?.code ?? "Локация"}
-                      </strong>
-                      <span>{row.location?.name}</span>
-
-                      {"serial_number" in row
-                        && row.serial_number !== null ? (
-                          <small>
-                            SN {row.serial_number}
-                            {row.wwn ? ` · WWN ${row.wwn}` : ""}
-                          </small>
-                        ) : null}
-                    </div>
-
-                    <b>
-                      {"quantity" in row
-                        ? row.quantity
-                        : "1 шт."}
-                    </b>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {mode === "SERIAL" && storedQuery.hasNextPage ? (
-              <button
-                className="button button--secondary"
-                disabled={storedQuery.isFetchingNextPage}
-                onClick={() => void storedQuery.fetchNextPage()}
-                type="button"
-              >
-                {storedQuery.isFetchingNextPage
-                  ? "Загрузка…"
-                  : "Показать ещё на складе"}
-              </button>
-            ) : null}
-          </div>
-
-          <div>
-            <h3>У сотрудников</h3>
-
-            {holderRows.length === 0 ? (
-              <p className="inventory-list-empty">
-                {resolvedSummary.custody_count > 0
-                  ? "Выданные позиции есть — загрузите следующие позиции"
-                  : "На руках нет"}
-              </p>
-            ) : (
-              <ul className="position-list">
-                {holderRows.map((row) => (
-                  <li key={row.id}>
-                    <div>
-                      <strong>
-                        {row.holder?.display_name ?? "Сотрудник"}
-                      </strong>
-
-                      {"serial_number" in row
-                        && row.serial_number !== null ? (
-                          <small>
-                            SN {row.serial_number}
-                            {row.wwn ? ` · WWN ${row.wwn}` : ""}
-                          </small>
-                        ) : null}
-                    </div>
-
-                    <b>
-                      {"quantity" in row
-                        ? row.quantity
-                        : "1 шт."}
-                    </b>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {mode === "SERIAL" && issuedQuery.hasNextPage ? (
-              <button
-                className="button button--secondary"
-                disabled={issuedQuery.isFetchingNextPage}
-                onClick={() => void issuedQuery.fetchNextPage()}
-                type="button"
-              >
-                {issuedQuery.isFetchingNextPage
-                  ? "Загрузка…"
-                  : "Показать ещё у сотрудников"}
-              </button>
-            ) : null}
-          </div>
-        </div>
-      )}
-
-      {mode === "QUANTITY" && quantityQuery.hasNextPage ? (
-        <button
-          className="button button--secondary"
-          disabled={quantityQuery.isFetchingNextPage}
-          onClick={() => void quantityQuery.fetchNextPage()}
-          type="button"
-        >
-          {quantityQuery.isFetchingNextPage
-            ? "Загрузка…"
-            : "Показать ещё позиции"}
-        </button>
-      ) : null}
-    </section>
-  );
+  const changed = () => { setRequestId(crypto.randomUUID()); mutation.reset(); };
+  return <section aria-labelledby="stock-title" className="detail-panel">
+    <h2 id="stock-title">В наличии: {summary.data?.total_count ?? "…"}</h2>
+    {summary.isError ? <p role="alert">Не удалось загрузить остаток. <button onClick={() => void summary.refetch()}>Повторить</button></p> : null}
+    <dl className="detail-list">{summary.data?.locations.map(row => <div key={row.id}><dt>{row.location.name}</dt><dd>{row.quantity}</dd></div>)}</dl>
+    {summary.data?.total_count === 0 ? <p>Оборудования в местах хранения пока нет.</p> : null}
+    {locations.isError ? <p role="alert">Не удалось загрузить места хранения. <button onClick={() => void locations.refetch()}>Повторить</button></p> : null}
+    <div className="warehouse-actions">{(Object.keys(actionNames) as Action[]).filter(key => auth.data?.user.role === "ADMIN" || key === "ISSUE" || key === "RETURN").filter(key => !archived || key !== "ISSUE" && key !== "RECEIPT").map(key => <button type="button" className="button button--dark" key={key} disabled={summary.isPending || summary.isError || locations.isError || locations.isPending || mutation.isPending} onClick={() => {setAction(key); setSource(""); setDestination(""); setQuantity("1"); setNotice(""); changed();}}>{actionNames[key]}</button>)}</div>
+    {notice ? <p role="status">{notice} <Link to="/movements">Движения</Link></p> : null}
+    {action ? <form className="warehouse-form" onSubmit={event => {event.preventDefault(); if(valid && !mutation.isPending) mutation.mutate();}}>
+      <h3>{actionNames[action]}</h3>
+      <fieldset disabled={mutation.isPending}>
+      {needsSource ? <label>Откуда<select required value={sourceId} onChange={event => {setSource(event.target.value); setDestination(""); changed();}}><option value="">Выберите место хранения</option>{stocked.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select><small>Доступно: {available}</small></label> : null}
+      {needsDestination ? <label>Куда<select required value={destinationId} onChange={event => {setDestination(event.target.value); changed();}}><option value="">Выберите место хранения</option>{destinations.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label> : null}
+      <label>Количество<input required type="number" inputMode="numeric" min="1" step="1" max={needsSource ? available : Number.MAX_SAFE_INTEGER} value={quantity} onChange={event => {setQuantity(event.target.value); changed();}} /></label>
+      {mutation.isError ? <p role="alert">{inventoryError(mutation.error)}</p> : null}
+      <div className="warehouse-actions"><button className="button button--accent" disabled={!valid || mutation.isPending} type="submit">{mutation.isPending ? "Записываем…" : "Подтвердить"}</button><button className="button button--ghost" type="button" onClick={() => setAction(null)}>Отмена</button></div>
+      </fieldset>
+    </form> : null}
+  </section>;
 }

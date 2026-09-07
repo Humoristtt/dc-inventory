@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any, cast
 
-from sqlalchemy import case, exists, func, literal, or_, select, union_all
+from sqlalchemy import exists, func, literal, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from sqlalchemy.sql.elements import ColumnElement
@@ -42,8 +42,7 @@ from app.modules.catalog.service import (
     normalize_comparison,
     prepare_attribute_filter_value,
 )
-from app.modules.inventory.enums import InventoryUnitState
-from app.modules.inventory.models import InventoryUnit, Location, StockBalance
+from app.modules.inventory.models import Location, StockBalance
 
 type FilterValue = str | int | Decimal | bool
 type FacetValue = uuid.UUID | str | int | Decimal | bool
@@ -66,8 +65,9 @@ class AttributeFilter:
 @dataclass(frozen=True, slots=True)
 class CatalogQuerySpec:
     tokens: tuple[str, ...]
-    serial_identity_holder_user_id: uuid.UUID | None
     category_id: uuid.UUID | None
+    category_ids: tuple[uuid.UUID, ...]
+    long_range: bool
     category_key: str | None
     status: ItemStatus
     manufacturer_ids: tuple[uuid.UUID, ...]
@@ -81,7 +81,6 @@ class CatalogQuerySpec:
 @dataclass(frozen=True, slots=True)
 class InventorySummary:
     available_count: int
-    custody_count: int
     total_count: int
 
 
@@ -149,8 +148,8 @@ async def build_catalog_query_spec(
     db: AsyncSession,
     *,
     q: str | None = None,
-    serial_identity_holder_user_id: uuid.UUID | None = None,
     category_key: str | None = None,
+    long_range: bool = False,
     item_status: ItemStatus = ItemStatus.ACTIVE,
     manufacturer_ids: Sequence[uuid.UUID] = (),
     availability: str = Availability.ANY.value,
@@ -164,7 +163,16 @@ async def build_catalog_query_spec(
     if category_key is not None:
         category_record = await get_category_record(db, category_key)
         category = category_record.category
-        definitions = category_record.attributes
+        category_ids = await scope_category_ids(db, category_key)
+        definitions = list(
+            (
+                await db.scalars(
+                    select(CategoryAttribute)
+                    .where(CategoryAttribute.category_id.in_(category_ids))
+                    .order_by(CategoryAttribute.key)
+                )
+            ).all()
+        )
     if filter_expressions and category is None:
         raise CatalogValidationError(
             "filter_category_required",
@@ -260,7 +268,8 @@ async def build_catalog_query_spec(
 
     return CatalogQuerySpec(
         tokens=_normalize_query_tokens(q),
-        serial_identity_holder_user_id=serial_identity_holder_user_id,
+        category_ids=await scope_category_ids(db, category_key),
+        long_range=long_range,
         category_id=category.id if category is not None else None,
         category_key=category.key if category is not None else None,
         status=item_status,
@@ -273,43 +282,44 @@ async def build_catalog_query_spec(
     )
 
 
-def _inventory_aggregate() -> Subquery:
-    quantity = select(
-        StockBalance.item_id.label("item_id"),
-        func.sum(
-            case(
-                (StockBalance.location_id.is_not(None), StockBalance.quantity),
-                else_=0,
-            )
-        ).label("available_count"),
-        func.sum(
-            case(
-                (StockBalance.holder_user_id.is_not(None), StockBalance.quantity),
-                else_=0,
-            )
-        ).label("custody_count"),
-    ).group_by(StockBalance.item_id)
-    serial = (
-        select(
-            InventoryUnit.item_id.label("item_id"),
-            func.count()
-            .filter(InventoryUnit.state == InventoryUnitState.STORED)
-            .label("available_count"),
-            func.count()
-            .filter(InventoryUnit.state == InventoryUnitState.ISSUED)
-            .label("custody_count"),
-        )
-        .where(InventoryUnit.state.in_([InventoryUnitState.STORED, InventoryUnitState.ISSUED]))
-        .group_by(InventoryUnit.item_id)
+async def scope_category_ids(db: AsyncSession, key: str | None) -> tuple[uuid.UUID, ...]:
+    if key is None:
+        return ()
+    category = (await get_category_record(db, key)).category
+    if category.parent_id is not None:
+        return (category.id,)
+    return tuple(
+        (await db.scalars(select(Category.id).where(Category.parent_id == category.id))).all()
     )
-    inventory_rows = union_all(quantity, serial).subquery("inventory_rows")
-    return (
-        select(
-            inventory_rows.c.item_id,
-            func.sum(inventory_rows.c.available_count).label("available_count"),
-            func.sum(inventory_rows.c.custody_count).label("custody_count"),
+
+
+def long_range_predicate() -> ColumnElement[bool]:
+    return Item.id.in_(
+        select(ItemAttributeValue.item_id)
+        .join(CategoryAttribute, CategoryAttribute.id == ItemAttributeValue.category_attribute_id)
+        .join(Category, Category.id == CategoryAttribute.category_id)
+        .where(
+            Category.key.in_(["transceiver_ethernet", "transceiver_fc"]),
+            CategoryAttribute.key == "reach_m",
+            ItemAttributeValue.integer_value >= 2000,
         )
-        .group_by(inventory_rows.c.item_id)
+    )
+
+
+async def equipment_scope(
+    db: AsyncSession, key: str | None, long_range: bool
+) -> list[ColumnElement[bool]]:
+    ids = await scope_category_ids(db, key)
+    predicates: list[ColumnElement[bool]] = [Item.category_id.in_(ids)] if key else []
+    if long_range:
+        predicates.append(long_range_predicate())
+    return predicates
+
+
+def _inventory_aggregate() -> Subquery:
+    return (
+        select(StockBalance.item_id, func.sum(StockBalance.quantity).label("available_count"))
+        .group_by(StockBalance.item_id)
         .subquery("inventory")
     )
 
@@ -318,12 +328,8 @@ def _available(inventory: Subquery) -> ColumnElement[int]:
     return cast(ColumnElement[int], func.coalesce(inventory.c.available_count, 0))
 
 
-def _custody(inventory: Subquery) -> ColumnElement[int]:
-    return cast(ColumnElement[int], func.coalesce(inventory.c.custody_count, 0))
-
-
 def _total(inventory: Subquery) -> ColumnElement[int]:
-    return _available(inventory) + _custody(inventory)
+    return _available(inventory)
 
 
 def _escaped_contains_pattern(value: str) -> str:
@@ -357,43 +363,17 @@ def _safe_decimal_token(token: str) -> Decimal | None:
     return value
 
 
-def _search_predicate(
-    token: str,
-    serial_identity_holder_user_id: uuid.UUID | None,
-) -> ColumnElement[bool]:
+def _search_predicate(token: str) -> ColumnElement[bool]:
     pattern = _escaped_contains_pattern(token)
-    serial_identity_conditions: list[ColumnElement[bool]] = [
-        InventoryUnit.item_id == Item.id,
-        or_(
-            InventoryUnit.normalized_serial_number.like(pattern, escape="\\"),
-            InventoryUnit.normalized_wwn.like(pattern, escape="\\"),
-        ),
-    ]
-    if serial_identity_holder_user_id is not None:
-        serial_identity_conditions.extend(
-            [
-                InventoryUnit.state == InventoryUnitState.ISSUED,
-                InventoryUnit.current_holder_user_id
-                == serial_identity_holder_user_id,
-            ]
-        )
-
     common = or_(
         Item.normalized_name.like(pattern, escape="\\"),
         Item.normalized_model.like(pattern, escape="\\"),
-        Item.normalized_manufacturer_part_number.like(pattern, escape="\\"),
-        Item.normalized_internal_code.like(pattern, escape="\\"),
         exists(
             select(literal(1))
             .where(
                 Manufacturer.id == Item.manufacturer_id,
                 Manufacturer.normalized_name.like(pattern, escape="\\"),
             )
-            .correlate(Item)
-        ),
-        exists(
-            select(literal(1))
-            .where(*serial_identity_conditions)
             .correlate(Item)
         ),
     )
@@ -454,7 +434,9 @@ def _attribute_filter_predicate(
     ]
     conditions: list[ColumnElement[bool]] = [
         ItemAttributeValue.item_id == Item.id,
-        ItemAttributeValue.category_attribute_id == first.attribute_id,
+        ItemAttributeValue.category_attribute_id.in_(
+            select(CategoryAttribute.id).where(CategoryAttribute.key == first.key)
+        ),
     ]
     if equal_values:
         if first.data_type == AttributeDataType.TEXT:
@@ -492,8 +474,10 @@ def _item_predicates(
     exclude: frozenset[str] = frozenset(),
 ) -> list[ColumnElement[bool]]:
     predicates: list[ColumnElement[bool]] = [Item.status == spec.status]
-    if spec.category_id is not None and "category" not in exclude:
-        predicates.append(Item.category_id == spec.category_id)
+    if spec.category_key is not None:
+        predicates.append(Item.category_id.in_(spec.category_ids))
+    if spec.long_range:
+        predicates.append(long_range_predicate())
     if spec.manufacturer_ids and "manufacturer" not in exclude:
         predicates.append(Item.manufacturer_id.in_(spec.manufacturer_ids))
     if spec.availability != Availability.ANY and "availability" not in exclude:
@@ -503,34 +487,13 @@ def _item_predicates(
             predicates.append(_available(inventory) == 0)
     if spec.location_ids and "location" not in exclude:
         predicates.append(
-            or_(
-                exists(
-                    select(literal(1))
-                    .where(
-                        StockBalance.item_id == Item.id,
-                        StockBalance.location_id.in_(spec.location_ids),
-                        StockBalance.quantity > 0,
-                    )
-                    .correlate(Item)
-                ),
-                exists(
-                    select(literal(1))
-                    .where(
-                        InventoryUnit.item_id == Item.id,
-                        InventoryUnit.state == InventoryUnitState.STORED,
-                        InventoryUnit.current_location_id.in_(spec.location_ids),
-                    )
-                    .correlate(Item)
-                ),
-            )
+            exists(
+                select(literal(1)).where(
+                    StockBalance.item_id == Item.id, StockBalance.location_id.in_(spec.location_ids)
+                )
+            ).correlate(Item)
         )
-    predicates.extend(
-        _search_predicate(
-            token,
-            spec.serial_identity_holder_user_id,
-        )
-        for token in spec.tokens
-    )
+    predicates.extend(_search_predicate(token) for token in spec.tokens)
 
     by_key: dict[str, list[AttributeFilter]] = defaultdict(list)
     for attribute_filter in spec.attribute_filters:
@@ -607,7 +570,6 @@ async def query_catalog_items(
         select(
             Item,
             _available(inventory).label("available_count"),
-            _custody(inventory).label("custody_count"),
         )
         .outerjoin(inventory, inventory.c.item_id == Item.id)
         .outerjoin(Manufacturer, Manufacturer.id == Item.manufacturer_id)
@@ -619,9 +581,8 @@ async def query_catalog_items(
     items = [row[0] for row in rows]
     attributes = await _load_attributes_for_items(db, [item.id for item in items])
     records: list[CatalogListRecord] = []
-    for item, available_count, custody_count in rows:
+    for item, available_count in rows:
         available = int(available_count)
-        custody = int(custody_count)
         records.append(
             CatalogListRecord(
                 record=ItemRecord(
@@ -632,8 +593,7 @@ async def query_catalog_items(
                 ),
                 inventory=InventorySummary(
                     available_count=available,
-                    custody_count=custody,
-                    total_count=available + custody,
+                    total_count=available,
                 ),
             )
         )
@@ -772,18 +732,7 @@ async def _availability_facet(
 
 
 def _location_item_pairs() -> Subquery:
-    quantity = select(
-        StockBalance.item_id.label("item_id"),
-        StockBalance.location_id.label("location_id"),
-    ).where(StockBalance.location_id.is_not(None), StockBalance.quantity > 0)
-    serial = select(
-        InventoryUnit.item_id.label("item_id"),
-        InventoryUnit.current_location_id.label("location_id"),
-    ).where(
-        InventoryUnit.state == InventoryUnitState.STORED,
-        InventoryUnit.current_location_id.is_not(None),
-    )
-    return union_all(quantity, serial).subquery("location_item_pairs")
+    return select(StockBalance.item_id, StockBalance.location_id).subquery("location_item_pairs")
 
 
 async def _location_facet(
@@ -877,8 +826,11 @@ async def _exact_attribute_facet(
                         matching.c.item_id == ItemAttributeValue.item_id,
                     )
                     .where(
-                        ItemAttributeValue.category_attribute_id
-                        == attribute.id
+                        ItemAttributeValue.category_attribute_id.in_(
+                            select(CategoryAttribute.id).where(
+                                CategoryAttribute.key == attribute.key
+                            )
+                        )
                     )
                     .group_by(normalized)
                     .order_by(normalized)
@@ -908,8 +860,9 @@ async def _exact_attribute_facet(
                 matching.c.item_id == ItemAttributeValue.item_id,
             )
             .where(
-                ItemAttributeValue.category_attribute_id
-                == attribute.id
+                ItemAttributeValue.category_attribute_id.in_(
+                    select(CategoryAttribute.id).where(CategoryAttribute.key == attribute.key)
+                )
             )
             .group_by(column)
         )
@@ -918,19 +871,12 @@ async def _exact_attribute_facet(
             AttributeDataType.ENUM,
             AttributeDataType.BOOLEAN,
         }:
-            exact_rows = (
-                (await db.execute(statement))
-                .tuples()
-                .all()
-            )
+            exact_rows = (await db.execute(statement)).tuples().all()
         else:
             exact_rows = (
                 (
                     await db.execute(
-                        statement
-                        .order_by(column)
-                        .limit(value_limit + 1)
-                        .offset(value_offset)
+                        statement.order_by(column).limit(value_limit + 1).offset(value_offset)
                     )
                 )
                 .tuples()
@@ -939,10 +885,7 @@ async def _exact_attribute_facet(
             has_more = len(exact_rows) > value_limit
             exact_rows = exact_rows[:value_limit]
 
-        by_value = {
-            value: int(count)
-            for value, count in exact_rows
-        }
+        by_value = {value: int(count) for value, count in exact_rows}
 
         if attribute.data_type == AttributeDataType.ENUM:
             allowed_values = attribute.allowed_values
@@ -951,27 +894,17 @@ async def _exact_attribute_facet(
                     f"attribute {attribute.key} has invalid ENUM allowed_values"
                 )
             ordered_values: list[FacetValue] = [
-                value
-                for value in allowed_values
-                if value in by_value
+                value for value in allowed_values if value in by_value
             ]
         elif attribute.data_type == AttributeDataType.BOOLEAN:
-            ordered_values = [
-                value
-                for value in (False, True)
-                if value in by_value
-            ]
+            ordered_values = [value for value in (False, True) if value in by_value]
         else:
             ordered_values = sorted(by_value)
 
         values = tuple(
             FacetValueRecord(
                 value=value,
-                label=(
-                    str(value).lower()
-                    if isinstance(value, bool)
-                    else str(value)
-                ),
+                label=(str(value).lower() if isinstance(value, bool) else str(value)),
                 count=by_value[value],
             )
             for value in ordered_values
@@ -1005,7 +938,11 @@ async def _range_attribute_facet(
             select(func.min(column), func.max(column))
             .select_from(ItemAttributeValue)
             .join(matching, matching.c.item_id == ItemAttributeValue.item_id)
-            .where(ItemAttributeValue.category_attribute_id == attribute.id)
+            .where(
+                ItemAttributeValue.category_attribute_id.in_(
+                    select(CategoryAttribute.id).where(CategoryAttribute.key == attribute.key)
+                )
+            )
         )
     ).one()
     minimum, maximum = row
@@ -1073,9 +1010,7 @@ async def query_catalog_facets(
         )
 
     if wanted("availability"):
-        facets.append(
-            await _availability_facet(db, spec, inventory)
-        )
+        facets.append(await _availability_facet(db, spec, inventory))
 
     if wanted("location"):
         facets.append(
@@ -1093,7 +1028,7 @@ async def query_catalog_facets(
             await db.scalars(
                 select(CategoryAttribute)
                 .where(
-                    CategoryAttribute.category_id == spec.category_id,
+                    CategoryAttribute.category_id.in_(spec.category_ids),
                     CategoryAttribute.filterable.is_(True),
                 )
                 .order_by(
@@ -1103,7 +1038,11 @@ async def query_catalog_facets(
             )
         ).all()
 
+        seen: set[str] = set()
         for attribute in definitions:
+            if attribute.key in seen:
+                continue
+            seen.add(attribute.key)
             if not wanted(attribute.key):
                 continue
 
@@ -1129,8 +1068,7 @@ async def query_catalog_facets(
                 )
             else:
                 raise CatalogSchemaError(
-                    f"filterable attribute {attribute.key} "
-                    "has invalid filter type"
+                    f"filterable attribute {attribute.key} has invalid filter type"
                 )
 
     if only_key is not None and not facets:
@@ -1139,4 +1077,11 @@ async def query_catalog_facets(
             f"unknown or unavailable facet: {only_key}",
         )
 
-    return facets
+    return [
+        facet
+        for facet in facets
+        if only_key is not None
+        or facet.values_has_more
+        or len(facet.values) > 1
+        or (facet.minimum is not None and facet.maximum != facet.minimum)
+    ]

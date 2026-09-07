@@ -1,6 +1,8 @@
 FROM python:3.12-slim-bookworm@sha256:782412e85d0f0984994c290652577d4018aff08145c85b262bb63dc0c7522254
 
-ARG APP_REVISION=unknown
+ARG APP_REVISION
+RUN test -n "$APP_REVISION" \
+    && test "$APP_REVISION" != "unknown"
 LABEL org.opencontainers.image.revision="${APP_REVISION}"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

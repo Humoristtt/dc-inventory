@@ -54,6 +54,13 @@ Read `last-success.json` and record:
 
 Final Stage15 recovery acceptance requires manifest schema v2.
 
+`production_checkout_sha` in the manifest is immutable provenance metadata for
+the moment the backup was created. A later source-only/documentation commit
+does not invalidate the database artifact. Recovery compatibility is proven
+against the exact backend/web image IDs and source revisions recorded in the
+manifest; a checkout mismatch is recorded as evidence, not treated as an
+automatic restore failure.
+
 ## 2. Download and verify
 
 Use the configured StorageGRID endpoint, bucket and `S3_PREFIX`.

@@ -181,12 +181,26 @@ if manifest.get("schema_version") != 2:
         "Stage15 final recovery requires manifest schema v2"
     )
 
-if manifest.get("production_checkout_sha") != production_checkout_sha:
+manifest_checkout_sha = manifest.get("production_checkout_sha")
+
+if (
+    not isinstance(manifest_checkout_sha, str)
+    or len(manifest_checkout_sha) != 40
+):
     raise RuntimeError(
-        "backup manifest does not match current production checkout"
+        "backup manifest has invalid production checkout provenance"
     )
 
-print("RESTORE_MANIFEST_CHECKOUT=PASS")
+print(
+    "BACKUP_PRODUCTION_CHECKOUT_SHA="
+    f"{manifest_checkout_sha}"
+)
+print("RESTORE_MANIFEST_CHECKOUT_METADATA=PASS")
+
+if manifest_checkout_sha == production_checkout_sha:
+    print("RESTORE_MANIFEST_CHECKOUT_MATCH=YES")
+else:
+    print("RESTORE_MANIFEST_CHECKOUT_MATCH=NO")
 
 dump_key = manifest["artifact"]["key"]
 expected_dump_sha = manifest["artifact"]["sha256"]

@@ -252,7 +252,7 @@ jobs:
         run: npx playwright install --with-deps chromium webkit
 
       - name: Build production frontend runtime for Playwright
-        run: docker build -t dc-inventory-playwright-web ./frontend
+        run: docker build --build-arg APP_REVISION=${{ github.sha }} -t dc-inventory-playwright-web ./frontend
 
       - name: Start production frontend runtime for Playwright
         run: |

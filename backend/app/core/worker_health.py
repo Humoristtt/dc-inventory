@@ -47,6 +47,10 @@ def write_heartbeat(
     os.utime(path, (timestamp, timestamp))
 
 
+def write_worker_heartbeat() -> None:
+    write_heartbeat(_heartbeat_file())
+
+
 def heartbeat_age_seconds(
     path: Path,
     *,

@@ -6,10 +6,10 @@ Create Date: 2026-09-07 15:26:53.708590
 """
 
 import json
-from pathlib import Path
-from typing import Any
-from uuid import NAMESPACE_URL, uuid5
 from collections.abc import Sequence
+from pathlib import Path
+from typing import Any, cast
+from uuid import NAMESPACE_URL, uuid5
 
 import sqlalchemy as sa
 from alembic import op
@@ -229,7 +229,12 @@ def downgrade() -> None:
 
 
 def _frozen(name: str) -> dict[str, Any]:
-    return json.loads((Path(__file__).parents[1] / 'data' / f'b3c4d5e6f7a8_{name}.json').read_text())
+    return cast(
+        dict[str, Any],
+        json.loads(
+            (Path(__file__).parents[1] / 'data' / f'b3c4d5e6f7a8_{name}.json').read_text()
+        ),
+    )
 
 
 def _guard_empty(operation: str) -> None:

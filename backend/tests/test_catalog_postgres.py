@@ -3,6 +3,7 @@ import uuid
 import pytest
 from sqlalchemy import select, update
 from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.catalog.configuration import FAMILIES, LEAVES
 from app.modules.catalog.models import Category, CategoryAttribute, Item, ItemAttributeValue
@@ -19,7 +20,7 @@ from tests.warehouse_helpers import cable_payload
 pytestmark = pytest.mark.asyncio
 
 
-async def test_fixed_hierarchy_and_metadata(warehouse_db):
+async def test_fixed_hierarchy_and_metadata(warehouse_db: AsyncSession) -> None:
     db = warehouse_db
     categories = (await db.scalars(select(Category))).all()
     by_key = {c.key: c for c in categories}
@@ -60,7 +61,7 @@ async def test_fixed_hierarchy_and_metadata(warehouse_db):
             )
 
 
-async def test_identity_color_and_edit_archive_semantics(warehouse_db):
+async def test_identity_color_and_edit_archive_semantics(warehouse_db: AsyncSession) -> None:
     db = warehouse_db
     payload = cable_payload(color="Synthetic pearlescent " + uuid.uuid4().hex)
     item_id = await create_item(db, payload)
@@ -84,7 +85,9 @@ async def test_identity_color_and_edit_archive_semantics(warehouse_db):
         await update_item(db, item_id, patch, fields_set=patch.model_fields_set)
 
 
-async def test_optional_blank_color_omitted_and_typed_db_constraints(warehouse_db):
+async def test_optional_blank_color_omitted_and_typed_db_constraints(
+    warehouse_db: AsyncSession,
+) -> None:
     db = warehouse_db
     item_id = await create_item(
         db, cable_payload(color="  ", length_m=str(uuid.uuid4().int % 100000 + 1))
@@ -95,6 +98,7 @@ async def test_optional_blank_color_omitted_and_typed_db_constraints(warehouse_d
             ItemAttributeValue.item_id == item_id, ItemAttributeValue.text_value.is_not(None)
         )
     )
+    assert value is not None
     with pytest.raises(DBAPIError):
         async with db.begin_nested():
             await db.execute(
@@ -107,6 +111,7 @@ async def test_optional_blank_color_omitted_and_typed_db_constraints(warehouse_d
         .join(Category)
         .where(Category.key == "power_cable", CategoryAttribute.key == "color")
     )
+    assert other_attribute is not None
     with pytest.raises(DBAPIError):
         async with db.begin_nested():
             await db.execute(

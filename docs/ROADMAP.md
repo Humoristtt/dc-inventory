@@ -159,6 +159,10 @@ ADMIN:
 
 ## 10. Production safety
 
+Stage 15 technical hardening COMPLETE.
+
+REAL_INVENTORY_ENTRY=BLOCKED_PENDING_NEXT_ROADMAP
+
 - [x] REAL_INVENTORY_MUTATIONS_ENABLED=false остаётся production default.
 - [x] Реальные warehouse mutations не включаются в этой ветке.
 - [x] Реальный workbook не импортируется в production в рамках этой ветки.

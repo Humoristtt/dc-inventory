@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 
 import pytest
+from pytest import MonkeyPatch
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -193,7 +194,8 @@ async def _cleanup_profile_fixture(item_id: str) -> None:
 
 @pytest.mark.asyncio
 async def test_real_postgres_sfp_downgrade_cycle_and_destructive_guard(
-    migration_database, monkeypatch
+    migration_database: str,
+    monkeypatch: MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("DATABASE_URL", migration_database)
     _alembic("upgrade", HEAD_REVISION)

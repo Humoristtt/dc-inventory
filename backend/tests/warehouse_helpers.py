@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,11 +12,14 @@ from app.modules.catalog.schemas import ItemCreate
 from app.modules.catalog.service import create_item
 from app.modules.identity.enums import UserAccessStatus, UserRole
 from app.modules.identity.models import TelegramIdentity, User
+from app.modules.inventory.enums import MovementType
 from app.modules.inventory.schemas import LocationCreate, MovementCreate, MovementLineCreate
-from app.modules.inventory.service import create_location, create_movement
+from app.modules.inventory.service import MovementResult, create_location, create_movement
+
+type Scenario = tuple[uuid.UUID, uuid.UUID, uuid.UUID, uuid.UUID]
 
 
-def cable_payload(**attributes):
+def cable_payload(**attributes: Any) -> ItemCreate:
     return ItemCreate(
         category_key="optical_patch_cord",
         name="Synthetic cable",
@@ -32,7 +36,11 @@ def cable_payload(**attributes):
     )
 
 
-async def actor(db, role=UserRole.ADMIN, access=UserAccessStatus.APPROVED):
+async def actor(
+    db: AsyncSession,
+    role: UserRole = UserRole.ADMIN,
+    access: UserAccessStatus = UserAccessStatus.APPROVED,
+) -> tuple[User, str]:
     now = datetime.now(UTC)
     user = User(
         id=uuid.uuid4(),
@@ -64,7 +72,7 @@ async def actor(db, role=UserRole.ADMIN, access=UserAccessStatus.APPROVED):
     return user, token
 
 
-async def scenario(db):
+async def scenario(db: AsyncSession) -> Scenario:
     user, _ = await actor(db)
     item = await create_item(db, cable_payload())
     locations = [
@@ -78,15 +86,15 @@ async def scenario(db):
 
 async def move(
     db: AsyncSession,
-    scenario,
-    kind,
-    quantity,
+    scenario: Scenario,
+    kind: MovementType | str,
+    quantity: int,
     *,
-    source=None,
-    destination=None,
-    key=None,
-    original=None,
-):
+    source: uuid.UUID | None = None,
+    destination: uuid.UUID | None = None,
+    key: str | None = None,
+    original: uuid.UUID | None = None,
+) -> MovementResult:
     result = await create_movement(
         db,
         MovementCreate(

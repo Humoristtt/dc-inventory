@@ -102,7 +102,7 @@ async def _enqueue_issue_admin_notification(
             "text": (
                 "📦 Выдача оборудования\n\n"
                 f"Сотрудник: {movement.actor_display_name_snapshot}\n"
-                f"Со склада: {location}\n\n" + "\n".join(lines)
+                f"Откуда: {location}\n\n" + "\n".join(lines)
             ),
         },
         dedupe_key=notification_dedupe_key(

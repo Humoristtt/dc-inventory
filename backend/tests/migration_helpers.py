@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 
 
-def alembic(url, *arguments, success=True):
+def alembic(url: str, *arguments: str, success: bool = True) -> str:
     result = subprocess.run(
         [str(Path(sys.executable).with_name("alembic")), *arguments],
         cwd=Path(__file__).parents[1],

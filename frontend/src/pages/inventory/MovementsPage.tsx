@@ -9,6 +9,7 @@ export function MovementsPage() {
   const [actor, setActor] = useState("");
   const [equipment, setEquipment] = useState("");
   const [location, setLocation] = useState("");
+  const [movementType, setMovementType] = useState("");
   const [offset, setOffset] = useState(0);
   const hierarchy = useQuery({queryKey:["catalog", "categories"], queryFn:({signal}) => getCatalogCategories(signal)});
   const locations = useQuery({queryKey:["inventory", "locations"], queryFn:({signal}) => getLocations(signal)});
@@ -18,11 +19,13 @@ export function MovementsPage() {
   if(equipment) params.set("category",equipment === "long-range" ? "transceivers" : equipment);
   if(equipment === "long-range") params.set("long_range","true");
   if(location) params.set("location_id",location);
+  if(movementType) params.set("movement_type",movementType);
   const history = useQuery({queryKey:["inventory","movements",params.toString()], queryFn:({signal}) => inventoryRequest<InventoryPage<Movement>>(`/api/inventory/movements?${params}`, undefined,"GET",signal)});
   const change = (setter:(value:string)=>void, value:string) => {setter(value);setOffset(0);};
   return <main className="catalog-page"><header className="category-header"><span className="section-kicker">Складской журнал</span><h1>Движения</h1></header><div className="catalog-page__body">
     <div className="history-filters">
       <label>Период<select value={period} onChange={e => change(setPeriod,e.target.value)}>{[["7d","7 дней"],["30d","30 дней"],["3m","3 месяца"],["year","Год"],["all","Всё время"]].map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label>
+      <label>Тип движения<select value={movementType} onChange={e => change(setMovementType,e.target.value)}><option value="">Все типы</option>{Object.entries(movementLabels).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       <label>Сотрудник<select value={actor} onChange={e => change(setActor,e.target.value)}><option value="">Все доступные</option>{actors.data?.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
       <label>Оборудование<select value={equipment} onChange={e => change(setEquipment,e.target.value)}><option value="">Всё оборудование</option>{hierarchy.data?.filter(x => x.parent_id === null).map(family => <optgroup label={family.display_name} key={family.id}><option value={family.key}>{family.display_name} — всё</option>{hierarchy.data.filter(x => x.parent_id === family.id).map(leaf => <option value={leaf.key} key={leaf.id}>{leaf.display_name}</option>)}{family.key === "transceivers" ? <option value="long-range">Дальние</option>:null}</optgroup>)}</select></label>
       <label>Место хранения<select value={location} onChange={e => change(setLocation,e.target.value)}><option value="">Все места</option>{locations.data?.map(x => <option key={x.id} value={x.id}>{x.name}{x.status === "ARCHIVED" ? " (архив)" : ""}</option>)}</select></label>

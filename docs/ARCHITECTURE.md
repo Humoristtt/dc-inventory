@@ -84,6 +84,30 @@ ISSUE notification создаётся до commit warehouse transaction.
 Outbox имеет deterministic dedupe key.
 Delivery worker выполняет retry/DEAD lifecycle независимо от warehouse request.
 
+TELEGRAM_DELIVERY_GUARANTEE=AT_LEAST_ONCE_NOT_EXACTLY_ONCE
+
+### Duplicate delivery window
+
+Transactional outbox гарантирует сохранность notification intent, но внешний
+Telegram Bot API не предоставляет системе атомарный commit вместе с локальным
+delivery-state update. Если Telegram принял сообщение, а worker завершился до
+фиксации успешной доставки в PostgreSQL, notification может быть отправлена
+повторно после retry.
+
+Поэтому delivery semantics — at-least-once, а не exactly-once. Dedupe key
+защищает от повторного создания одного и того же outbox intent внутри системы,
+но не превращает внешний Bot API delivery в exactly-once transport.
+
+## Runtime provenance
+
+Application image фиксирует source revision в OCI metadata:
+
+`org.opencontainers.image.revision`
+
+Git checkout на production VM и revision реально запущенного container image
+являются разными operational facts. Runtime provenance проверяется по metadata
+образа, а не выводится только из состояния checkout.
+
 ## Authorization
 
 Approved USER:

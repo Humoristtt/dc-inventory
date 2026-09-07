@@ -14,7 +14,7 @@ PREVIOUS = "a2b3c4d5e6f7"
 pytestmark = pytest.mark.asyncio
 
 
-async def test_baseline_head_empty_downgrade_and_metadata(migration_database):
+async def test_baseline_head_empty_downgrade_and_metadata(migration_database: str) -> None:
     url = migration_database
     alembic(url, "upgrade", "48c2f07f01a0")
     alembic(url, "upgrade", "head")
@@ -92,7 +92,11 @@ async def test_baseline_head_empty_downgrade_and_metadata(migration_database):
         ),
     ],
 )
-async def test_upgrade_refuses_populated_legacy_domain(migration_database, seed, reason):
+async def test_upgrade_refuses_populated_legacy_domain(
+    migration_database: str,
+    seed: str,
+    reason: str,
+) -> None:
     url = migration_database
     alembic(url, "upgrade", PREVIOUS)
     engine = create_async_engine(url)
@@ -107,7 +111,10 @@ async def test_upgrade_refuses_populated_legacy_domain(migration_database, seed,
 
 
 @pytest.mark.parametrize("domain", ["location", "item", "journal"])
-async def test_downgrade_refuses_populated_v2_without_losing_data(migration_database, domain):
+async def test_downgrade_refuses_populated_v2_without_losing_data(
+    migration_database: str,
+    domain: str,
+) -> None:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from app.modules.catalog.service import create_item
@@ -145,7 +152,7 @@ async def test_downgrade_refuses_populated_v2_without_losing_data(migration_data
     await engine.dispose()
 
 
-async def test_frozen_configuration_matches_current_product_contract():
+async def test_frozen_configuration_matches_current_product_contract() -> None:
     from dataclasses import asdict
 
     from app.modules.catalog.configuration import FAMILIES, LEAVES

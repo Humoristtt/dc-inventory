@@ -1,4 +1,5 @@
 import os
+from collections.abc import AsyncIterator
 
 os.environ.setdefault("APP_ENV", "test")
 os.environ.setdefault(
@@ -12,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 
 @pytest_asyncio.fixture
-async def warehouse_db():
+async def warehouse_db() -> AsyncIterator[AsyncSession]:
     if os.getenv("RUN_POSTGRES_INTEGRATION") != "1":
         pytest.skip("requires migrated disposable PostgreSQL")
     engine = create_async_engine(os.environ["DATABASE_URL"])
@@ -27,7 +28,7 @@ async def warehouse_db():
 
 
 @pytest_asyncio.fixture
-async def migration_database():
+async def migration_database() -> AsyncIterator[str]:
     """Create and remove only our uniquely named disposable database."""
     import uuid
 

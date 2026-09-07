@@ -10,19 +10,22 @@
 
 - transceivers
   - transceiver_ethernet
-  - transceiver_fibre_channel
+  - transceiver_fc
 - optics
-  - optical_patch_cords
-  - optical_splitters
+  - optical_patch_cord
+  - optical_splitter
 - network_adapters
-  - network_adapter_ethernet
-  - network_adapter_fibre_channel
+  - network_ethernet
+  - network_fc
 - storage
   - ssd
   - hdd
 - memory
-- pcie_adapters
-- power_cables
+  - ram
+- pcie
+  - pcie_adapter
+- power
+  - power_cable
 
 Item может принадлежать только leaf category.
 

@@ -4,6 +4,10 @@
 
 Telegram Mini App для складского учёта оборудования ЦОД.
 
+Stage15 technical hardening завершён. Warehouse Domain V2 этой feature-ветки
+является следующим schema/product состоянием и требует отдельного merge/deploy
+acceptance перед production rollout.
+
 Система должна отвечать на вопросы:
 
 1. Что есть в каталоге?

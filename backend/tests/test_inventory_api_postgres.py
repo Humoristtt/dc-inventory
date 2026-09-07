@@ -1,7 +1,9 @@
 import uuid
-from datetime import UTC, datetime, timedelta
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta, tzinfo
 
 import pytest
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -13,20 +15,25 @@ from tests.warehouse_helpers import actor, move, scenario
 
 pytestmark = pytest.mark.asyncio
 
+type ApiUsers = dict[str, tuple[uuid.UUID, dict[str, str]]]
 
-async def api_context(db, enabled=True):
+
+async def api_context(
+    db: AsyncSession,
+    enabled: bool = True,
+) -> tuple[FastAPI, ApiUsers]:
     settings = Settings(app_env="test", real_inventory_mutations_enabled=enabled)
     app = create_app(settings)
     connection = await db.connection()
 
-    async def session():
+    async def session() -> AsyncIterator[AsyncSession]:
         async with AsyncSession(
             connection, expire_on_commit=False, join_transaction_mode="create_savepoint"
         ) as request_db:
             yield request_db
 
     app.dependency_overrides[get_db_session] = session
-    users = {}
+    users: ApiUsers = {}
     for name, role, access in [
         ("admin", UserRole.ADMIN, UserAccessStatus.APPROVED),
         ("user", UserRole.USER, UserAccessStatus.APPROVED),
@@ -45,7 +52,7 @@ async def api_context(db, enabled=True):
     return app, users
 
 
-async def test_read_access_and_actor_scoped_journal(warehouse_db):
+async def test_read_access_and_actor_scoped_journal(warehouse_db: AsyncSession) -> None:
     db = warehouse_db
     s = await scenario(db)
     app, users = await api_context(db)
@@ -58,7 +65,7 @@ async def test_read_access_and_actor_scoped_journal(warehouse_db):
 
     class OldClock:
         @staticmethod
-        def now(tz):
+        def now(tz: tzinfo | None) -> datetime:
             return datetime.now(UTC) - timedelta(days=150)
 
     with patch.object(service, "datetime", OldClock):
@@ -104,7 +111,7 @@ async def test_read_access_and_actor_scoped_journal(warehouse_db):
         ).status_code == 422
 
 
-async def test_mutation_roles_idempotency_and_gate(warehouse_db):
+async def test_mutation_roles_idempotency_and_gate(warehouse_db: AsyncSession) -> None:
     db = warehouse_db
     s = await scenario(db)
     await move(db, s, "RECEIPT", 10, destination=s[2])
@@ -177,8 +184,8 @@ async def test_mutation_roles_idempotency_and_gate(warehouse_db):
 
 
 async def test_issue_enqueues_one_admin_notification_and_replay_does_not_duplicate(
-    warehouse_db,
-):
+    warehouse_db: AsyncSession,
+) -> None:
     from sqlalchemy import func, select
 
     from app.modules.notifications.models import NotificationOutbox
@@ -224,12 +231,16 @@ async def test_issue_enqueues_one_admin_notification_and_replay_does_not_duplica
         assert replay.status_code == 201, replay.text
         assert replay.json()["id"] == movement_id
 
-        count = await db.scalar(
+        issue_count = await db.scalar(
             select(func.count())
             .select_from(NotificationOutbox)
             .where(NotificationOutbox.dedupe_key == issue_key)
         )
-        assert count == 1
+        assert issue_count == 1
+
+        total_before_return = await db.scalar(
+            select(func.count()).select_from(NotificationOutbox)
+        )
 
         row = await db.scalar(
             select(NotificationOutbox).where(NotificationOutbox.dedupe_key == issue_key)
@@ -237,8 +248,11 @@ async def test_issue_enqueues_one_admin_notification_and_replay_does_not_duplica
         assert row is not None
         assert row.method == "sendMessage"
         assert row.payload["chat_id"] == 700000001
-        assert "Выдача оборудования" in row.payload["text"]
-        assert "2 шт." in row.payload["text"]
+        message_text = row.payload["text"]
+        assert isinstance(message_text, str)
+        assert "Выдача оборудования" in message_text
+        assert "Откуда:" in message_text
+        assert "2 шт." in message_text
 
         return_payload = {
             "movement_type": "RETURN",
@@ -254,9 +268,14 @@ async def test_issue_enqueues_one_admin_notification_and_replay_does_not_duplica
         )
         assert response.status_code == 201, response.text
 
-        count = await db.scalar(
+        issue_count = await db.scalar(
             select(func.count())
             .select_from(NotificationOutbox)
             .where(NotificationOutbox.dedupe_key == issue_key)
         )
-        assert count == 1
+        assert issue_count == 1
+
+        total_after_return = await db.scalar(
+            select(func.count()).select_from(NotificationOutbox)
+        )
+        assert total_after_return == total_before_return

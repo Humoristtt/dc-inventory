@@ -1,6 +1,7 @@
 import uuid
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.catalog.query import (
     build_catalog_query_spec,
@@ -14,7 +15,12 @@ from tests.warehouse_helpers import cable_payload
 pytestmark = pytest.mark.asyncio
 
 
-async def transceiver(db, marker, reach, category="transceiver_ethernet"):
+async def transceiver(
+    db: AsyncSession,
+    marker: str,
+    reach: str,
+    category: str = "transceiver_ethernet",
+) -> uuid.UUID:
     manufacturer = await create_manufacturer(db, ManufacturerCreate(name=uuid.uuid4().hex))
     return await create_item(
         db,
@@ -35,7 +41,9 @@ async def transceiver(db, marker, reach, category="transceiver_ethernet"):
     )
 
 
-async def test_hierarchy_long_range_and_shared_family_facets(warehouse_db):
+async def test_hierarchy_long_range_and_shared_family_facets(
+    warehouse_db: AsyncSession,
+) -> None:
     db = warehouse_db
     marker = uuid.uuid4().hex
     short = await transceiver(db, marker, "до 300 м")
@@ -59,7 +67,9 @@ async def test_hierarchy_long_range_and_shared_family_facets(warehouse_db):
     assert (await query_catalog_items(db, spec, limit=20, offset=0)).total == 2
 
 
-async def test_scoped_facets_free_text_and_pagination(warehouse_db):
+async def test_scoped_facets_free_text_and_pagination(
+    warehouse_db: AsyncSession,
+) -> None:
     db = warehouse_db
     marker = uuid.uuid4().hex
     ids = []
@@ -96,7 +106,10 @@ async def test_scoped_facets_free_text_and_pagination(warehouse_db):
         ["length_m:gte:1", "length_m:gte:2"],
     ],
 )
-async def test_invalid_filters_are_rejected(warehouse_db, expressions):
+async def test_invalid_filters_are_rejected(
+    warehouse_db: AsyncSession,
+    expressions: list[str],
+) -> None:
     with pytest.raises(CatalogValidationError):
         await build_catalog_query_spec(
             warehouse_db, category_key="optical_patch_cord", filter_expressions=expressions
@@ -104,6 +117,9 @@ async def test_invalid_filters_are_rejected(warehouse_db, expressions):
 
 
 @pytest.mark.parametrize("reach", ["unknown", "до 2 км experimental", "10/20 км"])
-async def test_ambiguous_reach_rejected(warehouse_db, reach):
+async def test_ambiguous_reach_rejected(
+    warehouse_db: AsyncSession,
+    reach: str,
+) -> None:
     with pytest.raises(CatalogValidationError, match="reach"):
         await transceiver(warehouse_db, uuid.uuid4().hex, reach)

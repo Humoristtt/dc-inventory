@@ -12,7 +12,7 @@ from app.modules.inventory.service import InventoryValidationError, validate_pos
 
 
 @pytest.mark.parametrize("quantity", [True, 1.5, "1", 0, -1, 2**53])
-def test_quantity_requires_positive_exact_json_integer(quantity):
+def test_quantity_requires_positive_exact_json_integer(quantity: object) -> None:
     with pytest.raises(ValidationError):
         MovementLineCreate(item_id=uuid.uuid4(), quantity=quantity)
 
@@ -27,7 +27,7 @@ def test_quantity_requires_positive_exact_json_integer(quantity):
         ("TRANSFER", True, True),
     ],
 )
-def test_movement_shapes(kind, source, destination):
+def test_movement_shapes(kind: str, source: bool, destination: bool) -> None:
     for actual_source in (False, True):
         for actual_destination in (False, True):
             payload = MovementCreate(
@@ -44,7 +44,7 @@ def test_movement_shapes(kind, source, destination):
                     validate_positions(payload)
 
 
-def test_transfer_rejects_same_location():
+def test_transfer_rejects_same_location() -> None:
     location = uuid.uuid4()
     with pytest.raises(InventoryValidationError, match="must differ"):
         validate_positions(

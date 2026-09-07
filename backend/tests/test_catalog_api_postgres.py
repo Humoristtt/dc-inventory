@@ -1,5 +1,6 @@
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from tests.test_inventory_api_postgres import api_context
 from tests.warehouse_helpers import cable_payload
@@ -7,7 +8,7 @@ from tests.warehouse_helpers import cable_payload
 pytestmark = pytest.mark.asyncio
 
 
-async def test_catalog_api_read_admin_and_gate_boundaries(warehouse_db):
+async def test_catalog_api_read_admin_and_gate_boundaries(warehouse_db: AsyncSession) -> None:
     app, users = await api_context(warehouse_db)
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         for path in ("/api/catalog/categories", "/api/catalog/items", "/api/catalog/items/facets"):

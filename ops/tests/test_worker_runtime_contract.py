@@ -58,26 +58,35 @@ for service in (
     assert "retries: 3" in block
     assert "start_period: 20s" in block
 
-for filename in (
-    "backend/app/modules/notifications/worker.py",
-    "backend/app/maintenance/worker.py",
-):
-    source = (ROOT / filename).read_text()
+notification_source = (
+    ROOT / "backend/app/modules/notifications/worker.py"
+).read_text()
 
-    assert (
-        "from app.core.worker_health import heartbeat_forever"
-        in source
-    ), filename
+assert "write_worker_heartbeat" in notification_source
+assert "heartbeat_forever" not in notification_source
+assert "Notification worker iteration failed" in notification_source
 
-    assert "asyncio.TaskGroup()" in source, filename
-    assert "heartbeat_forever()" in source, filename
+maintenance_source = (
+    ROOT / "backend/app/maintenance/worker.py"
+).read_text()
+
+assert (
+    "from app.core.worker_health import heartbeat_forever"
+    in maintenance_source
+)
+assert "asyncio.TaskGroup()" in maintenance_source
+assert "heartbeat_forever()" in maintenance_source
 
 health_source = (
     ROOT / "backend/app/core/worker_health.py"
 ).read_text()
 
 assert "heartbeat_is_fresh" in health_source
+assert "write_worker_heartbeat" in health_source
 assert "os.utime" in health_source
+
+db_permissions = service_block("db-permissions")
+assert "/var/lib/postgresql" in db_permissions
 
 print("WORKER_HEALTH_CONTRACT=PASS")
 print("DOCKER_RUNTIME_POLICY_CONTRACT=PASS")

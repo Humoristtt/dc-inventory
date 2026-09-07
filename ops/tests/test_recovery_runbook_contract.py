@@ -19,7 +19,7 @@ for required in (
     "set -Eeuo pipefail",
     'if [ "${EUID}" -ne 0 ]',
     "RESTORE_DOWNLOAD_VERIFICATION=PASS",
-    "RESTORE_MANIFEST_CHECKOUT=PASS",
+    "RESTORE_MANIFEST_CHECKOUT_METADATA=PASS",
     "RESTORE_ALEMBIC=PASS",
     "RESTORE_RECONCILIATION=ZERO_DRIFT",
     "RESTORE_RUNTIME_CONFIG=ISOLATED_PLACEHOLDERS",
@@ -43,6 +43,7 @@ for forbidden in (
     "docker compose down -v",
     "BypassGovernanceRetention",
     "REAL_INVENTORY_MUTATIONS_ENABLED=true",
+    "backup manifest does not match current production checkout",
 ):
     assert forbidden not in source, forbidden
 

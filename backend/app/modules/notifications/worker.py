@@ -9,9 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.core.config import Settings, get_settings
-from app.core.worker_health import heartbeat_forever
+from app.core.worker_health import write_worker_heartbeat
 from app.db.engine import create_engine
-from app.modules.notifications.gateway import TelegramGatewayClient
+from app.modules.notifications.gateway import (
+    TelegramGatewayClient,
+    TelegramGatewayError,
+)
 from app.modules.notifications.service import (
     ClaimedNotification,
     claim_notification_batch,
@@ -138,6 +141,12 @@ def _telegram_message_id(result: object) -> int | None:
     ):
         return None
     return message_id
+
+
+def _safe_delivery_error(exc: Exception) -> str:
+    if isinstance(exc, TelegramGatewayError):
+        return f"{type(exc).__name__}: {exc}"
+    return type(exc).__name__
 
 
 async def _is_current_start(
@@ -305,17 +314,32 @@ async def run_worker_once(
         try:
             result = await client.send(claim.method, claim.payload)
         except Exception as exc:
+            safe_error = _safe_delivery_error(exc)
             logger.warning(
-                "Telegram outbox delivery failed id=%s attempt=%s",
+                "Telegram outbox delivery failed "
+                "id=%s attempt=%s error=%s",
                 claim.id,
                 claim.attempts,
+                safe_error,
             )
             await _finalize_failure(
                 engine,
                 claim,
-                error=type(exc).__name__,
+                error=safe_error,
                 max_attempts=settings.notification_worker_max_attempts,
             )
+            if (
+                claim.attempts
+                >= settings.notification_worker_max_attempts
+            ):
+                logger.error(
+                    "Telegram outbox delivery reached DEAD "
+                    "id=%s method=%s attempts=%s error=%s",
+                    claim.id,
+                    claim.method,
+                    claim.attempts,
+                    safe_error,
+                )
         else:
             if start_context is None:
                 await _finalize_success(engine, claim)
@@ -365,6 +389,8 @@ async def _run_worker_loop(
         except Exception:
             logger.exception("Notification worker iteration failed")
             processed = 0
+        else:
+            write_worker_heartbeat()
 
         if processed == 0:
             await asyncio.sleep(
@@ -378,19 +404,11 @@ async def run_worker() -> None:
     engine = create_engine(settings)
 
     try:
-        async with asyncio.TaskGroup() as tasks:
-            tasks.create_task(
-                heartbeat_forever(),
-                name="notification-worker-heartbeat",
-            )
-            tasks.create_task(
-                _run_worker_loop(
-                    engine,
-                    client,
-                    settings,
-                ),
-                name="notification-worker-loop",
-            )
+        await _run_worker_loop(
+            engine,
+            client,
+            settings,
+        )
     finally:
         await engine.dispose()
 

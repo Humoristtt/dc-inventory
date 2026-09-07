@@ -11,7 +11,7 @@ x-backend-image: &backend-image
   build:
     context: ./backend
     args:
-      APP_REVISION: ${APP_REVISION:-unknown}
+      APP_REVISION: ${APP_REVISION:-}
 
 x-backend-environment: &backend-environment
   APP_ENV: production
@@ -115,6 +115,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+      - /var/lib/postgresql
     cap_drop:
       - ALL
     security_opt:
@@ -271,7 +272,7 @@ services:
     build:
       context: ./frontend
       args:
-        APP_REVISION: ${APP_REVISION:-unknown}
+        APP_REVISION: ${APP_REVISION:-}
     ports:
       - "127.0.0.1:${WEB_PORT:-8080}:8080"
     depends_on:

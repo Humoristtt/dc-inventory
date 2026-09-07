@@ -11,7 +11,9 @@ RUN npm run build
 
 FROM nginx:alpine@sha256:a9ae6f6d078d477e21323310498e5196cb2b7c0aedd9e07b7306612077227d7c
 
-ARG APP_REVISION=unknown
+ARG APP_REVISION
+RUN test -n "$APP_REVISION" \
+    && test "$APP_REVISION" != "unknown"
 LABEL org.opencontainers.image.revision="${APP_REVISION}"
 
 COPY nginx.conf /etc/nginx/nginx.conf

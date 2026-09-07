@@ -52,12 +52,26 @@ label = "org.opencontainers.image.revision"
 assert label in backend
 assert label in frontend
 
-for source in (compose, compose_dev):
-    assert (
-        source.count(
-            "APP_REVISION: ${APP_REVISION:-unknown}"
-        )
-        == 2
+for dockerfile in (backend, frontend):
+    assert "ARG APP_REVISION\n" in dockerfile
+    assert 'test -n "$APP_REVISION"' in dockerfile
+    assert 'test "$APP_REVISION" != "unknown"' in dockerfile
+    assert "APP_REVISION=unknown" not in dockerfile
+
+assert (
+    compose.count(
+        "APP_REVISION: ${APP_REVISION:-}"
     )
+    == 2
+)
+assert "APP_REVISION:-unknown" not in compose
+
+assert (
+    compose_dev.count(
+        "APP_REVISION: ${APP_REVISION:-development}"
+    )
+    == 2
+)
+assert "APP_REVISION:-unknown" not in compose_dev
 
 print("AUD_02_SOURCE_CONTRACT=PASS")

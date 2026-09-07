@@ -91,8 +91,8 @@ TELEGRAM_DELIVERY_GUARANTEE=AT_LEAST_ONCE_NOT_EXACTLY_ONCE
 Transactional outbox гарантирует сохранность notification intent, но внешний
 Telegram Bot API не предоставляет системе атомарный commit вместе с локальным
 delivery-state update. Если Telegram принял сообщение, а worker завершился до
-фиксации успешной доставки в PostgreSQL, notification может быть отправлена
-повторно после retry.
+фиксации успешной доставки в PostgreSQL, notification может быть отправлена повторно
+после retry.
 
 Поэтому delivery semantics — at-least-once, а не exactly-once. Dedupe key
 защищает от повторного создания одного и того же outbox intent внутри системы,

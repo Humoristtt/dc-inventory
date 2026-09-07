@@ -127,6 +127,35 @@ for assertion in (
     )
 
 
+current_gate_docs = (
+    "README.md",
+    "docs/DEPLOYMENT.md",
+    "docs/OPERATIONS.md",
+    "docs/ROADMAP.md",
+    "docs/STAGE15_AUDIT_REMEDIATION.md",
+    "docs/STAGE15_PLAN.md",
+    "docs/RECOVERY_RUNBOOK.md",
+)
+
+for name in current_gate_docs:
+    require(
+        name,
+        "BLOCKED_PENDING_NEXT_ROADMAP",
+    )
+    forbid(
+        name,
+        "BLOCKED_STAGE15",
+    )
+
+forbid(
+    "docs/DEVELOPMENT.md",
+    "Stage15C acceptance",
+)
+require(
+    "docs/DEVELOPMENT.md",
+    "npm run test:e2e:fullstack",
+)
+
 require(
     "docs/STAGE15_PLAN.md",
     "STAGE15=TECHNICAL_HARDENING_COMPLETE",

@@ -20,7 +20,7 @@ During rehearsal:
 - destructive Alembic downgrade is forbidden;
 - real inventory is not imported;
 - `REAL_INVENTORY_MUTATIONS_ENABLED` remains `false`;
-- `REAL_INVENTORY_ENTRY` remains `BLOCKED_STAGE15`.
+- `REAL_INVENTORY_ENTRY` remains `BLOCKED_PENDING_NEXT_ROADMAP`.
 
 ## Prerequisites
 

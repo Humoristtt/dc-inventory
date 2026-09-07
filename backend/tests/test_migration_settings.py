@@ -3,10 +3,7 @@ from pathlib import Path
 from app.core.config import Settings
 from app.db.migration_settings import migration_server_settings
 
-DATABASE_URL = (
-    "postgresql+asyncpg://dc_inventory:test@postgres:5432/"
-    "dc_inventory"
-)
+DATABASE_URL = "postgresql+asyncpg://dc_inventory:test@postgres:5432/dc_inventory"
 
 
 def test_migration_server_settings_defaults() -> None:
@@ -36,9 +33,6 @@ def test_migration_server_settings_use_dedicated_values() -> None:
 
 
 def test_alembic_env_uses_canonical_migration_server_settings() -> None:
-    source = Path("migrations/env.py").read_text()
+    source = (Path(__file__).parents[1] / "migrations/env.py").read_text()
 
-    assert (
-        '"server_settings": migration_server_settings(settings)'
-        in source
-    )
+    assert '"server_settings": migration_server_settings(settings)' in source

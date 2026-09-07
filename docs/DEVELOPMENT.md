@@ -134,15 +134,16 @@ Frontend:
     npm run build
     npm run test:e2e
 
-Текущий frontend включает Stage 8 catalog/Admin/stock/«Моё» UX поверх
-существующего Telegram/auth/access gate. Focused Vitest regressions находятся
-рядом с components/pages. `frontend/e2e/stage8.spec.ts` использует только
-deterministic synthetic API/Telegram boundaries и запускается на Telegram
-Desktop narrow, Android-like, iPhone-like и desktop/admin profiles. Это
+Текущий frontend включает Warehouse Domain V2 catalog/Admin/stock/«Моё» UX
+поверх существующего Telegram/auth/access gate. Focused Vitest regressions
+находятся рядом с components/pages. `frontend/e2e/warehouse-v2.spec.ts`
+использует deterministic synthetic API/Telegram boundaries и запускается на
+Telegram Desktop narrow, Android-like, iPhone-like и desktop profiles. Это
 browser-level acceptance, а не full-stack E2E: FastAPI/PostgreSQL этим
 Playwright suite не поднимаются; backend contracts проверяются отдельными
 Pytest/integration suites. Browser runtime устанавливается локально через
-`npx playwright install chromium`; CI использует `--with-deps`.
+`npx playwright install chromium webkit`; CI устанавливает browser dependencies
+в required browser gate.
 
 Из корня репозитория:
 
@@ -226,7 +227,8 @@ Catalog PostgreSQL checks можно запускать сфокусирован
     DATABASE_URL=postgresql+asyncpg://...@127.0.0.1:PORT/dc_inventory \
     pytest -q tests/test_catalog_postgres.py tests/test_catalog_api_postgres.py
 
-Warehouse PostgreSQL checks, включая allocation и reactivation/reversal races:
+Warehouse PostgreSQL checks, включая quantity allocation, concurrent
+movements, idempotency, correction/reversal и API authorization:
 
     RUN_POSTGRES_INTEGRATION=1 \
     DATABASE_URL=postgresql+asyncpg://...@127.0.0.1:PORT/dc_inventory \
@@ -252,9 +254,9 @@ production least-privilege identities.
 
 Есть два независимых browser-level слоя проверки.
 
-`npm run test:e2e` запускает Stage 8 UX/browser acceptance с синтетическими API
-fixtures. Этот слой нужен для deterministic UI, responsive и Telegram-shell
-сценариев.
+`npm run test:e2e` запускает Warehouse V2 UX/browser acceptance из
+`frontend/e2e/warehouse-v2.spec.ts` с синтетическими API fixtures. Этот слой
+нужен для deterministic UI, responsive и Telegram-shell сценариев.
 
 `npm run test:e2e:fullstack` запускается CI против production-shaped
 `compose.yaml`: настоящий frontend nginx проксирует запросы в настоящий FastAPI,
@@ -265,9 +267,9 @@ WebApp context с корректно подписанным CI `initData`; `/api
 
 ## Warehouse projection reconciliation
 
-Stage 6 содержит небольшой read-only drift check без repair/rebuild framework.
-После migrations, перед первым реальным inventory вводом и после любого restore
-запустить из корня репозитория:
+Warehouse Domain V2 содержит read-only projection reconciliation без
+repair/rebuild framework. После migrations, перед первым реальным inventory
+вводом и после любого restore запустить из корня репозитория:
 
     set -a
     source .env
@@ -277,10 +279,11 @@ Stage 6 содержит небольшой read-only drift check без repair/
     psql "$PSQL_DATABASE_URL" -v ON_ERROR_STOP=1 \
       -f backend/scripts/reconcile_inventory_projections.sql
 
-Скрипт пересчитывает quantity positions и latest serial state из immutable
-Movement/MovementLine journal. Оба result set должны содержать zero rows. Любая
+Скрипт пересчитывает quantity-by-location projection из immutable
+Movement/MovementLine journal. Result set должен содержать zero rows. Любая
 строка означает data-integrity blocker: остановить inventory mutations,
 сохранить backup artifact и расследовать причину; скрипт сам ничего не чинит.
+Warehouse V2 не имеет active InventoryUnit/serial/custody projection.
 
 Stage15A automated backup и Stage15B real isolated restore уже приняты,
 Stage15 technical hardening завершён. Это всё ещё не снимает production-data

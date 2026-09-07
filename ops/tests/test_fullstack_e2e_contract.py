@@ -20,7 +20,7 @@ workflow = (
 
 
 assert package["scripts"]["test:e2e"] == (
-    "playwright test e2e/stage8.spec.ts"
+    "playwright test e2e/warehouse-v2.spec.ts"
 )
 
 assert package["scripts"]["test:e2e:fullstack"] == (

@@ -42,9 +42,7 @@ SETTINGS = Settings(
 async def cleanup_users(db: AsyncSession, user_ids: list[uuid.UUID]) -> None:
     request_ids = list(
         (
-            await db.scalars(
-                select(AccessRequest.id).where(AccessRequest.user_id.in_(user_ids))
-            )
+            await db.scalars(select(AccessRequest.id).where(AccessRequest.user_id.in_(user_ids)))
         ).all()
     )
     if request_ids:
@@ -54,9 +52,7 @@ async def cleanup_users(db: AsyncSession, user_ids: list[uuid.UUID]) -> None:
             )
         )
         await db.execute(delete(AccessRequest).where(AccessRequest.id.in_(request_ids)))
-    await db.execute(
-        delete(TelegramIdentity).where(TelegramIdentity.user_id.in_(user_ids))
-    )
+    await db.execute(delete(TelegramIdentity).where(TelegramIdentity.user_id.in_(user_ids)))
     await db.execute(delete(User).where(User.id.in_(user_ids)))
     await db.commit()
 
@@ -141,12 +137,8 @@ async def test_approve_callback_is_authorized_atomic_and_idempotent() -> None:
             assert target.access_status == UserAccessStatus.APPROVED
 
             keys = [
-                notification_dedupe_key(
-                    "access-request", request_id, "user-decision"
-                ),
-                notification_dedupe_key(
-                    "callback", "callback-1", "clear-buttons"
-                ),
+                notification_dedupe_key("access-request", request_id, "user-decision"),
+                notification_dedupe_key("callback", "callback-1", "clear-buttons"),
                 notification_dedupe_key("callback", "callback-1", "answer"),
             ]
             count = await db.scalar(
@@ -240,9 +232,7 @@ async def test_telegram_update_dedupe_is_persistent() -> None:
             await db.commit()
             assert await register_telegram_update(db, update_id) is False
             await db.commit()
-            await db.execute(
-                delete(TelegramUpdate).where(TelegramUpdate.update_id == update_id)
-            )
+            await db.execute(delete(TelegramUpdate).where(TelegramUpdate.update_id == update_id))
             await db.commit()
     finally:
         await engine.dispose()

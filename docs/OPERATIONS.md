@@ -192,10 +192,10 @@ Canonical script:
 - после restore;
 - при подозрении на projection drift.
 
-Ожидается zero rows для:
+Ожидается zero rows.
 
-- QUANTITY drift;
-- SERIAL drift.
+Любая возвращённая строка означает расхождение между immutable movement journal
+и текущей stock_balances projection.
 
 Если drift найден:
 
@@ -293,7 +293,7 @@ Accepted procedure:
 7. проверить critical row counts/invariants;
 8. выполнить application compatibility check;
 9. выполнить canonical projection reconciliation;
-10. получить QUANTITY drift = 0 и SERIAL drift = 0;
+10. получить zero rows от canonical inventory projection reconciliation;
 11. удалить temporary restore environment только после сохранения evidence;
 12. записать acceptance в `docs/HISTORY.md`.
 

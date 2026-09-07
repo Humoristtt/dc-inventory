@@ -1,0 +1,604 @@
+{
+  "families": {
+    "transceivers": [
+      "Трансиверы",
+      "SFP, SFP+, SFP28, XFP и QSFP для Ethernet и Fibre Channel."
+    ],
+    "optics": [
+      "Оптика",
+      "Оптические патч-корды, MPO/LC-кабели и сплиттеры."
+    ],
+    "network_adapters": [
+      "Сетевые адаптеры",
+      "Сетевые карты Ethernet и адаптеры Fibre Channel."
+    ],
+    "storage": [
+      "Накопители",
+      "Твердотельные SSD и жёсткие диски HDD."
+    ],
+    "memory": [
+      "Оперативная память",
+      "Модули серверной оперативной памяти."
+    ],
+    "pcie": [
+      "PCIe-адаптеры",
+      "Контроллеры и адаптеры расширения PCIe."
+    ],
+    "power": [
+      "Кабели питания",
+      "Кабели питания для серверов и сетевого оборудования."
+    ]
+  },
+  "leaves": {
+    "transceiver_ethernet": [
+      "transceivers",
+      "Ethernet",
+      [
+        {
+          "key": "speed",
+          "label": "Скорость",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "wavelength",
+          "label": "Длина волны",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "reach",
+          "label": "Дальность",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "form_factor",
+          "label": "Форм-фактор",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "fiber",
+          "label": "Волокно / среда",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "connector",
+          "label": "Разъём",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "reach_m",
+          "label": "Максимальная дальность",
+          "required": true,
+          "data_type": "INTEGER",
+          "unit": "м",
+          "derived": true
+        }
+      ]
+    ],
+    "transceiver_fc": [
+      "transceivers",
+      "Fibre Channel",
+      [
+        {
+          "key": "speed",
+          "label": "Скорость",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "wavelength",
+          "label": "Длина волны",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "reach",
+          "label": "Дальность",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "form_factor",
+          "label": "Форм-фактор",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "fiber",
+          "label": "Волокно / среда",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "connector",
+          "label": "Разъём",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "reach_m",
+          "label": "Максимальная дальность",
+          "required": true,
+          "data_type": "INTEGER",
+          "unit": "м",
+          "derived": true
+        }
+      ]
+    ],
+    "optical_patch_cord": [
+      "optics",
+      "Оптические патч-корды",
+      [
+        {
+          "key": "fiber",
+          "label": "Тип волокна",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "fiber_category",
+          "label": "Категория волокна",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "connector_a",
+          "label": "Разъём A",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "connector_b",
+          "label": "Разъём B",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "length_m",
+          "label": "Длина",
+          "required": true,
+          "data_type": "DECIMAL",
+          "unit": "м",
+          "derived": false
+        },
+        {
+          "key": "construction",
+          "label": "Исполнение",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "color",
+          "label": "Цвет",
+          "required": false,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        }
+      ]
+    ],
+    "optical_splitter": [
+      "optics",
+      "Сплиттеры и делители",
+      [
+        {
+          "key": "type",
+          "label": "Тип",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "configuration",
+          "label": "Конфигурация",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "fiber",
+          "label": "Волокно",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "wavelength",
+          "label": "Рабочие длины волн",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "connector",
+          "label": "Разъёмы",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "split_ratio",
+          "label": "Деление",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "construction",
+          "label": "Исполнение",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        }
+      ]
+    ],
+    "network_ethernet": [
+      "network_adapters",
+      "Ethernet",
+      [
+        {
+          "key": "interface",
+          "label": "Интерфейс PCIe",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "ports",
+          "label": "Количество портов",
+          "required": true,
+          "data_type": "INTEGER",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "speed",
+          "label": "Скорость",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "port_type",
+          "label": "Тип портов",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "application",
+          "label": "Назначение",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        }
+      ]
+    ],
+    "network_fc": [
+      "network_adapters",
+      "Fibre Channel",
+      [
+        {
+          "key": "interface",
+          "label": "Интерфейс PCIe",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "ports",
+          "label": "Количество портов",
+          "required": true,
+          "data_type": "INTEGER",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "speed",
+          "label": "Скорость",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "port_type",
+          "label": "Тип портов",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "application",
+          "label": "Назначение",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        }
+      ]
+    ],
+    "ssd": [
+      "storage",
+      "SSD",
+      [
+        {
+          "key": "form_factor",
+          "label": "Форм-фактор",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "interface",
+          "label": "Интерфейс",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "capacity",
+          "label": "Объём",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "interface_speed",
+          "label": "Скорость интерфейса",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "type",
+          "label": "Тип",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        }
+      ]
+    ],
+    "hdd": [
+      "storage",
+      "HDD",
+      [
+        {
+          "key": "form_factor",
+          "label": "Форм-фактор",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "interface",
+          "label": "Интерфейс",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "capacity",
+          "label": "Объём",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "rpm",
+          "label": "Скорость вращения",
+          "required": true,
+          "data_type": "INTEGER",
+          "unit": "RPM",
+          "derived": false
+        },
+        {
+          "key": "type",
+          "label": "Тип",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        }
+      ]
+    ],
+    "ram": [
+      "memory",
+      "Оперативная память",
+      [
+        {
+          "key": "capacity",
+          "label": "Объём",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "type",
+          "label": "Тип",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "speed",
+          "label": "Скорость",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "organization",
+          "label": "Организация",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "ecc",
+          "label": "ECC",
+          "required": true,
+          "data_type": "BOOLEAN",
+          "unit": null,
+          "derived": false
+        }
+      ]
+    ],
+    "pcie_adapter": [
+      "pcie",
+      "PCIe-адаптеры",
+      [
+        {
+          "key": "interface",
+          "label": "Интерфейс",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "ports",
+          "label": "Порты",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "application",
+          "label": "Назначение",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "features",
+          "label": "Особенности",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        }
+      ]
+    ],
+    "power_cable": [
+      "power",
+      "Кабели питания",
+      [
+        {
+          "key": "type",
+          "label": "Тип",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "connector_a",
+          "label": "Разъём A",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "connector_b",
+          "label": "Разъём B",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "length_m",
+          "label": "Длина",
+          "required": true,
+          "data_type": "DECIMAL",
+          "unit": "м",
+          "derived": false
+        },
+        {
+          "key": "rating",
+          "label": "Номинал",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        },
+        {
+          "key": "color",
+          "label": "Цвет",
+          "required": true,
+          "data_type": "TEXT",
+          "unit": null,
+          "derived": false
+        }
+      ]
+    ]
+  }
+}

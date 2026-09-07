@@ -30,7 +30,9 @@ export function useCatalogUrlState() {
   ) => {
     setSearchParams((currentParams) => {
       const currentState = readCatalogViewState(currentParams);
-      return catalogViewStateToSearchParams(update(currentState));
+      const next = catalogViewStateToSearchParams(update(currentState));
+      if (currentParams.get("long_range") === "true") next.set("long_range", "true");
+      return next;
     }, options);
   }, [setSearchParams]);
 

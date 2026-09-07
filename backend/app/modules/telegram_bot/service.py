@@ -137,13 +137,8 @@ async def get_or_create_access_decision_callbacks(
         (
             await db.scalars(
                 select(AccessDecisionCallback)
-                .where(
-                    AccessDecisionCallback.access_request_id
-                    == access_request_id
-                )
-                .order_by(
-                    AccessDecisionCallback.action
-                )
+                .where(AccessDecisionCallback.access_request_id == access_request_id)
+                .order_by(AccessDecisionCallback.action)
             )
         ).all()
     )
@@ -154,36 +149,21 @@ async def get_or_create_access_decision_callbacks(
             access_request_id,
         )
 
-    by_action = {
-        callback.action: callback
-        for callback in existing
-    }
+    by_action = {callback.action: callback for callback in existing}
 
     approve = by_action.get("APPROVE")
     reject = by_action.get("REJECT")
 
-    if (
-        len(existing) != 2
-        or approve is None
-        or reject is None
-    ):
-        raise RuntimeError(
-            "access decision callback pair is incomplete"
-        )
+    if len(existing) != 2 or approve is None or reject is None:
+        raise RuntimeError("access decision callback pair is incomplete")
 
     return approve, reject
 
 
 def _display_identity(identity: TelegramIdentity) -> str:
     username = f"@{identity.username}" if identity.username else "без username"
-    full_name = " ".join(
-        part for part in (identity.first_name, identity.last_name) if part
-    )
-    return (
-        f"{full_name}\n"
-        f"{username}\n"
-        f"Telegram ID: {identity.telegram_user_id}"
-    )
+    full_name = " ".join(part for part in (identity.first_name, identity.last_name) if part)
+    return f"{full_name}\n{username}\nTelegram ID: {identity.telegram_user_id}"
 
 
 async def enqueue_access_request_admin_notification(
@@ -195,25 +175,18 @@ async def enqueue_access_request_admin_notification(
 ) -> None:
     admin_id = settings.admin_telegram_user_id
     if admin_id is None:
-        raise TelegramDeliveryConfigurationError(
-            "ADMIN_TELEGRAM_USER_ID is not configured"
-        )
+        raise TelegramDeliveryConfigurationError("ADMIN_TELEGRAM_USER_ID is not configured")
 
-    approve, reject = (
-        await get_or_create_access_decision_callbacks(
-            db,
-            access_request.id,
-        )
+    approve, reject = await get_or_create_access_decision_callbacks(
+        db,
+        access_request.id,
     )
     await enqueue_telegram_call(
         db,
         method="sendMessage",
         payload={
             "chat_id": admin_id,
-            "text": (
-                "🔐 Новый запрос доступа к Spik Inventory\n\n"
-                f"{_display_identity(identity)}"
-            ),
+            "text": (f"🔐 Новый запрос доступа к Spik Inventory\n\n{_display_identity(identity)}"),
             "reply_markup": {
                 "inline_keyboard": [
                     [
@@ -257,9 +230,9 @@ def _start_welcome_text(first_name: str, settings: Settings) -> str:
         f"<b>Привет, {safe_name}! 👋</b>\n\n"
         "Добро пожаловать в <b>Spikatel Inventory</b> — внутреннюю "
         "систему учёта оборудования ЦОД.\n\n"
-        "Здесь можно найти оборудование, проверить остатки, посмотреть, "
-        "у кого оно находится, а также работать с выдачей, возвратом "
-        "и историей движений.\n\n"
+        "Здесь можно найти оборудование, проверить остатки по площадкам, "
+        "работать с выдачей и возвратом, а также смотреть историю "
+        "движений.\n\n"
         "По вопросам доступа и работы сервиса — "
         f"<b>@{safe_support}</b>."
     )
@@ -275,22 +248,19 @@ async def _register_latest_start(
         chat_id=chat_id,
         latest_start_update_id=update_id,
     )
-    statement = (
-        insert_statement.on_conflict_do_update(
-            index_elements=[TelegramChatState.chat_id],
-            set_={
-                "latest_start_update_id": func.greatest(
-                    TelegramChatState.latest_start_update_id,
-                    insert_statement.excluded.latest_start_update_id,
-                ),
-                "updated_at": func.now(),
-            },
-        )
-        .returning(
-            TelegramChatState.latest_start_update_id,
-            TelegramChatState.last_welcome_message_id,
-            TelegramChatState.last_welcome_sent_at,
-        )
+    statement = insert_statement.on_conflict_do_update(
+        index_elements=[TelegramChatState.chat_id],
+        set_={
+            "latest_start_update_id": func.greatest(
+                TelegramChatState.latest_start_update_id,
+                insert_statement.excluded.latest_start_update_id,
+            ),
+            "updated_at": func.now(),
+        },
+    ).returning(
+        TelegramChatState.latest_start_update_id,
+        TelegramChatState.last_welcome_message_id,
+        TelegramChatState.last_welcome_sent_at,
     )
     row = (await db.execute(statement)).one()
     return row[0], row[1], row[2]
@@ -323,12 +293,10 @@ async def enqueue_start_message(
         available_at=current_time,
     )
 
-    latest_update_id, previous_message_id, previous_sent_at = (
-        await _register_latest_start(
-            db,
-            chat_id=chat_id,
-            update_id=update_id,
-        )
+    latest_update_id, previous_message_id, previous_sent_at = await _register_latest_start(
+        db,
+        chat_id=chat_id,
+        update_id=update_id,
     )
 
     # Webhook deliveries can overlap. An older /start still gets its command
@@ -362,10 +330,7 @@ async def enqueue_start_message(
         method="sendPhoto",
         payload={
             "chat_id": chat_id,
-            "photo": (
-                f"{settings.telegram_web_app_url.rstrip('/')}"
-                f"{_START_WELCOME_IMAGE_PATH}"
-            ),
+            "photo": (f"{settings.telegram_web_app_url.rstrip('/')}{_START_WELCOME_IMAGE_PATH}"),
             "caption": _start_welcome_text(first_name, settings),
             "parse_mode": "HTML",
             "message_effect_id": _START_WELCOME_EFFECT_ID,
@@ -390,18 +355,12 @@ async def _load_approved_admin(
     telegram_user_id: int,
 ) -> User:
     identity = await db.scalar(
-        select(TelegramIdentity).where(
-            TelegramIdentity.telegram_user_id == telegram_user_id
-        )
+        select(TelegramIdentity).where(TelegramIdentity.telegram_user_id == telegram_user_id)
     )
     if identity is None:
         raise TelegramAdminAuthorizationError
 
-    user = await db.scalar(
-        select(User)
-        .where(User.id == identity.user_id)
-        .with_for_update()
-    )
+    user = await db.scalar(select(User).where(User.id == identity.user_id).with_for_update())
     if (
         user is None
         or user.role != UserRole.ADMIN
@@ -551,9 +510,7 @@ async def apply_access_decision(
         raise InvalidAccessCallbackError("access request no longer exists")
 
     target_user = await db.scalar(
-        select(User)
-        .where(User.id == access_request.user_id)
-        .with_for_update()
+        select(User).where(User.id == access_request.user_id).with_for_update()
     )
     if target_user is None:
         raise RuntimeError("access request user no longer exists")
@@ -562,14 +519,10 @@ async def apply_access_decision(
         access_request.status == AccessRequestStatus.PENDING
         and target_user.access_status != UserAccessStatus.PENDING
     ):
-        raise InvalidAccessCallbackError(
-            "user access state is already terminal"
-        )
+        raise InvalidAccessCallbackError("user access state is already terminal")
 
     target_identity = await db.scalar(
-        select(TelegramIdentity).where(
-            TelegramIdentity.user_id == target_user.id
-        )
+        select(TelegramIdentity).where(TelegramIdentity.user_id == target_user.id)
     )
     if target_identity is None:
         raise RuntimeError("access request Telegram identity is missing")

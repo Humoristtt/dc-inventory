@@ -319,7 +319,6 @@ docker exec "$RESTORE_PG" \
   -At \
   -c "
     SELECT 'items=' || count(*) FROM items;
-    SELECT 'inventory_units=' || count(*) FROM inventory_units;
     SELECT 'stock_balances=' || count(*) FROM stock_balances;
     SELECT 'movements=' || count(*) FROM movements;
     SELECT 'movement_lines=' || count(*) FROM movement_lines;

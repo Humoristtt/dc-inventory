@@ -66,9 +66,7 @@ async def test_concurrent_access_request_creates_exactly_one_pending_row() -> No
                 # Reuse the already-open DB connection for cleanup. On Docker
                 # Desktop for macOS, opening an extra host-published connection
                 # during teardown can briefly race the port-forward path.
-                await db.execute(
-                    delete(AccessRequest).where(AccessRequest.user_id == user_id)
-                )
+                await db.execute(delete(AccessRequest).where(AccessRequest.user_id == user_id))
                 await db.execute(delete(User).where(User.id == user_id))
                 await db.commit()
     finally:
@@ -142,9 +140,7 @@ async def test_auth_session_query_rejects_revoked_and_expired_rows() -> None:
                 assert revoked is None
                 assert expired is None
             finally:
-                await db.execute(
-                    delete(AuthSession).where(AuthSession.user_id == user_id)
-                )
+                await db.execute(delete(AuthSession).where(AuthSession.user_id == user_id))
                 await db.execute(
                     delete(TelegramIdentity).where(TelegramIdentity.user_id == user_id)
                 )

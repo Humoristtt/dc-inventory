@@ -136,8 +136,7 @@ Run:
 
 Required result:
 
-    QUANTITY drift = 0
-    SERIAL drift = 0
+    zero rows
 
 Any returned drift row is a data-integrity blocker.
 

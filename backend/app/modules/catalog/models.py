@@ -28,7 +28,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.modules.catalog.enums import (
-    AccountingMode,
     AttributeDataType,
     FilterType,
     ItemStatus,
@@ -40,10 +39,6 @@ class Category(Base):
     __table_args__ = (
         CheckConstraint("btrim(key) <> ''", name="key_not_blank"),
         CheckConstraint("btrim(display_name) <> ''", name="display_name_not_blank"),
-        CheckConstraint(
-            "default_accounting_mode IN ('QUANTITY', 'SERIAL')",
-            name="default_accounting_mode",
-        ),
         CheckConstraint("sort_order >= 0", name="sort_order_non_negative"),
     )
 
@@ -55,17 +50,6 @@ class Category(Base):
     key: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     display_name: Mapped[str] = mapped_column(String(255), nullable=False)
     description: Mapped[str | None] = mapped_column(Text)
-    default_accounting_mode: Mapped[AccountingMode] = mapped_column(
-        Enum(
-            AccountingMode,
-            name="accounting_mode",
-            native_enum=False,
-            create_constraint=False,
-            validate_strings=True,
-            length=8,
-        ),
-        nullable=False,
-    )
     sort_order: Mapped[int] = mapped_column(
         Integer,
         nullable=False,
@@ -88,6 +72,12 @@ class Category(Base):
         nullable=False,
         server_default=func.now(),
         onupdate=func.now(),
+    )
+
+    parent_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("categories.id", ondelete="RESTRICT"),
+        index=True,
     )
 
     attributes: Mapped[list[CategoryAttribute]] = relationship(
@@ -166,8 +156,7 @@ class CategoryAttribute(Base):
             name="filter_type",
         ),
         CheckConstraint(
-            "(filterable AND filter_type <> 'NONE') "
-            "OR (NOT filterable AND filter_type = 'NONE')",
+            "(filterable AND filter_type <> 'NONE') OR (NOT filterable AND filter_type = 'NONE')",
             name="filter_configuration",
         ),
         CheckConstraint(
@@ -179,8 +168,7 @@ class CategoryAttribute(Base):
             name="allowed_values_match_data_type",
         ),
         CheckConstraint(
-            "validation_metadata IS NULL "
-            "OR jsonb_typeof(validation_metadata) = 'object'",
+            "validation_metadata IS NULL OR jsonb_typeof(validation_metadata) = 'object'",
             name="validation_metadata_object",
         ),
         CheckConstraint("sort_order >= 0", name="sort_order_non_negative"),
@@ -271,12 +259,8 @@ class CategoryAttribute(Base):
         default=FilterType.NONE,
         server_default=FilterType.NONE.value,
     )
-    allowed_values: Mapped[list[str] | None] = mapped_column(
-        JSONB(none_as_null=True)
-    )
-    validation_metadata: Mapped[dict[str, Any] | None] = mapped_column(
-        JSONB(none_as_null=True)
-    )
+    allowed_values: Mapped[list[str] | None] = mapped_column(JSONB(none_as_null=True))
+    validation_metadata: Mapped[dict[str, Any] | None] = mapped_column(JSONB(none_as_null=True))
     is_system: Mapped[bool] = mapped_column(
         Boolean,
         nullable=False,
@@ -306,19 +290,10 @@ class Item(Base):
             "category_id",
             name="uq_items_id_category_id",
         ),
-        UniqueConstraint(
-            "id",
-            "accounting_mode",
-            name="uq_items_id_accounting_mode",
-        ),
         CheckConstraint("btrim(name) <> ''", name="name_not_blank"),
         CheckConstraint(
             "btrim(normalized_name) <> ''",
             name="normalized_name_not_blank",
-        ),
-        CheckConstraint(
-            "accounting_mode IN ('QUANTITY', 'SERIAL')",
-            name="accounting_mode",
         ),
         CheckConstraint(
             "status IN ('ACTIVE', 'ARCHIVED')",
@@ -341,12 +316,6 @@ class Item(Base):
             "normalized_name",
         ),
         Index(
-            "ix_items_duplicate_mpn",
-            "category_id",
-            "manufacturer_id",
-            "normalized_manufacturer_part_number",
-        ),
-        Index(
             "ix_items_duplicate_name_model",
             "category_id",
             "manufacturer_id",
@@ -364,20 +333,6 @@ class Item(Base):
             "normalized_model",
             postgresql_using="gin",
             postgresql_ops={"normalized_model": "gin_trgm_ops"},
-        ),
-        Index(
-            "ix_items_normalized_mpn_trgm",
-            "normalized_manufacturer_part_number",
-            postgresql_using="gin",
-            postgresql_ops={
-                "normalized_manufacturer_part_number": "gin_trgm_ops"
-            },
-        ),
-        Index(
-            "ix_items_normalized_internal_code_trgm",
-            "normalized_internal_code",
-            postgresql_using="gin",
-            postgresql_ops={"normalized_internal_code": "gin_trgm_ops"},
         ),
     )
 
@@ -400,27 +355,6 @@ class Item(Base):
     normalized_name: Mapped[str] = mapped_column(String(255), nullable=False)
     model: Mapped[str | None] = mapped_column(String(255))
     normalized_model: Mapped[str | None] = mapped_column(String(255))
-    manufacturer_part_number: Mapped[str | None] = mapped_column(String(255))
-    normalized_manufacturer_part_number: Mapped[str | None] = mapped_column(
-        String(255)
-    )
-    internal_code: Mapped[str | None] = mapped_column(String(128))
-    normalized_internal_code: Mapped[str | None] = mapped_column(
-        String(128),
-        unique=True,
-    )
-    description: Mapped[str | None] = mapped_column(Text)
-    accounting_mode: Mapped[AccountingMode] = mapped_column(
-        Enum(
-            AccountingMode,
-            name="accounting_mode",
-            native_enum=False,
-            create_constraint=False,
-            validate_strings=True,
-            length=8,
-        ),
-        nullable=False,
-    )
     status: Mapped[ItemStatus] = mapped_column(
         Enum(
             ItemStatus,
@@ -434,9 +368,7 @@ class Item(Base):
         default=ItemStatus.ACTIVE,
         server_default=ItemStatus.ACTIVE.value,
     )
-    comment: Mapped[str | None] = mapped_column(Text)
-    datasheet_url: Mapped[str | None] = mapped_column(String(2048))
-    technical_data_source: Mapped[str | None] = mapped_column(Text)
+    identity_signature: Mapped[str] = mapped_column(String(64), nullable=False, unique=True)
     archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -473,8 +405,7 @@ class ItemAttributeValue(Base):
             name="uq_item_attribute_values_item_id_category_attribute_id",
         ),
         CheckConstraint(
-            "num_nonnulls(text_value, integer_value, decimal_value, "
-            "boolean_value, enum_value) = 1",
+            "num_nonnulls(text_value, integer_value, decimal_value, boolean_value, enum_value) = 1",
             name="exactly_one_typed_value",
         ),
         CheckConstraint(

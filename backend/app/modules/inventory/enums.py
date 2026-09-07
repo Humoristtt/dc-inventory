@@ -6,11 +6,9 @@ class LocationStatus(StrEnum):
     ARCHIVED = "ARCHIVED"
 
 
-class InventoryUnitState(StrEnum):
-    STORED = "STORED"
-    ISSUED = "ISSUED"
-    WRITTEN_OFF = "WRITTEN_OFF"
-    VOIDED = "VOIDED"
+class LocationType(StrEnum):
+    WAREHOUSE = "WAREHOUSE"
+    DATACENTER = "DATACENTER"
 
 
 class MovementType(StrEnum):

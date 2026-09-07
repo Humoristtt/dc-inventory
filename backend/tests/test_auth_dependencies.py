@@ -116,6 +116,7 @@ async def test_admin_dependency_accepts_approved_admin() -> None:
     )
     assert await get_admin_context(context) is context
 
+
 @pytest.mark.parametrize("method", ["GET", "HEAD", "OPTIONS"])
 def test_cookie_origin_guard_allows_safe_methods_without_origin(
     method: str,
@@ -149,9 +150,7 @@ def test_cookie_origin_guard_rejects_mutation_without_origin(
         )
 
     assert exc_info.value.status_code == 403
-    assert exc_info.value.detail == (
-        "cross-origin authenticated mutation forbidden"
-    )
+    assert exc_info.value.detail == ("cross-origin authenticated mutation forbidden")
 
 
 def test_cookie_origin_guard_rejects_foreign_origin() -> None:

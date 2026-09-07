@@ -89,9 +89,7 @@ def test_inventory_retryable_database_error_is_retryable_conflict(
     assert exc_info.value.status_code == 409
     assert cast(object, exc_info.value.detail) == {
         "code": "inventory_concurrency_conflict",
-        "message": (
-            "inventory operation conflicted with concurrent activity; retry"
-        ),
+        "message": ("inventory operation conflicted with concurrent activity; retry"),
     }
 
 

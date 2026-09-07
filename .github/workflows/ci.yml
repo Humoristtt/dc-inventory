@@ -516,14 +516,13 @@ jobs:
             docker compose --env-file .env.ci -f compose.yaml               exec -T postgres               psql               -U dc_inventory               -d dc_inventory               -AtF '|'               -v ON_ERROR_STOP=1               -c "
                 SELECT
                   (SELECT count(*) FROM items),
-                  (SELECT count(*) FROM inventory_units),
                   (SELECT count(*) FROM stock_balances),
                   (SELECT count(*) FROM movements),
                   (SELECT count(*) FROM movement_lines);
               "
           )"
 
-          test "$inventory_counts" = "0|0|0|0|0"
+          test "$inventory_counts" = "0|0|0|0"
 
           echo "FULLSTACK_DATABASE_SIDE_EFFECTS=PASS"
 

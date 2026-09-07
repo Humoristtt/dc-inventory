@@ -2,10 +2,9 @@ from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 
-from pydantic import AnyHttpUrl, BaseModel, ConfigDict, Field, TypeAdapter, field_validator
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.catalog.enums import (
-    AccountingMode,
     AttributeDataType,
     FilterType,
     ItemStatus,
@@ -18,23 +17,6 @@ type MetadataValue = str | int | Decimal | bool
 
 class StrictRequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
-
-
-_HTTP_URL_ADAPTER = TypeAdapter(AnyHttpUrl)
-
-
-def _canonicalize_optional_http_url(value: object) -> object:
-    if value is None or not isinstance(value, str):
-        return value
-
-    stripped = value.strip()
-    if not stripped:
-        return None
-
-    try:
-        return str(_HTTP_URL_ADAPTER.validate_python(stripped))
-    except ValueError as error:
-        raise ValueError("datasheet_url must be a valid http/https URL") from error
 
 
 class ManufacturerCreate(StrictRequestModel):
@@ -60,9 +42,9 @@ class CategorySummaryOut(BaseModel):
     key: str
     display_name: str
     description: str | None
-    default_accounting_mode: AccountingMode
     sort_order: int
     is_system: bool
+    parent_id: UUID | None
 
 
 class CategoryAttributeOut(BaseModel):
@@ -94,19 +76,7 @@ class ItemCreate(StrictRequestModel):
     manufacturer_id: UUID | None = None
     name: str = Field(max_length=255)
     model: str | None = Field(default=None, max_length=255)
-    manufacturer_part_number: str | None = Field(default=None, max_length=255)
-    internal_code: str | None = Field(default=None, max_length=128)
-    description: str | None = None
-    accounting_mode: AccountingMode | None = None
-    comment: str | None = None
-    datasheet_url: str | None = Field(default=None, max_length=2048)
-    technical_data_source: str | None = None
     attributes: dict[str, AttributeInputValue] = Field(default_factory=dict)
-
-    _canonicalize_datasheet_url = field_validator(
-        "datasheet_url",
-        mode="before",
-    )(_canonicalize_optional_http_url)
 
 
 class ItemPatch(StrictRequestModel):
@@ -114,19 +84,7 @@ class ItemPatch(StrictRequestModel):
     manufacturer_id: UUID | None = None
     name: str | None = Field(default=None, max_length=255)
     model: str | None = Field(default=None, max_length=255)
-    manufacturer_part_number: str | None = Field(default=None, max_length=255)
-    internal_code: str | None = Field(default=None, max_length=128)
-    description: str | None = None
-    accounting_mode: AccountingMode | None = None
-    comment: str | None = None
-    datasheet_url: str | None = Field(default=None, max_length=2048)
-    technical_data_source: str | None = None
     attributes: dict[str, AttributeInputValue] | None = None
-
-    _canonicalize_datasheet_url = field_validator(
-        "datasheet_url",
-        mode="before",
-    )(_canonicalize_optional_http_url)
 
 
 class ItemCategoryOut(BaseModel):
@@ -146,14 +104,7 @@ class ItemOut(BaseModel):
     manufacturer: ItemManufacturerOut | None
     name: str
     model: str | None
-    manufacturer_part_number: str | None
-    internal_code: str | None
-    description: str | None
-    accounting_mode: AccountingMode
     status: ItemStatus
-    comment: str | None
-    datasheet_url: str | None
-    technical_data_source: str | None
     archived_at: datetime | None
     created_at: datetime
     updated_at: datetime
@@ -162,7 +113,6 @@ class ItemOut(BaseModel):
 
 class InventorySummaryOut(BaseModel):
     available_count: int = Field(ge=0)
-    custody_count: int = Field(ge=0)
     total_count: int = Field(ge=0)
 
 
@@ -205,10 +155,9 @@ class FacetListOut(BaseModel):
     facets: list[FacetOut]
 
 
-class DuplicateCheckRequest(StrictRequestModel):
+class DuplicateCheckRequest(ItemCreate):
     category_key: str = Field(max_length=64)
     manufacturer_id: UUID | None = None
-    manufacturer_part_number: str | None = Field(default=None, max_length=255)
     name: str = Field(max_length=255)
     model: str | None = Field(default=None, max_length=255)
     exclude_item_id: UUID | None = None
@@ -220,7 +169,6 @@ class DuplicateCandidateOut(BaseModel):
     model: str | None
     manufacturer_id: UUID | None
     manufacturer_name: str | None
-    manufacturer_part_number: str | None
     reason: str
 
 

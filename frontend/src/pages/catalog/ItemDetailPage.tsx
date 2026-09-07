@@ -14,10 +14,8 @@ import {
 import { AdminItemActions } from "../../features/catalog/AdminItemActions";
 import { ItemInventoryPanel } from "../../features/inventory/ItemInventoryPanel";
 import {
-  formatAccountingMode,
   formatAttributeValue,
   formatItemStatus,
-  safeExternalUrl,
 } from "../../features/catalog/format";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
 
@@ -73,7 +71,6 @@ export function ItemDetailPage() {
         attribute.detail_visible && item.attributes[attribute.key] !== undefined,
     )
     .sort((left, right) => left.sort_order - right.sort_order);
-  const datasheetUrl = safeExternalUrl(item.datasheet_url);
 
   return (
     <main className="catalog-page detail-page">
@@ -95,14 +92,11 @@ export function ItemDetailPage() {
           <p className="detail-identity__maker">{item.manufacturer?.name ?? "Без производителя"}</p>
           <h1>{item.model?.trim() || item.name}</h1>
           {item.model !== null && item.name !== item.model ? <p>{item.name}</p> : null}
-          {item.manufacturer_part_number ? (
-            <span className="detail-identity__pn">PN {item.manufacturer_part_number}</span>
-          ) : null}
         </div>
       </div>
 
       <div className="catalog-page__body detail-body">
-        <ItemInventoryPanel itemId={item.id} mode={item.accounting_mode} />
+        <ItemInventoryPanel itemId={item.id} archived={item.status === "ARCHIVED"} />
 
         <section aria-labelledby="identity-title" className="detail-panel">
           <div className="detail-panel__heading">
@@ -116,9 +110,6 @@ export function ItemDetailPage() {
             <div><dt>Производитель</dt><dd>{item.manufacturer?.name ?? "Не указан"}</dd></div>
             <div><dt>Название</dt><dd>{item.name}</dd></div>
             {item.model ? <div><dt>Модель</dt><dd>{item.model}</dd></div> : null}
-            {item.manufacturer_part_number ? <div><dt>Part number</dt><dd>{item.manufacturer_part_number}</dd></div> : null}
-            {item.internal_code ? <div><dt>Внутренний код</dt><dd>{item.internal_code}</dd></div> : null}
-            <div><dt>Способ учёта</dt><dd>{formatAccountingMode(item.accounting_mode)}</dd></div>
             <div><dt>Статус</dt><dd>{formatItemStatus(item.status)}</dd></div>
           </dl>
         </section>
@@ -153,39 +144,6 @@ export function ItemDetailPage() {
                 </div>
               ))}
             </dl>
-          </section>
-        ) : null}
-
-        {item.description || item.comment ? (
-          <section aria-labelledby="notes-title" className="detail-panel">
-            <div className="detail-panel__heading">
-              <div><span className="section-kicker">Контекст</span><h2 id="notes-title">Описание</h2></div>
-            </div>
-            <div className="detail-copy">
-              {item.description ? <p>{item.description}</p> : null}
-              {item.comment ? <aside><strong>Комментарий</strong><p>{item.comment}</p></aside> : null}
-            </div>
-          </section>
-        ) : null}
-
-        {item.technical_data_source || datasheetUrl ? (
-          <section aria-labelledby="sources-title" className="detail-panel">
-            <div className="detail-panel__heading">
-              <div><span className="section-kicker">Документация</span><h2 id="sources-title">Источники</h2></div>
-            </div>
-            {item.technical_data_source ? (
-              <p className="technical-source">{item.technical_data_source}</p>
-            ) : null}
-            {datasheetUrl ? (
-              <a
-                className="button button--accent detail-datasheet"
-                href={datasheetUrl}
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                Открыть datasheet <span aria-hidden="true">↗</span>
-              </a>
-            ) : null}
           </section>
         ) : null}
 

@@ -32,3 +32,7 @@ tmp/
 
 # Python packaging
 *.egg-info/
+
+# Alembic frozen migration artifacts must be versioned.
+!backend/migrations/data/
+!backend/migrations/data/*.json

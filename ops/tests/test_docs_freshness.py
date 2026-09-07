@@ -72,6 +72,19 @@ require(
     "docs/DEVELOPMENT.md",
     "npx playwright install chromium webkit",
 )
+require(
+    "docs/DEVELOPMENT.md",
+    "frontend/e2e/warehouse-v2.spec.ts",
+)
+for stale_value in (
+    "frontend/e2e/stage8.spec.ts",
+    "latest serial state",
+    "allocation и reactivation/reversal races",
+):
+    forbid(
+        "docs/DEVELOPMENT.md",
+        stale_value,
+    )
 forbid(
     "docs/DEVELOPMENT.md",
     "Production остаётся на `f1a2b3c4d5e6`",

@@ -35,16 +35,11 @@ from app.modules.telegram_bot.service import (
 
 DATABASE_URL = os.environ["DATABASE_URL"]
 
-POSTGRES_INTEGRATION_ENABLED = (
-    os.getenv("RUN_POSTGRES_INTEGRATION") == "1"
-)
+POSTGRES_INTEGRATION_ENABLED = os.getenv("RUN_POSTGRES_INTEGRATION") == "1"
 
 pytestmark = pytest.mark.skipif(
     not POSTGRES_INTEGRATION_ENABLED,
-    reason=(
-        "set RUN_POSTGRES_INTEGRATION=1 against "
-        "a migrated PostgreSQL test DB"
-    ),
+    reason=("set RUN_POSTGRES_INTEGRATION=1 against a migrated PostgreSQL test DB"),
 )
 
 SETTINGS = Settings(
@@ -76,9 +71,7 @@ async def test_dead_access_admin_notification_is_requeued() -> None:
         ) as db:
             user = User(
                 id=user_id,
-                access_status=(
-                    UserAccessStatus.PENDING
-                ),
+                access_status=(UserAccessStatus.PENDING),
             )
 
             identity = TelegramIdentity(
@@ -106,13 +99,11 @@ async def test_dead_access_admin_notification_is_requeued() -> None:
 
             await db.flush()
 
-            await (
-                enqueue_access_request_admin_notification(
-                    db,
-                    access_request=access_request,
-                    identity=identity,
-                    settings=SETTINGS,
-                )
+            await enqueue_access_request_admin_notification(
+                db,
+                access_request=access_request,
+                identity=identity,
+                settings=SETTINGS,
             )
 
             await db.commit()
@@ -122,10 +113,7 @@ async def test_dead_access_admin_notification_is_requeued() -> None:
             expire_on_commit=False,
         ) as db:
             row = await db.scalar(
-                select(NotificationOutbox).where(
-                    NotificationOutbox.dedupe_key
-                    == dedupe_key
-                )
+                select(NotificationOutbox).where(NotificationOutbox.dedupe_key == dedupe_key)
             )
 
             assert row is not None
@@ -135,12 +123,8 @@ async def test_dead_access_admin_notification_is_requeued() -> None:
             original_tokens = set(
                 (
                     await db.scalars(
-                        select(
-                            AccessDecisionCallback.token
-                        ).where(
-                            AccessDecisionCallback
-                            .access_request_id
-                            == request_id
+                        select(AccessDecisionCallback.token).where(
+                            AccessDecisionCallback.access_request_id == request_id
                         )
                     )
                 ).all()
@@ -166,32 +150,24 @@ async def test_dead_access_admin_notification_is_requeued() -> None:
             )
 
             saved_identity = await db.scalar(
-                select(TelegramIdentity).where(
-                    TelegramIdentity.user_id
-                    == user_id
-                )
+                select(TelegramIdentity).where(TelegramIdentity.user_id == user_id)
             )
 
             assert saved_request is not None
             assert saved_identity is not None
 
-            await (
-                enqueue_access_request_admin_notification(
-                    db,
-                    access_request=saved_request,
-                    identity=saved_identity,
-                    settings=SETTINGS,
-                )
+            await enqueue_access_request_admin_notification(
+                db,
+                access_request=saved_request,
+                identity=saved_identity,
+                settings=SETTINGS,
             )
 
             await db.commit()
 
         async with AsyncSession(engine) as db:
             row = await db.scalar(
-                select(NotificationOutbox).where(
-                    NotificationOutbox.dedupe_key
-                    == dedupe_key
-                )
+                select(NotificationOutbox).where(NotificationOutbox.dedupe_key == dedupe_key)
             )
 
             assert row is not None
@@ -205,21 +181,14 @@ async def test_dead_access_admin_notification_is_requeued() -> None:
             outbox_count = await db.scalar(
                 select(func.count())
                 .select_from(NotificationOutbox)
-                .where(
-                    NotificationOutbox.dedupe_key
-                    == dedupe_key
-                )
+                .where(NotificationOutbox.dedupe_key == dedupe_key)
             )
 
             callback_tokens = set(
                 (
                     await db.scalars(
-                        select(
-                            AccessDecisionCallback.token
-                        ).where(
-                            AccessDecisionCallback
-                            .access_request_id
-                            == request_id
+                        select(AccessDecisionCallback.token).where(
+                            AccessDecisionCallback.access_request_id == request_id
                         )
                     )
                 ).all()
@@ -229,41 +198,20 @@ async def test_dead_access_admin_notification_is_requeued() -> None:
             assert callback_tokens == original_tokens
 
             await db.execute(
-                delete(NotificationOutbox).where(
-                    NotificationOutbox.dedupe_key
-                    == dedupe_key
-                )
+                delete(NotificationOutbox).where(NotificationOutbox.dedupe_key == dedupe_key)
             )
 
             await db.execute(
-                delete(
-                    AccessDecisionCallback
-                ).where(
-                    AccessDecisionCallback
-                    .access_request_id
-                    == request_id
+                delete(AccessDecisionCallback).where(
+                    AccessDecisionCallback.access_request_id == request_id
                 )
             )
 
-            await db.execute(
-                delete(AccessRequest).where(
-                    AccessRequest.id
-                    == request_id
-                )
-            )
+            await db.execute(delete(AccessRequest).where(AccessRequest.id == request_id))
 
-            await db.execute(
-                delete(TelegramIdentity).where(
-                    TelegramIdentity.user_id
-                    == user_id
-                )
-            )
+            await db.execute(delete(TelegramIdentity).where(TelegramIdentity.user_id == user_id))
 
-            await db.execute(
-                delete(User).where(
-                    User.id == user_id
-                )
-            )
+            await db.execute(delete(User).where(User.id == user_id))
 
             await db.commit()
 

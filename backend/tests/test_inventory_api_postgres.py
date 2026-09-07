@@ -1,609 +1,281 @@
-import os
 import uuid
-from datetime import UTC, datetime, timedelta
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta, tzinfo
 
 import pytest
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.db.session import get_db_session
 from app.main import create_app
-from app.modules.auth.models import AuthSession
-from app.modules.auth.service import hash_session_token
 from app.modules.identity.enums import UserAccessStatus, UserRole
-from app.modules.identity.models import TelegramIdentity, User
-from tests.test_inventory_postgres import _create_scenario
+from tests.warehouse_helpers import actor, move, scenario
 
-DATABASE_URL = os.environ["DATABASE_URL"]
-POSTGRES_INTEGRATION_ENABLED = os.getenv("RUN_POSTGRES_INTEGRATION") == "1"
+pytestmark = pytest.mark.asyncio
 
-pytestmark = pytest.mark.skipif(
-    not POSTGRES_INTEGRATION_ENABLED,
-    reason="set RUN_POSTGRES_INTEGRATION=1 against a migrated PostgreSQL test DB",
-)
-
-def _auth_headers(
-    settings: Settings,
-    token: str,
-    extra: dict[str, str] | None = None,
-) -> dict[str, str]:
-    headers = {
-        "Cookie": f"{settings.auth_cookie_name}={token}",
-    }
-    if extra is not None:
-        headers.update(extra)
-    return headers
+type ApiUsers = dict[str, tuple[uuid.UUID, dict[str, str]]]
 
 
+async def api_context(
+    db: AsyncSession,
+    enabled: bool = True,
+) -> tuple[FastAPI, ApiUsers]:
+    settings = Settings(app_env="test", real_inventory_mutations_enabled=enabled)
+    app = create_app(settings)
+    connection = await db.connection()
 
-@pytest.mark.asyncio
-async def test_inventory_api_enforces_read_and_mutation_boundaries() -> None:
-    engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
-    settings = Settings(
-        database_url=DATABASE_URL,
-        app_env="test",
-        real_inventory_mutations_enabled=True,
-    )
-    application = create_app(settings)
-    application.state.db_engine = engine
-    now = datetime.now(UTC)
-    marker = uuid.uuid4().hex
-    tokens = {
-        "pending": f"inventory-pending-{marker}",
-        "user": f"inventory-user-{marker}",
-        "admin": f"inventory-admin-{marker}",
-    }
+    async def session() -> AsyncIterator[AsyncSession]:
+        async with AsyncSession(
+            connection, expire_on_commit=False, join_transaction_mode="create_savepoint"
+        ) as request_db:
+            yield request_db
 
-    try:
-        async with AsyncSession(engine, expire_on_commit=False) as db:
-            scenario = await _create_scenario(db)
-            pending_user = User(
-                id=uuid.uuid4(),
-                role=UserRole.USER,
-                access_status=UserAccessStatus.PENDING,
+    app.dependency_overrides[get_db_session] = session
+    users: ApiUsers = {}
+    for name, role, access in [
+        ("admin", UserRole.ADMIN, UserAccessStatus.APPROVED),
+        ("user", UserRole.USER, UserAccessStatus.APPROVED),
+        ("pending", UserRole.USER, UserAccessStatus.PENDING),
+        ("blocked", UserRole.USER, UserAccessStatus.BLOCKED),
+        ("rejected", UserRole.USER, UserAccessStatus.REJECTED),
+    ]:
+        user, token = await actor(db, role, access)
+        users[name] = (
+            user.id,
+            {
+                "Cookie": f"{settings.auth_cookie_name}={token}",
+                "Origin": settings.telegram_web_app_url,
+            },
+        )
+    return app, users
+
+
+async def test_read_access_and_actor_scoped_journal(warehouse_db: AsyncSession) -> None:
+    db = warehouse_db
+    s = await scenario(db)
+    app, users = await api_context(db)
+    first = await move(db, (users["user"][0], *s[1:]), "RETURN", 16, destination=s[2])
+    other = await move(db, s, "RECEIPT", 20, destination=s[2])
+    # Set the time before INSERT (the journal itself cannot be edited).
+    from unittest.mock import patch
+
+    from app.modules.inventory import service
+
+    class OldClock:
+        @staticmethod
+        def now(tz: tzinfo | None) -> datetime:
+            return datetime.now(UTC) - timedelta(days=150)
+
+    with patch.object(service, "datetime", OldClock):
+        await move(db, (users["user"][0], *s[1:]), "RETURN", 1, destination=s[2])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for path in [
+            "/api/inventory/stock",
+            "/api/inventory/locations",
+            "/api/inventory/movements",
+            "/api/inventory/movement-actors",
+            f"/api/inventory/items/{s[1]}/summary",
+        ]:
+            assert (await client.get(path)).status_code == 401
+            for name in ("pending", "blocked", "rejected"):
+                assert (await client.get(path, headers=users[name][1])).status_code == 403
+        response = await client.get("/api/inventory/movements", headers=users["user"][1])
+        assert response.status_code == 200, response.text
+        assert [m["id"] for m in response.json()["items"]] == [str(first.record.movement.id)]
+        response = await client.get("/api/inventory/movements?period=all", headers=users["user"][1])
+        assert response.json()["total"] == 2
+        assert (
+            await client.get(
+                f"/api/inventory/movements?actor_user_id={s[0]}", headers=users["user"][1]
             )
-            pending_identity = TelegramIdentity(
-                user=pending_user,
-                user_id=pending_user.id,
-                telegram_user_id=(7_500_000_000 + (uuid.UUID(marker).int % 400_000_000)),
-                first_name="Pending",
+        ).status_code == 403
+        assert (
+            await client.get(
+                f"/api/inventory/movements/{other.record.movement.id}", headers=users["user"][1]
             )
-            db.add_all([pending_user, pending_identity])
-            for key, user_id in (
-                ("pending", pending_user.id),
-                ("user", scenario.holder_one_id),
-                ("admin", scenario.actor_id),
-            ):
-                db.add(
-                    AuthSession(
-                        user_id=user_id,
-                        token_hash=hash_session_token(tokens[key]),
-                        created_at=now,
-                        last_seen_at=now,
-                        expires_at=now + timedelta(hours=1),
+        ).status_code == 403
+        response = await client.get(
+            f"/api/inventory/movements?actor_user_id={s[0]}&category=optics&location_id={s[2]}",
+            headers=users["admin"][1],
+        )
+        assert response.json()["total"] == 1
+        summary = await client.get(f"/api/inventory/items/{s[1]}/summary", headers=users["user"][1])
+        assert summary.json()["total_count"] == 37
+        assert summary.json()["locations"][0]["quantity"] == 37
+        assert (
+            await client.get(
+                "/api/inventory/movements?since=2026-01-01T00:00:00", headers=users["admin"][1]
+            )
+        ).status_code == 422
+
+
+async def test_mutation_roles_idempotency_and_gate(warehouse_db: AsyncSession) -> None:
+    db = warehouse_db
+    s = await scenario(db)
+    await move(db, s, "RECEIPT", 10, destination=s[2])
+    app, users = await api_context(db)
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        for kind in ("ISSUE", "RETURN"):
+            payload = {
+                "movement_type": kind,
+                "client_request_id": uuid.uuid4().hex,
+                "lines": [{"item_id": str(s[1]), "quantity": 2}],
+                ("source_location_id" if kind == "ISSUE" else "destination_location_id"): str(s[2]),
+            }
+            response = await client.post(
+                "/api/inventory/movements", headers=users["user"][1], json=payload
+            )
+            assert response.status_code == 201, response.text
+            assert response.json()["actor_user_id"] == str(users["user"][0])
+            replay = await client.post(
+                "/api/inventory/movements", headers=users["user"][1], json=payload
+            )
+            assert replay.json()["id"] == response.json()["id"]
+            for restricted in ("RECEIPT", "TRANSFER", "WRITE_OFF", "CORRECTION", "REVERSAL"):
+                assert (
+                    await client.post(
+                        "/api/inventory/movements",
+                        headers=users["user"][1],
+                        json={**payload, "movement_type": restricted},
                     )
-                )
-            await db.commit()
-
-        transport = ASGITransport(app=application)
-        async with AsyncClient(
-            transport=transport,
-            base_url="http://test",
-            headers={"Origin": settings.telegram_web_app_url},
-        ) as client:
-            anonymous_read = await client.get("/api/inventory/stock")
-            anonymous_mutation = await client.post(
-                "/api/admin/inventory/movements",
-                json={},
+                ).status_code == 403
+        reversal = f"/api/admin/inventory/movements/{response.json()['id']}/reversal"
+        assert (
+            await client.post(
+                reversal, headers=users["user"][1], json={"client_request_id": "reverse"}
             )
-            assert anonymous_read.status_code == 401
-            assert anonymous_mutation.status_code == 401
-
-            pending_read = await client.get(
-                "/api/inventory/locations",
-                headers=_auth_headers(settings, tokens["pending"]),
+        ).status_code == 403
+        assert (
+            await client.post(
+                reversal, headers=users["admin"][1], json={"client_request_id": "reverse"}
             )
-            assert pending_read.status_code == 403
-
-            user_read = await client.get(
-                "/api/inventory/locations",
-                headers=_auth_headers(settings, tokens["user"]),
+        ).status_code == 201
+        payload = {"code": uuid.uuid4().hex, "name": "Test location", "location_type": "DATACENTER"}
+        assert (
+            await client.post(
+                "/api/admin/inventory/locations", headers=users["user"][1], json=payload
             )
-            assert user_read.status_code == 200
-            assert str(scenario.location_one_id) in {
-                location["id"] for location in user_read.json()["items"]
-            }
-
-            movement_body = {
-                "movement_type": "RECEIPT",
-                "destination_location_id": str(scenario.location_one_id),
-                "client_request_id": f"api-receipt-{marker}",
-                "purpose": "API authorization test",
-                "lines": [
-                    {
-                        "item_id": str(scenario.quantity_item_id),
-                        "quantity": 2,
-                    }
-                ],
-            }
-            user_mutation = await client.post(
-                "/api/admin/inventory/movements",
-                headers=_auth_headers(settings, tokens["user"]),
-                json=movement_body,
+        ).status_code == 403
+        app.state.settings.real_inventory_mutations_enabled = False
+        assert (
+            await client.post(
+                "/api/admin/inventory/locations", headers=users["admin"][1], json=payload
             )
-            assert user_mutation.status_code == 403
-
-            settings.real_inventory_mutations_enabled = False
-
-            user_mutation_while_locked = await client.post(
-                "/api/admin/inventory/movements",
-                headers=_auth_headers(settings, tokens["user"]),
-                json=movement_body,
+        ).status_code == 423
+        assert (
+            await client.post(
+                reversal, headers=users["admin"][1], json={"client_request_id": "gate"}
             )
-            assert user_mutation_while_locked.status_code == 403
-
-            read_while_locked = await client.get(
-                "/api/inventory/locations",
-                headers=_auth_headers(settings, tokens["admin"]),
-            )
-            assert read_while_locked.status_code == 200
-
-            locked_location = await client.post(
-                "/api/admin/inventory/locations",
-                headers=_auth_headers(settings, tokens["admin"]),
+        ).status_code == 423
+        assert (
+            await client.post(
+                "/api/inventory/movements",
+                headers=users["user"][1],
                 json={
-                    "code": f"LOCK-{marker[:10]}",
-                    "name": "Locked location",
+                    "movement_type": "RETURN",
+                    "destination_location_id": str(s[2]),
+                    "client_request_id": "gate",
+                    "lines": [{"item_id": str(s[1]), "quantity": 1}],
                 },
             )
-            locked_archive = await client.post(
-                f"/api/admin/inventory/locations/{scenario.location_one_id}/archive",
-                headers=_auth_headers(settings, tokens["admin"]),
-            )
-            locked_unarchive = await client.post(
-                f"/api/admin/inventory/locations/{scenario.location_one_id}/unarchive",
-                headers=_auth_headers(settings, tokens["admin"]),
-            )
-            locked_movement = await client.post(
-                "/api/admin/inventory/movements",
-                headers=_auth_headers(settings, tokens["admin"]),
-                json=movement_body,
-            )
-            locked_reversal = await client.post(
-                f"/api/admin/inventory/movements/{uuid.uuid4()}/reversal",
-                headers=_auth_headers(settings, tokens["admin"]),
-                json={
-                    "client_request_id": f"locked-reversal-{marker}",
-                    "purpose": "mutation gate test",
-                },
-            )
+        ).status_code == 423
 
-            for response in (
-                locked_location,
-                locked_archive,
-                locked_unarchive,
-                locked_movement,
-                locked_reversal,
-            ):
-                assert response.status_code == 423
-                assert response.json()["detail"]["code"] == (
-                    "real_inventory_mutations_disabled"
-                )
 
-            settings.real_inventory_mutations_enabled = True
+async def test_issue_enqueues_one_admin_notification_and_replay_does_not_duplicate(
+    warehouse_db: AsyncSession,
+) -> None:
+    from sqlalchemy import func, select
 
-            location_response = await client.post(
-                "/api/admin/inventory/locations",
-                headers=_auth_headers(settings, tokens["admin"]),
-                json={
-                    "code": f"API-{marker[:10]}",
-                    "name": "API-created location",
-                },
-            )
-            assert location_response.status_code == 201
-            assert location_response.json()["status"] == "ACTIVE"
-            api_location_id = location_response.json()["id"]
-            archived_location = await client.post(
-                f"/api/admin/inventory/locations/{api_location_id}/archive",
-                headers=_auth_headers(settings, tokens["admin"]),
-            )
-            unarchived_location = await client.post(
-                f"/api/admin/inventory/locations/{api_location_id}/unarchive",
-                headers=_auth_headers(settings, tokens["admin"]),
-            )
-            assert archived_location.status_code == 200
-            assert archived_location.json()["status"] == "ARCHIVED"
-            assert unarchived_location.status_code == 200
-            assert unarchived_location.json()["status"] == "ACTIVE"
+    from app.modules.notifications.models import NotificationOutbox
+    from app.modules.notifications.service import notification_dedupe_key
 
-            admin_movement = await client.post(
-                "/api/admin/inventory/movements",
-                headers=_auth_headers(settings, tokens["admin"]),
-                json=movement_body,
-            )
-            replayed_movement = await client.post(
-                "/api/admin/inventory/movements",
-                headers=_auth_headers(settings, tokens["admin"]),
-                json=movement_body,
-            )
-            assert admin_movement.status_code == 201
-            assert replayed_movement.status_code == 201
-            assert replayed_movement.json()["id"] == admin_movement.json()["id"]
-            assert admin_movement.json()["actor_user_id"] == str(scenario.actor_id)
-            assert admin_movement.json()["lines"][0]["quantity"] == 2
-            assert admin_movement.json()["lines"][0]["line_no"] == 1
+    db = warehouse_db
+    s = await scenario(db)
+    await move(db, s, "RECEIPT", 10, destination=s[2])
 
-            different_payload = {
-                **movement_body,
-                "lines": [
-                    {
-                        "item_id": str(scenario.quantity_item_id),
-                        "quantity": 3,
-                    }
-                ],
-            }
-            idempotency_conflict = await client.post(
-                "/api/admin/inventory/movements",
-                headers=_auth_headers(settings, tokens["admin"]),
-                json=different_payload,
-            )
-            assert idempotency_conflict.status_code == 409
-            assert idempotency_conflict.json()["detail"]["code"] == ("idempotency_payload_conflict")
+    app, users = await api_context(db)
+    app.state.settings.admin_telegram_user_id = 700000001
 
-            invalid_quantity = {
-                **movement_body,
-                "client_request_id": f"api-zero-{marker}",
-                "lines": [
-                    {
-                        "item_id": str(scenario.quantity_item_id),
-                        "quantity": 0,
-                    }
-                ],
-            }
-            validation_response = await client.post(
-                "/api/admin/inventory/movements",
-                headers=_auth_headers(settings, tokens["admin"]),
-                json=invalid_quantity,
-            )
-            assert validation_response.status_code == 422
-            assert validation_response.json()["detail"]["code"] == ("quantity_not_positive")
+    issue_payload = {
+        "movement_type": "ISSUE",
+        "source_location_id": str(s[2]),
+        "client_request_id": "issue-notification-test",
+        "lines": [{"item_id": str(s[1]), "quantity": 2}],
+    }
 
-            for invalid_value in (True, "1", 1.5):
-                strict_quantity_response = await client.post(
-                    "/api/admin/inventory/movements",
-                    headers=_auth_headers(settings, tokens["admin"]),
-                    json={
-                        **movement_body,
-                        "client_request_id": (f"api-strict-{invalid_value!s}-{marker}"),
-                        "lines": [
-                            {
-                                "item_id": str(scenario.quantity_item_id),
-                                "quantity": invalid_value,
-                            }
-                        ],
-                    },
-                )
-                assert strict_quantity_response.status_code == 422
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/api/inventory/movements",
+            headers=users["user"][1],
+            json=issue_payload,
+        )
+        assert response.status_code == 201, response.text
 
-            oversized_location_code = await client.post(
-                "/api/admin/inventory/locations",
-                headers=_auth_headers(settings, tokens["admin"]),
-                json={"code": "ß" * 33, "name": "Oversized after casefold"},
-            )
-            assert oversized_location_code.status_code == 422
-            assert oversized_location_code.json()["detail"]["code"] == ("location_code_too_long")
+        movement_id = response.json()["id"]
+        issue_key = notification_dedupe_key(
+            "inventory-issue",
+            movement_id,
+            "admin",
+        )
 
-            foreign_quantity_issue = await client.post(
-                "/api/admin/inventory/movements",
-                headers=_auth_headers(settings, tokens["admin"]),
-                json={
-                    "movement_type": "ISSUE",
-                    "source_location_id": str(scenario.location_one_id),
-                    "destination_holder_user_id": str(scenario.holder_two_id),
-                    "client_request_id": f"api-foreign-quantity-{marker}",
-                    "lines": [
-                        {
-                            "item_id": str(scenario.quantity_item_id),
-                            "quantity": 1,
-                        }
-                    ],
-                },
-            )
-            assert foreign_quantity_issue.status_code == 201
+        replay = await client.post(
+            "/api/inventory/movements",
+            headers=users["user"][1],
+            json=issue_payload,
+        )
+        assert replay.status_code == 201, replay.text
+        assert replay.json()["id"] == movement_id
 
-            stock = await client.get(
-                f"/api/inventory/stock?item_id={scenario.quantity_item_id}",
-                headers=_auth_headers(settings, tokens["user"]),
-            )
-            assert stock.status_code == 200
-            stock_items = stock.json()["items"]
-            warehouse_row = next(
-                row for row in stock_items if row["location"] is not None
-            )
-            foreign_holder_row = next(
-                row for row in stock_items if row["holder"] is not None
-            )
-            assert warehouse_row["quantity"] == 1
-            assert foreign_holder_row["quantity"] == 1
-            assert foreign_holder_row["holder"] == {
-                "user_id": None,
-                "display_name": "Сотрудник",
-            }
+        issue_count = await db.scalar(
+            select(func.count())
+            .select_from(NotificationOutbox)
+            .where(NotificationOutbox.dedupe_key == issue_key)
+        )
+        assert issue_count == 1
 
-            foreign_stock_filter = await client.get(
-                f"/api/inventory/stock?holder_user_id={scenario.holder_two_id}",
-                headers=_auth_headers(settings, tokens["user"]),
-            )
-            own_stock_filter = await client.get(
-                f"/api/inventory/stock?holder_user_id={scenario.holder_one_id}",
-                headers=_auth_headers(settings, tokens["user"]),
-            )
-            admin_foreign_stock = await client.get(
-                f"/api/inventory/stock?holder_user_id={scenario.holder_two_id}",
-                headers=_auth_headers(settings, tokens["admin"]),
-            )
-            assert foreign_stock_filter.status_code == 403
-            assert own_stock_filter.status_code == 200
-            assert admin_foreign_stock.status_code == 200
-            assert admin_foreign_stock.json()["items"][0]["holder"]["user_id"] == (
-                str(scenario.holder_two_id)
-            )
-            assert "Holder Two" in (
-                admin_foreign_stock.json()["items"][0]["holder"]["display_name"]
-            )
+        total_before_return = await db.scalar(
+            select(func.count()).select_from(NotificationOutbox)
+        )
 
-            user_history = await client.get(
-                f"/api/inventory/movements?item_id={scenario.quantity_item_id}",
-                headers=_auth_headers(settings, tokens["user"]),
-            )
-            user_movement_detail = await client.get(
-                f"/api/inventory/movements/{admin_movement.json()['id']}",
-                headers=_auth_headers(settings, tokens["user"]),
-            )
-            admin_history = await client.get(
-                f"/api/inventory/movements?item_id={scenario.quantity_item_id}",
-                headers=_auth_headers(settings, tokens["admin"]),
-            )
-            admin_movement_detail = await client.get(
-                f"/api/inventory/movements/{admin_movement.json()['id']}",
-                headers=_auth_headers(settings, tokens["admin"]),
-            )
-            assert user_history.status_code == 403
-            assert user_movement_detail.status_code == 403
-            assert admin_history.status_code == 200
-            assert admin_history.json()["total"] == 2
-            assert admin_movement_detail.status_code == 200
+        row = await db.scalar(
+            select(NotificationOutbox).where(NotificationOutbox.dedupe_key == issue_key)
+        )
+        assert row is not None
+        assert row.method == "sendMessage"
+        assert row.payload["chat_id"] == 700000001
+        message_text = row.payload["text"]
+        assert isinstance(message_text, str)
+        assert "Выдача оборудования" in message_text
+        assert "Откуда:" in message_text
+        assert "2 шт." in message_text
 
-            own_serial = f"SN-OWN-{marker}"
-            foreign_serial = f"SN-FOREIGN-{marker}"
-            own_wwn = f"WWN-OWN-{marker}"
-            foreign_wwn = f"WWN-FOREIGN-{marker}"
+        return_payload = {
+            "movement_type": "RETURN",
+            "destination_location_id": str(s[2]),
+            "client_request_id": "return-no-notification-test",
+            "lines": [{"item_id": str(s[1]), "quantity": 1}],
+        }
 
-            serial_receipt = await client.post(
-                "/api/admin/inventory/movements",
-                headers=_auth_headers(settings, tokens["admin"]),
-                json={
-                    "movement_type": "RECEIPT",
-                    "destination_location_id": str(scenario.location_one_id),
-                    "client_request_id": f"api-serial-receipt-{marker}",
-                    "lines": [
-                        {
-                            "item_id": str(scenario.serial_item_id),
-                            "serial_number": own_serial,
-                            "wwn": own_wwn,
-                            "unit_comment": "Own serial unit",
-                        },
-                        {
-                            "item_id": str(scenario.serial_item_id),
-                            "serial_number": foreign_serial,
-                            "wwn": foreign_wwn,
-                            "unit_comment": "Foreign serial unit",
-                        },
-                    ],
-                },
-            )
-            assert serial_receipt.status_code == 201
-            serial_lines = serial_receipt.json()["lines"]
-            assert len(serial_lines) == 2
-            own_unit_id = serial_lines[0]["inventory_unit_id"]
-            foreign_unit_id = serial_lines[1]["inventory_unit_id"]
-            assert own_unit_id is not None
-            assert foreign_unit_id is not None
+        response = await client.post(
+            "/api/inventory/movements",
+            headers=users["user"][1],
+            json=return_payload,
+        )
+        assert response.status_code == 201, response.text
 
-            own_serial_issue = await client.post(
-                "/api/admin/inventory/movements",
-                headers=_auth_headers(settings, tokens["admin"]),
-                json={
-                    "movement_type": "ISSUE",
-                    "source_location_id": str(scenario.location_one_id),
-                    "destination_holder_user_id": str(scenario.holder_one_id),
-                    "client_request_id": f"api-own-serial-{marker}",
-                    "lines": [{"inventory_unit_id": own_unit_id}],
-                },
-            )
-            foreign_serial_issue = await client.post(
-                "/api/admin/inventory/movements",
-                headers=_auth_headers(settings, tokens["admin"]),
-                json={
-                    "movement_type": "ISSUE",
-                    "source_location_id": str(scenario.location_one_id),
-                    "destination_holder_user_id": str(scenario.holder_two_id),
-                    "client_request_id": f"api-foreign-serial-{marker}",
-                    "lines": [{"inventory_unit_id": foreign_unit_id}],
-                },
-            )
-            assert own_serial_issue.status_code == 201
-            assert foreign_serial_issue.status_code == 201
+        issue_count = await db.scalar(
+            select(func.count())
+            .select_from(NotificationOutbox)
+            .where(NotificationOutbox.dedupe_key == issue_key)
+        )
+        assert issue_count == 1
 
-            user_units = await client.get(
-                (
-                    f"/api/inventory/units?item_id={scenario.serial_item_id}"
-                    "&state=ISSUED"
-                ),
-                headers=_auth_headers(settings, tokens["user"]),
-            )
-            assert user_units.status_code == 200
-            assert user_units.json()["total"] == 2
-            units_by_id = {
-                row["id"]: row
-                for row in user_units.json()["items"]
-            }
-
-            own_unit = units_by_id[own_unit_id]
-            assert own_unit["serial_number"] == own_serial
-            assert own_unit["wwn"] == own_wwn
-            assert own_unit["comment"] == "Own serial unit"
-            assert own_unit["holder"]["user_id"] == str(scenario.holder_one_id)
-            assert "Holder One" in own_unit["holder"]["display_name"]
-
-            foreign_unit = units_by_id[foreign_unit_id]
-            assert foreign_unit["serial_number"] is None
-            assert foreign_unit["wwn"] is None
-            assert foreign_unit["comment"] is None
-            assert foreign_unit["holder"] == {
-                "user_id": None,
-                "display_name": "Сотрудник",
-            }
-
-            foreign_units_filter = await client.get(
-                f"/api/inventory/units?holder_user_id={scenario.holder_two_id}",
-                headers=_auth_headers(settings, tokens["user"]),
-            )
-            own_units_filter = await client.get(
-                f"/api/inventory/units?holder_user_id={scenario.holder_one_id}",
-                headers=_auth_headers(settings, tokens["user"]),
-            )
-            admin_foreign_units = await client.get(
-                f"/api/inventory/units?holder_user_id={scenario.holder_two_id}",
-                headers=_auth_headers(settings, tokens["admin"]),
-            )
-            assert foreign_units_filter.status_code == 403
-            assert own_units_filter.status_code == 200
-            assert own_units_filter.json()["total"] == 1
-            assert own_units_filter.json()["items"][0]["serial_number"] == own_serial
-
-            own_quantity_issue = await client.post(
-                "/api/admin/inventory/movements",
-                headers=_auth_headers(settings, tokens["admin"]),
-                json={
-                    "movement_type": "ISSUE",
-                    "source_location_id": str(scenario.location_one_id),
-                    "destination_holder_user_id": str(scenario.holder_one_id),
-                    "client_request_id": f"api-own-quantity-{marker}",
-                    "lines": [
-                        {
-                            "item_id": str(scenario.quantity_item_id),
-                            "quantity": 1,
-                        }
-                    ],
-                },
-            )
-            assert own_quantity_issue.status_code == 201
-
-            quantity_summary = await client.get(
-                f"/api/inventory/items/{scenario.quantity_item_id}/summary",
-                headers=_auth_headers(settings, tokens["user"]),
-            )
-            assert quantity_summary.status_code == 200
-            assert quantity_summary.json() == {
-                "available_count": 0,
-                "custody_count": 2,
-                "total_count": 2,
-            }
-
-            serial_summary = await client.get(
-                f"/api/inventory/items/{scenario.serial_item_id}/summary",
-                headers=_auth_headers(settings, tokens["user"]),
-            )
-            assert serial_summary.status_code == 200
-            assert serial_summary.json() == {
-                "available_count": 0,
-                "custody_count": 2,
-                "total_count": 2,
-            }
-
-            mine_first_page = await client.get(
-                "/api/inventory/mine?limit=1&offset=0",
-                headers=_auth_headers(settings, tokens["user"]),
-            )
-            mine_all = await client.get(
-                "/api/inventory/mine?limit=100&offset=0",
-                headers=_auth_headers(settings, tokens["user"]),
-            )
-            mine_ignores_foreign_holder = await client.get(
-                (
-                    "/api/inventory/mine?limit=100&offset=0"
-                    f"&holder_user_id={scenario.holder_two_id}"
-                ),
-                headers=_auth_headers(settings, tokens["user"]),
-            )
-
-            assert mine_first_page.status_code == 200
-            assert mine_first_page.json()["total"] == 2
-            assert len(mine_first_page.json()["items"]) == 1
-
-            assert mine_all.status_code == 200
-            assert mine_all.json()["total"] == 2
-            assert mine_ignores_foreign_holder.status_code == 200
-            assert mine_ignores_foreign_holder.json() == mine_all.json()
-
-            mine_by_item = {
-                row["item_id"]: row
-                for row in mine_all.json()["items"]
-            }
-
-            assert set(mine_by_item) == {
-                str(scenario.quantity_item_id),
-                str(scenario.serial_item_id),
-            }
-
-            quantity_holding = mine_by_item[
-                str(scenario.quantity_item_id)
-            ]
-            assert quantity_holding["accounting_mode"] == "QUANTITY"
-            assert quantity_holding["quantity"] > 0
-            assert quantity_holding["serial_count"] == 0
-            assert quantity_holding["serial_preview"] == []
-
-            serial_holding = mine_by_item[
-                str(scenario.serial_item_id)
-            ]
-            assert serial_holding["accounting_mode"] == "SERIAL"
-            assert serial_holding["quantity"] == 0
-            assert serial_holding["serial_count"] == 1
-            assert len(serial_holding["serial_preview"]) == 1
-            assert (
-                serial_holding["serial_preview"][0]["serial_number"]
-                == own_serial
-            )
-            assert admin_foreign_units.status_code == 200
-            assert admin_foreign_units.json()["total"] == 1
-            assert (
-                admin_foreign_units.json()["items"][0]["serial_number"]
-                == foreign_serial
-            )
-            assert admin_foreign_units.json()["items"][0]["wwn"] == foreign_wwn
-            assert admin_foreign_units.json()["items"][0]["holder"]["user_id"] == (
-                str(scenario.holder_two_id)
-            )
-
-            own_unit_detail = await client.get(
-                f"/api/inventory/units/{own_unit_id}",
-                headers=_auth_headers(settings, tokens["user"]),
-            )
-            foreign_unit_detail = await client.get(
-                f"/api/inventory/units/{foreign_unit_id}",
-                headers=_auth_headers(settings, tokens["user"]),
-            )
-            admin_foreign_unit_detail = await client.get(
-                f"/api/inventory/units/{foreign_unit_id}",
-                headers=_auth_headers(settings, tokens["admin"]),
-            )
-            assert own_unit_detail.status_code == 200
-            assert own_unit_detail.json()["serial_number"] == own_serial
-            assert foreign_unit_detail.status_code == 403
-            assert admin_foreign_unit_detail.status_code == 200
-            assert admin_foreign_unit_detail.json()["serial_number"] == foreign_serial
-            assert admin_foreign_unit_detail.json()["wwn"] == foreign_wwn
-    finally:
-        await engine.dispose()
+        total_after_return = await db.scalar(
+            select(func.count()).select_from(NotificationOutbox)
+        )
+        assert total_after_return == total_before_return

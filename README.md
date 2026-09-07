@@ -9,12 +9,12 @@
 - PostgreSQL является каноническим источником данных.
 - Остатки изменяются только через складские операции.
 - История операций сохраняется и не переписывается задним числом.
-- Поддерживается количественный и серийный учёт.
+- Warehouse Domain V2 использует только количественный учёт; legacy serial/custody model не является частью целевой схемы этой ветки.
 - Поддерживается несколько складов и локаций.
-- Категории оборудования расширяемы без переделки всей системы.
+- Каталог Warehouse V2 использует versioned fixed hierarchy и leaf schemas; изменения схем выполняются через код и миграции, а не runtime-конструктор.
 - Доступ пользователей осуществляется через Telegram.
 - Базовые роли: `ADMIN` и `USER`.
-- Transactional Telegram notification infrastructure реализована; конкретные product notifications развиваются по roadmap.
+- Transactional Telegram notification infrastructure реализована; ISSUE создаёт deduplicated admin Telegram notification через outbox.
 - Production разворачивается только из зафиксированного Git commit.
 - Production VM имеет только read-only доступ к GitHub-репозиторию.
 
@@ -65,9 +65,9 @@ Production runtime включает:
 - GitHub Actions CI;
 - Cloudflare Tunnel для публикации Mini App.
 - metadata-driven catalog API, global/category search и facets;
-- глобальный поиск по model/PN/internal code/manufacturer, serial и WWN;
-- warehouse journal, quantity balances, serial custody и projection
-  reconciliation.
+- глобальный поиск и scoped catalog facets;
+- immutable warehouse journal, quantity balances по StorageLocation и
+  projection reconciliation.
 
 Production runtime публикует на host только `127.0.0.1:8080`; backend и PostgreSQL доступны только внутри Docker-сетей.
 
@@ -83,30 +83,32 @@ Stage 4 Telegram/auth/access foundation закрыт production smoke 2026-09-01
 неизвестный пользователь запросил доступ, ADMIN получил Telegram-уведомление,
 одобрил запрос inline-кнопкой, пользователь получил уведомление и вошёл в Mini App.
 
-Stage 5 Catalog Foundation и Stage 6 Warehouse Core развёрнуты в production:
+Stage 5 Catalog Foundation и Stage 6 Warehouse Core входят в текущий
+production baseline на migration head `a2b3c4d5e6f7`.
 
-- Category, Manufacturer и Item;
-- metadata-driven CategoryAttribute и typed ItemAttributeValue;
-- role-aware read API: Approved catalog/current inventory, USER custody
-  redaction и Admin-only movement journal; Admin mutation API;
-- пять initial versioned schemas: SFP, оптика, кабели питания, NIC и диски;
-- source-backed refinement: медные сетевые кабели, conductor attributes для
-  кабелей питания и уточнённые SFP vocabularies.
-- first-class Location с non-destructive lifecycle;
+Warehouse Domain V2 этой feature-ветки является следующим schema/product
+состоянием и не должен считаться уже развёрнутым в production до отдельного
+merge/deploy acceptance. Целевая модель V2 включает:
+
+- фиксированную versioned hierarchy каталога с leaf schemas;
+- Category, Manufacturer и Item без physical-unit accounting mode;
+- role-aware API: approved USER видит каталог, остатки и собственную actor-history,
+  выполняет ISSUE/RETURN; ADMIN получает общий journal и administrative mutations;
+- first-class StorageLocation типов WAREHOUSE / DATACENTER;
 - append-only Movement/MovementLine journal: receipt, issue, return, transfer,
   write-off, correction и reversal;
-- integer StockBalance projection по Location/holder для QUANTITY;
-- physical InventoryUnit state/custody для SERIAL;
-- PostgreSQL row/advisory locking, request idempotency и concurrency regression
-  tests;
-- production-role database permission regressions для Telegram ingress,
-  immutable warehouse journal и controlled DEAD notification recovery;
+- integer StockBalance projection только Item × StorageLocation;
+- отсутствие personal custody, holder balances и InventoryUnit в активной V2 schema;
+- PostgreSQL row/advisory locking, request idempotency, immutable-journal guards
+  и concurrency regression tests;
+- projection reconciliation из immutable movement journal;
+- transactional admin Telegram notification на ISSUE;
 - same-origin vendored Telegram Web App SDK с фиксированным SHA-256 и явным
   frontend failure state.
 
 Stage 7 также завершён и развёрнут: реализованы и протестированы deterministic
-sorting/pagination, global/category search, включая serial/WWN, availability,
-location и metadata-driven filters/facets.
+sorting/pagination, global/category search, availability, location и
+metadata-driven filters/facets.
 
 Stage 8A Working Mini App Catalog UX завершён и принят в production:
 application shell, API-driven categories, debounced global/category search,
@@ -116,17 +118,20 @@ Item detail, URL-preserving navigation, Telegram BackButton/safe-area integratio
 
 Stage 8B завершён и принят в production: metadata-driven Admin
 create/edit/archive/unarchive, inline Manufacturer и duplicate-check UX,
-stock/custody detail, рабочий экран «Моё оборудование», bounded facets,
-privacy/auth/runtime hardening и production-Nginx Playwright acceptance
+stock-by-location detail, bounded facets, privacy/auth/runtime hardening и
+production-Nginx Playwright acceptance
 прошли local gate, PR #22 required CI и production smoke. Chromium и WebKit
 покрывают mobile/browser acceptance. Production migration head — `a2b3c4d5e6f7`; exact runtime source
 проверяется по image provenance, а не выводится только из Git checkout.
 
-Item остаётся каталожной позицией; физические serial units и balances существуют
-только в warehouse domain. Источник реальных складских данных сейчас намеренно
-не определён. Его contract, mapping и способ первоначального ввода будут
-спроектированы после Stage 15 в следующем roadmap. Stage 8B не добавляет
-warehouse mutation UI.
+Item остаётся каталожной позицией, а не физическим экземпляром.
+Warehouse V2 не содержит active SERIAL/WWN/InventoryUnit/current-holder semantics.
+
+Для первоначального наполнения Warehouse V2 authoritative operator input —
+внешний workbook `inventory.xlsx`. Он хранится вне репозитория и не должен
+попадать в Git. Bootstrap импортирует его только в явно существующую активную
+локацию, создаёт начальный RECEIPT и fail-closed отказывается от повторного
+импорта в уже наполненный warehouse domain.
 
 Stage15A/B уже доказали automated off-VM backup и real isolated restore,
 но ввод real inventory остаётся заблокирован до полного Stage15C acceptance и
@@ -146,10 +151,10 @@ read-only projection reconciliation из
 - сетевые карты;
 - другие категории, которые будут добавляться позднее.
 
-Никакой внешний файл или таблица сейчас не является authoritative inventory
-source. Правила будущего импорта, первоначального наполнения и source-to-domain
-mapping намеренно не зафиксированы и будут определены после завершения Stage 15
-в следующем roadmap. До этого реальные складские данные не импортируются.
+Для bootstrap Warehouse V2 authoritative input — операторский `inventory.xlsx`,
+расположенный вне репозитория. Его mapping зафиксирован в bootstrap-коде и
+регрессионных тестах. Сам workbook, его копии и реальные складские данные
+не должны коммититься в публичный репозиторий.
 
 ## Технологический стек
 

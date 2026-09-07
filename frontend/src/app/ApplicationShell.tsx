@@ -5,7 +5,6 @@ import "./styles/app-shell.css";
 
 const navigationItems = [
   { to: "/catalog", label: "Каталог", icon: "▦" },
-  { to: "/mine", label: "Моё", icon: "◎" },
   { to: "/movements", label: "Движения", icon: "↔" },
   { to: "/more", label: "Ещё", icon: "•••" },
 ] as const;

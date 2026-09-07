@@ -6,7 +6,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
-from typing import cast
+from typing import Any, cast
 
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,41 +32,6 @@ MAX_DECIMAL_SCALE = 10
 MAX_DECIMAL_INTEGRAL_DIGITS = MAX_DECIMAL_PRECISION - MAX_DECIMAL_SCALE
 MIN_SAFE_INTEGER = -(2**53 - 1)
 MAX_SAFE_INTEGER = 2**53 - 1
-SFP_CATEGORY_ID = uuid.UUID("10000000-0000-4000-8000-000000000001")
-
-SFP_SPEED_PROFILE_SCALARS: dict[str, Decimal | None] = {
-    "10 Гбит/с": Decimal("10000"),
-    "10/25 Гбит/с": Decimal("25000"),
-    "100 Гбит/с": Decimal("100000"),
-    "16G FC": Decimal("16000"),
-    "25 Гбит/с": Decimal("25000"),
-    "4/8/16G FC": Decimal("16000"),
-    "40 Гбит/с": Decimal("40000"),
-    "8/16/32G FC": Decimal("32000"),
-}
-
-SFP_REACH_PROFILE_SCALARS: dict[str, Decimal | None] = {
-    "MMF: до 35 м\nOM3: до 100 м": Decimal("100"),
-    "OM2: до 20 м\nOM3: до 70 м\nOM4: до 100 м": Decimal("100"),
-    "OM2: до 35 м\nOM3: до 100 м\nOM4: до 125 м": Decimal("125"),
-    (
-        "OM3: 30 м без RS-FEC / 70 м с RS-FEC\n"
-        "OM4: 40 м без RS-FEC / 100 м с RS-FEC"
-    ): Decimal("100"),
-    "OM3: до 100 м\nOM4: до 125 м": Decimal("125"),
-    "OM3: до 70 м\nOM4: до 100 м": Decimal("100"),
-    "до 10 км": Decimal("10000"),
-    "до 100 м": Decimal("100"),
-    "до 100 м по OM4": Decimal("100"),
-    "до 20 км": Decimal("20000"),
-    "до 300 м": Decimal("300"),
-}
-
-SFP_WAVELENGTH_PROFILE_SCALARS: dict[str, Decimal | None] = {
-    "850 нм": Decimal("850"),
-    "1310 нм": Decimal("1310"),
-    "1271 / 1291 / 1311 / 1331 нм": None,
-}
 
 
 class CatalogError(RuntimeError):
@@ -99,82 +64,6 @@ class PreparedAttributeValue:
     decimal_value: Decimal | None = None
     boolean_value: bool | None = None
     enum_value: str | None = None
-
-
-def _prepared_numeric_value(
-    value: PreparedAttributeValue,
-) -> Decimal | None:
-    if value.integer_value is not None:
-        return Decimal(value.integer_value)
-    if value.decimal_value is not None:
-        return value.decimal_value
-    return None
-
-
-def _validate_profile_scalar_pair(
-    values: Mapping[str, PreparedAttributeValue],
-    *,
-    profile_key: str,
-    scalar_key: str,
-    expectations: Mapping[str, Decimal | None],
-) -> None:
-    profile_value = values.get(profile_key)
-    scalar_value = values.get(scalar_key)
-
-    if (
-        profile_value is None
-        or profile_value.text_value is None
-        or scalar_value is None
-    ):
-        return
-
-    profile = profile_value.text_value
-    actual = _prepared_numeric_value(scalar_value)
-    if actual is None:
-        raise CatalogSchemaError(
-            f"attribute {scalar_key} is not numeric"
-        )
-
-    if profile not in expectations:
-        raise CatalogValidationError(
-            "profile_scalar_unverifiable",
-            f"cannot validate {scalar_key} against unrecognized {profile_key}",
-        )
-
-    expected = expectations[profile]
-    if expected is None or actual != expected:
-        raise CatalogValidationError(
-            "profile_scalar_mismatch",
-            f"attribute {scalar_key} contradicts {profile_key}",
-        )
-
-
-def _validate_sfp_profile_scalar_consistency(
-    prepared: Sequence[PreparedAttributeValue],
-) -> None:
-    values = {
-        value.attribute.key: value
-        for value in prepared
-    }
-
-    _validate_profile_scalar_pair(
-        values,
-        profile_key="speed_profile",
-        scalar_key="speed_mbps",
-        expectations=SFP_SPEED_PROFILE_SCALARS,
-    )
-    _validate_profile_scalar_pair(
-        values,
-        profile_key="reach_profile",
-        scalar_key="reach_m",
-        expectations=SFP_REACH_PROFILE_SCALARS,
-    )
-    _validate_profile_scalar_pair(
-        values,
-        profile_key="wavelength_profile",
-        scalar_key="nominal_wavelength_nm",
-        expectations=SFP_WAVELENGTH_PROFILE_SCALARS,
-    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -280,19 +169,13 @@ def _numeric_metadata(
         return None
     raw = metadata[key]
     if isinstance(raw, bool) or not isinstance(raw, (str, int, float, Decimal)):
-        raise CatalogSchemaError(
-            f"attribute {attribute.key} has invalid {key} metadata"
-        )
+        raise CatalogSchemaError(f"attribute {attribute.key} has invalid {key} metadata")
     try:
         value = Decimal(str(raw))
     except InvalidOperation as exc:
-        raise CatalogSchemaError(
-            f"attribute {attribute.key} has invalid {key} metadata"
-        ) from exc
+        raise CatalogSchemaError(f"attribute {attribute.key} has invalid {key} metadata") from exc
     if not value.is_finite():
-        raise CatalogSchemaError(
-            f"attribute {attribute.key} has non-finite {key} metadata"
-        )
+        raise CatalogSchemaError(f"attribute {attribute.key} has non-finite {key} metadata")
     return value
 
 
@@ -407,9 +290,7 @@ def _prepare_attribute_value(
             return None
         try:
             decimal_value = (
-                raw_value
-                if isinstance(raw_value, Decimal)
-                else Decimal(str(raw_value).strip())
+                raw_value if isinstance(raw_value, Decimal) else Decimal(str(raw_value).strip())
             )
         except InvalidOperation as exc:
             raise CatalogValidationError(
@@ -459,9 +340,7 @@ def _prepare_attribute_value(
             or not allowed_values
             or any(not isinstance(value, str) for value in allowed_values)
         ):
-            raise CatalogSchemaError(
-                f"attribute {attribute.key} has invalid ENUM allowed_values"
-            )
+            raise CatalogSchemaError(f"attribute {attribute.key} has invalid ENUM allowed_values")
         if enum_value not in allowed_values:
             raise CatalogValidationError(
                 "attribute_enum_invalid",
@@ -567,9 +446,6 @@ def validate_attribute_values(
         if value is not None:
             prepared.append(value)
 
-    if category_id == SFP_CATEGORY_ID:
-        _validate_sfp_profile_scalar_consistency(prepared)
-
     return prepared
 
 
@@ -608,23 +484,6 @@ async def _get_manufacturer(
     return manufacturer
 
 
-async def _ensure_internal_code_available(
-    db: AsyncSession,
-    normalized_internal_code: str | None,
-    *,
-    exclude_item_id: uuid.UUID | None = None,
-) -> None:
-    if normalized_internal_code is None:
-        return
-    statement = select(Item.id).where(
-        Item.normalized_internal_code == normalized_internal_code
-    )
-    if exclude_item_id is not None:
-        statement = statement.where(Item.id != exclude_item_id)
-    if await db.scalar(statement) is not None:
-        raise CatalogConflictError("internal code is already used")
-
-
 async def create_manufacturer(
     db: AsyncSession,
     payload: ManufacturerCreate,
@@ -636,9 +495,7 @@ async def create_manufacturer(
         max_length=255,
     )
     existing = await db.scalar(
-        select(Manufacturer.id).where(
-            Manufacturer.normalized_name == normalized_name
-        )
+        select(Manufacturer.id).where(Manufacturer.normalized_name == normalized_name)
     )
     if existing is not None:
         raise CatalogConflictError("manufacturer already exists")
@@ -674,8 +531,7 @@ async def list_manufacturers(
 
     total = await db.scalar(count_statement)
     result = await db.scalars(
-        statement
-        .order_by(Manufacturer.normalized_name, Manufacturer.id)
+        statement.order_by(Manufacturer.normalized_name, Manufacturer.id)
         .limit(limit)
         .offset(offset)
     )
@@ -683,9 +539,7 @@ async def list_manufacturers(
 
 
 async def list_categories(db: AsyncSession) -> list[Category]:
-    result = await db.scalars(
-        select(Category).order_by(Category.sort_order, Category.key)
-    )
+    result = await db.scalars(select(Category).order_by(Category.sort_order, Category.key))
     return list(result.all())
 
 
@@ -718,209 +572,101 @@ def _item_attribute_rows(
     ]
 
 
-async def create_item(db: AsyncSession, payload: ItemCreate) -> uuid.UUID:
+async def _prepare_identity(
+    db: AsyncSession, payload: ItemCreate
+) -> tuple[Category, list[PreparedAttributeValue], str]:
+    from app.modules.catalog.configuration import LEAVES, MANUFACTURED_LEAVES
+    from app.modules.catalog.normalization import item_signature, normalize_reach
+
     category = await _get_category(db, payload.category_key)
-    await _get_manufacturer(db, payload.manufacturer_id)
-    definitions = await _get_category_attributes(db, category.id)
-    prepared_values = validate_attribute_values(
-        category.id,
-        definitions,
-        payload.attributes,
-    )
-
-    name = normalize_inline_text(payload.name, field="name", max_length=255)
-    model = normalize_optional_inline_text(
-        payload.model,
-        field="model",
-        max_length=255,
-    )
-    manufacturer_part_number = normalize_optional_inline_text(
-        payload.manufacturer_part_number,
-        field="manufacturer_part_number",
-        max_length=255,
-    )
-    internal_code = normalize_optional_inline_text(
-        payload.internal_code,
-        field="internal_code",
-        max_length=128,
-    )
-    normalized_internal_code = (
-        normalize_comparison(
-            internal_code,
-            field="internal_code",
-            max_length=128,
+    if category.parent_id is None or category.key not in LEAVES:
+        raise CatalogValidationError(
+            "leaf_category_required", "items require a fixed leaf category"
         )
-        if internal_code is not None
-        else None
+    manufacturer = await _get_manufacturer(db, payload.manufacturer_id)
+    if category.key in MANUFACTURED_LEAVES and (
+        manufacturer is None or not payload.model or not payload.model.strip()
+    ):
+        raise CatalogValidationError("identity_required", "manufacturer and model are required")
+    attributes = dict(payload.attributes)
+    if category.key.startswith("transceiver_"):
+        try:
+            derived = normalize_reach(str(attributes.get("reach", "")))
+        except ValueError as error:
+            raise CatalogValidationError("reach_invalid", str(error)) from error
+        if "reach_m" in attributes and attributes["reach_m"] != derived:
+            raise CatalogValidationError(
+                "reach_mismatch", "normalized reach contradicts display value"
+            )
+        attributes["reach_m"] = derived
+    definitions = await _get_category_attributes(db, category.id)
+    values = validate_attribute_values(category.id, definitions, attributes)
+    normalized = {
+        v.attribute.key: next(
+            x
+            for x in (v.text_value, v.integer_value, v.decimal_value, v.boolean_value, v.enum_value)
+            if x is not None
+        )
+        for v in values
+    }
+    signature = item_signature(
+        category.key, manufacturer.name if manufacturer else None, payload.model, normalized
     )
-    await _ensure_internal_code_available(db, normalized_internal_code)
+    return category, values, signature
 
-    item_id = uuid.uuid4()
+
+async def create_item(db: AsyncSession, payload: ItemCreate) -> uuid.UUID:
+    category, values, signature = await _prepare_identity(db, payload)
     item = Item(
-        id=item_id,
+        id=uuid.uuid4(),
         category_id=category.id,
         manufacturer_id=payload.manufacturer_id,
-        name=name,
-        normalized_name=normalize_comparison(
-            name,
-            field="name",
-            max_length=255,
-        ),
-        model=model,
-        normalized_model=(
-            normalize_comparison(
-                model,
-                field="model",
-                max_length=255,
-            )
-            if model is not None
-            else None
-        ),
-        manufacturer_part_number=manufacturer_part_number,
-        normalized_manufacturer_part_number=(
-            normalize_comparison(
-                manufacturer_part_number,
-                field="manufacturer_part_number",
-                max_length=255,
-            )
-            if manufacturer_part_number is not None
-            else None
-        ),
-        internal_code=internal_code,
-        normalized_internal_code=normalized_internal_code,
-        description=normalize_optional_text(payload.description),
-        accounting_mode=payload.accounting_mode or category.default_accounting_mode,
+        name=normalize_inline_text(payload.name, field="name", max_length=255),
+        normalized_name=normalize_comparison(payload.name),
+        model=normalize_optional_inline_text(payload.model, field="model", max_length=255),
+        normalized_model=normalize_comparison(payload.model) if payload.model else None,
+        identity_signature=signature,
         status=ItemStatus.ACTIVE,
-        comment=normalize_optional_text(payload.comment),
-        datasheet_url=payload.datasheet_url,
-        technical_data_source=normalize_optional_text(
-            payload.technical_data_source
-        ),
     )
     db.add(item)
-    db.add_all(_item_attribute_rows(item_id, category.id, prepared_values))
+    db.add_all(_item_attribute_rows(item.id, category.id, values))
     await db.flush()
-    return item_id
+    return item.id
 
 
 async def update_item(
-    db: AsyncSession,
-    item_id: uuid.UUID,
-    payload: ItemPatch,
-    *,
-    fields_set: set[str],
+    db: AsyncSession, item_id: uuid.UUID, payload: ItemPatch, *, fields_set: set[str]
 ) -> uuid.UUID:
-    item = await db.scalar(
-        select(Item).where(Item.id == item_id).with_for_update()
-    )
+    item = await db.scalar(select(Item).where(Item.id == item_id).with_for_update())
     if item is None:
         raise CatalogNotFoundError("item not found")
-
     if "category_key" in fields_set:
-        raise CatalogValidationError(
-            "category_immutable",
-            "item category cannot be changed",
-        )
-    if "accounting_mode" in fields_set:
-        raise CatalogValidationError(
-            "accounting_mode_immutable",
-            "item accounting mode cannot be changed",
-        )
-
-    if "manufacturer_id" in fields_set:
-        await _get_manufacturer(db, payload.manufacturer_id)
-        item.manufacturer_id = payload.manufacturer_id
-    if "name" in fields_set:
-        if payload.name is None:
-            raise CatalogValidationError("name_required", "name must not be null")
-        item.name = normalize_inline_text(payload.name, field="name", max_length=255)
-        item.normalized_name = normalize_comparison(
-            item.name,
-            field="name",
-            max_length=255,
-        )
-    if "model" in fields_set:
-        item.model = normalize_optional_inline_text(
-            payload.model,
-            field="model",
-            max_length=255,
-        )
-        item.normalized_model = (
-            normalize_comparison(
-                item.model,
-                field="model",
-                max_length=255,
-            )
-            if item.model is not None
-            else None
-        )
-    if "manufacturer_part_number" in fields_set:
-        item.manufacturer_part_number = normalize_optional_inline_text(
-            payload.manufacturer_part_number,
-            field="manufacturer_part_number",
-            max_length=255,
-        )
-        item.normalized_manufacturer_part_number = (
-            normalize_comparison(
-                item.manufacturer_part_number,
-                field="manufacturer_part_number",
-                max_length=255,
-            )
-            if item.manufacturer_part_number is not None
-            else None
-        )
-    if "internal_code" in fields_set:
-        item.internal_code = normalize_optional_inline_text(
-            payload.internal_code,
-            field="internal_code",
-            max_length=128,
-        )
-        item.normalized_internal_code = (
-            normalize_comparison(
-                item.internal_code,
-                field="internal_code",
-                max_length=128,
-            )
-            if item.internal_code is not None
-            else None
-        )
-        await _ensure_internal_code_available(
-            db,
-            item.normalized_internal_code,
-            exclude_item_id=item.id,
-        )
-    if "description" in fields_set:
-        item.description = normalize_optional_text(payload.description)
-    if "comment" in fields_set:
-        item.comment = normalize_optional_text(payload.comment)
-    if "datasheet_url" in fields_set:
-        item.datasheet_url = payload.datasheet_url
-    if "technical_data_source" in fields_set:
-        item.technical_data_source = normalize_optional_text(
-            payload.technical_data_source
-        )
-
-    if "attributes" in fields_set:
-        if payload.attributes is None:
-            raise CatalogValidationError(
-                "attributes_required",
-                "attributes must be an object when supplied",
-            )
-        definitions = await _get_category_attributes(db, item.category_id)
-        prepared_values = validate_attribute_values(
-            item.category_id,
-            definitions,
-            payload.attributes,
-        )
-        await db.execute(
-            delete(ItemAttributeValue).where(ItemAttributeValue.item_id == item.id)
-        )
-        db.add_all(
-            _item_attribute_rows(item.id, item.category_id, prepared_values)
-        )
-
-    if fields_set:
-        item.updated_at = datetime.now(UTC)
+        raise CatalogValidationError("category_immutable", "item category cannot be changed")
+    record = await get_item_record(db, item_id)
+    data: dict[str, Any] = dict(
+        category_key=record.category.key,
+        name=item.name,
+        model=item.model,
+        manufacturer_id=item.manufacturer_id,
+        attributes=record.attributes,
+    )
+    data.update(payload.model_dump(include=fields_set))
+    if "attributes" in fields_set and data["attributes"] is None:
+        raise CatalogValidationError("attributes_required", "attributes must be an object")
+    # reach_m is derived on every edit, including after replacing a reach profile.
+    if "attributes" not in fields_set:
+        data["attributes"].pop("reach_m", None)
+    merged = ItemCreate.model_validate(data)
+    category, values, signature = await _prepare_identity(db, merged)
+    item.name = normalize_inline_text(merged.name, field="name", max_length=255)
+    item.normalized_name = normalize_comparison(item.name)
+    item.model = normalize_optional_inline_text(merged.model, field="model", max_length=255)
+    item.normalized_model = normalize_comparison(item.model) if item.model else None
+    item.manufacturer_id = merged.manufacturer_id
+    item.identity_signature = signature
+    await db.execute(delete(ItemAttributeValue).where(ItemAttributeValue.item_id == item.id))
+    db.add_all(_item_attribute_rows(item.id, category.id, values))
+    item.updated_at = datetime.now(UTC)
     await db.flush()
     return item.id
 
@@ -932,9 +678,7 @@ async def set_item_archived(
     archived: bool,
     now: datetime | None = None,
 ) -> uuid.UUID:
-    item = await db.scalar(
-        select(Item).where(Item.id == item_id).with_for_update()
-    )
+    item = await db.scalar(select(Item).where(Item.id == item_id).with_for_update())
     if item is None:
         raise CatalogNotFoundError("item not found")
 
@@ -1063,9 +807,7 @@ async def list_items(
     if category_id is not None:
         filters.append(Item.category_id == category_id)
 
-    total = await db.scalar(
-        select(func.count()).select_from(Item).where(*filters)
-    )
+    total = await db.scalar(select(func.count()).select_from(Item).where(*filters))
     result = await db.scalars(
         select(Item)
         .where(*filters)
@@ -1094,79 +836,17 @@ async def list_items(
 
 
 async def check_duplicate_candidates(
-    db: AsyncSession,
-    payload: DuplicateCheckRequest,
+    db: AsyncSession, payload: DuplicateCheckRequest
 ) -> list[DuplicateCandidate]:
-    category = await _get_category(db, payload.category_key)
-    await _get_manufacturer(db, payload.manufacturer_id)
-    name = normalize_inline_text(payload.name, field="name", max_length=255)
-    model = normalize_optional_inline_text(
-        payload.model,
-        field="model",
-        max_length=255,
-    )
-    manufacturer_part_number = normalize_optional_inline_text(
-        payload.manufacturer_part_number,
-        field="manufacturer_part_number",
-        max_length=255,
-    )
-
-    filters = [
-        Item.category_id == category.id,
-        (
-            Item.manufacturer_id.is_(None)
-            if payload.manufacturer_id is None
-            else Item.manufacturer_id == payload.manufacturer_id
-        ),
-    ]
-    if payload.exclude_item_id is not None:
-        filters.append(Item.id != payload.exclude_item_id)
-
-    if manufacturer_part_number is not None:
-        filters.append(
-            Item.normalized_manufacturer_part_number
-            == normalize_comparison(
-                manufacturer_part_number,
-                field="manufacturer_part_number",
-                max_length=255,
-            )
-        )
-        reason = "same_category_manufacturer_mpn"
-    else:
-        filters.extend(
-            [
-                Item.normalized_name
-                == normalize_comparison(
-                    name,
-                    field="name",
-                    max_length=255,
-                ),
-                (
-                    Item.normalized_model.is_(None)
-                    if model is None
-                    else Item.normalized_model
-                    == normalize_comparison(
-                        model,
-                        field="model",
-                        max_length=255,
-                    )
-                ),
-            ]
-        )
-        reason = "same_category_manufacturer_name_model"
-
-    result = await db.scalars(
+    _, _, signature = await _prepare_identity(db, payload)
+    statement = (
         select(Item)
-        .where(*filters)
+        .where(Item.identity_signature == signature)
         .options(joinedload(Item.manufacturer))
-        .order_by(Item.created_at, Item.id)
-        .limit(20)
     )
+    if payload.exclude_item_id:
+        statement = statement.where(Item.id != payload.exclude_item_id)
+    items = (await db.scalars(statement)).all()
     return [
-        DuplicateCandidate(
-            item=item,
-            manufacturer=item.manufacturer,
-            reason=reason,
-        )
-        for item in result.unique().all()
+        DuplicateCandidate(item, item.manufacturer, "exact_equipment_identity") for item in items
     ]

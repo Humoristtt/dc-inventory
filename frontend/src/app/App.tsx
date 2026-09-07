@@ -9,8 +9,8 @@ import { CategoryPage } from "../pages/catalog/CategoryPage";
 import { CatalogLandingPage } from "../pages/catalog/CatalogLandingPage";
 import { ItemDetailPage } from "../pages/catalog/ItemDetailPage";
 import { ItemFormPage } from "../pages/catalog/ItemFormPage";
-import { MyEquipmentPage } from "../pages/inventory/MyEquipmentPage";
-import { PlaceholderPage } from "../pages/placeholder/PlaceholderPage";
+import { MovementsPage } from "../pages/inventory/MovementsPage";
+import { LocationsPage } from "../pages/inventory/LocationsPage";
 import { ApplicationShell } from "./ApplicationShell";
 
 export function ApplicationRoutes() {
@@ -23,27 +23,8 @@ export function ApplicationRoutes() {
         <Route path="catalog/items/:itemId/edit" element={<ItemFormPage />} />
         <Route path="catalog/items/:itemId" element={<ItemDetailPage />} />
         <Route path="catalog/:categoryKey" element={<CategoryPage />} />
-        <Route path="mine" element={<MyEquipmentPage />} />
-        <Route
-          path="movements"
-          element={
-            <PlaceholderPage
-              description="Журнал движений будет подключён отдельным рабочим срезом без имитации складских операций."
-              eyebrow="Складской журнал"
-              title="Движения"
-            />
-          }
-        />
-        <Route
-          path="more"
-          element={
-            <PlaceholderPage
-              description="Служебные и административные функции появятся по мере готовности следующих этапов."
-              eyebrow="Дополнительно"
-              title="Ещё"
-            />
-          }
-        />
+        <Route path="movements" element={<MovementsPage />} />
+        <Route path="more" element={<LocationsPage />} />
         <Route path="*" element={<Navigate replace to="/catalog" />} />
       </Route>
     </Routes>

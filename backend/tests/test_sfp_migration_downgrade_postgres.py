@@ -7,6 +7,7 @@ import uuid
 from pathlib import Path
 
 import pytest
+from pytest import MonkeyPatch
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
@@ -192,14 +193,19 @@ async def _cleanup_profile_fixture(item_id: str) -> None:
 
 
 @pytest.mark.asyncio
-async def test_real_postgres_sfp_downgrade_cycle_and_destructive_guard() -> None:
+async def test_real_postgres_sfp_downgrade_cycle_and_destructive_guard(
+    migration_database: str,
+    monkeypatch: MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("DATABASE_URL", migration_database)
+    _alembic("upgrade", HEAD_REVISION)
     assert HEAD_REVISION in _current_revision()
 
     _alembic("downgrade", BASE_REVISION)
     assert BASE_REVISION in _current_revision()
     assert HEAD_REVISION not in _current_revision()
 
-    _alembic("upgrade", "head")
+    _alembic("upgrade", HEAD_REVISION)
     assert HEAD_REVISION in _current_revision()
 
     item_id = str(uuid.uuid4())
@@ -230,7 +236,7 @@ async def test_real_postgres_sfp_downgrade_cycle_and_destructive_guard() -> None
         )
     finally:
         if HEAD_REVISION not in _current_revision():
-            _alembic("upgrade", "head")
+            _alembic("upgrade", HEAD_REVISION)
 
         if fixture_inserted:
             await _cleanup_profile_fixture(item_id)

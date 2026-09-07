@@ -53,11 +53,6 @@ export function EquipmentCard({
 
         <div className="equipment-card__meta">
           <span>{item.category.display_name}</span>
-          {item.manufacturer_part_number ? (
-            <span className="equipment-card__pn">
-              PN {item.manufacturer_part_number}
-            </span>
-          ) : null}
         </div>
 
         {visibleAttributes.length === 0 ? null : (
@@ -78,16 +73,8 @@ export function EquipmentCard({
 
         <dl className="stock-strip">
           <div className={item.inventory.available_count > 0 ? "stock-strip__available" : "stock-strip__zero"}>
-            <dt>Доступно</dt>
+            <dt>В наличии</dt>
             <dd>{item.inventory.available_count}</dd>
-          </div>
-          <div>
-            <dt>У пользователей</dt>
-            <dd>{item.inventory.custody_count}</dd>
-          </div>
-          <div>
-            <dt>Всего</dt>
-            <dd>{item.inventory.total_count}</dd>
           </div>
         </dl>
       </div>

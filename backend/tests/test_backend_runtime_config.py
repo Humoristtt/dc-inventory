@@ -5,10 +5,7 @@ import pytest
 from app.core.config import Settings
 from app.main import create_app, validate_backend_runtime_config
 
-DATABASE_URL = (
-    "postgresql+asyncpg://dc_inventory:test@postgres:5432/"
-    "dc_inventory"
-)
+DATABASE_URL = "postgresql+asyncpg://dc_inventory:test@postgres:5432/dc_inventory"
 
 
 def production_settings(
@@ -20,9 +17,7 @@ def production_settings(
         "telegram_bot_token": "123456789:test-token",
         "admin_telegram_user_id": 123456789,
         "telegram_webhook_secret": "webhook-secret",
-        "telegram_web_app_url": (
-            "https://app.spik-inventory.ru"
-        ),
+        "telegram_web_app_url": ("https://app.spik-inventory.ru"),
     }
     values.update(overrides)
     return Settings.model_validate(values)

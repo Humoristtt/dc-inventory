@@ -27,12 +27,22 @@ import type {
   CategorySummary,
 } from "../../shared/api/catalog";
 
+const transceiversFamily: CategorySummary = {
+  id: "category-transceivers",
+  key: "transceivers",
+  display_name: "Трансиверы",
+  description: "SFP, SFP+, SFP28, XFP и QSFP для Ethernet и Fibre Channel.",
+  parent_id: null,
+  sort_order: 10,
+  is_system: true,
+};
+
 const category: CategorySummary = {
   id: "category-sfp",
   key: "sfp",
   display_name: "SFP-модули",
   description: "Оптические и медные трансиверы",
-  default_accounting_mode: "SERIAL",
+  parent_id: transceiversFamily.id,
   sort_order: 10,
   is_system: true,
 };
@@ -42,7 +52,7 @@ const secondCategory: CategorySummary = {
   key: "disks",
   display_name: "Диски и накопители",
   description: null,
-  default_accounting_mode: "SERIAL",
+  parent_id: null,
   sort_order: 20,
   is_system: true,
 };
@@ -97,14 +107,7 @@ const itemBase: CatalogItem = {
   manufacturer: { id: "manufacturer-1", name: "Mellanox" },
   name: "Трансивер 100G",
   model: "MFM1T02A-LR",
-  manufacturer_part_number: "MFM1T02A-LR-PN",
-  internal_code: "SFP-001",
-  description: "Одномодовый трансивер",
-  accounting_mode: "SERIAL",
   status: "ACTIVE",
-  comment: "Проверять совместимость прошивки",
-  datasheet_url: "https://example.com/datasheet.pdf",
-  technical_data_source: "Спецификация производителя",
   archived_at: null,
   created_at: "2026-01-01T00:00:00Z",
   updated_at: "2026-01-02T00:00:00Z",
@@ -113,7 +116,7 @@ const itemBase: CatalogItem = {
 
 const listItem: CatalogItemListEntry = {
   ...itemBase,
-  inventory: { available_count: 2, custody_count: 1, total_count: 3 },
+  inventory: { available_count: 3, total_count: 3 },
 };
 
 function jsonResponse(body: unknown, status = 200) {
@@ -212,7 +215,7 @@ function catalogFetch(input: RequestInfo | URL): Promise<Response> {
     }));
   }
   if (url === "/api/catalog/categories") {
-    return Promise.resolve(jsonResponse([category, secondCategory]));
+    return Promise.resolve(jsonResponse([transceiversFamily, category, secondCategory]));
   }
   return Promise.reject(new Error(`unexpected fetch: ${url}`));
 }
@@ -258,7 +261,7 @@ it("после approved access gate показывает рабочий shell и
   expect(
     screen.getByText("Инвентаризация ЦОД"),
   ).toBeInTheDocument();
-  expect(await screen.findByRole("link", { name: /SFP-модули/ })).toBeInTheDocument();
+  expect(await screen.findByRole("link", { name: /Трансиверы/ })).toBeInTheDocument();
   expect(screen.getByRole("link", { name: /Диски и накопители/ })).toBeInTheDocument();
   expect(screen.getByRole("navigation", { name: "Основная навигация" })).toBeInTheDocument();
   expect(screen.getAllByRole("link", { name: /Каталог/ }).length).toBeGreaterThan(0);
@@ -277,13 +280,13 @@ it("показывает ошибку категорий и повторяет �
     calls += 1;
     return calls === 1
       ? jsonResponse({ detail: "failed" }, 500)
-      : jsonResponse([category]);
+      : jsonResponse([transceiversFamily, category]);
   }));
   renderRoutes("/catalog");
 
   expect(await screen.findByText("Не удалось загрузить категории")).toBeInTheDocument();
   fireEvent.click(screen.getByRole("button", { name: "Повторить" }));
-  expect(await screen.findByRole("link", { name: /SFP-модули/ })).toBeInTheDocument();
+  expect(await screen.findByRole("link", { name: /Трансиверы/ })).toBeInTheDocument();
   expect(calls).toBe(2);
 });
 
@@ -572,18 +575,15 @@ it("facet sheet не показывает previous-query counts как теку�
   resolveNextFacets?.(jsonResponse({ facets: [] }));
 });
 
-it("detail показывает только detail_visible атрибуты и безопасный datasheet", async () => {
+it("detail показывает только detail_visible характеристики", async () => {
   vi.stubGlobal("fetch", vi.fn(catalogFetch));
   renderRoutes("/catalog/items/item-1");
 
   expect(await screen.findByRole("heading", { name: "MFM1T02A-LR" })).toBeInTheDocument();
   expect(await screen.findByText("100 Гбит/с")).toBeInTheDocument();
   expect(screen.queryByText("не показывать")).not.toBeInTheDocument();
-  expect(screen.getByText("Проверять совместимость прошивки")).toBeInTheDocument();
-  expect(screen.getByRole("link", { name: /Открыть datasheet/ })).toHaveAttribute(
-    "href",
-    "https://example.com/datasheet.pdf",
-  );
+  expect(screen.getByText("Идентификация")).toBeInTheDocument();
+  expect(screen.getByText("Характеристики")).toBeInTheDocument();
 });
 
 it("возврат из detail восстанавливает search и filter URL категории", async () => {

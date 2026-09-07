@@ -8,10 +8,7 @@ from app.modules.notifications.worker import (
     validate_notification_worker_config,
 )
 
-DATABASE_URL = (
-    "postgresql+asyncpg://dc_inventory:test@postgres:5432/"
-    "dc_inventory"
-)
+DATABASE_URL = "postgresql+asyncpg://dc_inventory:test@postgres:5432/dc_inventory"
 
 
 def settings_for(

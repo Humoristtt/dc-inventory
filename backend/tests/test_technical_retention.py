@@ -6,21 +6,21 @@ from app.maintenance.technical_retention import (
     TECHNICAL_RETENTION_TARGETS,
 )
 
-DATABASE_URL = (
-    "postgresql+asyncpg://dc_inventory:test@postgres:5432/"
-    "dc_inventory"
-)
+DATABASE_URL = "postgresql+asyncpg://dc_inventory:test@postgres:5432/dc_inventory"
 
 
 def test_technical_retention_targets_are_explicit_and_non_warehouse() -> None:
-    assert frozenset(
-        {
-            "auth_sessions",
-            "telegram_updates",
-            "notification_outbox",
-            "access_decision_callbacks",
-        }
-    ) == TECHNICAL_RETENTION_TARGETS
+    assert (
+        frozenset(
+            {
+                "auth_sessions",
+                "telegram_updates",
+                "notification_outbox",
+                "access_decision_callbacks",
+            }
+        )
+        == TECHNICAL_RETENTION_TARGETS
+    )
 
     assert "movements" not in TECHNICAL_RETENTION_TARGETS
     assert "movement_lines" not in TECHNICAL_RETENTION_TARGETS

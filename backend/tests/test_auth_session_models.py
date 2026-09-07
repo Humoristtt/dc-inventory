@@ -7,11 +7,7 @@ from app.modules.auth.service import hash_session_token
 
 def _constraint_names(table_name: str) -> set[str]:
     table = metadata.tables[table_name]
-    return {
-        str(constraint.name)
-        for constraint in table.constraints
-        if constraint.name is not None
-    }
+    return {str(constraint.name) for constraint in table.constraints if constraint.name is not None}
 
 
 def test_auth_sessions_are_registered_in_shared_metadata() -> None:

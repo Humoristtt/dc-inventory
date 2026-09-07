@@ -28,7 +28,7 @@ Stage15 technical hardening завершён; production-data gate остаёт�
 Production safety:
 
     REAL_INVENTORY_MUTATIONS_ENABLED=false
-    REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
+    REAL_INVENTORY_ENTRY=BLOCKED_PENDING_NEXT_ROADMAP
 
 Stage15 acceptance описан в `docs/STAGE15_PLAN.md`.
 

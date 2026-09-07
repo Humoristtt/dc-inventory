@@ -248,6 +248,21 @@ production least-privilege identities.
 - notification payload backend-role изменять не может;
 - maintenance worker выполняет реальную bounded retention iteration.
 
+## Browser acceptance
+
+Есть два независимых browser-level слоя проверки.
+
+`npm run test:e2e` запускает Stage 8 UX/browser acceptance с синтетическими API
+fixtures. Этот слой нужен для deterministic UI, responsive и Telegram-shell
+сценариев.
+
+`npm run test:e2e:fullstack` запускается CI против production-shaped
+`compose.yaml`: настоящий frontend nginx проксирует запросы в настоящий FastAPI,
+который работает с PostgreSQL. В тесте синтетически задаётся только Telegram
+WebApp context с корректно подписанным CI `initData`; `/api/*` routes не
+мокаются. CI дополнительно подтверждает созданные Telegram identity/auth session
+непосредственно в PostgreSQL и проверяет, что warehouse tables остались пустыми.
+
 ## Warehouse projection reconciliation
 
 Stage 6 содержит небольшой read-only drift check без repair/rebuild framework.
@@ -267,9 +282,10 @@ Movement/MovementLine journal. Оба result set должны содержать
 строка означает data-integrity blocker: остановить inventory mutations,
 сохранить backup artifact и расследовать причину; скрипт сам ничего не чинит.
 
-Stage15A automated backup и Stage15B real isolated restore уже приняты.
-Это всё ещё не снимает production-data gate: real inventory запрещён до полного
-Stage15C acceptance и отдельного explicit operator action.
+Stage15A automated backup и Stage15B real isolated restore уже приняты,
+Stage15 technical hardening завершён. Это всё ещё не снимает production-data
+gate: real inventory запрещён до отдельного explicit enablement decision в
+следующем roadmap и operator action.
 
 ## Checkpoint и source audit
 

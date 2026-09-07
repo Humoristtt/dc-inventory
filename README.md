@@ -28,7 +28,7 @@ AUD-01 fail-closed server-side real-inventory mutation gate принят в
 production. Runtime остаётся заблокирован:
 
     REAL_INVENTORY_MUTATIONS_ENABLED=false
-    REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
+    REAL_INVENTORY_ENTRY=BLOCKED_PENDING_NEXT_ROADMAP
 
 Текущий migration head — `a2b3c4d5e6f7`. Production Git checkout и реально
 запущенные application images рассматриваются как разные operational facts;

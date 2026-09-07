@@ -9,7 +9,7 @@
 > **Production:** Stages 4–8B и post-8B UX приняты; migration head `a2b3c4d5e6f7`.
 > **Stage 15:** technical hardening COMPLETE; real-inventory gate KEEP_DISABLED_NEXT_ROADMAP.
 > **AUD-01:** production fail-closed mutation gate PASS; `REAL_INVENTORY_MUTATIONS_ENABLED=false`.
-> **Production-data gate:** `REAL_INVENTORY_ENTRY=BLOCKED_STAGE15`.
+> **Production-data gate:** `REAL_INVENTORY_ENTRY=BLOCKED_PENDING_NEXT_ROADMAP`.
 > **Runtime provenance:** Git checkout и backend/web runtime image revision проверяются отдельно.
 > **Git/GitHub:** protected `main`; required CI: backend, frontend, runtime, telegram-gateway.
 > **Repository visibility:** public; обязательный reassessment перед любыми real inventory data.

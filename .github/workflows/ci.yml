@@ -153,6 +153,10 @@ jobs:
         shell: bash
         run: python3 ops/tests/test_docs_freshness.py
 
+      - name: Full-stack E2E contract
+        shell: bash
+        run: python3 ops/tests/test_fullstack_e2e_contract.py
+
       - name: Stage 15 recovery runbook contract
         shell: bash
         run: python3 ops/tests/test_recovery_runbook_contract.py
@@ -303,6 +307,20 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install full-stack browser dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install full-stack Chromium
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
 
       - name: Scan dependencies for critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
@@ -455,6 +473,59 @@ jobs:
           PY
 
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/api/docs)" = "404"
+
+      - name: Full-stack browser acceptance
+        working-directory: frontend
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:8080
+          FULLSTACK_TELEGRAM_BOT_TOKEN: ci-runtime-only-token
+          FULLSTACK_TELEGRAM_USER_ID: "42424242"
+        run: npm run test:e2e:fullstack
+
+      - name: Verify full-stack database side effects
+        run: |
+          identity_count="$(
+            docker compose --env-file .env.ci -f compose.yaml               exec -T postgres               psql               -U dc_inventory               -d dc_inventory               -At               -v ON_ERROR_STOP=1               -c "
+                SELECT count(*)
+                FROM telegram_identities ti
+                JOIN users u ON u.id = ti.user_id
+                WHERE ti.telegram_user_id = 42424242
+                  AND u.role = 'ADMIN'
+                  AND u.access_status = 'APPROVED';
+              "
+          )"
+
+          test "$identity_count" = "1"
+
+          session_ok="$(
+            docker compose --env-file .env.ci -f compose.yaml               exec -T postgres               psql               -U dc_inventory               -d dc_inventory               -At               -v ON_ERROR_STOP=1               -c "
+                SELECT CASE
+                  WHEN count(*) >= 1 THEN 1
+                  ELSE 0
+                END
+                FROM auth_sessions s
+                JOIN telegram_identities ti
+                  ON ti.user_id = s.user_id
+                WHERE ti.telegram_user_id = 42424242;
+              "
+          )"
+
+          test "$session_ok" = "1"
+
+          inventory_counts="$(
+            docker compose --env-file .env.ci -f compose.yaml               exec -T postgres               psql               -U dc_inventory               -d dc_inventory               -AtF '|'               -v ON_ERROR_STOP=1               -c "
+                SELECT
+                  (SELECT count(*) FROM items),
+                  (SELECT count(*) FROM inventory_units),
+                  (SELECT count(*) FROM stock_balances),
+                  (SELECT count(*) FROM movements),
+                  (SELECT count(*) FROM movement_lines);
+              "
+          )"
+
+          test "$inventory_counts" = "0|0|0|0|0"
+
+          echo "FULLSTACK_DATABASE_SIDE_EFFECTS=PASS"
 
       - name: Verify Telegram worker boundary
         run: |

@@ -64,7 +64,7 @@ Stage15C: `ACTIVE`.
 AUD-01 production acceptance:
 
     REAL_INVENTORY_MUTATIONS_ENABLED=false
-    REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
+    REAL_INVENTORY_ENTRY=BLOCKED_PENDING_NEXT_ROADMAP
     pre-real-data inventory rows=0
     production health=PASS
 
@@ -269,7 +269,7 @@ Local backup policy после Stage15C hygiene checkpoint:
     STAGE15A=PASS
     STAGE15B=PASS
     STAGE15C=ACTIVE
-    REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
+    REAL_INVENTORY_ENTRY=BLOCKED_PENDING_NEXT_ROADMAP
 
 Stage 15 implementation и acceptance ведутся по
 `docs/STAGE15_PLAN.md`.
@@ -367,7 +367,7 @@ Data-integrity blocker. Inventory mutations останавливаются.
 После technical hardening сохраняется fail-closed operational state:
 
     REAL_INVENTORY_MUTATIONS_ENABLED=false
-    REAL_INVENTORY_ENTRY=BLOCKED_STAGE15
+    REAL_INVENTORY_ENTRY=BLOCKED_PENDING_NEXT_ROADMAP
 
 
 ## Stage15C host security baseline — AUD-17

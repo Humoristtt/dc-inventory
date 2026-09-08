@@ -595,3 +595,37 @@
 - `REAL_INVENTORY_MUTATIONS_ENABLED=false`.
 - `REAL_INVENTORY_ENTRY=BLOCKED_STAGE15`.
 - `STAGE15=TECHNICAL_HARDENING_COMPLETE`.
+
+
+## 2026-09-08 — Warehouse V2 production rollout and initial inventory acceptance
+
+- Warehouse Domain V2 schema/domain accepted and deployed.
+- Production schema advanced through Warehouse V2 and leaf-description
+  migrations to `c5d6e7f8a9b0`.
+- Warehouse responsive UI, header/fullscreen/Escape remediation and desktop form
+  consistency accepted through subsequent PR/CI/deploy cycles.
+- PR #45 added guarded one-shot production inventory bootstrap.
+- PR #45 merge commit:
+  `a7ee822cfbb9fd2b25b73e676c026a9e849f1839`.
+- Required `main` CI run #104 completed successfully:
+  backend, frontend, runtime and telegram-gateway all PASS.
+- Production backend, telegram-worker and maintenance-worker were rebuilt from
+  the accepted PR #45 merge revision; web remained on the previously accepted
+  frontend-only revision until a later frontend-changing deploy.
+- Authoritative initial inventory workbook remained external to Git.
+- Read-only production preflight confirmed empty warehouse domain, approved
+  ADMIN actor, expected schema, matching source contract and closed regular
+  mutation gate.
+- Fresh verified off-VM pre-import backup PASS.
+- Guarded one-shot production bootstrap completed successfully.
+- Initial load created the intended opening RECEIPT and stock projection.
+- Post-import DB verification PASS.
+- Canonical quantity projection reconciliation returned zero drift.
+- Production health/live/ready PASS after import.
+- `REAL_INVENTORY_MUTATIONS_ENABLED=false` remained unchanged.
+- Fresh verified off-VM post-import backup PASS.
+- Real Telegram Mini App visual acceptance confirmed catalog/location/movement
+  data are visible and globally usable.
+- Temporary container-readable bootstrap workbook copy was removed after
+  acceptance.
+- Initial bootstrap is now a completed one-time operation and must not be rerun.

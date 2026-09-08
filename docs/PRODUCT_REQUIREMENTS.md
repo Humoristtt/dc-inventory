@@ -4,11 +4,11 @@
 
 Telegram Mini App для складского учёта оборудования ЦОД.
 
-Stage15 technical hardening завершён. Warehouse Domain V2 этой feature-ветки
-является следующим schema/product состоянием и требует отдельного merge/deploy
-acceptance перед production rollout.
+Warehouse Domain V2 развёрнут и принят в production.
+Initial production inventory bootstrap выполнен и подтверждён
+post-import reconciliation + verified backup + Telegram visual acceptance.
 
-Система должна отвечать на вопросы:
+Система отвечает на вопросы:
 
 1. Что есть в каталоге?
 2. Сколько оборудования есть сейчас?
@@ -16,6 +16,10 @@ acceptance перед production rollout.
 4. Кто и когда выполнил приход, выдачу, возврат, перемещение или списание?
 
 Персональный баланс оборудования сотрудников не ведётся.
+
+Regular production warehouse mutations дополнительно защищены
+`REAL_INVENTORY_MUTATIONS_ENABLED`. Initial one-shot bootstrap и normal
+operational mutations являются разными safety boundaries.
 
 ## Каталог
 

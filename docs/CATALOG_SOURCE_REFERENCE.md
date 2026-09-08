@@ -17,14 +17,27 @@
 
 ## Operational inventory boundary
 
-Этот документ хранит только исторический design context и не определяет
-источник реальных складских данных или будущий import contract.
+Этот документ остаётся historical Stage 5 design/source-reference и не является
+authoritative production inventory dataset.
 
-    CURRENT_AUTHORITATIVE_INVENTORY_SOURCE=NOT_DEFINED
-    REAL_DATA_IMPORT=DEFERRED_NEXT_ROADMAP
+Старые files/examples из `data/source/` по-прежнему не используются для
+production stock.
 
-Формат источника, mapping и opening-inventory semantics будут спроектированы
-после Stage 15 в следующем roadmap.
+После Stage15 initial production source был определён отдельно:
+
+- внешний operator workbook `inventory.xlsx`;
+- workbook хранится вне repository;
+- workbook contract реализован в
+  `backend/app/bootstrap/inventory_workbook.py`;
+- production one-shot safety boundary реализован в
+  `backend/app/bootstrap/production_inventory.py`;
+- real workbook contents и runtime-only validation values не дублируются в
+  public documentation;
+- bootstrap уже выполнен и повторно не запускается.
+
+Current active category/schema contract определяется
+`docs/CATALOG_SCHEMA.md`, а warehouse semantics —
+`docs/WAREHOUSE_DOMAIN.md`.
 
 ## Исторический source-review
 

@@ -1,5 +1,29 @@
 # Stage 15 — Production Hardening Before Real Inventory
 
+## Post-Stage15 note
+
+Этот документ является historical acceptance record Stage 15.
+
+Статусы `BLOCKED_PENDING_NEXT_ROADMAP`, `NOT_DEFINED`,
+`DEFERRED_NEXT_ROADMAP`, pre-data zero counts и Alembic head
+`a2b3c4d5e6f7` ниже описывают фактическое состояние **на момент закрытия
+Stage 15** и намеренно не переписываются задним числом.
+
+Post-Stage15 production state принят 2026-09-08:
+
+    WAREHOUSE_DOMAIN_V2=PRODUCTION_ACCEPTED
+    ALEMBIC_HEAD=c5d6e7f8a9b0
+    INITIAL_PRODUCTION_BOOTSTRAP=PASS
+    POST_IMPORT_RECONCILIATION=ZERO_DRIFT
+    POST_IMPORT_BACKUP=PASS
+    REAL_INVENTORY_MUTATIONS_ENABLED=false
+
+Authoritative initial source был впоследствии определён как внешний operator
+workbook с versioned parser/validation contract. Workbook остаётся вне Git.
+
+Regular mutation gate после initial bootstrap не открывался.
+
+
 ## Status
 
     STAGE15=TECHNICAL_HARDENING_COMPLETE

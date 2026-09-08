@@ -23,10 +23,15 @@ for value in (
     "APP_HOST_BIND=127.0.0.1:8080",
     "POSTGRES_HOST_PORT=NONE",
     "REPOSITORY_VISIBILITY_CURRENT=public",
+    "REPOSITORY_DATA_POLICY=NO_REAL_INVENTORY_DATA_IN_GIT",
+):
+    assert value in operations, value
+
+for stale_value in (
     "REPOSITORY_VISIBILITY_BEFORE_REAL_INVENTORY=REASSESS_REQUIRED",
     "AUD19_DECISION=REASSESS_BEFORE_REAL_INVENTORY",
 ):
-    assert value in operations, value
+    assert stale_value not in operations, stale_value
 
 assert (
     "TELEGRAM_DELIVERY_GUARANTEE="

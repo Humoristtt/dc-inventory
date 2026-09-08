@@ -80,9 +80,9 @@ Baseline Alembic:
 
 Текущий source migration head:
 
-    a2b3c4d5e6f7
+    c5d6e7f8a9b0
 
-Production migration head принят на `a2b3c4d5e6f7`.
+Production migration head принят на `c5d6e7f8a9b0`.
 
 ## Локальный backend
 
@@ -268,8 +268,10 @@ WebApp context с корректно подписанным CI `initData`; `/api
 ## Warehouse projection reconciliation
 
 Warehouse Domain V2 содержит read-only projection reconciliation без
-repair/rebuild framework. После migrations, перед первым реальным inventory
-вводом и после любого restore запустить из корня репозитория:
+repair/rebuild framework. Проверка обязательна после warehouse migrations,
+после restore, при controlled bootstrap/data migration и при подозрении на
+projection drift. Для локального development runtime запустить из корня
+репозитория:
 
     set -a
     source .env
@@ -285,10 +287,13 @@ Movement/MovementLine journal. Result set должен содержать zero r
 сохранить backup artifact и расследовать причину; скрипт сам ничего не чинит.
 Warehouse V2 не имеет active InventoryUnit/serial/custody projection.
 
-Stage15A automated backup и Stage15B real isolated restore уже приняты,
-Stage15 technical hardening завершён. Это всё ещё не снимает production-data
-gate: real inventory запрещён до отдельного explicit enablement decision в
-следующем roadmap и operator action.
+Stage15A automated backup, Stage15B real isolated restore и Stage15
+technical hardening приняты.
+
+Initial production inventory bootstrap выполнен отдельным guarded one-shot path.
+Regular API mutations остаются независимо защищены
+`REAL_INVENTORY_MUTATIONS_ENABLED=false` до отдельного operational go-live
+decision.
 
 ## Checkpoint и source audit
 

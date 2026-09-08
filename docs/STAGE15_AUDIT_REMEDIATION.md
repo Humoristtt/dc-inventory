@@ -1,5 +1,27 @@
 # Stage 15C — Full Audit Remediation Tracker
 
+## Post-Stage15 note
+
+Это historical remediation tracker pre-data hardening.
+
+Все `KEEP_DISABLED_NEXT_ROADMAP`, `BLOCKED_PENDING_NEXT_ROADMAP`,
+`NOT_DEFINED`, `DEFERRED_NEXT_ROADMAP`, zero inventory counts и historical
+Alembic references ниже являются evidence состояния на момент соответствующего
+AUD checkpoint и не должны глобально заменяться.
+
+После Stage15:
+
+    WAREHOUSE_DOMAIN_V2=PRODUCTION_ACCEPTED
+    ALEMBIC_HEAD=c5d6e7f8a9b0
+    INITIAL_PRODUCTION_BOOTSTRAP=PASS
+    POST_IMPORT_RECONCILIATION=ZERO_DRIFT
+    POST_IMPORT_BACKUP=PASS
+    REAL_INVENTORY_MUTATIONS_ENABLED=false
+
+Текущий operational state ведётся в `docs/OPERATIONS.md` и
+`docs/ROADMAP.md`.
+
+
 This document tracks findings from the full-project audit performed before
 real inventory entry.
 

@@ -62,7 +62,6 @@ def _context(
         user_id=user.id,
         token_hash=b"x" * 32,
         created_at=now,
-        last_seen_at=now,
         expires_at=now + timedelta(hours=1),
     )
     return AuthenticatedContext(

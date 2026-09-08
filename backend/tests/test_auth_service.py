@@ -162,7 +162,6 @@ async def test_load_auth_context_returns_loaded_identity() -> None:
         user_id=user.id,
         token_hash=hash_session_token("raw-token"),
         created_at=NOW,
-        last_seen_at=NOW,
         expires_at=NOW + timedelta(hours=1),
     )
     db = AsyncMock(spec=AsyncSession)
@@ -192,7 +191,6 @@ async def test_revoke_auth_session_sets_revocation_time() -> None:
         user_id=user.id,
         token_hash=b"x" * 32,
         created_at=NOW,
-        last_seen_at=NOW,
         expires_at=NOW + timedelta(hours=1),
     )
     db = AsyncMock(spec=AsyncSession)

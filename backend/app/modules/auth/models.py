@@ -60,11 +60,6 @@ class AuthSession(Base):
         nullable=False,
         server_default=func.now(),
     )
-    last_seen_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        server_default=func.now(),
-    )
     expires_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

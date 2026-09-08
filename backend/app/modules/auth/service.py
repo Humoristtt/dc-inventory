@@ -132,7 +132,6 @@ async def issue_auth_session(
         user_id=user.id,
         token_hash=hash_session_token(raw_token),
         created_at=current_time,
-        last_seen_at=current_time,
         expires_at=current_time + timedelta(seconds=ttl_seconds),
     )
     db.add(session)

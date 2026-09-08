@@ -158,7 +158,6 @@ async def test_retention_deletes_only_old_terminal_technical_rows() -> None:
                         user_id=terminal_user_id,
                         token_hash=token_hash("old-session"),
                         created_at=old - timedelta(days=1),
-                        last_seen_at=old,
                         expires_at=old,
                     ),
                     AuthSession(
@@ -166,7 +165,6 @@ async def test_retention_deletes_only_old_terminal_technical_rows() -> None:
                         user_id=terminal_user_id,
                         token_hash=token_hash("revoked-session"),
                         created_at=old - timedelta(days=1),
-                        last_seen_at=old,
                         expires_at=future,
                         revoked_at=old,
                     ),
@@ -175,7 +173,6 @@ async def test_retention_deletes_only_old_terminal_technical_rows() -> None:
                         user_id=terminal_user_id,
                         token_hash=token_hash("live-session"),
                         created_at=recent,
-                        last_seen_at=recent,
                         expires_at=future,
                     ),
                     TelegramUpdate(

@@ -1,30 +1,58 @@
 from __future__ import annotations
 
-import asyncio
 import json
-import urllib.error
-import urllib.request
-from dataclasses import dataclass
+
+import httpx
+
+_RESPONSE_LIMIT_BYTES = 1_048_576
+_USER_AGENT = "dc-inventory-telegram-worker/1.0"
 
 
 class TelegramGatewayError(RuntimeError):
     """Безопасная ошибка доставки без утечки gateway secret/token."""
 
 
-@dataclass(frozen=True, slots=True)
 class TelegramGatewayClient:
-    base_url: str
-    secret: str
-    timeout_seconds: int = 10
+    def __init__(
+        self,
+        *,
+        base_url: str,
+        secret: str,
+        timeout_seconds: int = 10,
+        transport: httpx.AsyncBaseTransport | None = None,
+    ) -> None:
+        self.base_url = base_url.rstrip("/")
+        self.secret = secret
+        self.timeout_seconds = timeout_seconds
+        self._transport = transport
+        self._client: httpx.AsyncClient | None = None
+
+    def _get_client(self) -> httpx.AsyncClient:
+        if self._client is None:
+            timeout = float(self.timeout_seconds)
+            self._client = httpx.AsyncClient(
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": _USER_AGENT,
+                    "X-DC-Inventory-Gateway-Secret": self.secret,
+                },
+                timeout=httpx.Timeout(
+                    connect=timeout,
+                    read=timeout,
+                    write=timeout,
+                    pool=timeout,
+                ),
+                limits=httpx.Limits(
+                    max_connections=10,
+                    max_keepalive_connections=10,
+                    keepalive_expiry=30.0,
+                ),
+                follow_redirects=False,
+                transport=self._transport,
+            )
+        return self._client
 
     async def send(
-        self,
-        method: str,
-        payload: dict[str, object],
-    ) -> object:
-        return await asyncio.to_thread(self._send_sync, method, payload)
-
-    def _send_sync(
         self,
         method: str,
         payload: dict[str, object],
@@ -34,36 +62,48 @@ class TelegramGatewayClient:
             ensure_ascii=False,
             separators=(",", ":"),
         ).encode("utf-8")
-        request = urllib.request.Request(
-            f"{self.base_url.rstrip('/')}/telegram/{method}",
-            data=body,
-            method="POST",
-            headers={
-                "Content-Type": "application/json",
-                "User-Agent": "dc-inventory-telegram-worker/1.0",
-                "X-DC-Inventory-Gateway-Secret": self.secret,
-            },
-        )
 
         try:
-            with urllib.request.urlopen(
-                request,
-                timeout=self.timeout_seconds,
+            async with self._get_client().stream(
+                "POST",
+                f"{self.base_url}/telegram/{method}",
+                content=body,
             ) as response:
-                raw = response.read(1_048_576)
-        except urllib.error.HTTPError as exc:
+                response.raise_for_status()
+
+                raw = bytearray()
+                async for chunk in response.aiter_bytes():
+                    if len(raw) + len(chunk) > _RESPONSE_LIMIT_BYTES:
+                        raise TelegramGatewayError(
+                            "gateway response is too large"
+                        )
+                    raw.extend(chunk)
+
+        except httpx.HTTPStatusError as exc:
             raise TelegramGatewayError(
-                f"gateway returned HTTP {exc.code}"
+                f"gateway returned HTTP {exc.response.status_code}"
             ) from exc
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            raise TelegramGatewayError("gateway request failed") from exc
+        except httpx.RequestError as exc:
+            raise TelegramGatewayError(
+                "gateway request failed"
+            ) from exc
 
         try:
-            result = json.loads(raw)
+            result: object = json.loads(raw)
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
-            raise TelegramGatewayError("gateway returned invalid JSON") from exc
+            raise TelegramGatewayError(
+                "gateway returned invalid JSON"
+            ) from exc
 
         if not isinstance(result, dict) or result.get("ok") is not True:
-            raise TelegramGatewayError("Telegram Bot API call failed")
+            raise TelegramGatewayError(
+                "Telegram Bot API call failed"
+            )
 
         return result.get("result")
+
+    async def aclose(self) -> None:
+        client = self._client
+        self._client = None
+        if client is not None:
+            await client.aclose()

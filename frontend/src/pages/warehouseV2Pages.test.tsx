@@ -504,7 +504,7 @@ it("Движения по умолчанию показывают 3 месяца
       ]);
     }
 
-    if (url.startsWith("/api/inventory/movements?")) {
+    if (url.startsWith("/api/inventory/movements/feed?")) {
       movementRequests.push(url);
 
       return jsonResponse({
@@ -528,9 +528,8 @@ it("Движения по умолчанию показывают 3 месяца
             ],
           },
         ],
-        total: 1,
         limit: 30,
-        offset: 0,
+        next_before_journal_seq: null,
       });
     }
 
@@ -551,7 +550,10 @@ it("Движения по умолчанию показывают 3 месяца
           "http://test",
         ).searchParams;
 
-        return params.get("period") === "3m";
+        return params.get("period") === "3m"
+          && params.get("limit") === "30"
+          && params.get("offset") === null
+          && params.get("before_journal_seq") === null;
       }),
     ).toBe(true);
   });

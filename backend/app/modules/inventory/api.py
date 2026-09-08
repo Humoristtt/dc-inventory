@@ -32,6 +32,7 @@ from app.modules.inventory.schemas import (
     LocationPatch,
     LocationPositionOut,
     MovementCreate,
+    MovementCursorListOut,
     MovementListOut,
     MovementOut,
     MovementReversalCreate,
@@ -51,6 +52,7 @@ from app.modules.inventory.service import (
     get_movement_record,
     list_locations,
     list_movements,
+    list_movements_cursor,
     list_stock_balances,
     reverse_movement,
     set_location_archived,
@@ -330,6 +332,91 @@ async def get_movements(
         _raise_catalog_error(error)
     return MovementListOut(
         items=[_movement_out(x) for x in page.items], total=page.total, limit=limit, offset=offset
+    )
+
+
+@read_router.get(
+    "/movements/feed",
+    response_model=MovementCursorListOut,
+)
+async def get_movement_feed(
+    db: DbSession,
+    approved: Approved,
+    movement_type: MovementType | None = None,
+    actor_user_id: UUID | None = None,
+    category: str | None = None,
+    long_range: bool = False,
+    location_id: UUID | None = None,
+    period: Literal["7d", "30d", "3m", "year", "all"] = "3m",
+    limit: Annotated[int, Query(ge=1, le=100)] = 50,
+    before_journal_seq: Annotated[int | None, Query(ge=1)] = None,
+) -> MovementCursorListOut:
+    if approved.user.role != UserRole.ADMIN:
+        if (
+            actor_user_id is not None
+            and actor_user_id != approved.user.id
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="employee history requires administrator",
+            )
+        actor_user_id = approved.user.id
+
+    since: datetime | None = None
+
+    if period != "all":
+        now = datetime.now(UTC)
+
+        if period in {"7d", "30d"}:
+            since = now - timedelta(
+                days=7 if period == "7d" else 30
+            )
+        else:
+            months = 3 if period == "3m" else 12
+            month_index = (
+                now.year * 12
+                + now.month
+                - 1
+                - months
+            )
+            year, month = divmod(month_index, 12)
+
+            since = now.replace(
+                year=year,
+                month=month + 1,
+                day=min(
+                    now.day,
+                    calendar.monthrange(
+                        year,
+                        month + 1,
+                    )[1],
+                ),
+            )
+
+    try:
+        page = await list_movements_cursor(
+            db,
+            movement_type=movement_type,
+            actor_user_id=actor_user_id,
+            category_key=category,
+            long_range=long_range,
+            location_id=location_id,
+            since=since,
+            before_journal_seq=before_journal_seq,
+            limit=limit,
+        )
+    except CatalogError as error:
+        _raise_catalog_error(error)
+
+    return MovementCursorListOut(
+        items=[
+            _movement_out(record)
+            for record in page.items
+        ],
+        limit=limit,
+        next_before_journal_seq=(
+            page.next_before_journal_seq
+        ),
     )
 
 

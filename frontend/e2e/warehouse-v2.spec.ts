@@ -162,6 +162,13 @@ async function installApiMock(page:Page, role:"USER"|"ADMIN", failures=0) {
     if(path === `/api/inventory/items/${item.id}/summary`) return json(route,{total_count:quantity,locations:[{id:"balance",item_id:item.id,item_name:item.name,quantity,location:{location_id:location.id,code:location.code,name:location.name},updated_at:now}]});
     if(path === "/api/inventory/locations") return json(route,{items:[location],total:1,limit:200,offset:0});
     if(path === "/api/inventory/movement-actors") return json(route,[{id:userId,name:"Иван"}]);
+    if(path === "/api/inventory/movements/feed") {
+      return json(route,{
+        items:[...movements].reverse(),
+        limit:30,
+        next_before_journal_seq:null,
+      });
+    }
     if(path === "/api/inventory/movements") {
       if(request.method() === "POST") {
         const payload=request.postDataJSON() as Record<string,unknown>; mutations.push(payload);

@@ -28,6 +28,7 @@ RUN python -m pip install \
 
 COPY --chown=10001:10001 alembic.ini /app/alembic.ini
 COPY --chown=10001:10001 migrations /app/migrations
+COPY --chown=10001:10001 scripts /app/scripts
 COPY --chown=10001:10001 app /app/app
 
 USER 10001:10001

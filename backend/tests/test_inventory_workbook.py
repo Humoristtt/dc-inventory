@@ -156,3 +156,134 @@ async def test_bootstrap_requires_existing_location_and_refuses_second_import(
             assert not (await db.execute(text(sql))).all()
     finally:
         await engine.dispose()
+
+
+def test_production_bootstrap_runtime_guard_is_fail_closed() -> None:
+    from app.bootstrap.production_inventory import assert_production_runtime
+
+    assert_production_runtime(
+        app_env="production",
+        database_url="postgresql+asyncpg://runtime:secret@postgres:5432/inventory",
+        gate_enabled=False,
+    )
+
+    with pytest.raises(ValueError, match="APP_ENV=production"):
+        assert_production_runtime(
+            app_env="test",
+            database_url="postgresql+asyncpg://runtime:secret@postgres:5432/inventory",
+            gate_enabled=False,
+        )
+
+    with pytest.raises(ValueError, match="production Docker PostgreSQL boundary"):
+        assert_production_runtime(
+            app_env="production",
+            database_url="postgresql+asyncpg://runtime:secret@localhost:5432/inventory",
+            gate_enabled=False,
+        )
+
+    with pytest.raises(ValueError, match="must remain false"):
+        assert_production_runtime(
+            app_env="production",
+            database_url="postgresql+asyncpg://runtime:secret@postgres:5432/inventory",
+            gate_enabled=True,
+        )
+
+
+def test_production_bootstrap_validation_contract(tmp_path: Path) -> None:
+    from app.bootstrap.production_inventory import assert_validation_contract
+
+    validation = read_workbook(synthetic_workbook(tmp_path / "synthetic-production.xlsx"))
+
+    assert_validation_contract(
+        validation,
+        expected_rows=3,
+        expected_items=2,
+        expected_quantity=26,
+    )
+
+    with pytest.raises(ValueError, match="normalized item count"):
+        assert_validation_contract(
+            validation,
+            expected_rows=3,
+            expected_items=3,
+            expected_quantity=26,
+        )
+
+
+@pytest.mark.asyncio
+async def test_production_bootstrap_creates_single_location_and_receipt(
+    migration_database: str,
+    tmp_path: Path,
+) -> None:
+    from sqlalchemy import func, select
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+    from app.bootstrap.production_inventory import bootstrap_transaction
+    from app.modules.catalog.models import Item
+    from app.modules.inventory.enums import LocationType
+    from app.modules.inventory.models import Location, Movement, MovementLine, StockBalance
+    from tests.migration_helpers import alembic
+    from tests.warehouse_helpers import actor
+
+    alembic(migration_database, "upgrade", "head")
+
+    engine = create_async_engine(migration_database)
+    validation = read_workbook(
+        synthetic_workbook(tmp_path / "synthetic-production-bootstrap.xlsx")
+    )
+
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            user, _ = await actor(db)
+
+            result = await bootstrap_transaction(
+                db,
+                validation,
+                location_code="SYNTHETIC-01",
+                location_name="Synthetic warehouse",
+                location_type=LocationType.WAREHOUSE,
+                actor_user_id=user.id,
+                expected_items=2,
+                expected_quantity=26,
+            )
+
+            await db.commit()
+
+            assert result["projection_drift_rows"] == 0
+            assert result["stock_quantity"] == 26
+
+            assert await db.scalar(
+                select(func.count()).select_from(Location)
+            ) == 1
+
+            assert await db.scalar(
+                select(func.count()).select_from(Item)
+            ) == 2
+
+            assert await db.scalar(
+                select(func.count()).select_from(Movement)
+            ) == 1
+
+            assert await db.scalar(
+                select(func.count()).select_from(MovementLine)
+            ) == 2
+
+            assert await db.scalar(
+                select(func.sum(StockBalance.quantity))
+            ) == 26
+
+            with pytest.raises(ValueError, match="BOOTSTRAP_ALREADY_POPULATED"):
+                await bootstrap_transaction(
+                    db,
+                    validation,
+                    location_code="SYNTHETIC-02",
+                    location_name="Second synthetic warehouse",
+                    location_type=LocationType.WAREHOUSE,
+                    actor_user_id=user.id,
+                    expected_items=2,
+                    expected_quantity=26,
+                )
+
+            await db.rollback()
+    finally:
+        await engine.dispose()

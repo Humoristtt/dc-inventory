@@ -173,12 +173,12 @@ ADMIN:
 feature cycle.
 
 - [x] Canonical documentation reconciled with accepted production state.
-- [ ] Очистить merged Git branches; после closeout оставить только `main`.
-- [ ] Очистить production VM от временных bootstrap/build/test artifacts,
+- [x] Очистить merged Git branches; после closeout оставить только `main`.
+- [x] Очистить production VM от временных bootstrap/build/test artifacts,
       сохранив operational state и намеренные rollback/recovery artifacts.
-- [ ] Очистить Mac development environment от obsolete branches/worktrees,
+- [x] Очистить Mac development environment от obsolete branches/worktrees,
       temporary archives, caches и disposable Docker resources.
-- [ ] Выполнить independent full source/security/runtime/data audit на clean baseline.
+- [~] Выполнить independent full source/security/runtime/data audit на clean baseline.
 - [ ] Исправить найденные P0/P1 blockers отдельными change sets.
 - [ ] Зафиксировать пользовательский список minor UX corrections.
 - [ ] Выполнить minor UX remediation отдельной веткой.

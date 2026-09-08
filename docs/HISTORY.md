@@ -638,3 +638,27 @@ to `c5d6e7f8a9b0`.
 - Temporary container-readable bootstrap workbook copy was removed after
   acceptance.
 - Initial bootstrap is now a completed one-time operation and must not be rerun.
+
+## 2026-09-08 — Stabilization cleanup closeout
+
+- Git/GitHub hygiene завершена: после удаления merged topic branches
+  authoritative repository baseline снова содержит только `main`.
+- Mac development checkout очищен от obsolete local branches/worktrees,
+  generated test/build caches и disposable `dc-inventory` Docker resources.
+- Локальные project-specific test/dev PostgreSQL containers и volumes удалены,
+  чтобы следующий full runtime audit стартовал с clean database state.
+- Рабочие development dependencies сохранены; глобальные Docker artifacts и
+  build cache других проектов намеренно не затрагивались.
+- Canonical initial-inventory workbook сохранён вне Git до завершения
+  independent audit.
+- Production VM очищена от obsolete audit worktree/branch, transfer patch,
+  unused build image и disposable BuildKit cache.
+- Production operational state сохранён: active runtime, PostgreSQL data
+  volume, backup observability state, canonical external workbook,
+  environment rollback checkpoint и намеренные rollback images.
+- Production database не изменялась и application runtime в рамках cleanup
+  не пересобирался и не перезапускался.
+- После cleanup production health/live/ready — PASS.
+- `REAL_INVENTORY_MUTATIONS_ENABLED=false` сохранён.
+- Следующая активная фаза — independent full
+  source/security/runtime/data audit на clean baseline.

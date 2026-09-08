@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
+from sqlalchemy.sql.elements import ColumnElement
 
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Item, Manufacturer
@@ -214,6 +215,23 @@ async def _create_movement(
     destination = (
         locations.get(payload.destination_location_id) if payload.destination_location_id else None
     )
+    # The request is bounded to 500 items and two locations. Item locks above
+    # serialize missing-row creation as well as existing-row updates. Lock all
+    # balances in one deterministic statement before applying any deltas.
+    balances = {
+        (balance.item_id, balance.location_id): balance
+        for balance in (
+            await db.scalars(
+                select(StockBalance)
+                .where(
+                    StockBalance.item_id.in_(item_ids),
+                    StockBalance.location_id.in_(location_ids),
+                )
+                .order_by(StockBalance.item_id, StockBalance.location_id)
+                .with_for_update()
+            )
+        ).all()
+    }
     movement = Movement(
         id=uuid.uuid4(),
         movement_type=payload.movement_type,
@@ -245,13 +263,7 @@ async def _create_movement(
         ):
             if location_id is None:
                 continue
-            balance = await db.scalar(
-                select(StockBalance)
-                .where(
-                    StockBalance.item_id == line.item_id, StockBalance.location_id == location_id
-                )
-                .with_for_update()
-            )
+            balance = balances.get((line.item_id, location_id))
             quantity = (balance.quantity if balance else 0) + delta
             if quantity < 0:
                 raise InventoryConflictError("insufficient stock", code="insufficient_stock")
@@ -341,6 +353,65 @@ async def list_stock_balances(
     return StockBalancePage([StockBalanceRecord(*row) for row in rows], int(total or 0))
 
 
+async def _movement_filters(
+    db: AsyncSession,
+    *,
+    movement_type: MovementType | None = None,
+    item_id: uuid.UUID | None = None,
+    actor_user_id: uuid.UUID | None = None,
+    location_id: uuid.UUID | None = None,
+    category_key: str | None = None,
+    long_range: bool = False,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> list[ColumnElement[bool]]:
+    from app.modules.catalog.query import equipment_scope
+
+    filters: list[ColumnElement[bool]] = []
+
+    if movement_type:
+        filters.append(Movement.movement_type == movement_type)
+
+    if actor_user_id:
+        filters.append(Movement.actor_user_id == actor_user_id)
+
+    if location_id:
+        filters.append(
+            or_(
+                Movement.source_location_id == location_id,
+                Movement.destination_location_id == location_id,
+            )
+        )
+
+    if since:
+        filters.append(Movement.occurred_at >= since)
+
+    if until:
+        filters.append(Movement.occurred_at < until)
+
+    if item_id or category_key or long_range:
+        item_query = select(Item.id).where(
+            *await equipment_scope(
+                db,
+                category_key,
+                long_range,
+            )
+        )
+
+        if item_id:
+            item_query = item_query.where(Item.id == item_id)
+
+        filters.append(
+            Movement.id.in_(
+                select(MovementLine.movement_id).where(
+                    MovementLine.item_id.in_(item_query)
+                )
+            )
+        )
+
+    return filters
+
+
 async def list_movements(
     db: AsyncSession,
     *,
@@ -355,34 +426,24 @@ async def list_movements(
     limit: int = 50,
     offset: int = 0,
 ) -> MovementPage:
-    from app.modules.catalog.query import equipment_scope
+    filters = await _movement_filters(
+        db,
+        movement_type=movement_type,
+        item_id=item_id,
+        actor_user_id=actor_user_id,
+        location_id=location_id,
+        category_key=category_key,
+        long_range=long_range,
+        since=since,
+        until=until,
+    )
 
-    filters = []
-    if movement_type:
-        filters.append(Movement.movement_type == movement_type)
-    if actor_user_id:
-        filters.append(Movement.actor_user_id == actor_user_id)
-    if location_id:
-        filters.append(
-            or_(
-                Movement.source_location_id == location_id,
-                Movement.destination_location_id == location_id,
-            )
-        )
-    if since:
-        filters.append(Movement.occurred_at >= since)
-    if until:
-        filters.append(Movement.occurred_at < until)
-    if item_id or category_key or long_range:
-        item_query = select(Item.id).where(*await equipment_scope(db, category_key, long_range))
-        if item_id:
-            item_query = item_query.where(Item.id == item_id)
-        filters.append(
-            Movement.id.in_(
-                select(MovementLine.movement_id).where(MovementLine.item_id.in_(item_query))
-            )
-        )
-    total = await db.scalar(select(func.count()).select_from(Movement).where(*filters))
+    total = await db.scalar(
+        select(func.count())
+        .select_from(Movement)
+        .where(*filters)
+    )
+
     movements = (
         await db.scalars(
             select(Movement)
@@ -393,8 +454,74 @@ async def list_movements(
             .offset(offset)
         )
     ).all()
+
     return MovementPage(
-        [MovementRecord(row, list(row.lines)) for row in movements], int(total or 0)
+        [
+            MovementRecord(row, list(row.lines))
+            for row in movements
+        ],
+        int(total or 0),
+    )
+
+
+async def list_movements_cursor(
+    db: AsyncSession,
+    *,
+    movement_type: MovementType | None = None,
+    item_id: uuid.UUID | None = None,
+    actor_user_id: uuid.UUID | None = None,
+    location_id: uuid.UUID | None = None,
+    category_key: str | None = None,
+    long_range: bool = False,
+    since: datetime | None = None,
+    until: datetime | None = None,
+    before_journal_seq: int | None = None,
+    limit: int = 50,
+) -> MovementCursorPage:
+    filters = await _movement_filters(
+        db,
+        movement_type=movement_type,
+        item_id=item_id,
+        actor_user_id=actor_user_id,
+        location_id=location_id,
+        category_key=category_key,
+        long_range=long_range,
+        since=since,
+        until=until,
+    )
+
+    if before_journal_seq is not None:
+        filters.append(
+            Movement.journal_seq < before_journal_seq
+        )
+
+    movements = list(
+        (
+            await db.scalars(
+                select(Movement)
+                .where(*filters)
+                .options(selectinload(Movement.lines))
+                .order_by(Movement.journal_seq.desc())
+                .limit(limit + 1)
+            )
+        ).all()
+    )
+
+    has_more = len(movements) > limit
+    visible = movements[:limit]
+
+    next_before_journal_seq = (
+        visible[-1].journal_seq
+        if has_more and visible
+        else None
+    )
+
+    return MovementCursorPage(
+        items=[
+            MovementRecord(row, list(row.lines))
+            for row in visible
+        ],
+        next_before_journal_seq=next_before_journal_seq,
     )
 
 
@@ -448,6 +575,12 @@ class MovementRecord:
 class MovementPage:
     items: list[MovementRecord]
     total: int
+
+
+@dataclass(frozen=True, slots=True)
+class MovementCursorPage:
+    items: list[MovementRecord]
+    next_before_journal_seq: int | None
 
 
 @dataclass(frozen=True, slots=True)

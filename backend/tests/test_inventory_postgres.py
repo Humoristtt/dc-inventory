@@ -340,3 +340,101 @@ async def test_concurrent_issues_cannot_overspend() -> None:
             assert await quantity(db, s[1], s[2]) == 1
     finally:
         await engine.dispose()
+
+
+@pytest.mark.parametrize("line_count", [1, 40])
+async def test_balance_locks_are_batched_and_transfer_reconciles(
+    warehouse_db: AsyncSession, line_count: int
+) -> None:
+    from app.modules.catalog.service import create_item
+    from app.modules.inventory.schemas import MovementCreate, MovementLineCreate
+    from app.modules.inventory.service import create_movement
+    from tests.sql_capture import capture_sql
+    from tests.warehouse_helpers import cable_payload
+
+    db = warehouse_db
+    s = await scenario(db)
+    item_ids = [s[1]] + [await create_item(db, cable_payload()) for _ in range(line_count - 1)]
+    connection = await db.connection()
+    for kind in ["RECEIPT", "TRANSFER"]:
+        payload = MovementCreate(
+            movement_type=kind,
+            client_request_id=uuid.uuid4().hex,
+            source_location_id=s[2] if kind == "TRANSFER" else None,
+            destination_location_id=s[3] if kind == "TRANSFER" else s[2],
+            lines=[MovementLineCreate(item_id=item, quantity=3) for item in reversed(item_ids)],
+        )
+        with capture_sql(connection) as statements:
+            await create_movement(db, payload, actor_user_id=s[0], actor_display_name="Synthetic")
+        balance_selects = [sql for sql in statements if sql.startswith("SELECT stock_balances.")]
+        assert len(balance_selects) == 1
+        assert (
+            "ORDER BY stock_balances.item_id, stock_balances.location_id FOR UPDATE"
+            in (balance_selects[0])
+        )
+    balances = (
+        await db.scalars(select(StockBalance).where(StockBalance.item_id.in_(item_ids)))
+    ).all()
+    assert {(b.item_id, b.location_id, b.quantity) for b in balances} == {
+        (item, s[3], 3) for item in item_ids
+    }
+    await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+    sql = (Path(__file__).parents[1] / "scripts/reconcile_inventory_projections.sql").read_text()
+    assert not (await db.execute(text(sql))).all()
+
+
+async def test_concurrent_transfers_create_missing_destinations_safely() -> None:
+    if os.getenv("RUN_POSTGRES_INTEGRATION") != "1":
+        pytest.skip("requires disposable PostgreSQL")
+    engine = create_async_engine(os.environ["DATABASE_URL"])
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            s = await scenario(db)
+            await move(db, s, "RECEIPT", 10, destination=s[2])
+            await db.commit()
+
+        async def transfer() -> None:
+            async with AsyncSession(engine, expire_on_commit=False) as db, db.begin():
+                await move(db, s, "TRANSFER", 3, source=s[2], destination=s[3])
+
+        await asyncio.wait_for(asyncio.gather(transfer(), transfer()), timeout=10)
+        async with AsyncSession(engine) as db:
+            assert await quantity(db, s[1], s[2]) == 4
+            assert await quantity(db, s[1], s[3]) == 6
+    finally:
+        await engine.dispose()
+
+
+async def test_multiline_transfer_failure_rolls_back_journal_and_projection(
+    warehouse_db: AsyncSession,
+) -> None:
+    from app.modules.catalog.service import create_item
+    from app.modules.inventory.schemas import MovementCreate, MovementLineCreate
+    from app.modules.inventory.service import create_movement
+    from tests.warehouse_helpers import cable_payload
+
+    db = warehouse_db
+    s = await scenario(db)
+    stocked, empty = sorted([s[1], await create_item(db, cable_payload())])
+    await move(db, (s[0], stocked, s[2], s[3]), "RECEIPT", 3, destination=s[2])
+    request_id = uuid.uuid4().hex
+    with pytest.raises(InventoryConflictError, match="insufficient stock"):
+        async with db.begin_nested():
+            await create_movement(
+                db,
+                MovementCreate(
+                    movement_type="TRANSFER",
+                    client_request_id=request_id,
+                    source_location_id=s[2],
+                    destination_location_id=s[3],
+                    lines=[
+                        MovementLineCreate(item_id=item, quantity=2) for item in [stocked, empty]
+                    ],
+                ),
+                actor_user_id=s[0],
+                actor_display_name="Synthetic",
+            )
+    assert await quantity(db, stocked, s[2]) == 3
+    assert await quantity(db, stocked, s[3]) == 0
+    assert not await db.scalar(select(Movement.id).where(Movement.client_request_id == request_id))
+    await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))

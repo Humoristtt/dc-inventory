@@ -5,12 +5,13 @@ import {
 
 import {
   exitTelegramFullscreen,
-  getTelegramWebApp,
   requestTelegramFullscreen,
 } from "./webApp";
 
+import { useTelegramWebApp } from "./useTelegramWebApp";
+
 export function TelegramFullscreenButton() {
-  const webApp = getTelegramWebApp();
+  const webApp = useTelegramWebApp();
 
   const [fullscreen, setFullscreen] = useState(
     () => webApp?.isFullscreen === true,

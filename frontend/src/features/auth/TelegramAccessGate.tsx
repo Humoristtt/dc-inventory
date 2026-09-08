@@ -51,15 +51,19 @@ class TelegramSdkUnavailableError extends Error {
   }
 }
 
-async function resolveAuthState(signal?: AbortSignal): Promise<AuthState> {
+async function resolveAuthState(): Promise<AuthState> {
   try {
-    return await getAuthState(signal);
+    return await getAuthState();
   } catch (error) {
     if (!(error instanceof ApiRequestError) || error.status !== 401) {
       throw error;
     }
   }
 
+  const initialStatus = getTelegramWebAppSdkLoadStatus();
+  if (initialStatus === "idle" || initialStatus === "loading") {
+    await loadTelegramWebAppSdk();
+  }
   const sdkStatus = getTelegramWebAppSdkLoadStatus();
   if (
     sdkStatus === "load-error"
@@ -72,7 +76,7 @@ async function resolveAuthState(signal?: AbortSignal): Promise<AuthState> {
   if (initData === "") {
     throw new TelegramContextRequiredError();
   }
-  return authenticateWithTelegram(initData, signal);
+  return authenticateWithTelegram(initData);
 }
 
 type TelegramAccessGateProps = {
@@ -259,7 +263,7 @@ function BlockedAccessScreen({ support }: { support: SupportContact }) {
 function LoadingScreen() {
   return (
     <AccessScreen eyebrow="Spikatel Inventory" title="Проверяем доступ">
-      <p>Подтверждаем Telegram-сессию и состояние учётной записи…</p>
+      <p role="status">Подтверждаем Telegram-сессию и состояние учётной записи…</p>
     </AccessScreen>
   );
 }
@@ -329,13 +333,23 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    prepareTelegramWebApp();
-    return bindDesktopEscapeGuard();
+    let active = true;
+    const status = getTelegramWebAppSdkLoadStatus();
+    const sdk = status === "load-error" || status === "timeout"
+      ? Promise.resolve()
+      : loadTelegramWebAppSdk();
+    void sdk.then(() => {
+      if (active) prepareTelegramWebApp();
+    });
+    const unbindEscape = bindDesktopEscapeGuard();
+    return () => { active = false; unbindEscape(); };
   }, []);
 
   const authQuery = useQuery({
     queryKey: AUTH_QUERY_KEY,
-    queryFn: ({ signal }) => resolveAuthState(signal),
+    // Keep one shared in-flight auth exchange across StrictMode remounts.
+    // Consuming Query's abort signal would cancel/restart the session POST.
+    queryFn: resolveAuthState,
     retry: false,
     staleTime: 60_000,
     refetchInterval: 60_000,

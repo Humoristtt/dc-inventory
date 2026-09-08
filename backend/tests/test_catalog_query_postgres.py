@@ -123,3 +123,64 @@ async def test_ambiguous_reach_rejected(
 ) -> None:
     with pytest.raises(CatalogValidationError, match="reach"):
         await transceiver(warehouse_db, uuid.uuid4().hex, reach)
+
+
+@pytest.mark.parametrize(
+    ("category_key", "query_count"),
+    [(None, 0), ("optical_patch_cord", 2), ("transceivers", 3)],
+)
+async def test_request_metadata_round_trip_budget(
+    warehouse_db: AsyncSession, category_key: str | None, query_count: int
+) -> None:
+    from tests.sql_capture import capture_sql
+
+    connection = await warehouse_db.connection()
+    with capture_sql(connection) as preparation:
+        spec = await build_catalog_query_spec(warehouse_db, category_key=category_key)
+    assert len(preparation) == query_count
+    with capture_sql(connection) as facets:
+        await query_catalog_facets(warehouse_db, spec)
+    assert not any(sql.startswith("SELECT category_attributes.") for sql in facets)
+    assert not any(sql.startswith("SELECT categories.id,") for sql in facets)
+    assert not any("sum(stock_balances.quantity)" in sql for sql in facets)
+
+
+async def test_facets_self_exclude_and_paginate_with_stock(warehouse_db: AsyncSession) -> None:
+    from tests.warehouse_helpers import Scenario, move, scenario
+
+    db = warehouse_db
+    seed = await scenario(db)
+    marker = uuid.uuid4().hex
+    items = []
+    for color, length in [("amber", "5"), ("blue", "7"), ("cyan", "9")]:
+        payload = cable_payload(color=color, length_m=length)
+        payload.name = marker
+        items.append(await create_item(db, payload))
+    for item in items[:2]:
+        movement_scenario: Scenario = (seed[0], item, seed[2], seed[3])
+        await move(db, movement_scenario, "RECEIPT", 2, destination=seed[2])
+        await move(db, movement_scenario, "RECEIPT", 3, destination=seed[3])
+    spec = await build_catalog_query_spec(
+        db, q=marker, category_key="optical_patch_cord", availability="IN_STOCK"
+    )
+    availability = (await query_catalog_facets(db, spec, only_key="availability"))[0]
+    assert {v.value: v.count for v in availability.values} == {"IN_STOCK": 2, "OUT_OF_STOCK": 1}
+    first = (await query_catalog_facets(db, spec, only_key="color", value_limit=1))[0]
+    second = (
+        await query_catalog_facets(db, spec, only_key="color", value_limit=1, value_offset=1)
+    )[0]
+    assert [v.value for v in first.values] == ["amber"] and first.values_has_more
+    assert [v.value for v in second.values] == ["blue"] and not second.values_has_more
+    spec = await build_catalog_query_spec(
+        db,
+        q=marker,
+        category_key="optical_patch_cord",
+        location_ids=[seed[2]],
+        filter_expressions=["color:eq:blue", "length_m:gte:6"],
+    )
+    color_facet = (await query_catalog_facets(db, spec, only_key="color"))[0]
+    assert [(v.value, v.count) for v in color_facet.values] == [("blue", 1)]
+    length_facet = (await query_catalog_facets(db, spec, only_key="length_m"))[0]
+    assert length_facet.minimum == length_facet.maximum == 7
+    locations = (await query_catalog_facets(db, spec, only_key="location"))[0]
+    assert {v.value: v.count for v in locations.values} == {seed[2]: 1, seed[3]: 1}

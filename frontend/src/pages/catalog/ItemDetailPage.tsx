@@ -1,6 +1,6 @@
 import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
 import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
-import { getTelegramWebApp } from "../../shared/telegram/webApp";
+import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
 import { useQuery } from "@tanstack/react-query";
 import {
   useParams,
@@ -23,9 +23,10 @@ import {
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
 
 export function ItemDetailPage() {
+  const webApp = useTelegramWebApp();
   const { itemId = "" } = useParams();
   const navigateBack = useInternalBackNavigation();
-  const telegramOwnsBack = getTelegramWebApp()?.BackButton !== undefined;
+  const telegramOwnsBack = webApp?.BackButton !== undefined;
   const itemQuery = useQuery({
     queryKey: ["catalog", "item", itemId],
     queryFn: ({ signal }) => getCatalogItem(itemId, signal),

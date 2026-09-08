@@ -410,7 +410,10 @@ async def run_worker() -> None:
             settings,
         )
     finally:
-        await engine.dispose()
+        try:
+            await client.aclose()
+        finally:
+            await engine.dispose()
 
 
 def main() -> None:

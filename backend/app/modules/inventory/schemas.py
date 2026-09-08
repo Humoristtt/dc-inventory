@@ -127,3 +127,9 @@ class MovementListOut(BaseModel):
     total: int
     limit: int
     offset: int
+
+
+class MovementCursorListOut(BaseModel):
+    items: list[MovementOut]
+    limit: int
+    next_before_journal_seq: int | None

@@ -103,7 +103,6 @@ async def test_auth_session_query_rejects_revoked_and_expired_rows() -> None:
                         user_id=user_id,
                         token_hash=hash_session_token(valid_token),
                         created_at=now - timedelta(minutes=10),
-                        last_seen_at=now - timedelta(minutes=10),
                         expires_at=now + timedelta(hours=1),
                     ),
                     AuthSession(
@@ -112,7 +111,6 @@ async def test_auth_session_query_rejects_revoked_and_expired_rows() -> None:
                         user_id=user_id,
                         token_hash=hash_session_token(revoked_token),
                         created_at=now - timedelta(minutes=10),
-                        last_seen_at=now - timedelta(minutes=10),
                         expires_at=now + timedelta(hours=1),
                         revoked_at=now - timedelta(minutes=1),
                     ),
@@ -122,7 +120,6 @@ async def test_auth_session_query_rejects_revoked_and_expired_rows() -> None:
                         user_id=user_id,
                         token_hash=hash_session_token(expired_token),
                         created_at=now - timedelta(hours=2),
-                        last_seen_at=now - timedelta(hours=2),
                         expires_at=now - timedelta(hours=1),
                     ),
                 ]

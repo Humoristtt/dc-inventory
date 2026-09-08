@@ -11,6 +11,8 @@ RUN npm run build
 
 FROM nginx:alpine@sha256:a9ae6f6d078d477e21323310498e5196cb2b7c0aedd9e07b7306612077227d7c
 
+RUN apk add --no-cache --upgrade libuuid=2.42.3-r1
+
 ARG APP_REVISION
 RUN test -n "$APP_REVISION" \
     && test "$APP_REVISION" != "unknown"

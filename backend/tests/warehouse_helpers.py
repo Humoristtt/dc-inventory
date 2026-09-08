@@ -63,7 +63,6 @@ async def actor(
                 user_id=user.id,
                 token_hash=hash_session_token(token),
                 created_at=now,
-                last_seen_at=now,
                 expires_at=now + timedelta(hours=1),
             ),
         ]

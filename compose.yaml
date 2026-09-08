@@ -13,6 +13,11 @@ x-backend-image: &backend-image
     args:
       APP_REVISION: ${APP_REVISION:-}
 
+x-postgres-image: &postgres-image
+  image: dc-inventory-postgres:local
+  build:
+    context: ./ops/postgres
+
 x-backend-environment: &backend-environment
   APP_ENV: production
   DATABASE_CONNECT_TIMEOUT_SECONDS: ${DATABASE_CONNECT_TIMEOUT_SECONDS:-5}
@@ -26,7 +31,7 @@ x-backend-environment: &backend-environment
 
 services:
   postgres:
-    image: postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+    <<: *postgres-image
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
@@ -70,7 +75,7 @@ services:
     restart: "no"
 
   db-permissions:
-    image: postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+    <<: *postgres-image
     environment:
       PGHOST: postgres
       PGPORT: "5432"

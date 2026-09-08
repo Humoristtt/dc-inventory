@@ -279,3 +279,122 @@ async def test_issue_enqueues_one_admin_notification_and_replay_does_not_duplica
             select(func.count()).select_from(NotificationOutbox)
         )
         assert total_after_return == total_before_return
+
+
+async def test_movement_feed_uses_stable_journal_cursor(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    s = await scenario(db)
+    app, users = await api_context(db)
+
+    first = await move(
+        db,
+        s,
+        "RECEIPT",
+        10,
+        destination=s[2],
+    )
+    second = await move(
+        db,
+        s,
+        "RECEIPT",
+        20,
+        destination=s[2],
+    )
+    user_movement = await move(
+        db,
+        (users["user"][0], *s[1:]),
+        "RETURN",
+        1,
+        destination=s[2],
+    )
+    fourth = await move(
+        db,
+        s,
+        "RECEIPT",
+        30,
+        destination=s[2],
+    )
+
+    expected = sorted(
+        [
+            first.record.movement,
+            second.record.movement,
+            fourth.record.movement,
+        ],
+        key=lambda movement: movement.journal_seq,
+        reverse=True,
+    )
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        page1 = await client.get(
+            "/api/inventory/movements/feed"
+            "?period=all&limit=2"
+            f"&actor_user_id={s[0]}",
+            headers=users["admin"][1],
+        )
+
+        assert page1.status_code == 200, page1.text
+
+        body1 = page1.json()
+
+        assert [
+            row["journal_seq"]
+            for row in body1["items"]
+        ] == [
+            movement.journal_seq
+            for movement in expected[:2]
+        ]
+
+        cursor = body1["next_before_journal_seq"]
+
+        assert cursor == expected[1].journal_seq
+
+        page2 = await client.get(
+            "/api/inventory/movements/feed"
+            f"?period=all&limit=2"
+            f"&actor_user_id={s[0]}"
+            f"&before_journal_seq={cursor}",
+            headers=users["admin"][1],
+        )
+
+        assert page2.status_code == 200, page2.text
+
+        body2 = page2.json()
+
+        assert [
+            row["journal_seq"]
+            for row in body2["items"]
+        ] == [
+            movement.journal_seq
+            for movement in expected[2:]
+        ]
+
+        assert body2["next_before_journal_seq"] is None
+
+        user_page = await client.get(
+            "/api/inventory/movements/feed"
+            "?period=all&limit=10",
+            headers=users["user"][1],
+        )
+
+        assert user_page.status_code == 200
+        assert [
+            row["id"]
+            for row in user_page.json()["items"]
+        ] == [
+            str(user_movement.record.movement.id)
+        ]
+
+        forbidden = await client.get(
+            "/api/inventory/movements/feed"
+            f"?period=all"
+            f"&actor_user_id={s[0]}",
+            headers=users["user"][1],
+        )
+
+        assert forbidden.status_code == 403

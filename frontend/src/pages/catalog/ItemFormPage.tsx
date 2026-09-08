@@ -43,7 +43,7 @@ import {
 } from "../../shared/api/catalog";
 import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
 import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
-import { getTelegramWebApp } from "../../shared/telegram/webApp";
+import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
 
 import "../../features/catalog/admin-catalog.css";
 import "../../features/inventory/inventory.css";
@@ -219,6 +219,7 @@ function textSuggestions(
 }
 
 export function ItemFormPage() {
+  const webApp = useTelegramWebApp();
   const { itemId } = useParams();
   const [params] = useSearchParams();
   const auth = useAuthState();
@@ -241,6 +242,7 @@ export function ItemFormPage() {
   });
 
   const categories = useQuery({
+    staleTime: 5 * 60_000,
     queryKey: ["catalog", "categories"],
     queryFn: ({ signal }) => getCatalogCategories(signal),
   });
@@ -268,6 +270,7 @@ export function ItemFormPage() {
   const identityRequired = manufactured.has(draft.category);
 
   const schema = useQuery({
+    staleTime: 5 * 60_000,
     queryKey: ["catalog", "category", draft.category],
     queryFn: ({ signal }) =>
       getCatalogCategory(draft.category, signal),
@@ -480,7 +483,7 @@ export function ItemFormPage() {
   }
 
   const telegramOwnsBack =
-    getTelegramWebApp()?.BackButton !== undefined;
+    webApp?.BackButton !== undefined;
 
   return (
     <main className="catalog-page">

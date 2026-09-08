@@ -595,3 +595,46 @@
 - `REAL_INVENTORY_MUTATIONS_ENABLED=false`.
 - `REAL_INVENTORY_ENTRY=BLOCKED_STAGE15`.
 - `STAGE15=TECHNICAL_HARDENING_COMPLETE`.
+
+
+## 2026-09-08 — Warehouse V2 production rollout and initial inventory acceptance
+
+Accepted release lineage:
+
+- PR #41 `Warehouse Domain V2` merged as
+  `42aaf6ad646237bfcecdd246e6817c693047d718`;
+- PR #42 responsive Warehouse V2 UI refinement merged as
+  `0d4dada26959a8a336a936417ca43e8bd9d82529`;
+- PR #43 header/fullscreen/Escape and leaf-description remediation merged as
+  `1b2ee7cca063d7b4979ed21bce99ceac59a6dd15`;
+- PR #44 desktop form consistency and smart suggestions merged as
+  `7871f6140e8e2c22d994438a7b371c186de16225`;
+- PR #45 guarded production inventory bootstrap merged as
+  `a7ee822cfbb9fd2b25b73e676c026a9e849f1839`.
+
+Production schema advanced through Warehouse V2 and leaf-description migrations
+to `c5d6e7f8a9b0`.
+
+- Required `main` CI run #104 completed successfully:
+  backend, frontend, runtime and telegram-gateway all PASS.
+- During bootstrap acceptance, production backend, telegram-worker and
+  maintenance-worker ran the accepted PR #45 merge revision; web remained on
+  the previously accepted PR #44 frontend revision and was not rebuilt by the
+  bootstrap rollout.
+- Authoritative initial inventory workbook remained external to Git.
+- Read-only production preflight confirmed empty warehouse domain, approved
+  ADMIN actor, expected schema, matching source contract and closed regular
+  mutation gate.
+- Fresh verified off-VM pre-import backup PASS.
+- Guarded one-shot production bootstrap completed successfully.
+- Initial load created the intended opening RECEIPT and stock projection.
+- Post-import DB verification PASS.
+- Canonical quantity projection reconciliation returned zero drift.
+- Production health/live/ready PASS after import.
+- `REAL_INVENTORY_MUTATIONS_ENABLED=false` remained unchanged.
+- Fresh verified off-VM post-import backup PASS.
+- Real Telegram Mini App visual acceptance confirmed catalog/location/movement
+  data are visible and globally usable.
+- Temporary container-readable bootstrap workbook copy was removed after
+  acceptance.
+- Initial bootstrap is now a completed one-time operation and must not be rerun.

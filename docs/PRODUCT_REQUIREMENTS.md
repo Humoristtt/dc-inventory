@@ -4,11 +4,11 @@
 
 Telegram Mini App для складского учёта оборудования ЦОД.
 
-Stage15 technical hardening завершён. Warehouse Domain V2 этой feature-ветки
-является следующим schema/product состоянием и требует отдельного merge/deploy
-acceptance перед production rollout.
+Warehouse Domain V2 развёрнут и принят в production.
+Initial production inventory bootstrap выполнен и подтверждён
+post-import reconciliation + verified backup + Telegram visual acceptance.
 
-Система должна отвечать на вопросы:
+Система отвечает на вопросы:
 
 1. Что есть в каталоге?
 2. Сколько оборудования есть сейчас?
@@ -16,6 +16,10 @@ acceptance перед production rollout.
 4. Кто и когда выполнил приход, выдачу, возврат, перемещение или списание?
 
 Персональный баланс оборудования сотрудников не ведётся.
+
+Regular production warehouse mutations дополнительно защищены
+`REAL_INVENTORY_MUTATIONS_ENABLED`. Initial one-shot bootstrap и normal
+operational mutations являются разными safety boundaries.
 
 ## Каталог
 
@@ -145,14 +149,25 @@ Movement и notification outbox record фиксируются одной тра�
 
 ## Initial bootstrap
 
-Начальный workbook импортируется только в явно существующую StorageLocation.
+Initial production inventory bootstrap является guarded one-shot operation.
 
-Импорт:
+Production bootstrap:
 
-- quantity-only;
-- транзакционный;
-- создаёт opening RECEIPT;
-- защищён от повторного bootstrap;
-- dry-run не изменяет БД.
+- сначала выполняет read-only validation внешнего workbook;
+- проверяет expected workbook rows/items/quantity и source SHA contract;
+- требует закрытый regular mutation gate;
+- требует пустой warehouse domain;
+- атомарно создаёт target StorageLocation;
+- создаёт quantity-only catalog/stock state;
+- создаёт одну opening RECEIPT transaction;
+- выполняет post-write count/quantity checks;
+- требует zero-drift projection reconciliation до commit;
+- fail-closed запрещает повторный bootstrap после первого успешного load.
+
+Validation-only запуск workbook reader не изменяет БД.
+
+Локальный `--import-local` helper предназначен только для disposable loopback
+test database и использует заранее существующую active Location; это не
+production bootstrap path.
 
 Authoritative workbook хранится вне public repository.

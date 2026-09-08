@@ -20,17 +20,22 @@ Production VM имеет read-only GitHub Deploy Key. Deploy выполняет�
 
 Текущий Alembic head:
 
-    a2b3c4d5e6f7
+    c5d6e7f8a9b0
 
-Stage15A automated off-VM backup и Stage15B real isolated restore — `PASS`.
-Stage15 technical hardening завершён; production-data gate остаётся закрытым до отдельного решения следующего roadmap.
+Stage15A automated off-VM backup, Stage15B real isolated restore и Stage15
+technical hardening — `PASS`.
 
-Production safety:
+Warehouse Domain V2 и initial production inventory bootstrap приняты.
+
+Regular warehouse mutation API остаётся fail-closed:
 
     REAL_INVENTORY_MUTATIONS_ENABLED=false
-    REAL_INVENTORY_ENTRY=BLOCKED_PENDING_NEXT_ROADMAP
 
-Stage15 acceptance описан в `docs/STAGE15_PLAN.md`.
+Initial bootstrap не требовал открытия этого gate: для него используется
+отдельный guarded one-shot production path.
+
+Stage15 historical acceptance описан в `docs/STAGE15_PLAN.md`.
+Текущий operational state описан в `docs/OPERATIONS.md`.
 
 ## Production runtime
 
@@ -263,6 +268,40 @@ profile attributes не содержат данных. Если существу
 восстановлением verified PostgreSQL backup; destructive Alembic downgrade
 не является допустимым rollback path.
 
+## Initial production inventory bootstrap
+
+Initial production bootstrap принят 2026-09-08.
+
+Canonical entry point:
+
+    python -m app.bootstrap.production_inventory
+
+Это one-shot operator tool, а не обычный runtime mutation API.
+
+Fail-closed contract:
+
+- `APP_ENV=production`;
+- PostgreSQL boundary — Docker hostname `postgres`;
+- `REAL_INVENTORY_MUTATIONS_ENABLED` обязан оставаться `false`;
+- explicit confirmation token обязателен;
+- source SHA-256 передаётся runtime-параметром;
+- expected workbook rows/items/quantity передаются runtime-параметрами;
+- source workbook не хранится в repository;
+- warehouse domain должен быть пуст;
+- actor должен быть existing APPROVED ADMIN;
+- location создаётся внутри той же transaction;
+- initial inventory создаётся одной RECEIPT;
+- post-write counts, total quantity и projection reconciliation проверяются до
+  commit;
+- любая ошибка откатывает transaction;
+- повторный bootstrap в наполненную production DB fail-closed запрещён.
+
+Реальные source values, workbook hash, actor/location identifiers и inventory
+dataset намеренно не фиксируются в public repository documentation.
+
+После успешного bootstrap обязательны read-only DB verification, health check,
+zero-drift reconciliation и fresh verified off-VM backup.
+
 ## Проверка после deploy
 
     curl http://127.0.0.1:8080/healthz
@@ -283,7 +322,11 @@ profile attributes не содержат данных. Если существу
 - backend работает от UID 10001;
 - web работает от пользователя `nginx`;
 - для runtime-changing deploy production worktree соответствует утверждённому deploy commit;
-- docs-only sync может продвигать worktree вперёд без rebuild/restart контейнеров, если runtime source не менялся.
+- source-only sync, затрагивающий только documentation и host-side `ops/`
+  tooling, может продвигать production worktree без rebuild/restart application
+  containers, если Docker build contexts и application runtime source не
+  менялись; изменённые host-side tools обязаны отдельно пройти
+  syntax/contract checks.
 
 Для Telegram delivery после runtime-changing deploy выполняется минимальный live
 smoke: `/start` должен пройти webhook/outbox/worker/Gateway, удалить входящую
@@ -303,7 +346,10 @@ Canonical command-level recovery procedure:
 
     docs/RECOVERY_RUNBOOK.md
 
-До первого real inventory entry полный Stage15C всё равно обязан завершиться.
+Initial real inventory bootstrap уже принят. Перед любым следующим risky
+schema/data change обязателен fresh verified backup и соответствующий
+reconciliation/rollback plan.
+
 ## Technical data retention
 
 Production uses a dedicated `maintenance-worker` and a separate
@@ -324,17 +370,29 @@ The maintenance role has `SELECT, DELETE` only on the four technical targets
 and read-only `SELECT` on `access_requests`, which is needed to determine
 whether callback state is terminal.
 
-`movements`, `movement_lines`, `inventory_units`, `stock_balances` and other
-warehouse state are outside the retention target set. The canonical warehouse
+`movements`, `movement_lines`, `stock_balances` and other warehouse state are
+outside the retention target set. The canonical warehouse
 movement journal remains immutable and is never pruned by this worker.
 
-## Production-data gate
+## Operational mutation gate
 
-Stage15A/B prerequisites выполнены, но production-data gate остаётся закрыт до
-полного Stage15C.
+Initial production inventory уже загружен guarded one-shot bootstrap-процедурой.
 
-`REAL_INVENTORY_MUTATIONS_ENABLED=false` остаётся независимым fail-closed
-server-side safety boundary.
+Regular warehouse mutation endpoints независимо защищены:
 
-Operational procedure находится в `docs/OPERATIONS.md`, recovery procedure —
-в `docs/RECOVERY_RUNBOOK.md`.
+    REAL_INVENTORY_MUTATIONS_ENABLED=false
+
+Пока gate закрыт, normal ISSUE/RETURN/RECEIPT/TRANSFER/WRITE_OFF/CORRECTION/
+REVERSAL API не переводится в operational go-live.
+
+Gate может быть изменён только отдельным explicit production decision после:
+
+- repository / VM / local hygiene;
+- independent full audit;
+- устранения blocking findings;
+- запланированных minor UX corrections;
+- fresh pre-change backup;
+- production health/reconciliation verification.
+
+Повторный initial bootstrap не является способом включения normal operations и
+запрещён после первого успешного production load.

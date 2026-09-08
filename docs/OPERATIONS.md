@@ -11,8 +11,11 @@ Runtime-changing deploy выполняется только из конкрет�
 3. review;
 4. merge в `main`.
 
-Repository остаётся public до завершения connector-dependent review,
-merge/deploy и GitHub hardening. Перевод в private — последний шаг.
+Repository visibility является отдельным operational решением.
+
+Текущий repository может оставаться public только при строгой границе:
+никаких inventory datasets, workbook contents, database dumps, credentials,
+tokens, production environment files и runtime-only identifiers в Git.
 
 ## PostgreSQL identities
 
@@ -51,25 +54,38 @@ Warehouse mutation privileges отсутствуют.
 
 ## Current production baseline
 
-Stages 4–8B, branded Telegram `/start` и post-8B UX приняты в production.
+Warehouse Domain V2 принят в production.
 
-Migration head:
+Current schema:
 
-    a2b3c4d5e6f7
+    ALEMBIC_HEAD=c5d6e7f8a9b0
 
-Stage15A automated off-VM backup: `PASS`.
-Stage15B real isolated restore: `PASS`.
-Stage15C: `ACTIVE`.
+Stage15:
 
-AUD-01 production acceptance:
+    STAGE15=TECHNICAL_HARDENING_COMPLETE
+    STAGE15A=PASS
+    STAGE15B=PASS
+    STAGE15C=COMPLETE
+
+Initial production inventory bootstrap:
+
+    INITIAL_PRODUCTION_BOOTSTRAP=PASS
+    POST_IMPORT_RECONCILIATION=ZERO_DRIFT
+    POST_IMPORT_BACKUP=PASS
+    TELEGRAM_VISUAL_ACCEPTANCE=PASS
+
+Authoritative workbook остаётся external operator input и не хранится в Git.
+
+Regular warehouse mutation API остаётся закрыт:
 
     REAL_INVENTORY_MUTATIONS_ENABLED=false
-    REAL_INVENTORY_ENTRY=BLOCKED_PENDING_NEXT_ROADMAP
-    pre-real-data inventory rows=0
-    production health=PASS
 
-Exact production checkout и runtime image provenance являются отдельным
-operational evidence.
+Initial bootstrap был выполнен отдельным guarded one-shot CLI и не открывал
+regular mutation gate.
+
+Exact production checkout и runtime image provenance являются отдельными
+operational facts. Исторические acceptance SHA фиксируются в `docs/HISTORY.md`,
+а текущее состояние проверяется непосредственно на production.
 
 ## Deploy sequence
 
@@ -144,19 +160,31 @@ Mini App открывается по WebApp CTA.
 
 ### Telegram Mini App UX acceptance
 
-Текущий accepted desktop/mobile contract:
+Текущий accepted Warehouse UI contract:
 
-- обычный старт — `expand()` без автоматического true fullscreen;
-- при viewport >= 400 CSS px доступен явный fullscreen toggle;
-- `requestFullscreen()` вызывается только действием пользователя;
-- в fullscreen CTA переключается на `exitFullscreen()`;
-- при viewport < 400 CSS px fullscreen CTA скрыт;
-- Escape используется только для внутренних dismissable layers;
-- catalog не создаёт декоративных боковых borders при расширении desktop окна;
-- первый переход landing → category начинается с верхней позиции страницы;
-- mobile category cards сохраняют индексы `01`, `02`, ... без тяжёлых glyph blocks.
+- Telegram/mobile shell использует `expand()` и поддерживаемые viewport APIs;
+- desktop-capable runtime автоматически запрашивает fullscreen там, где
+  Telegram Desktop это поддерживает;
+- fullscreen control находится внутри page header toolbar, а не fixed overlay;
+- CTA корректно переключает request/exit fullscreen;
+- Escape сначала закрывает последний внутренний `[data-escape-dismiss]` layer;
+- если внутреннего dismiss-layer нет и fullscreen активен, Escape завершает
+  fullscreen;
+- если закрывать нечего, Escape не запускает случайную navigation action;
+- category landing, category page, movements, locations, item form и item detail
+  используют единый branded header contract;
+- desktop item/location forms используют согласованную responsive geometry;
+- smart suggestions не ограничивают возможность ручного ввода допустимого
+  значения;
+- catalog desktop layout не создаёт декоративных боковых borders;
+- landing → category navigation начинает страницу сверху;
+- mobile category cards сохраняют компактные числовые индексы.
 
-Cloudflare Telegram Gateway при этих frontend-only UX изменениях не менялся.
+Synthetic frontend Playwright не считается доказательством реального Telegram
+host behavior. Для production UX acceptance используется отдельный real Telegram
+visual smoke.
+
+Cloudflare Telegram Gateway не меняется при frontend-only warehouse UX changes.
 
 ## Technical retention
 
@@ -184,26 +212,29 @@ Canonical script:
 
     backend/scripts/reconcile_inventory_projections.sql
 
-Скрипт read-only.
+Скрипт read-only и пересчитывает quantity projection из immutable
+Movement/MovementLine journal.
 
-Запуск:
+Запуск обязателен:
 
-- перед первым real inventory entry;
+- после warehouse-affecting migrations;
 - после restore;
+- после controlled initial/data bootstrap;
+- перед и после risky inventory data maintenance;
 - при подозрении на projection drift.
 
 Ожидается zero rows.
 
 Любая возвращённая строка означает расхождение между immutable movement journal
-и текущей stock_balances projection.
+и `stock_balances`.
 
 Если drift найден:
 
-1. остановить inventory mutations;
-2. не выполнять автоматический repair;
-3. сохранить backup/snapshot;
-4. расследовать divergence;
-5. определить controlled repair.
+1. regular inventory mutations остаются/переводятся в disabled state;
+2. автоматический repair не выполняется;
+3. сохраняется fresh backup/evidence;
+4. расследуется divergence;
+5. controlled repair проектируется отдельно.
 
 ## Backup gate
 
@@ -268,11 +299,13 @@ Local backup policy после Stage15C hygiene checkpoint:
 
     STAGE15A=PASS
     STAGE15B=PASS
-    STAGE15C=ACTIVE
-    REAL_INVENTORY_ENTRY=BLOCKED_PENDING_NEXT_ROADMAP
+    STAGE15C=COMPLETE
+    INITIAL_PRODUCTION_BOOTSTRAP=PASS
+    REGULAR_MUTATION_GATE=DISABLED
 
-Stage 15 implementation и acceptance ведутся по
-`docs/STAGE15_PLAN.md`.
+Stage 15 historical implementation/acceptance хранится в
+`docs/STAGE15_PLAN.md`. Текущий post-Stage15 state фиксируется этим runbook и
+`docs/HISTORY.md`.
 
 ## Restore acceptance
 
@@ -297,9 +330,15 @@ Accepted procedure:
 11. удалить temporary restore environment только после сохранения evidence;
 12. записать acceptance в `docs/HISTORY.md`.
 
-Эта процедура реально выполнена для Stage15B. Повторная final production
-reconciliation и остальные Stage15C checks остаются обязательными перед снятием
-production-data gate.
+Эта процедура реально выполнена для Stage15B и является historical evidence
+первого real isolated restore acceptance.
+
+После появления production inventory каждый последующий restore rehearsal
+проверяет выбранный artifact по его manifest: Alembic head, critical row
+counts/invariants, application compatibility и canonical zero-drift
+reconciliation.
+
+Restore rehearsal сам не открывает regular mutation gate.
 
 ## Failure boundaries
 
@@ -331,44 +370,46 @@ Data-integrity blocker. Inventory mutations останавливаются.
 
 ## GitHub hardening
 
-После merge/deploy/smoke:
+После accepted merge/deploy/smoke:
 
 1. main branch protection/rules;
 2. required CI;
 3. запрет непроверенного direct push;
 4. clean/current `main`;
-5. repository visibility — отдельное explicit решение перед снятием real-inventory gate и перед любой операцией с реальными данными.
+5. merged topic branches удаляются после acceptance; целевое состояние между
+   change sets — только `main`;
+6. public visibility допустима только при
+   `REPOSITORY_DATA_POLICY=NO_REAL_INVENTORY_DATA_IN_GIT`; изменение visibility
+   является отдельным explicit security/operational решением.
 
-## Перед первым real inventory entry
+## Initial production inventory bootstrap — accepted
 
-- [x] Stage 8B + post-8B UX production accepted;
-- [x] migration head `a2b3c4d5e6f7`;
-- [x] Stage15A automated off-VM backup;
-- [x] first scheduled automatic backup;
-- [x] Stage15B real isolated restore;
-- [x] restore reconciliation zero drift;
-- [x] local backup hygiene;
-- [x] branch protection + four required CI checks;
-- [x] production DB roles/journal/host-exposure audit;
-- [x] production reconciliation zero drift;
-- [x] AUD-01 fail-closed mutation gate;
-- [x] AUD-02 runtime provenance v2;
-- [x] AUD-03 exact S3 lifecycle-prefix validation;
-- [x] AUD-06 command-level recovery runbook;
-- [x] AUD-08..13 canonical docs + freshness CI;
-- [x] AUD-04 durable immutable application rollback artifact;
-- [x] AUD-05 controlled backup failure drill;
-- [x] AUD-07 stale inventory-source assumptions retired;
-- [x] host/security hardening accepted; recorded findings retained;
-- [x] final full source + production re-audit;
-- [x] explicit Stage15 gate decision: KEEP_DISABLED_NEXT_ROADMAP;
-- [x] real inventory operator action explicitly deferred to next roadmap; no import executed.
+Pre-data Stage15 checklist исторически завершён.
 
-После technical hardening сохраняется fail-closed operational state:
+После него отдельным post-Stage15 change set выполнены:
 
+- Warehouse Domain V2 production rollout;
+- current migration head `c5d6e7f8a9b0`;
+- external workbook validation;
+- guarded production bootstrap implementation;
+- required local PostgreSQL gates;
+- PR/CI acceptance;
+- exact production backend image build/provenance verification;
+- read-only empty-domain preflight;
+- fresh pre-import verified off-VM backup;
+- one-shot initial RECEIPT bootstrap;
+- post-import counts/quantity verification;
+- canonical reconciliation with zero drift;
+- regular mutation gate confirmation `false`;
+- fresh verified post-import off-VM backup;
+- real Telegram visual acceptance.
+
+Operational rule after acceptance:
+
+    INITIAL_PRODUCTION_BOOTSTRAP=DO_NOT_RERUN
     REAL_INVENTORY_MUTATIONS_ENABLED=false
-    REAL_INVENTORY_ENTRY=BLOCKED_PENDING_NEXT_ROADMAP
 
+Normal warehouse operations require a separate go-live decision.
 
 ## Stage15C host security baseline — AUD-17
 
@@ -408,24 +449,29 @@ AUD-23 precondition recheck completed 2026-09-07: listeners, SSH effective
 config, host firewall state и host-published application ports проверены
 повторно; recorded findings не изменились.
 
-## Repository visibility boundary — AUD-19
+## Repository visibility boundary
 
-Текущее состояние:
+Current repository state:
 
     REPOSITORY_VISIBILITY_CURRENT=public
+    REPOSITORY_DATA_POLICY=NO_REAL_INVENTORY_DATA_IN_GIT
 
-Принятое правило до любых реальных складских данных:
+Repository visibility остаётся отдельным security/operational решением.
 
-    REPOSITORY_VISIBILITY_BEFORE_REAL_INVENTORY=REASSESS_REQUIRED
-    AUD19_DECISION=REASSESS_BEFORE_REAL_INVENTORY
+Initial production bootstrap был выполнен без помещения real inventory source в
+Git. External workbook, его hash contract, реальные строки, runtime actor/location
+identifiers и database contents остаются вне repository.
 
-Пока repository public, в Git нельзя помещать реальные inventory datasets,
-exports, database dumps, backup artifacts, credentials, tokens или production
-environment files.
+Независимо от public/private visibility запрещено коммитить:
 
-До снятия `REAL_INVENTORY_MUTATIONS_ENABLED=false` и до любой отдельной
-real-data operator action repository visibility должна быть явно пересмотрена.
-Решение public/private принимается отдельно с повторной проверкой Git
-history/current tree на secrets и операционные artifacts. Независимо от
-visibility реальные inventory datasets, dumps, credentials и production
-environment files в Git не помещаются.
+- authoritative inventory workbook и его копии;
+- exports реального склада;
+- PostgreSQL dumps;
+- backup artifacts;
+- `.env` production;
+- credentials/tokens/private keys;
+- runtime-only secrets/identifiers без необходимости.
+
+Repository visibility сама по себе не является warehouse database mutation
+механизмом. Regular inventory operations регулируются backend authorization,
+database privileges и `REAL_INVENTORY_MUTATIONS_ENABLED`.

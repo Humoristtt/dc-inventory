@@ -132,7 +132,17 @@ Frontend authorization не является security boundary.
 
 ## Safety gate
 
-Real inventory mutations защищены REAL_INVENTORY_MUTATIONS_ENABLED.
+Regular warehouse mutation API защищён:
+
+`REAL_INVENTORY_MUTATIONS_ENABLED`
+
+Production default остаётся `false`.
+
+Initial production inventory bootstrap использует отдельный one-shot CLI
+boundary и намеренно требует, чтобы regular mutation gate оставался закрытым.
+
+Таким образом initial load не является обходом или включением normal mutation
+API.
 
 ## Reconciliation
 
@@ -144,13 +154,28 @@ Zero returned rows означает, что stock projection совпадает 
 
 ## Bootstrap
 
-Workbook importer предназначен только для initial quantity bootstrap.
+Authoritative initial workbook находится вне repository.
 
-Он поддерживает:
+Bootstrap architecture состоит из двух boundaries:
 
-- dry-run;
-- transactional import;
-- explicit destination location;
-- double-import protection.
+1. `app.bootstrap.inventory_workbook`
+   - читает и валидирует workbook;
+   - нормализует Item identity;
+   - агрегирует deterministic duplicates;
+   - создаёт opening RECEIPT через warehouse service;
+   - защищается от populated catalog/journal.
 
-Реальный authoritative workbook находится вне repository.
+2. `app.bootstrap.production_inventory`
+   - production-only guarded one-shot entry point;
+   - требует production Docker PostgreSQL boundary;
+   - требует закрытый regular mutation gate;
+   - проверяет source SHA/count contract;
+   - проверяет empty warehouse domain;
+   - создаёт location + inventory атомарно;
+   - проверяет resulting counts/quantities;
+   - выполняет canonical projection reconciliation до commit;
+   - fail-closed откатывает transaction при любой ошибке.
+
+Initial production bootstrap принят 2026-09-08.
+
+Повторный initial bootstrap в текущую production DB запрещён.

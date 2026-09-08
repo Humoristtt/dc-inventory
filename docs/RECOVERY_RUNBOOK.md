@@ -14,13 +14,20 @@ During rehearsal:
 
 - production PostgreSQL volume is never mounted;
 - restore PostgreSQL has no host-published port;
-- `docker compose down -v` is forbidden;
+- `docker compose down -v` is forbidden on production;
 - verified S3 objects are never deleted or overwritten;
 - Governance retention is never bypassed;
 - destructive Alembic downgrade is forbidden;
-- real inventory is not imported;
-- `REAL_INVENTORY_MUTATIONS_ENABLED` remains `false`;
-- `REAL_INVENTORY_ENTRY` remains `BLOCKED_PENDING_NEXT_ROADMAP`.
+- rehearsal does not import, delete or mutate production inventory;
+- production runtime configuration is not changed;
+- regular mutation gate is not opened as part of recovery rehearsal.
+
+Current normal production policy:
+
+    REAL_INVENTORY_MUTATIONS_ENABLED=false
+
+A production incident/cutover may change runtime state only through a separate
+explicit incident/change decision. This rehearsal runbook does not authorize it.
 
 ## Prerequisites
 
@@ -116,17 +123,22 @@ Required checks:
 
     SELECT version_num FROM alembic_version;
 
-Verify canonical tables and critical row counts.
+Verify canonical tables, constraints and critical row counts.
 
-For the current pre-real-data baseline the expected operational rows remain:
+Production now contains real warehouse data, therefore zero pre-data counts are
+no longer a valid current invariant.
 
-    items=0
-    inventory_units=0
-    stock_balances=0
-    movements=0
-    movement_lines=0
+Do not hard-code operational row counts in this runbook.
 
-Do not hard-code these zero counts after real inventory entry.
+For a selected artifact:
+
+- restored Alembic head must equal manifest expectation;
+- restored critical row counts must be internally readable/consistent;
+- when comparing with the source production checkpoint, counts must match the
+  corresponding backup evidence;
+- immutable movement journal must remain present;
+- stock projection integrity is decided by canonical reconciliation, not by
+  guessed static counts.
 
 ## 7. Projection reconciliation
 

@@ -139,7 +139,7 @@ ADMIN:
 - [x] Idempotent replay не создаёт duplicate notification.
 - [x] RETURN не создаёт ISSUE notification.
 
-## 9. Acceptance Warehouse V2
+## 9. Production acceptance Warehouse V2
 
 - [x] Backend PostgreSQL tests.
 - [x] Ruff.
@@ -148,29 +148,53 @@ ADMIN:
 - [x] Frontend lint.
 - [x] Frontend unit tests.
 - [x] Frontend build.
-- [x] Warehouse browser E2E.
-- [x] Frontend → API → PostgreSQL fullstack acceptance.
+- [x] Warehouse synthetic browser E2E.
+- [x] Frontend → API → PostgreSQL fullstack CI acceptance.
 - [x] Projection reconciliation zero drift.
-- [~] Final documentation / obsolete-reference audit.
-- [ ] Final branch commit.
-- [ ] GitHub CI.
-- [ ] Independent post-push audit.
-- [ ] PR / production decision только по отдельному явному разрешению.
+- [x] Warehouse Domain V2 merge/deploy.
+- [x] Responsive/mobile/desktop warehouse UI acceptance.
+- [x] Header/fullscreen/Escape remediation.
+- [x] Desktop form consistency and smart suggestions.
+- [x] Current migration head `c5d6e7f8a9b0`.
+- [x] External authoritative workbook contract.
+- [x] Fail-closed production one-shot bootstrap path.
+- [x] Empty-domain production preflight.
+- [x] Fresh verified pre-import off-VM backup.
+- [x] Initial production inventory bootstrap.
+- [x] Post-import DB/count/quantity verification.
+- [x] Post-import projection reconciliation zero drift.
+- [x] Fresh verified post-import off-VM backup.
+- [x] Real Telegram visual acceptance.
 
-## 10. Production safety
+## 10. Current stabilization / closeout
 
-Stage 15 technical hardening COMPLETE.
+Текущая фаза не добавляет новый product domain. Цель — получить чистый,
+документированный и независимо проверенный production baseline перед следующим
+feature cycle.
 
-REAL_INVENTORY_ENTRY=BLOCKED_PENDING_NEXT_ROADMAP
+- [x] Canonical documentation reconciled with accepted production state.
+- [ ] Очистить merged Git branches; после closeout оставить только `main`.
+- [ ] Очистить production VM от временных bootstrap/build/test artifacts,
+      сохранив operational state и намеренные rollback/recovery artifacts.
+- [ ] Очистить Mac development environment от obsolete branches/worktrees,
+      temporary archives, caches и disposable Docker resources.
+- [ ] Выполнить independent full source/security/runtime/data audit на clean baseline.
+- [ ] Исправить найденные P0/P1 blockers отдельными change sets.
+- [ ] Зафиксировать пользовательский список minor UX corrections.
+- [ ] Выполнить minor UX remediation отдельной веткой.
+- [ ] Повторить final affected/full acceptance после UX fixes.
+- [ ] Принять explicit operational decision по normal warehouse mutations.
 
-- [x] REAL_INVENTORY_MUTATIONS_ENABLED=false остаётся production default.
-- [x] Реальные warehouse mutations не включаются в этой ветке.
-- [x] Реальный workbook не импортируется в production в рамках этой ветки.
-- [x] Repository не содержит authoritative inventory workbook.
+До последнего пункта regular mutation gate остаётся:
+
+    REAL_INVENTORY_MUTATIONS_ENABLED=false
+
+Initial bootstrap уже выполнен и повторно не запускается.
 
 ## 11. Future procurement workflow
 
-Этот блок обязателен как будущее направление и не входит в Warehouse V2.
+Этот блок является следующим подтверждённым product-направлением после
+стабилизации текущего warehouse baseline.
 
 - [ ] Purchasing manager role/capability.
 - [ ] Формирование списка «что необходимо купить».
@@ -185,6 +209,9 @@ REAL_INVENTORY_ENTRY=BLOCKED_PENDING_NEXT_ROADMAP
 - [ ] Связь поступления товара с procurement request.
 - [ ] Уведомления о смене procurement status.
 - [ ] Дополнительные approval roles/workflow при необходимости.
+
+Новые feature-направления сверх этого блока добавляются в roadmap только после
+закрытия current stabilization/audit phase.
 
 ## 12. Изменённые решения
 

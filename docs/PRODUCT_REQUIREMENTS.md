@@ -149,14 +149,25 @@ Movement и notification outbox record фиксируются одной тра�
 
 ## Initial bootstrap
 
-Начальный workbook импортируется только в явно существующую StorageLocation.
+Initial production inventory bootstrap является guarded one-shot operation.
 
-Импорт:
+Production bootstrap:
 
-- quantity-only;
-- транзакционный;
-- создаёт opening RECEIPT;
-- защищён от повторного bootstrap;
-- dry-run не изменяет БД.
+- сначала выполняет read-only validation внешнего workbook;
+- проверяет expected workbook rows/items/quantity и source SHA contract;
+- требует закрытый regular mutation gate;
+- требует пустой warehouse domain;
+- атомарно создаёт target StorageLocation;
+- создаёт quantity-only catalog/stock state;
+- создаёт одну opening RECEIPT transaction;
+- выполняет post-write count/quantity checks;
+- требует zero-drift projection reconciliation до commit;
+- fail-closed запрещает повторный bootstrap после первого успешного load.
+
+Validation-only запуск workbook reader не изменяет БД.
+
+Локальный `--import-local` helper предназначен только для disposable loopback
+test database и использует заранее существующую active Location; это не
+production bootstrap path.
 
 Authoritative workbook хранится вне public repository.

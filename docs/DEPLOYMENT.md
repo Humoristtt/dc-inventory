@@ -370,8 +370,8 @@ The maintenance role has `SELECT, DELETE` only on the four technical targets
 and read-only `SELECT` on `access_requests`, which is needed to determine
 whether callback state is terminal.
 
-`movements`, `movement_lines`, `inventory_units`, `stock_balances` and other
-warehouse state are outside the retention target set. The canonical warehouse
+`movements`, `movement_lines`, `stock_balances` and other warehouse state are
+outside the retention target set. The canonical warehouse
 movement journal remains immutable and is never pruned by this worker.
 
 ## Operational mutation gate

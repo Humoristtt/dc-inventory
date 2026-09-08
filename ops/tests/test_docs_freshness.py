@@ -253,6 +253,23 @@ require(
     "docs/PRODUCT_REQUIREMENTS.md",
     "Warehouse Domain V2 развёрнут и принят в production.",
 )
+require(
+    "docs/PRODUCT_REQUIREMENTS.md",
+    "атомарно создаёт target StorageLocation",
+)
+for stale_value in (
+    "Начальный workbook импортируется только в явно существующую StorageLocation.",
+    "dry-run не изменяет БД.",
+):
+    forbid(
+        "docs/PRODUCT_REQUIREMENTS.md",
+        stale_value,
+    )
+
+forbid(
+    "docs/DEPLOYMENT.md",
+    "`inventory_units`",
+)
 
 require(
     "docs/OPERATIONS.md",
@@ -279,6 +296,10 @@ for stale_value in (
 require(
     "docs/ROADMAP.md",
     "## 10. Current stabilization / closeout",
+)
+require(
+    "docs/ROADMAP.md",
+    "- [x] Canonical documentation reconciled with accepted production state.",
 )
 
 

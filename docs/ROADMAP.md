@@ -172,7 +172,7 @@ ADMIN:
 документированный и независимо проверенный production baseline перед следующим
 feature cycle.
 
-- [~] Canonical documentation reconciliation with accepted production state.
+- [x] Canonical documentation reconciled with accepted production state.
 - [ ] Очистить merged Git branches; после closeout оставить только `main`.
 - [ ] Очистить production VM от временных bootstrap/build/test artifacts,
       сохранив operational state и намеренные rollback/recovery artifacts.

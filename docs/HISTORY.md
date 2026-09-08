@@ -614,11 +614,13 @@ Accepted release lineage:
 
 Production schema advanced through Warehouse V2 and leaf-description migrations
 to `c5d6e7f8a9b0`.
+
 - Required `main` CI run #104 completed successfully:
   backend, frontend, runtime and telegram-gateway all PASS.
-- Production backend, telegram-worker and maintenance-worker were rebuilt from
-  the accepted PR #45 merge revision; web remained on the previously accepted
-  frontend-only revision until a later frontend-changing deploy.
+- During bootstrap acceptance, production backend, telegram-worker and
+  maintenance-worker ran the accepted PR #45 merge revision; web remained on
+  the previously accepted PR #44 frontend revision and was not rebuilt by the
+  bootstrap rollout.
 - Authoritative initial inventory workbook remained external to Git.
 - Read-only production preflight confirmed empty warehouse domain, approved
   ADMIN actor, expected schema, matching source contract and closed regular

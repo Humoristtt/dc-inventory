@@ -107,7 +107,10 @@ export function SuggestionInput({
         inputMode={inputMode}
         maxLength={maxLength}
         onBlur={() => setFocused(false)}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(event) => {
+          setFocused(true);
+          onChange(event.target.value);
+        }}
         onFocus={() => setFocused(true)}
         required={required}
         role="combobox"
@@ -119,7 +122,13 @@ export function SuggestionInput({
       {showSuggestions ? (
         <div
           className="smart-suggest__menu"
+          data-escape-dismiss=""
           id={listboxId}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) {
+              setFocused(false);
+            }
+          }}
           role="listbox"
         >
           {loading ? (

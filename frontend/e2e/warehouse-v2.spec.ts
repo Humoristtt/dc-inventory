@@ -129,7 +129,34 @@ async function installApiMock(page:Page, role:"USER"|"ADMIN", failures=0) {
     }
     if(path.startsWith("/api/catalog/categories/")) return json(route,path.endsWith(family.key) ? {...family,attributes:[]} : categoryDetail);
     if(path === "/api/catalog/manufacturers") return json(route,{items:makers,total:makers.length,limit:100,offset:0});
-    if(path === "/api/catalog/items/facets") return json(route,{facets:[{key:"availability",label:"Наличие",data_type:"ENUM",unit:null,filter_type:"EXACT",values:[{value:"IN_STOCK",label:"В наличии",count:1},{value:"OUT_OF_STOCK",label:"Нет в наличии",count:1}],min:null,max:null}]});
+    if(path === "/api/catalog/items/facets") {
+      const facet = url.searchParams.get("facet");
+
+      if (facet !== null && facet in attributes) {
+        const value =
+          attributes[facet as keyof typeof attributes];
+
+        return json(route,{
+          facets:[{
+            key:facet,
+            label:labels[facet],
+            data_type:"TEXT",
+            unit:null,
+            filter_type:"EXACT",
+            values:[{
+              value,
+              label:value,
+              count:1,
+            }],
+            values_has_more:false,
+            min:null,
+            max:null,
+          }],
+        });
+      }
+
+      return json(route,{facets:[{key:"availability",label:"Наличие",data_type:"ENUM",unit:null,filter_type:"EXACT",values:[{value:"IN_STOCK",label:"В наличии",count:1},{value:"OUT_OF_STOCK",label:"Нет в наличии",count:1}],min:null,max:null}]});
+    }
     if(path === "/api/catalog/items") return json(route,{items:[{...item,inventory:{available_count:quantity,total_count:quantity}}],total:1,limit:20,offset:0});
     if(path.startsWith("/api/catalog/items/")) return json(route,item);
     if(path === `/api/inventory/items/${item.id}/summary`) return json(route,{total_count:quantity,locations:[{id:"balance",item_id:item.id,item_name:item.name,quantity,location:{location_id:location.id,code:location.code,name:location.name},updated_at:now}]});
@@ -512,6 +539,54 @@ test(
     );
 
     await expect(speed).toBeVisible();
+
+    await speed.fill("10");
+
+    await expect(
+      page.getByRole(
+        "option",
+        { name: "10 Гбит/с" },
+      ),
+    ).toBeVisible();
+
+    await page.keyboard.press("Escape");
+
+    await expect(
+      page.getByRole(
+        "option",
+        { name: "10 Гбит/с" },
+      ),
+    ).toHaveCount(0);
+
+    await expect.poll(
+      () => page.evaluate(() => (
+        (
+          window as unknown as {
+            __stage8Telegram: {
+              fullscreenRequested: boolean;
+            };
+          }
+        ).__stage8Telegram.fullscreenRequested
+      )),
+    ).toBe(true);
+
+    await speed.fill("10 Г");
+
+    await expect(
+      page.getByRole(
+        "option",
+        { name: "10 Гбит/с" },
+      ),
+    ).toBeVisible();
+
+    await page.keyboard.press("Escape");
+
+    await expect(
+      page.getByRole(
+        "option",
+        { name: "10 Гбит/с" },
+      ),
+    ).toHaveCount(0);
 
     const catalogGeometry = await page.evaluate(() => {
       const body =

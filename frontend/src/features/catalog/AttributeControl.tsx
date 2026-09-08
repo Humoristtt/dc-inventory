@@ -9,6 +9,7 @@ type AttributeControlProps = {
   error: string | undefined;
   onChange: (value: string | boolean | undefined) => void;
   suggestions?: readonly string[];
+  suggestionsLoading?: boolean;
   value: string | boolean | undefined;
 };
 
@@ -17,6 +18,7 @@ export function AttributeControl({
   error,
   onChange,
   suggestions = [],
+  suggestionsLoading = false,
   value,
 }: AttributeControlProps) {
   const controlId = `attribute-${attribute.key}`;
@@ -173,6 +175,7 @@ export function AttributeControl({
       id={controlId}
       inputMode={inputMode}
       label={label}
+      loading={suggestionsLoading}
       maxLength={
         typeof maxLength === "number"
           ? maxLength

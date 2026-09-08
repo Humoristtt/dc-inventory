@@ -33,7 +33,7 @@ import {
   createCatalogManufacturer,
   getCatalogCategories,
   getCatalogCategory,
-  getCatalogFacets,
+  getCatalogFacetPage,
   getCatalogItem,
   getCatalogItems,
   getCatalogManufacturers,
@@ -98,6 +98,82 @@ function useDebouncedValue(value: string, delay = 180) {
   }, [delay, value]);
 
   return debounced;
+}
+
+type SmartAttributeControlProps = {
+  attribute: Parameters<typeof AttributeControl>[0]["attribute"];
+  category: string;
+  error: string | undefined;
+  onChange: (value: string | boolean | undefined) => void;
+  value: string | boolean | undefined;
+};
+
+function SmartAttributeControl({
+  attribute,
+  category,
+  error,
+  onChange,
+  value,
+}: SmartAttributeControlProps) {
+  const rawValue = typeof value === "string" ? value : "";
+
+  const debouncedValue = useDebouncedValue(
+    rawValue.trim(),
+  );
+
+  const suggestible =
+    attribute.data_type === "TEXT"
+    && attribute.filterable
+    && attribute.filter_type === "EXACT"
+    && attribute.searchable;
+
+  const suggestionsQuery = useQuery({
+    queryKey: [
+      "catalog",
+      "form-attribute-suggestions",
+      category,
+      attribute.key,
+      debouncedValue,
+    ],
+    queryFn: async ({ signal }) => {
+      const page = await getCatalogFacetPage(
+        {
+          category,
+          q: debouncedValue,
+        },
+        {
+          facet: attribute.key,
+          limit: 50,
+          offset: 0,
+        },
+        signal,
+      );
+
+      const facet = page.facets.find(
+        (candidate) =>
+          candidate.key === attribute.key,
+      );
+
+      return facet?.values.map(
+        (entry) => String(entry.value),
+      ) ?? [];
+    },
+    enabled:
+      suggestible
+      && category !== ""
+      && debouncedValue.length >= 1,
+  });
+
+  return (
+    <AttributeControl
+      attribute={attribute}
+      error={error}
+      onChange={onChange}
+      suggestions={suggestionsQuery.data ?? []}
+      suggestionsLoading={suggestionsQuery.isFetching}
+      value={value}
+    />
+  );
 }
 
 function textSuggestions(
@@ -294,33 +370,6 @@ export function ItemFormPage() {
       Boolean(draft.category)
       && debouncedName.length >= 2,
   });
-
-  const facets = useQuery({
-    queryKey: [
-      "catalog",
-      "form-attribute-suggestions",
-      draft.category,
-    ],
-    queryFn: ({ signal }) =>
-      getCatalogFacets(
-        {
-          category: draft.category,
-        },
-        signal,
-      ),
-    enabled: Boolean(draft.category),
-  });
-
-  const attributeSuggestions = new Map(
-    (facets.data?.facets ?? []).map((facet) => [
-      facet.key,
-      [
-        ...new Set(
-          facet.values.map((entry) => String(entry.value)),
-        ),
-      ],
-    ]),
-  );
 
   const manufacturerOptions: SuggestionOption[] = (
     manufacturers.data?.items ?? []
@@ -646,6 +695,20 @@ export function ItemFormPage() {
                   value={manufacturerInput}
                 />
 
+                {manufacturers.isError ? (
+                  <p role="alert">
+                    Не удалось загрузить производителей.{" "}
+                    <button
+                      onClick={() =>
+                        void manufacturers.refetch()
+                      }
+                      type="button"
+                    >
+                      Повторить
+                    </button>
+                  </p>
+                ) : null}
+
                 <SuggestionInput
                   label="Модель"
                   loading={modelMatches.isFetching}
@@ -743,8 +806,9 @@ export function ItemFormPage() {
               ) : null}
 
               {definitions.map((attribute) => (
-                <AttributeControl
+                <SmartAttributeControl
                   attribute={attribute}
+                  category={draft.category}
                   error={errors[attribute.key]}
                   key={attribute.key}
                   onChange={(value) => {
@@ -762,10 +826,6 @@ export function ItemFormPage() {
                       attributes,
                     });
                   }}
-                  suggestions={
-                    attributeSuggestions.get(attribute.key)
-                    ?? []
-                  }
                   value={draft.attributes[attribute.key]}
                 />
               ))}

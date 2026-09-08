@@ -949,3 +949,163 @@
     flex: 0 0 17px;
   }
 }
+
+/* Warehouse V2 responsive UI refinement */
+
+.catalog-admin-action {
+  margin-bottom: 24px;
+}
+
+.category-tile--compact {
+  min-height: 132px;
+}
+
+.category-tile--compact strong {
+  padding-right: 34px;
+}
+
+@media (max-width: 679px) {
+  .catalog-admin-action {
+    margin-bottom: 22px;
+  }
+
+  .category-tile--compact {
+    min-height: 104px;
+    justify-content: center;
+  }
+
+  .category-tile--compact .category-tile__index {
+    margin-bottom: 8px;
+  }
+}
+
+@media (min-width: 1100px) {
+  .catalog-landing-header h1,
+  .category-header h1 {
+    font-size: clamp(48px, 4.1vw, 72px);
+  }
+
+  .section-heading h2,
+  .result-toolbar h2,
+  .detail-panel__heading h2 {
+    font-size: clamp(32px, 2.5vw, 44px);
+  }
+
+  .section-kicker {
+    font-size: 13px;
+    letter-spacing: 0.11em;
+  }
+
+  .catalog-landing-header .search-field,
+  .category-header .search-field {
+    min-height: 62px;
+  }
+
+  .search-field input {
+    font-size: 18px;
+  }
+
+  .category-grid {
+    gap: 18px;
+  }
+
+  .category-tile {
+    min-height: 218px;
+    padding: 22px;
+  }
+
+  .category-tile--compact {
+    min-height: 160px;
+  }
+
+  .category-tile strong {
+    font-size: 22px;
+  }
+
+  .category-tile p {
+    max-width: 92%;
+    font-size: 14px;
+    line-height: 1.45;
+  }
+
+  .category-tile__index {
+    top: 18px;
+    left: 22px;
+    font-size: 12px;
+  }
+
+  .category-tile__glyph {
+    top: 18px;
+    right: 18px;
+    width: 54px;
+    height: 54px;
+    font-size: 13px;
+  }
+
+  .category-tile > i {
+    right: 20px;
+    bottom: 18px;
+    font-size: 20px;
+  }
+}
+
+.detail-header__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+}
+
+.detail-header__row h1 {
+  min-width: 0;
+  margin: 0;
+}
+
+
+@media (max-width: 679px) {
+  .detail-header__row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+}
+
+@media (min-width: 1100px) {
+  .detail-header__row {
+    gap: 20px;
+  }
+}
+
+.detail-header__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@media (max-width: 679px) {
+  .detail-header__actions {
+    grid-column: 1 / -1;
+  }
+}
+
+/* Explicit spacing between admin CTA and the catalog section. */
+.catalog-page--landing .catalog-admin-action {
+  margin: 0;
+}
+
+.catalog-page--landing .catalog-admin-action + .catalog-section {
+  padding-top: 32px;
+}
+
+@media (max-width: 679px) {
+  .catalog-page--landing .catalog-admin-action + .catalog-section {
+    padding-top: 28px;
+  }
+}
+
+@media (min-width: 1100px) {
+  .catalog-page--landing .catalog-admin-action + .catalog-section {
+    padding-top: 38px;
+  }
+}

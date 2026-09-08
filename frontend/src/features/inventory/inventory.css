@@ -121,3 +121,104 @@
 .movement-entry header { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: space-between; font-size: 0.8rem; color: #52616d; }
 .movement-entry p { margin: 0.5rem 0; }
 .movement-entry ul { padding-left: 1.2rem; }
+
+/* Warehouse V2 responsive forms and journal */
+
+.warehouse-page-header__top {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.warehouse-page-header__title {
+  position: relative;
+  z-index: 1;
+  margin-top: 24px;
+}
+
+.warehouse-page-header__title h1 {
+  margin-top: 5px;
+}
+
+.warehouse-form__hint {
+  margin-top: -0.1rem;
+  color: var(--color-muted);
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.warehouse-form input::placeholder {
+  color: rgb(21 32 43 / 42%);
+}
+
+@media (min-width: 1100px) {
+  .warehouse-actions {
+    gap: 0.8rem;
+    margin-block: 1.35rem;
+  }
+
+  .warehouse-form {
+    max-width: 980px;
+    margin-top: 1.5rem;
+  }
+
+  .warehouse-form label,
+  .history-filters label {
+    gap: 0.55rem;
+    margin-block: 1rem;
+    font-size: 1.05rem;
+  }
+
+  .warehouse-form input,
+  .warehouse-form select,
+  .warehouse-form textarea,
+  .history-filters select {
+    min-height: 52px;
+    padding: 0.8rem 0.95rem;
+    border-radius: 12px;
+    font-size: 1rem;
+  }
+
+  .warehouse-form textarea {
+    min-height: 110px;
+  }
+
+  .history-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.35rem 1.5rem;
+    max-width: 1180px;
+  }
+
+  .movement-entry {
+    max-width: 1180px;
+    padding: 1.35rem 0;
+    font-size: 1rem;
+  }
+
+  .movement-entry header {
+    font-size: 0.9rem;
+  }
+
+  .movement-entry p {
+    margin: 0.7rem 0;
+    line-height: 1.5;
+  }
+}
+
+.warehouse-form__field {
+  display: grid;
+  gap: 0.4rem;
+  margin-block: 0.8rem;
+  font-size: 0.9rem;
+}
+
+@media (min-width: 1100px) {
+  .warehouse-form__field {
+    gap: 0.55rem;
+    margin-block: 1rem;
+    font-size: 1.05rem;
+  }
+}

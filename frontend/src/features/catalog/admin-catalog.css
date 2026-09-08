@@ -265,3 +265,49 @@
   .catalog-form__actions { grid-template-columns: 1fr; }
   .admin-item-actions__buttons { grid-template-columns: 1fr; }
 }
+
+/* Warehouse V2 desktop form scale */
+
+@media (min-width: 1100px) {
+  .catalog-form {
+    gap: 20px;
+    padding: 24px 34px 40px;
+  }
+
+  .catalog-form .detail-panel {
+    padding: 24px;
+  }
+
+  .catalog-form__field {
+    gap: 8px;
+    font-size: 16px;
+  }
+
+  .catalog-form__label {
+    font-size: 14px;
+  }
+
+  .catalog-form__label small {
+    font-size: 11px;
+  }
+
+  .catalog-form__field input,
+  .catalog-form__field select,
+  .inline-manufacturer input {
+    min-height: 52px;
+    padding-inline: 14px;
+    border-radius: 12px;
+    font-size: 17px;
+  }
+
+  .catalog-form__field textarea {
+    min-height: 104px;
+    padding: 13px 14px;
+    font-size: 17px;
+  }
+
+  .catalog-form__hint,
+  .catalog-form__empty {
+    font-size: 12px;
+  }
+}

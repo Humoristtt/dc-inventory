@@ -1,6 +1,7 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { useTelegramNavigation } from "../features/navigation/useTelegramNavigation";
+import { TelegramFullscreenButton } from "../shared/telegram/TelegramFullscreenButton";
 import "./styles/app-shell.css";
 
 const navigationItems = [
@@ -22,6 +23,9 @@ export function ApplicationShell() {
 
   return (
     <div className="app-shell">
+      <div className="app-shell__fullscreen">
+        <TelegramFullscreenButton />
+      </div>
       <div className="app-shell__content">
         <Outlet />
       </div>

@@ -22,7 +22,14 @@ export function MovementsPage() {
   if(movementType) params.set("movement_type",movementType);
   const history = useQuery({queryKey:["inventory","movements",params.toString()], queryFn:({signal}) => inventoryRequest<InventoryPage<Movement>>(`/api/inventory/movements?${params}`, undefined,"GET",signal)});
   const change = (setter:(value:string)=>void, value:string) => {setter(value);setOffset(0);};
-  return <main className="catalog-page"><header className="category-header"><span className="section-kicker">Складской журнал</span><h1>Движения</h1></header><div className="catalog-page__body">
+  return <main className="catalog-page"><header className="category-header warehouse-page-header">
+    <div className="warehouse-page-header__top">
+    </div>
+    <div className="warehouse-page-header__title">
+      <span className="section-kicker">Складской журнал</span>
+      <h1>Движения</h1>
+    </div>
+  </header><div className="catalog-page__body">
     <div className="history-filters">
       <label>Период<select value={period} onChange={e => change(setPeriod,e.target.value)}>{[["7d","7 дней"],["30d","30 дней"],["3m","3 месяца"],["year","Год"],["all","Всё время"]].map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label>
       <label>Тип движения<select value={movementType} onChange={e => change(setMovementType,e.target.value)}><option value="">Все типы</option>{Object.entries(movementLabels).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label>

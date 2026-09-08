@@ -13,7 +13,7 @@ export function MovementsPage() {
   const [location, setLocation] = useState("");
   const [movementType, setMovementType] = useState("");
   const [offset, setOffset] = useState(0);
-  const hierarchy = useQuery({queryKey:["catalog", "categories"], queryFn:({signal}) => getCatalogCategories(signal)});
+  const hierarchy = useQuery({staleTime: 5 * 60_000, queryKey:["catalog", "categories"], queryFn:({signal}) => getCatalogCategories(signal)});
   const locations = useQuery({queryKey:["inventory", "locations"], queryFn:({signal}) => getLocations(signal)});
   const actors = useQuery({queryKey:["inventory", "actors"], queryFn:({signal}) => inventoryRequest<{id:string;name:string}[]>("/api/inventory/movement-actors", undefined, "GET", signal)});
   const params = new URLSearchParams({period, offset: String(offset), limit:"30"});

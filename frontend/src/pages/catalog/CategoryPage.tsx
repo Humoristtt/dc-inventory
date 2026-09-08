@@ -35,10 +35,11 @@ import { useCatalogItems } from "../../features/catalog/useCatalogItems";
 import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
 import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
-import { getTelegramWebApp } from "../../shared/telegram/webApp";
+import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
 import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 
 export function CategoryPage() {
+  const webApp = useTelegramWebApp();
   const { categoryKey = "" } = useParams();
   const {
     updateFilters,
@@ -50,7 +51,7 @@ export function CategoryPage() {
   const [sortOpen, setSortOpen] = useState(false);
   const location = useLocation();
   const navigateBack = useInternalBackNavigation();
-  const telegramOwnsBack = getTelegramWebApp()?.BackButton !== undefined;
+  const telegramOwnsBack = webApp?.BackButton !== undefined;
   const categoryQuery = useQuery({
     queryKey: ["catalog", "category", categoryKey],
     queryFn: ({ signal }) => getCatalogCategory(categoryKey, signal),

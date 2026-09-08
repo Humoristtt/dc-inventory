@@ -2,6 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { getCatalogCategories } from "../../shared/api/catalog";
 import { getLocations, inventoryRequest, movementLabels, type Movement, type InventoryPage } from "../../shared/api/inventory";
+import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
+import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 import "../../features/inventory/inventory.css";
 
 export function MovementsPage() {
@@ -23,8 +25,10 @@ export function MovementsPage() {
   const history = useQuery({queryKey:["inventory","movements",params.toString()], queryFn:({signal}) => inventoryRequest<InventoryPage<Movement>>(`/api/inventory/movements?${params}`, undefined,"GET",signal)});
   const change = (setter:(value:string)=>void, value:string) => {setter(value);setOffset(0);};
   return <main className="catalog-page"><header className="category-header warehouse-page-header">
-    <div className="warehouse-page-header__top">
-    </div>
+    <div className="page-toolbar page-toolbar--brand">
+     <SpikatelBrand inverse title="Инвентаризация ЦОД" />
+     <TelegramFullscreenButton />
+   </div>
     <div className="warehouse-page-header__title">
       <span className="section-kicker">Складской журнал</span>
       <h1>Движения</h1>

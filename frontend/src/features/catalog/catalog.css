@@ -1109,3 +1109,27 @@
     padding-top: 38px;
   }
 }
+
+/* Header refinement after Telegram fullscreen control returned to the page toolbar. */
+.detail-header .page-toolbar {
+  margin-bottom: 26px;
+}
+
+.detail-header__row--title {
+  align-items: center;
+}
+
+.detail-header__row--title h1 {
+  font-size: clamp(30px, 4.2vw, 52px);
+  line-height: 0.98;
+}
+
+@media (max-width: 679px) {
+  .detail-header .page-toolbar {
+    margin-bottom: 22px;
+  }
+
+  .detail-header__row--title h1 {
+    font-size: clamp(30px, 9vw, 42px);
+  }
+}

@@ -16,6 +16,7 @@ type TelegramWebApp = {
   initData: string;
   ready: () => void;
   expand: () => void;
+  platform?: string;
   isFullscreen?: boolean;
   requestFullscreen?: () => void;
   exitFullscreen?: () => void;
@@ -149,6 +150,38 @@ export function loadTelegramWebAppSdk(): Promise<void> {
   return sdkLoadPromise;
 }
 
+const DESKTOP_TELEGRAM_PLATFORMS = new Set([
+  "desktop",
+  "linux",
+  "macos",
+  "tdesktop",
+  "web",
+  "weba",
+  "webk",
+  "windows",
+]);
+
+function requestDesktopFullscreen(
+  webApp: TelegramWebApp | null,
+): void {
+  const platform = webApp?.platform?.toLowerCase();
+
+  if (
+    platform === undefined
+    || !DESKTOP_TELEGRAM_PLATFORMS.has(platform)
+    || webApp?.requestFullscreen === undefined
+    || webApp.isFullscreen === true
+  ) {
+    return;
+  }
+
+  try {
+    webApp.requestFullscreen();
+  } catch {
+    // Unsupported Telegram clients keep the expanded fallback.
+  }
+}
+
 export function bindDesktopEscapeGuard(): () => void {
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key !== "Escape") {
@@ -157,13 +190,34 @@ export function bindDesktopEscapeGuard(): () => void {
 
     event.preventDefault();
     event.stopPropagation();
+    event.stopImmediatePropagation();
 
     const dismissTargets =
       document.querySelectorAll<HTMLElement>(
         "[data-escape-dismiss]",
       );
 
-    dismissTargets.item(dismissTargets.length - 1)?.click();
+    const dismissTarget = dismissTargets.item(
+      dismissTargets.length - 1,
+    );
+
+    if (dismissTarget !== null) {
+      dismissTarget.click();
+      return;
+    }
+
+    const webApp = getTelegramWebApp();
+
+    if (
+      webApp?.isFullscreen === true
+      && webApp.exitFullscreen !== undefined
+    ) {
+      try {
+        webApp.exitFullscreen();
+      } catch {
+        // Keep Escape consumed even if Telegram rejects the request.
+      }
+    }
   };
 
   window.addEventListener("keydown", handleKeyDown, true);
@@ -177,6 +231,7 @@ export function prepareTelegramWebApp(): TelegramWebApp | null {
   const webApp = getTelegramWebApp();
   webApp?.ready();
   webApp?.expand();
+  requestDesktopFullscreen(webApp);
   applyTelegramSafeArea(webApp);
   return webApp;
 }

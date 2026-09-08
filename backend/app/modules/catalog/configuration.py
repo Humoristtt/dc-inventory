@@ -131,6 +131,24 @@ LEAVES = {
     ),
 }
 
+LEAF_DESCRIPTIONS = {
+    "transceiver_ethernet": "Трансиверы SFP, SFP+, SFP28, XFP и QSFP для Ethernet-сетей.",
+    "transceiver_fc": "Оптические трансиверы для Fibre Channel SAN.",
+    "optical_patch_cord": (
+        "Одномодовые и многомодовые оптические патч-корды "
+        "с различными типами разъёмов."
+    ),
+    "optical_splitter": "Оптические сплиттеры и делители для распределения оптического сигнала.",
+    "network_ethernet": "Сетевые Ethernet-адаптеры и многопортовые NIC.",
+    "network_fc": "HBA-адаптеры для подключения серверов к Fibre Channel SAN.",
+    "ssd": "Твердотельные накопители SATA, SAS и NVMe.",
+    "hdd": "Серверные жёсткие диски SAS и SATA.",
+    "ram": "Серверные модули оперативной памяти разных объёмов и поколений.",
+    "pcie_adapter": "Контроллеры и специализированные платы расширения PCIe.",
+    "power_cable": "Кабели питания для серверного и сетевого оборудования.",
+}
+
+
 MANUFACTURED_LEAVES = frozenset(
     {
         "transceiver_ethernet",

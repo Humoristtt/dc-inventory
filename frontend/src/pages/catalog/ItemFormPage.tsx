@@ -7,6 +7,9 @@ import { draftAttributesFromItem, validateDraftAttributes, type AttributeDraft }
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
 import { ApiRequestError } from "../../shared/api/auth";
 import { createCatalogItem, createCatalogManufacturer, getCatalogCategories, getCatalogCategory, getCatalogItem, getCatalogManufacturers, patchCatalogItem, type CatalogItem, type ItemWritePayload } from "../../shared/api/catalog";
+import { getTelegramWebApp } from "../../shared/telegram/webApp";
+import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
+import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
 import "../../features/catalog/admin-catalog.css";
 import "../../features/inventory/inventory.css";
 
@@ -38,9 +41,14 @@ export function ItemFormPage() {
   if(auth.data?.user.role !== "ADMIN") return <Navigate replace to="/catalog"/>;
   if(itemId && item.isError) return <p role="alert">Не удалось загрузить оборудование. <button onClick={()=>void item.refetch()}>Повторить</button></p>;
   const identityRequired = manufactured.has(draft.category);
+  const telegramOwnsBack = getTelegramWebApp()?.BackButton !== undefined;
   return <main className="catalog-page"><header className="detail-header">
-    <div className="detail-header__row">
-      <button className="icon-button icon-button--light" type="button" onClick={back} aria-label="Назад">←</button>
+    <div className="page-toolbar page-toolbar--brand">
+      <SpikatelBrand inverse title="Инвентаризация ЦОД" />
+      <TelegramFullscreenButton />
+    </div>
+    <div className="detail-header__row detail-header__row--title">
+      {!telegramOwnsBack ? <button className="icon-button icon-button--light" type="button" onClick={back} aria-label="Назад">←</button> : null}
       <h1>{itemId ? "Редактировать оборудование" : "Добавить оборудование"}</h1>
     </div>
   </header><div className="catalog-page__body">

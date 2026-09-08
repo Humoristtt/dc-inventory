@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from tests.migration_helpers import alembic
 
-HEAD = "b3c4d5e6f7a8"
+HEAD = "c5d6e7f8a9b0"
 PREVIOUS = "a2b3c4d5e6f7"
 pytestmark = pytest.mark.asyncio
 
@@ -47,6 +47,18 @@ async def test_baseline_head_empty_downgrade_and_metadata(migration_database: st
             "datasheet_url",
         }.intersection(columns)
         assert await db.scalar(text("SELECT count(*) FROM categories")) == 18
+        assert (
+            await db.scalar(
+                text(
+                    "SELECT count(*) FROM categories "
+                    "WHERE parent_id IS NOT NULL "
+                    "AND is_system = true "
+                    "AND description IS NOT NULL "
+                    "AND btrim(description) <> ''"
+                )
+            )
+            == 11
+        )
     await engine.dispose()
     assert "No new upgrade operations detected" in alembic(url, "check")
     alembic(url, "downgrade", PREVIOUS)

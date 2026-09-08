@@ -172,6 +172,12 @@ function currentSearchParams(): URLSearchParams {
 
 function catalogFetch(input: RequestInfo | URL): Promise<Response> {
   const url = String(input);
+  if (url === "/api/catalog/categories/transceivers") {
+    return Promise.resolve(jsonResponse({
+      ...transceiversFamily,
+      attributes: [],
+    }));
+  }
   if (url === "/api/catalog/categories/sfp") {
     return Promise.resolve(jsonResponse(categoryDetail));
   }
@@ -265,6 +271,20 @@ it("после approved access gate показывает рабочий shell и
   expect(screen.getByRole("link", { name: /Диски и накопители/ })).toBeInTheDocument();
   expect(screen.getByRole("navigation", { name: "Основная навигация" })).toBeInTheDocument();
   expect(screen.getAllByRole("link", { name: /Каталог/ }).length).toBeGreaterThan(0);
+});
+
+it("показывает описание дочерней категории в карточке семейства", async () => {
+  vi.stubGlobal("fetch", vi.fn(catalogFetch));
+
+  renderRoutes("/catalog/transceivers");
+
+  expect(
+    await screen.findByRole("heading", { name: "Трансиверы" }),
+  ).toBeInTheDocument();
+
+  expect(
+    screen.getByText("Оптические и медные трансиверы"),
+  ).toBeInTheDocument();
 });
 
 it("показывает отдельное пустое состояние без категорий", async () => {

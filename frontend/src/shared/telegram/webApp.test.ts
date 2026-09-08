@@ -226,6 +226,34 @@ describe("Telegram Web App SDK delivery", () => {
     dismiss.remove();
   });
 
+  it("consumes Escape and exits Telegram fullscreen when no internal layer is open", () => {
+    const exitFullscreen = vi.fn();
+
+    window.Telegram = {
+      WebApp: {
+        initData: "query_id=test",
+        ready: vi.fn(),
+        expand: vi.fn(),
+        isFullscreen: true,
+        exitFullscreen,
+      },
+    };
+
+    const cleanup = bindDesktopEscapeGuard();
+    const event = new KeyboardEvent("keydown", {
+      key: "Escape",
+      bubbles: true,
+      cancelable: true,
+    });
+
+    window.dispatchEvent(event);
+
+    expect(event.defaultPrevented).toBe(true);
+    expect(exitFullscreen).toHaveBeenCalledTimes(1);
+
+    cleanup();
+  });
+
   it("subscribes and unsubscribes Telegram BackButton", () => {
     const handler = vi.fn();
     const backButton = {

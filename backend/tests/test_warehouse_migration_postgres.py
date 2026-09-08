@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from tests.migration_helpers import alembic
 
-HEAD = "c5d6e7f8a9b0"
+HEAD = "d6e7f8a9b0c1"
 PREVIOUS = "a2b3c4d5e6f7"
 pytestmark = pytest.mark.asyncio
 

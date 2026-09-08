@@ -322,7 +322,11 @@ zero-drift reconciliation и fresh verified off-VM backup.
 - backend работает от UID 10001;
 - web работает от пользователя `nginx`;
 - для runtime-changing deploy production worktree соответствует утверждённому deploy commit;
-- docs-only sync может продвигать worktree вперёд без rebuild/restart контейнеров, если runtime source не менялся.
+- source-only sync, затрагивающий только documentation и host-side `ops/`
+  tooling, может продвигать production worktree без rebuild/restart application
+  containers, если Docker build contexts и application runtime source не
+  менялись; изменённые host-side tools обязаны отдельно пройти
+  syntax/contract checks.
 
 Для Telegram delivery после runtime-changing deploy выполняется минимальный live
 smoke: `/start` должен пройти webhook/outbox/worker/Gateway, удалить входящую
@@ -345,6 +349,7 @@ Canonical command-level recovery procedure:
 Initial real inventory bootstrap уже принят. Перед любым следующим risky
 schema/data change обязателен fresh verified backup и соответствующий
 reconciliation/rollback plan.
+
 ## Technical data retention
 
 Production uses a dedicated `maintenance-worker` and a separate

@@ -330,9 +330,15 @@ Accepted procedure:
 11. удалить temporary restore environment только после сохранения evidence;
 12. записать acceptance в `docs/HISTORY.md`.
 
-Эта процедура реально выполнена для Stage15B. Повторная final production
-reconciliation и остальные Stage15C checks остаются обязательными перед снятием
-production-data gate.
+Эта процедура реально выполнена для Stage15B и является historical evidence
+первого real isolated restore acceptance.
+
+После появления production inventory каждый последующий restore rehearsal
+проверяет выбранный artifact по его manifest: Alembic head, critical row
+counts/invariants, application compatibility и canonical zero-drift
+reconciliation.
+
+Restore rehearsal сам не открывает regular mutation gate.
 
 ## Failure boundaries
 
@@ -364,13 +370,17 @@ Data-integrity blocker. Inventory mutations останавливаются.
 
 ## GitHub hardening
 
-После merge/deploy/smoke:
+После accepted merge/deploy/smoke:
 
 1. main branch protection/rules;
 2. required CI;
 3. запрет непроверенного direct push;
 4. clean/current `main`;
-5. repository visibility — отдельное explicit решение перед снятием real-inventory gate и перед любой операцией с реальными данными.
+5. merged topic branches удаляются после acceptance; целевое состояние между
+   change sets — только `main`;
+6. public visibility допустима только при
+   `REPOSITORY_DATA_POLICY=NO_REAL_INVENTORY_DATA_IN_GIT`; изменение visibility
+   является отдельным explicit security/operational решением.
 
 ## Initial production inventory bootstrap — accepted
 

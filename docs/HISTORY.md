@@ -599,14 +599,21 @@
 
 ## 2026-09-08 — Warehouse V2 production rollout and initial inventory acceptance
 
-- Warehouse Domain V2 schema/domain accepted and deployed.
-- Production schema advanced through Warehouse V2 and leaf-description
-  migrations to `c5d6e7f8a9b0`.
-- Warehouse responsive UI, header/fullscreen/Escape remediation and desktop form
-  consistency accepted through subsequent PR/CI/deploy cycles.
-- PR #45 added guarded one-shot production inventory bootstrap.
-- PR #45 merge commit:
+Accepted release lineage:
+
+- PR #41 `Warehouse Domain V2` merged as
+  `42aaf6ad646237bfcecdd246e6817c693047d718`;
+- PR #42 responsive Warehouse V2 UI refinement merged as
+  `0d4dada26959a8a336a936417ca43e8bd9d82529`;
+- PR #43 header/fullscreen/Escape and leaf-description remediation merged as
+  `1b2ee7cca063d7b4979ed21bce99ceac59a6dd15`;
+- PR #44 desktop form consistency and smart suggestions merged as
+  `7871f6140e8e2c22d994438a7b371c186de16225`;
+- PR #45 guarded production inventory bootstrap merged as
   `a7ee822cfbb9fd2b25b73e676c026a9e849f1839`.
+
+Production schema advanced through Warehouse V2 and leaf-description migrations
+to `c5d6e7f8a9b0`.
 - Required `main` CI run #104 completed successfully:
   backend, frontend, runtime and telegram-gateway all PASS.
 - Production backend, telegram-worker and maintenance-worker were rebuilt from

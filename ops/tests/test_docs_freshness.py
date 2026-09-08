@@ -111,11 +111,6 @@ require(
 )
 
 require(
-    "docs/ROADMAP.md",
-    "Initial bootstrap уже выполнен и повторно не запускается.",
-)
-
-require(
     "docs/OPERATIONS.md",
     "INITIAL_PRODUCTION_BOOTSTRAP=PASS",
 )
@@ -263,6 +258,23 @@ require(
     "docs/OPERATIONS.md",
     "desktop-capable runtime автоматически запрашивает fullscreen",
 )
+require(
+    "docs/OPERATIONS.md",
+    "merged topic branches удаляются после acceptance",
+)
+require(
+    "docs/DEPLOYMENT.md",
+    "host-side `ops/`",
+)
+
+for stale_value in (
+    "остаются обязательными перед снятием",
+    "repository visibility — отдельное explicit решение перед снятием",
+):
+    forbid(
+        "docs/OPERATIONS.md",
+        stale_value,
+    )
 
 require(
     "docs/ROADMAP.md",

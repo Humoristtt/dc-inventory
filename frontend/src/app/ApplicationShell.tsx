@@ -2,6 +2,7 @@ import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { useTelegramNavigation } from "../features/navigation/useTelegramNavigation";
 import "./styles/app-shell.css";
+import { RouteContent } from "./RouteContent";
 
 const navigationItems = [
   { to: "/catalog", label: "Каталог", icon: "▦" },
@@ -23,7 +24,7 @@ export function ApplicationShell() {
   return (
     <div className="app-shell">
       <div className="app-shell__content">
-        <Outlet />
+        <RouteContent key={location.pathname}><Outlet /></RouteContent>
       </div>
       <nav aria-label="Основная навигация" className="bottom-nav">
         <div className="bottom-nav__inner">

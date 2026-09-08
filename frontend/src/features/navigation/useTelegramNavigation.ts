@@ -6,6 +6,8 @@ import {
 
 import { bindTelegramBackButton } from "../../shared/telegram/webApp";
 
+import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
+
 export function useInternalBackNavigation(): () => void {
   const location = useLocation();
   const navigate = useNavigate();
@@ -24,12 +26,13 @@ export function useTelegramNavigation(): {
   navigateBack: () => void;
 } {
   const location = useLocation();
+  const webApp = useTelegramWebApp();
   const showBack = location.pathname !== "/catalog";
   const navigateBack = useInternalBackNavigation();
 
   useEffect(
     () => bindTelegramBackButton(showBack, navigateBack),
-    [navigateBack, showBack],
+    [navigateBack, showBack, webApp],
   );
 
   return { showBack, navigateBack };

@@ -200,3 +200,7 @@
   font-size: 12px;
   line-height: 1.45;
 }
+
+.route-status {
+  padding: 2rem;
+}

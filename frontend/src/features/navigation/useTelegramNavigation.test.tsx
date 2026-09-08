@@ -80,3 +80,17 @@ it("показывает BackButton внутри приложения и очи�
   result.unmount();
   expect(backButton.offClick).toHaveBeenCalledTimes(1);
 });
+
+it("binds BackButton when the SDK arrives after navigation has mounted", async () => {
+  const { loadTelegramWebAppSdk, TELEGRAM_WEB_APP_SDK_PATH } = await import("../../shared/telegram/webApp");
+  render(<MemoryRouter initialEntries={["/movements"]}><NavigationHarness /></MemoryRouter>);
+  const loading = loadTelegramWebAppSdk();
+  const { backButton } = telegramBackButton();
+  await act(async () => {
+    document.querySelector(`script[src="${TELEGRAM_WEB_APP_SDK_PATH}"]`)?.dispatchEvent(new Event("load"));
+    await loading;
+  });
+  expect(backButton.show).toHaveBeenCalledTimes(1);
+  expect(backButton.onClick).toHaveBeenCalledTimes(1);
+  document.querySelector(`script[src="${TELEGRAM_WEB_APP_SDK_PATH}"]`)?.remove();
+});

@@ -1,3 +1,5 @@
+import { lazy } from "react";
+
 import {
   BrowserRouter,
   Navigate,
@@ -5,13 +7,15 @@ import {
   Routes,
 } from "react-router-dom";
 
-import { CategoryPage } from "../pages/catalog/CategoryPage";
-import { CatalogLandingPage } from "../pages/catalog/CatalogLandingPage";
-import { ItemDetailPage } from "../pages/catalog/ItemDetailPage";
-import { ItemFormPage } from "../pages/catalog/ItemFormPage";
-import { MovementsPage } from "../pages/inventory/MovementsPage";
-import { LocationsPage } from "../pages/inventory/LocationsPage";
 import { ApplicationShell } from "./ApplicationShell";
+
+const CategoryPage = lazy(() => import("../pages/catalog/CategoryPage").then((module) => ({ default: module.CategoryPage })));
+const CatalogLandingPage = lazy(() => import("../pages/catalog/CatalogLandingPage").then((module) => ({ default: module.CatalogLandingPage })));
+const ItemDetailPage = lazy(() => import("../pages/catalog/ItemDetailPage").then((module) => ({ default: module.ItemDetailPage })));
+const ItemFormPage = lazy(() => import("../pages/catalog/ItemFormPage").then((module) => ({ default: module.ItemFormPage })));
+const MovementsPage = lazy(() => import("../pages/inventory/MovementsPage").then((module) => ({ default: module.MovementsPage })));
+const LocationsPage = lazy(() => import("../pages/inventory/LocationsPage").then((module) => ({ default: module.LocationsPage })));
+
 
 export function ApplicationRoutes() {
   return (

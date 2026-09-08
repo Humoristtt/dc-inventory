@@ -8,7 +8,6 @@ import { AppProviders } from "./app/providers/AppProviders";
 import "./app/styles/tokens.css";
 import "./app/styles/global.css";
 import { TelegramAccessGate } from "./features/auth/TelegramAccessGate";
-import { loadTelegramWebAppSdk } from "./shared/telegram/webApp";
 
 const root = document.getElementById("root");
 
@@ -30,4 +29,4 @@ function renderApplication() {
   );
 }
 
-void loadTelegramWebAppSdk().finally(renderApplication);
+renderApplication();

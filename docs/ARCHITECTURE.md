@@ -31,6 +31,16 @@ Preparation reads category metadata once; facets reuse it without global caching
 Availability filters/facets use indexed stock existence checks (nonnegative
 quantities), while item list quantities retain the stock aggregate.
 
+## Frontend startup
+
+React renders the access shell immediately. SDK loading runs independently of
+cookie-session lookup; Telegram authentication waits for SDK completion after
+an unauthenticated response. The auth exchange stays shared across StrictMode
+remounts. BackButton/fullscreen controls subscribe to delayed SDK availability.
+Pages load through route-level lazy imports with an accessible loading/error
+boundary that preserves navigation and does not remount on query-string changes.
+The production build checks the complete initial JS import graph and lazy routes.
+
 ## Warehouse
 
 Источник истины — immutable movement journal.

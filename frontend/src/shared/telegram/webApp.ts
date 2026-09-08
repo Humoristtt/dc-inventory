@@ -54,6 +54,17 @@ export type TelegramWebAppSdkLoadStatus =
 
 let sdkLoadPromise: Promise<void> | null = null;
 let sdkLoadStatus: TelegramWebAppSdkLoadStatus = "idle";
+const sdkListeners = new Set<() => void>();
+
+export function subscribeTelegramSdk(listener: () => void): () => void {
+  sdkListeners.add(listener);
+  return () => { sdkListeners.delete(listener); };
+}
+
+function setSdkLoadStatus(status: TelegramWebAppSdkLoadStatus): void {
+  sdkLoadStatus = status;
+  sdkListeners.forEach((listener) => listener());
+}
 
 export function getTelegramWebApp(): TelegramWebApp | null {
   return window.Telegram?.WebApp ?? null;
@@ -69,7 +80,7 @@ export function getTelegramWebAppSdkLoadStatus():
 
 export function loadTelegramWebAppSdk(): Promise<void> {
   if (getTelegramWebApp() !== null) {
-    sdkLoadStatus = "ready";
+    setSdkLoadStatus("ready");
     return Promise.resolve();
   }
 
@@ -77,7 +88,7 @@ export function loadTelegramWebAppSdk(): Promise<void> {
     return sdkLoadPromise;
   }
 
-  sdkLoadStatus = "loading";
+  setSdkLoadStatus("loading");
 
   sdkLoadPromise = new Promise((resolve) => {
     const existing =
@@ -99,7 +110,8 @@ export function loadTelegramWebAppSdk(): Promise<void> {
       }
 
       settled = true;
-      sdkLoadStatus = status;
+      sdkLoadPromise = null;
+      setSdkLoadStatus(status);
 
       if (timeoutId !== null) {
         window.clearTimeout(timeoutId);

@@ -214,6 +214,23 @@ async def _create_movement(
     destination = (
         locations.get(payload.destination_location_id) if payload.destination_location_id else None
     )
+    # The request is bounded to 500 items and two locations. Item locks above
+    # serialize missing-row creation as well as existing-row updates. Lock all
+    # balances in one deterministic statement before applying any deltas.
+    balances = {
+        (balance.item_id, balance.location_id): balance
+        for balance in (
+            await db.scalars(
+                select(StockBalance)
+                .where(
+                    StockBalance.item_id.in_(item_ids),
+                    StockBalance.location_id.in_(location_ids),
+                )
+                .order_by(StockBalance.item_id, StockBalance.location_id)
+                .with_for_update()
+            )
+        ).all()
+    }
     movement = Movement(
         id=uuid.uuid4(),
         movement_type=payload.movement_type,
@@ -245,13 +262,7 @@ async def _create_movement(
         ):
             if location_id is None:
                 continue
-            balance = await db.scalar(
-                select(StockBalance)
-                .where(
-                    StockBalance.item_id == line.item_id, StockBalance.location_id == location_id
-                )
-                .with_for_update()
-            )
+            balance = balances.get((line.item_id, location_id))
             quantity = (balance.quantity if balance else 0) + delta
             if quantity < 0:
                 raise InventoryConflictError("insufficient stock", code="insufficient_stock")

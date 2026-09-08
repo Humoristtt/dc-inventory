@@ -63,7 +63,7 @@ MovementLine хранит Item snapshot и positive quantity.
 4. lock original movement при необходимости;
 5. lock locations;
 6. lock Items;
-7. lock/update StockBalance;
+7. batch-lock StockBalance ordered by (item_id, location_id), then apply deltas;
 8. insert immutable Movement/MovementLine;
 9. enqueue transactional outbox effects;
 10. commit.

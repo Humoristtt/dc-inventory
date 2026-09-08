@@ -37,8 +37,8 @@ from app.modules.catalog.service import (
     CatalogSchemaError,
     CatalogValidationError,
     ItemRecord,
+    _get_category,
     _load_attributes_for_items,
-    get_category_record,
     normalize_comparison,
     prepare_attribute_filter_value,
 )
@@ -67,6 +67,7 @@ class CatalogQuerySpec:
     tokens: tuple[str, ...]
     category_id: uuid.UUID | None
     category_ids: tuple[uuid.UUID, ...]
+    definitions: tuple[CategoryAttribute, ...]
     long_range: bool
     category_key: str | None
     status: ItemStatus
@@ -160,10 +161,10 @@ async def build_catalog_query_spec(
 ) -> CatalogQuerySpec:
     category: Category | None = None
     definitions: list[CategoryAttribute] = []
+    category_ids: tuple[uuid.UUID, ...] = ()
     if category_key is not None:
-        category_record = await get_category_record(db, category_key)
-        category = category_record.category
-        category_ids = await scope_category_ids(db, category_key)
+        category = await _get_category(db, category_key)
+        category_ids = await scope_category_ids(db, category)
         definitions = list(
             (
                 await db.scalars(
@@ -268,7 +269,8 @@ async def build_catalog_query_spec(
 
     return CatalogQuerySpec(
         tokens=_normalize_query_tokens(q),
-        category_ids=await scope_category_ids(db, category_key),
+        category_ids=category_ids,
+        definitions=tuple(definitions),
         long_range=long_range,
         category_id=category.id if category is not None else None,
         category_key=category.key if category is not None else None,
@@ -282,10 +284,7 @@ async def build_catalog_query_spec(
     )
 
 
-async def scope_category_ids(db: AsyncSession, key: str | None) -> tuple[uuid.UUID, ...]:
-    if key is None:
-        return ()
-    category = (await get_category_record(db, key)).category
+async def scope_category_ids(db: AsyncSession, category: Category) -> tuple[uuid.UUID, ...]:
     if category.parent_id is not None:
         return (category.id,)
     return tuple(
@@ -309,7 +308,7 @@ def long_range_predicate() -> ColumnElement[bool]:
 async def equipment_scope(
     db: AsyncSession, key: str | None, long_range: bool
 ) -> list[ColumnElement[bool]]:
-    ids = await scope_category_ids(db, key)
+    ids = await scope_category_ids(db, await _get_category(db, key)) if key is not None else ()
     predicates: list[ColumnElement[bool]] = [Item.category_id.in_(ids)] if key else []
     if long_range:
         predicates.append(long_range_predicate())
@@ -467,9 +466,15 @@ def _attribute_filter_predicate(
     )
 
 
+def _in_stock() -> ColumnElement[bool]:
+    # Quantities are nonnegative in PostgreSQL; existence avoids a full stock SUM.
+    return exists(
+        select(literal(1)).where(StockBalance.item_id == Item.id, StockBalance.quantity > 0)
+    ).correlate(Item)
+
+
 def _item_predicates(
     spec: CatalogQuerySpec,
-    inventory: Subquery,
     *,
     exclude: frozenset[str] = frozenset(),
 ) -> list[ColumnElement[bool]]:
@@ -482,9 +487,9 @@ def _item_predicates(
         predicates.append(Item.manufacturer_id.in_(spec.manufacturer_ids))
     if spec.availability != Availability.ANY and "availability" not in exclude:
         if spec.availability == Availability.IN_STOCK:
-            predicates.append(_available(inventory) > 0)
+            predicates.append(_in_stock())
         else:
-            predicates.append(_available(inventory) == 0)
+            predicates.append(~_in_stock())
     if spec.location_ids and "location" not in exclude:
         predicates.append(
             exists(
@@ -505,14 +510,12 @@ def _item_predicates(
 
 def _matching_items(
     spec: CatalogQuerySpec,
-    inventory: Subquery,
     *,
     exclude: frozenset[str] = frozenset(),
 ) -> Subquery:
     return (
         select(Item.id.label("item_id"))
-        .outerjoin(inventory, inventory.c.item_id == Item.id)
-        .where(*_item_predicates(spec, inventory, exclude=exclude))
+        .where(*_item_predicates(spec, exclude=exclude))
         .subquery("matching_items")
     )
 
@@ -559,13 +562,8 @@ async def query_catalog_items(
     offset: int,
 ) -> CatalogItemPage:
     inventory = _inventory_aggregate()
-    predicates = _item_predicates(spec, inventory)
-    total = await db.scalar(
-        select(func.count())
-        .select_from(Item)
-        .outerjoin(inventory, inventory.c.item_id == Item.id)
-        .where(*predicates)
-    )
+    predicates = _item_predicates(spec)
+    total = await db.scalar(select(func.count()).select_from(Item).where(*predicates))
     statement = (
         select(
             Item,
@@ -603,12 +601,11 @@ async def query_catalog_items(
 async def _category_facet(
     db: AsyncSession,
     spec: CatalogQuerySpec,
-    inventory: Subquery,
     *,
     value_limit: int,
     value_offset: int,
 ) -> FacetRecord:
-    matching = _matching_items(spec, inventory, exclude=frozenset({"category"}))
+    matching = _matching_items(spec, exclude=frozenset({"category"}))
     rows = (
         (
             await db.execute(
@@ -653,12 +650,11 @@ async def _category_facet(
 async def _manufacturer_facet(
     db: AsyncSession,
     spec: CatalogQuerySpec,
-    inventory: Subquery,
     *,
     value_limit: int,
     value_offset: int,
 ) -> FacetRecord:
-    matching = _matching_items(spec, inventory, exclude=frozenset({"manufacturer"}))
+    matching = _matching_items(spec, exclude=frozenset({"manufacturer"}))
     rows = (
         (
             await db.execute(
@@ -699,16 +695,14 @@ async def _manufacturer_facet(
     )
 
 
-async def _availability_facet(
-    db: AsyncSession, spec: CatalogQuerySpec, inventory: Subquery
-) -> FacetRecord:
-    matching = _matching_items(spec, inventory, exclude=frozenset({"availability"}))
-    in_stock = _available(inventory) > 0
+async def _availability_facet(db: AsyncSession, spec: CatalogQuerySpec) -> FacetRecord:
+    matching = _matching_items(spec, exclude=frozenset({"availability"}))
+    in_stock = _in_stock()
     rows = (
         await db.execute(
             select(in_stock.label("in_stock"), func.count())
-            .select_from(matching)
-            .outerjoin(inventory, inventory.c.item_id == matching.c.item_id)
+            .select_from(Item)
+            .join(matching, matching.c.item_id == Item.id)
             .group_by(in_stock)
         )
     ).tuples()
@@ -738,12 +732,11 @@ def _location_item_pairs() -> Subquery:
 async def _location_facet(
     db: AsyncSession,
     spec: CatalogQuerySpec,
-    inventory: Subquery,
     *,
     value_limit: int,
     value_offset: int,
 ) -> FacetRecord:
-    matching = _matching_items(spec, inventory, exclude=frozenset({"location"}))
+    matching = _matching_items(spec, exclude=frozenset({"location"}))
     pairs = _location_item_pairs()
     rows = (
         (
@@ -796,7 +789,6 @@ async def _location_facet(
 async def _exact_attribute_facet(
     db: AsyncSession,
     spec: CatalogQuerySpec,
-    inventory: Subquery,
     attribute: CategoryAttribute,
     *,
     value_limit: int,
@@ -804,7 +796,6 @@ async def _exact_attribute_facet(
 ) -> FacetRecord:
     matching = _matching_items(
         spec,
-        inventory,
         exclude=frozenset({f"attribute:{attribute.key}"}),
     )
     column = _attribute_value_column(attribute.data_type)
@@ -924,12 +915,10 @@ async def _exact_attribute_facet(
 async def _range_attribute_facet(
     db: AsyncSession,
     spec: CatalogQuerySpec,
-    inventory: Subquery,
     attribute: CategoryAttribute,
 ) -> FacetRecord:
     matching = _matching_items(
         spec,
-        inventory,
         exclude=frozenset({f"attribute:{attribute.key}"}),
     )
     column = _attribute_value_column(attribute.data_type)
@@ -981,7 +970,6 @@ async def query_catalog_facets(
             "facet key is required for a non-zero facet offset",
         )
 
-    inventory = _inventory_aggregate()
     facets: list[FacetRecord] = []
 
     def wanted(key: str) -> bool:
@@ -992,7 +980,6 @@ async def query_catalog_facets(
             await _category_facet(
                 db,
                 spec,
-                inventory,
                 value_limit=value_limit,
                 value_offset=value_offset,
             )
@@ -1003,40 +990,29 @@ async def query_catalog_facets(
             await _manufacturer_facet(
                 db,
                 spec,
-                inventory,
                 value_limit=value_limit,
                 value_offset=value_offset,
             )
         )
 
     if wanted("availability"):
-        facets.append(await _availability_facet(db, spec, inventory))
+        facets.append(await _availability_facet(db, spec))
 
     if wanted("location"):
         facets.append(
             await _location_facet(
                 db,
                 spec,
-                inventory,
                 value_limit=value_limit,
                 value_offset=value_offset,
             )
         )
 
     if spec.category_id is not None:
-        definitions = (
-            await db.scalars(
-                select(CategoryAttribute)
-                .where(
-                    CategoryAttribute.category_id.in_(spec.category_ids),
-                    CategoryAttribute.filterable.is_(True),
-                )
-                .order_by(
-                    CategoryAttribute.sort_order,
-                    CategoryAttribute.key,
-                )
-            )
-        ).all()
+        definitions = sorted(
+            (attribute for attribute in spec.definitions if attribute.filterable),
+            key=lambda attribute: (attribute.sort_order, attribute.key),
+        )
 
         seen: set[str] = set()
         for attribute in definitions:
@@ -1051,7 +1027,6 @@ async def query_catalog_facets(
                     await _range_attribute_facet(
                         db,
                         spec,
-                        inventory,
                         attribute,
                     )
                 )
@@ -1060,7 +1035,6 @@ async def query_catalog_facets(
                     await _exact_attribute_facet(
                         db,
                         spec,
-                        inventory,
                         attribute,
                         value_limit=value_limit,
                         value_offset=value_offset,

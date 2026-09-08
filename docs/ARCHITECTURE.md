@@ -26,6 +26,11 @@ Item является номенклатурной позицией.
 Технические поля зависят от leaf category.
 Search/facets выполняются backend и scoped текущим universe.
 
+CatalogQuerySpec carries request-scoped category IDs and attribute definitions.
+Preparation reads category metadata once; facets reuse it without global caching.
+Availability filters/facets use indexed stock existence checks (nonnegative
+quantities), while item list quantities retain the stock aggregate.
+
 ## Warehouse
 
 Источник истины — immutable movement journal.

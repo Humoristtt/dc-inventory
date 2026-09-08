@@ -135,17 +135,6 @@
   margin-top: 5px;
 }
 
-.warehouse-form__hint {
-  margin-top: -0.1rem;
-  color: var(--color-muted);
-  font-size: 0.78rem;
-  line-height: 1.4;
-}
-
-.warehouse-form input::placeholder {
-  color: rgb(21 32 43 / 42%);
-}
-
 @media (min-width: 1100px) {
   .warehouse-actions {
     gap: 0.8rem;
@@ -153,8 +142,20 @@
   }
 
   .warehouse-form {
-    max-width: 980px;
-    margin-top: 1.5rem;
+    width: min(100%, 1180px);
+    max-width: none;
+    margin: 1.5rem auto 0;
+  }
+
+  .warehouse-form fieldset {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0 1.5rem;
+  }
+
+  .warehouse-form fieldset > label:last-of-type,
+  .warehouse-form .warehouse-actions {
+    grid-column: 1 / -1;
   }
 
   .warehouse-form label,

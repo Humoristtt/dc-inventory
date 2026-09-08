@@ -675,11 +675,12 @@
 .sort-option--active i { color: var(--color-orange); }
 
 .detail-header {
+  position: relative;
   display: grid;
   min-height: calc(var(--safe-area-top) + 66px);
-  grid-template-columns: 42px minmax(0, 1fr) auto;
-  align-items: end;
-  gap: 11px;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0;
   padding: calc(var(--safe-area-top) + 12px) max(var(--page-inline), var(--safe-area-right)) 12px max(var(--page-inline), var(--safe-area-left));
   background: var(--color-ink);
   color: #fff;

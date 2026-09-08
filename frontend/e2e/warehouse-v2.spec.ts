@@ -129,7 +129,34 @@ async function installApiMock(page:Page, role:"USER"|"ADMIN", failures=0) {
     }
     if(path.startsWith("/api/catalog/categories/")) return json(route,path.endsWith(family.key) ? {...family,attributes:[]} : categoryDetail);
     if(path === "/api/catalog/manufacturers") return json(route,{items:makers,total:makers.length,limit:100,offset:0});
-    if(path === "/api/catalog/items/facets") return json(route,{facets:[{key:"availability",label:"Наличие",data_type:"ENUM",unit:null,filter_type:"EXACT",values:[{value:"IN_STOCK",label:"В наличии",count:1},{value:"OUT_OF_STOCK",label:"Нет в наличии",count:1}],min:null,max:null}]});
+    if(path === "/api/catalog/items/facets") {
+      const facet = url.searchParams.get("facet");
+
+      if (facet !== null && facet in attributes) {
+        const value =
+          attributes[facet as keyof typeof attributes];
+
+        return json(route,{
+          facets:[{
+            key:facet,
+            label:labels[facet],
+            data_type:"TEXT",
+            unit:null,
+            filter_type:"EXACT",
+            values:[{
+              value,
+              label:value,
+              count:1,
+            }],
+            values_has_more:false,
+            min:null,
+            max:null,
+          }],
+        });
+      }
+
+      return json(route,{facets:[{key:"availability",label:"Наличие",data_type:"ENUM",unit:null,filter_type:"EXACT",values:[{value:"IN_STOCK",label:"В наличии",count:1},{value:"OUT_OF_STOCK",label:"Нет в наличии",count:1}],min:null,max:null}]});
+    }
     if(path === "/api/catalog/items") return json(route,{items:[{...item,inventory:{available_count:quantity,total_count:quantity}}],total:1,limit:20,offset:0});
     if(path.startsWith("/api/catalog/items/")) return json(route,item);
     if(path === `/api/inventory/items/${item.id}/summary`) return json(route,{total_count:quantity,locations:[{id:"balance",item_id:item.id,item_name:item.name,quantity,location:{location_id:location.id,code:location.code,name:location.name},updated_at:now}]});
@@ -213,9 +240,11 @@ test("ADMIN creates metadata-driven equipment, edits and archives",async({page})
   await page.getByRole("combobox",{name:"Раздел"}).selectOption("family");
   await page.getByRole("combobox",{name:"Категория"}).selectOption("transceiver_ethernet");
   await page.getByLabel("Название оборудования",{exact:true}).fill("Synthetic new item");
-  const manufacturerSelect = page.getByRole("combobox",{name:"Производитель"});
-  await expect(manufacturerSelect.locator('option[value="maker"]')).toHaveCount(1);
-  await manufacturerSelect.selectOption("maker");
+  const manufacturerInput = page.getByRole("combobox",{name:"Производитель"});
+  await manufacturerInput.fill("Syn");
+  await expect(page.getByRole("option",{name:"Synthetic"})).toBeVisible();
+  await page.getByRole("option",{name:"Synthetic"}).click();
+  await expect(manufacturerInput).toHaveValue("Synthetic");
   await page.getByLabel("Модель",{exact:true}).fill("NEW-10G");
   for(const [key,value] of Object.entries(attributes)) await page.getByLabel(new RegExp("^"+labels[key])).fill(value);
   await page.getByRole("button",{name:"Сохранить",exact:true}).click();
@@ -475,6 +504,257 @@ test(
     ).toBeVisible();
 
     await assertBottomNavigationClearance(page);
+    await assertNoHorizontalOverflow(page);
+  },
+);
+
+test(
+  "desktop forms keep centered two-column geometry",
+  async ({ page }, testInfo) => {
+    test.skip(
+      ![
+        "desktop-admin",
+        "desktop-standard",
+        "desktop-ultrawide",
+      ].includes(testInfo.project.name),
+      "desktop form acceptance",
+    );
+
+    await installTelegramMock(page, "tdesktop");
+    await installApiMock(page, "ADMIN");
+
+    await page.goto("/catalog/new");
+
+    await page
+      .getByRole("combobox", { name: "Раздел" })
+      .selectOption("family");
+
+    await page
+      .getByRole("combobox", { name: "Категория" })
+      .selectOption("transceiver_ethernet");
+
+    const speed = page.getByRole(
+      "combobox",
+      { name: "Скорость" },
+    );
+
+    await expect(speed).toBeVisible();
+
+    await speed.fill("10");
+
+    await expect(
+      page.getByRole(
+        "option",
+        { name: "10 Гбит/с" },
+      ),
+    ).toBeVisible();
+
+    await page.keyboard.press("Escape");
+
+    await expect(
+      page.getByRole(
+        "option",
+        { name: "10 Гбит/с" },
+      ),
+    ).toHaveCount(0);
+
+    await expect.poll(
+      () => page.evaluate(() => (
+        (
+          window as unknown as {
+            __stage8Telegram: {
+              fullscreenRequested: boolean;
+            };
+          }
+        ).__stage8Telegram.fullscreenRequested
+      )),
+    ).toBe(true);
+
+    await speed.fill("10 Г");
+
+    await expect(
+      page.getByRole(
+        "option",
+        { name: "10 Гбит/с" },
+      ),
+    ).toBeVisible();
+
+    await page.keyboard.press("Escape");
+
+    await expect(
+      page.getByRole(
+        "option",
+        { name: "10 Гбит/с" },
+      ),
+    ).toHaveCount(0);
+
+    const catalogGeometry = await page.evaluate(() => {
+      const body =
+        document.querySelector<HTMLElement>(
+          ".catalog-page__body",
+        );
+
+      const form =
+        document.querySelector<HTMLElement>(
+          ".catalog-form",
+        );
+
+      const panel =
+        form?.querySelector<HTMLElement>(
+          ".detail-panel",
+        );
+
+      const toolbar =
+        document.querySelector<HTMLElement>(
+          ".detail-header .page-toolbar",
+        );
+
+      const title =
+        document.querySelector<HTMLElement>(
+          ".detail-header__row--title",
+        );
+
+      if (
+        body === null
+        || form === null
+        || panel == null
+        || toolbar === null
+        || title === null
+      ) {
+        return null;
+      }
+
+      const bodyRect = body.getBoundingClientRect();
+      const formRect = form.getBoundingClientRect();
+      const toolbarRect = toolbar.getBoundingClientRect();
+      const titleRect = title.getBoundingClientRect();
+
+      return {
+        formWidth: formRect.width,
+        leftGap: formRect.left - bodyRect.left,
+        rightGap: bodyRect.right - formRect.right,
+        gridTemplateColumns:
+          getComputedStyle(panel).gridTemplateColumns,
+        toolbarBottom: toolbarRect.bottom,
+        titleTop: titleRect.top,
+      };
+    });
+
+    expect(catalogGeometry).not.toBeNull();
+
+    if (catalogGeometry === null) {
+      throw new Error(
+        "catalog form geometry unavailable",
+      );
+    }
+
+    expect(catalogGeometry.formWidth)
+      .toBeLessThanOrEqual(1181);
+
+    expect(
+      Math.abs(
+        catalogGeometry.leftGap
+        - catalogGeometry.rightGap,
+      ),
+    ).toBeLessThanOrEqual(2);
+
+    expect(
+      catalogGeometry.gridTemplateColumns,
+    ).toMatch(/^repeat\(2,/);
+
+    expect(catalogGeometry.toolbarBottom)
+      .toBeLessThanOrEqual(
+        catalogGeometry.titleTop + 0.5,
+      );
+
+    const speedHeight = await speed.evaluate(
+      (element) =>
+        element.getBoundingClientRect().height,
+    );
+
+    expect(speedHeight).toBeGreaterThanOrEqual(58);
+    expect(speedHeight).toBeLessThanOrEqual(66);
+
+    await expect(
+      page.locator(".catalog-form textarea"),
+    ).toHaveCount(0);
+
+    await assertNoHorizontalOverflow(page);
+
+    await page.goto("/more");
+
+    await page
+      .getByRole(
+        "button",
+        { name: "Добавить место хранения" },
+      )
+      .click();
+
+    await expect(
+      page.getByRole(
+        "heading",
+        { name: "Новое место хранения" },
+      ),
+    ).toBeVisible();
+
+    const locationGeometry = await page.evaluate(() => {
+      const body =
+        document.querySelector<HTMLElement>(
+          ".catalog-page__body",
+        );
+
+      const form =
+        document.querySelector<HTMLElement>(
+          ".warehouse-form",
+        );
+
+      const fieldset =
+        form?.querySelector<HTMLElement>(
+          "fieldset",
+        );
+
+      if (
+        body === null
+        || form === null
+        || fieldset == null
+      ) {
+        return null;
+      }
+
+      const bodyRect = body.getBoundingClientRect();
+      const formRect = form.getBoundingClientRect();
+
+      return {
+        formWidth: formRect.width,
+        leftGap: formRect.left - bodyRect.left,
+        rightGap: bodyRect.right - formRect.right,
+        gridTemplateColumns:
+          getComputedStyle(fieldset).gridTemplateColumns,
+      };
+    });
+
+    expect(locationGeometry).not.toBeNull();
+
+    if (locationGeometry === null) {
+      throw new Error(
+        "location form geometry unavailable",
+      );
+    }
+
+    expect(locationGeometry.formWidth)
+      .toBeLessThanOrEqual(1181);
+
+    expect(
+      Math.abs(
+        locationGeometry.leftGap
+        - locationGeometry.rightGap,
+      ),
+    ).toBeLessThanOrEqual(2);
+
+    expect(
+      locationGeometry.gridTemplateColumns,
+    ).toMatch(/^repeat\(2,/);
+
     await assertNoHorizontalOverflow(page);
   },
 );

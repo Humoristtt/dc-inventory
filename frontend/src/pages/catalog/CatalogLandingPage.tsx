@@ -21,7 +21,6 @@ import { DebouncedSearchField } from "../../features/catalog/DebouncedSearchFiel
 import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useCatalogItems } from "../../features/catalog/useCatalogItems";
 import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
-import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 import "../../features/catalog/catalog.css";
 
 export function CatalogLandingPage() {
@@ -42,7 +41,6 @@ export function CatalogLandingPage() {
       <header className="catalog-landing-header">
         <div className="page-toolbar page-toolbar--brand">
           <SpikatelBrand inverse title="Инвентаризация ЦОД" />
-          <TelegramFullscreenButton />
         </div>
         <div className="catalog-landing-header__copy">
           <span className="section-kicker">Рабочий каталог</span>
@@ -58,7 +56,13 @@ export function CatalogLandingPage() {
       </header>
 
       <div className="catalog-page__body">
-        {auth.data?.user.role === "ADMIN" ? <Link className="button button--dark" to="/catalog/new">+ Добавить оборудование</Link> : null}
+        {auth.data?.user.role === "ADMIN" ? (
+          <div className="catalog-admin-action">
+            <Link className="button button--dark" to="/catalog/new">
+              + Добавить оборудование
+            </Link>
+          </div>
+        ) : null}
         {searchActive ? (
           <section aria-labelledby="global-search-title" className="catalog-section">
             <div className="section-heading">
@@ -135,7 +139,11 @@ export function CatalogLandingPage() {
                   .sort((left, right) => left.sort_order - right.sort_order)
                   .map((category, index) => (
                     <Link
-                      className="category-tile"
+                      className={
+                        category.description
+                          ? "category-tile"
+                          : "category-tile category-tile--compact"
+                      }
                       key={category.id}
                       onClick={() => {
                         window.scrollTo({

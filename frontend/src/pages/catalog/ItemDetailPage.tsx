@@ -75,12 +75,29 @@ export function ItemDetailPage() {
   return (
     <main className="catalog-page detail-page">
       <header className="detail-header">
-        <button aria-label="Назад" className="icon-button icon-button--light" onClick={navigateBack} type="button">←</button>
+      <div className="detail-header__row">
+        <button
+          aria-label="Назад"
+          className="icon-button icon-button--light"
+          onClick={navigateBack}
+          type="button"
+        >
+          ←
+        </button>
         <span>Карточка оборудования</span>
-        <span className={item.status === "ARCHIVED" ? "status-badge status-badge--archived" : "status-badge"}>
-          {item.status === "ARCHIVED" ? "Архив" : "Активно"}
-        </span>
-      </header>
+        <div className="detail-header__actions">
+          <span
+            className={
+              item.status === "ARCHIVED"
+                ? "status-badge status-badge--archived"
+                : "status-badge"
+            }
+          >
+            {item.status === "ARCHIVED" ? "Архив" : "Активно"}
+          </span>
+        </div>
+      </div>
+    </header>
 
       <div className="detail-hero">
         <div className="detail-visual" aria-hidden="true">

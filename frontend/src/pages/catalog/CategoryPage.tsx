@@ -35,7 +35,6 @@ import { useCatalogItems } from "../../features/catalog/useCatalogItems";
 import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
 import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
-import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 import { getTelegramWebApp } from "../../shared/telegram/webApp";
 
 export function CategoryPage() {
@@ -90,7 +89,6 @@ export function CategoryPage() {
             </button>
           ) : null}
           <SpikatelBrand inverse title="Инвентаризация ЦОД" />
-          <TelegramFullscreenButton />
         </div>
         <div className="category-header__title">
           <span className="section-kicker">Категория</span>

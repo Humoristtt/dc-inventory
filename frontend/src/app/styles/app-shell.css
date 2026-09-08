@@ -200,3 +200,33 @@
   font-size: 12px;
   line-height: 1.45;
 }
+
+/* Global Telegram fullscreen control.
+   Lives in ApplicationShell so every routed page gets it. */
+.app-shell__fullscreen {
+  position: fixed;
+  z-index: 70;
+  top: 0;
+  left: 50%;
+  display: flex;
+  width: min(100%, var(--app-shell-width));
+  justify-content: flex-end;
+  padding:
+    calc(var(--safe-area-top) + 18px)
+    max(var(--safe-area-right), 18px)
+    0
+    max(var(--safe-area-left), 18px);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.app-shell__fullscreen .telegram-fullscreen-button {
+  pointer-events: auto;
+}
+
+@media (max-width: 399px) {
+  .app-shell__fullscreen {
+    padding-top: calc(var(--safe-area-top) + 10px);
+    padding-right: max(var(--safe-area-right), 10px);
+  }
+}

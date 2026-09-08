@@ -209,7 +209,7 @@ test("USER issues and returns quantities, then reads movement history",async({pa
 test("ADMIN creates metadata-driven equipment, edits and archives",async({page})=>{
   await installTelegramMock(page);const api=await installApiMock(page,"ADMIN");
   await page.goto("/catalog/new");
-  await page.getByRole("combobox",{name:"Семейство"}).selectOption("family");
+  await page.getByRole("combobox",{name:"Раздел"}).selectOption("family");
   await page.getByRole("combobox",{name:"Категория"}).selectOption("transceiver_ethernet");
   await page.getByLabel("Название оборудования",{exact:true}).fill("Synthetic new item");
   const manufacturerSelect = page.getByRole("combobox",{name:"Производитель"});

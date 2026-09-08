@@ -36,6 +36,7 @@ import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
 import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
 import { getTelegramWebApp } from "../../shared/telegram/webApp";
+import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 
 export function CategoryPage() {
   const { categoryKey = "" } = useParams();
@@ -77,7 +78,7 @@ export function CategoryPage() {
   return (
     <main className="catalog-page category-page">
       <header className="category-header">
-        <div className="page-toolbar">
+        <div className="page-toolbar page-toolbar--brand">
           {!telegramOwnsBack ? (
             <button
               aria-label="Назад в каталог"
@@ -89,6 +90,7 @@ export function CategoryPage() {
             </button>
           ) : null}
           <SpikatelBrand inverse title="Инвентаризация ЦОД" />
+        <TelegramFullscreenButton />
         </div>
         <div className="category-header__title">
           <span className="section-kicker">Категория</span>
@@ -116,7 +118,7 @@ export function CategoryPage() {
         ) : null}
 
         {family ? <div className="category-grid">
-          {children.map(child => <Link key={child.id} className="category-tile" to={`/catalog/${child.key}`}><strong>{child.display_name}</strong><i aria-hidden="true">↗</i></Link>)}
+          {children.map(child => <Link key={child.id} className="category-tile" to={`/catalog/${child.key}`}><strong>{child.display_name}</strong>{child.description ? <p>{child.description}</p> : null}<i aria-hidden="true">↗</i></Link>)}
           {categoryKey === "transceivers" ? <Link className="category-tile" to="/catalog/transceivers?long_range=true"><strong>Дальние</strong><p>Дальность от 2 км.</p><i aria-hidden="true">↗</i></Link> : null}
         </div> : null}
         {!categoryQuery.isError && !family ? (

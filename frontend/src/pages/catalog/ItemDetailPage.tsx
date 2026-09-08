@@ -1,3 +1,6 @@
+import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
+import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
+import { getTelegramWebApp } from "../../shared/telegram/webApp";
 import { useQuery } from "@tanstack/react-query";
 import {
   useParams,
@@ -22,6 +25,7 @@ import { useInternalBackNavigation } from "../../features/navigation/useTelegram
 export function ItemDetailPage() {
   const { itemId = "" } = useParams();
   const navigateBack = useInternalBackNavigation();
+  const telegramOwnsBack = getTelegramWebApp()?.BackButton !== undefined;
   const itemQuery = useQuery({
     queryKey: ["catalog", "item", itemId],
     queryFn: ({ signal }) => getCatalogItem(itemId, signal),
@@ -39,8 +43,20 @@ export function ItemDetailPage() {
     return (
       <main className="catalog-page detail-page">
         <header className="detail-header detail-header--loading">
-          <button aria-label="Назад" className="icon-button icon-button--light" onClick={navigateBack} type="button">←</button>
-          <span>Spikatel Inventory</span>
+          <div className="page-toolbar page-toolbar--brand">
+            <SpikatelBrand inverse title="Инвентаризация ЦОД" />
+            <TelegramFullscreenButton />
+          </div>
+          {!telegramOwnsBack ? (
+            <button
+              aria-label="Назад"
+              className="icon-button icon-button--light"
+              onClick={navigateBack}
+              type="button"
+            >
+              ←
+            </button>
+          ) : null}
         </header>
         <div className="catalog-page__body"><CatalogListSkeleton count={2} /></div>
       </main>
@@ -51,8 +67,23 @@ export function ItemDetailPage() {
     return (
       <main className="catalog-page detail-page">
         <header className="detail-header">
-          <button aria-label="Назад" className="icon-button icon-button--light" onClick={navigateBack} type="button">←</button>
-          <span>Карточка оборудования</span>
+          <div className="page-toolbar page-toolbar--brand">
+            <SpikatelBrand inverse title="Инвентаризация ЦОД" />
+            <TelegramFullscreenButton />
+          </div>
+          <div className="detail-header__row detail-header__row--title">
+            {!telegramOwnsBack ? (
+              <button
+                aria-label="Назад"
+                className="icon-button icon-button--light"
+                onClick={navigateBack}
+                type="button"
+              >
+                ←
+              </button>
+            ) : null}
+            <span>Карточка оборудования</span>
+          </div>
         </header>
         <div className="catalog-page__body">
           <CatalogErrorState
@@ -75,15 +106,21 @@ export function ItemDetailPage() {
   return (
     <main className="catalog-page detail-page">
       <header className="detail-header">
-      <div className="detail-header__row">
-        <button
-          aria-label="Назад"
-          className="icon-button icon-button--light"
-          onClick={navigateBack}
-          type="button"
-        >
-          ←
-        </button>
+      <div className="page-toolbar page-toolbar--brand">
+        <SpikatelBrand inverse title="Инвентаризация ЦОД" />
+        <TelegramFullscreenButton />
+      </div>
+      <div className="detail-header__row detail-header__row--title">
+        {!telegramOwnsBack ? (
+          <button
+            aria-label="Назад"
+            className="icon-button icon-button--light"
+            onClick={navigateBack}
+            type="button"
+          >
+            ←
+          </button>
+        ) : null}
         <span>Карточка оборудования</span>
         <div className="detail-header__actions">
           <span

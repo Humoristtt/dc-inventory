@@ -21,6 +21,7 @@ import { DebouncedSearchField } from "../../features/catalog/DebouncedSearchFiel
 import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useCatalogItems } from "../../features/catalog/useCatalogItems";
 import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
+import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 import "../../features/catalog/catalog.css";
 
 export function CatalogLandingPage() {
@@ -41,6 +42,7 @@ export function CatalogLandingPage() {
       <header className="catalog-landing-header">
         <div className="page-toolbar page-toolbar--brand">
           <SpikatelBrand inverse title="Инвентаризация ЦОД" />
+        <TelegramFullscreenButton />
         </div>
         <div className="catalog-landing-header__copy">
           <span className="section-kicker">Рабочий каталог</span>

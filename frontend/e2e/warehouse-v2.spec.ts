@@ -63,6 +63,7 @@ async function installTelegramMock(
             emitWebAppEvent("fullscreenChanged");
           },
           exitFullscreen: () => {
+            state.fullscreenRequested = false;
             state.fullscreen = false;
             emitWebAppEvent("fullscreenChanged");
           },
@@ -274,7 +275,45 @@ test(
     ));
 
     expect(telegramViewportState.expanded).toBe(true);
-    expect(telegramViewportState.fullscreenRequested).toBe(false);
+    expect(telegramViewportState.fullscreenRequested).toBe(true);
+
+    const exitFullscreenButton = page.getByRole(
+      "button",
+      { name: "Выйти из полного экрана" },
+    );
+
+    await expect(exitFullscreenButton).toBeVisible();
+
+    const fixedFullscreenAncestor = await exitFullscreenButton.evaluate(
+      (button) => {
+        let node: HTMLElement | null = button as HTMLElement;
+
+        while (node !== null) {
+          if (getComputedStyle(node).position === "fixed") {
+            return node.className;
+          }
+          node = node.parentElement;
+        }
+
+        return null;
+      },
+    );
+
+    expect(fixedFullscreenAncestor).toBeNull();
+
+    await exitFullscreenButton.click();
+
+    await expect.poll(
+      () => page.evaluate(() => (
+        (
+          window as unknown as {
+            __stage8Telegram: {
+              fullscreenRequested: boolean;
+            };
+          }
+        ).__stage8Telegram.fullscreenRequested
+      )),
+    ).toBe(false);
 
     const fullscreenButton = page.getByRole(
       "button",
@@ -282,6 +321,9 @@ test(
     );
 
     await expect(fullscreenButton).toBeVisible();
+
+    // Manual fullscreen control remains available after leaving
+    // the automatically requested desktop fullscreen mode.
     await fullscreenButton.click();
 
     await expect.poll(
@@ -295,11 +337,6 @@ test(
         ).__stage8Telegram.fullscreenRequested
       )),
     ).toBe(true);
-
-    const exitFullscreenButton = page.getByRole(
-      "button",
-      { name: "Выйти из полного экрана" },
-    );
 
     await expect(exitFullscreenButton).toBeVisible();
     await exitFullscreenButton.click();

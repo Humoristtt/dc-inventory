@@ -3,6 +3,8 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuthState } from "../../features/auth/useAuthState";
 import { getLocations, inventoryError, inventoryRequest, type StorageLocation } from "../../shared/api/inventory";
+import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
+import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 import "../../features/inventory/inventory.css";
 
 const blank = {code:"",name:"",location_type:"WAREHOUSE" as "WAREHOUSE" | "DATACENTER",address:""};
@@ -13,8 +15,10 @@ export function LocationsPage() {
   const mutation = useMutation({mutationFn:({id,body,action}:{id?:string;body?:unknown;action?:string}) => inventoryRequest<StorageLocation>(`/api/admin/inventory/locations${id ? `/${id}` : ""}${action ? `/${action}` : ""}`,body ?? {}, id && !action ? "PATCH" : "POST"),onSuccess:()=>{setOpen(false);void client.invalidateQueries({queryKey:["inventory"]});}});
   const admin = auth.data?.user.role === "ADMIN";
   return <main className="catalog-page"><header className="category-header warehouse-page-header">
-    <div className="warehouse-page-header__top">
-    </div>
+    <div className="page-toolbar page-toolbar--brand">
+     <SpikatelBrand inverse title="Инвентаризация ЦОД" />
+     <TelegramFullscreenButton />
+   </div>
     <div className="warehouse-page-header__title">
       <span className="section-kicker">Склад</span>
       <h1>Места хранения</h1>

@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { useAuthState } from "../auth/useAuthState";
 import { createMovement, getInventorySummary, getLocations, inventoryError, type MovementType } from "../../shared/api/inventory";
 import "./inventory.css";
+import { refreshAfterMovement } from "../../shared/api/inventoryCache";
 
 const actionNames = { ISSUE: "Взять", RETURN: "Вернуть", TRANSFER: "Переместить", RECEIPT: "Приход", WRITE_OFF: "Списать" } as const;
 type Action = keyof typeof actionNames;
@@ -31,8 +32,8 @@ export function ItemInventoryPanel({itemId, archived = false}: {itemId: string; 
   const mutation = useMutation({
     mutationFn: () => createMovement({movement_type: action as MovementType, client_request_id: requestId,
       ...(needsSource ? {source_location_id: sourceId} : {}), ...(needsDestination ? {destination_location_id: destinationId} : {}), lines: [{item_id: itemId, quantity: amount}]}),
-    onSuccess: () => { setNotice("Операция записана в журнал."); setAction(null); setRequestId(crypto.randomUUID());
-      void client.invalidateQueries({queryKey: ["inventory"]}); void client.invalidateQueries({queryKey: ["catalog"]}); },
+    onSuccess: async () => { setNotice("Операция записана в журнал."); setAction(null); setRequestId(crypto.randomUUID());
+      await refreshAfterMovement(client, itemId); },
     onError: () => { void client.invalidateQueries({queryKey: ["inventory", "summary", itemId]}); },
   });
   const changed = () => { setRequestId(crypto.randomUUID()); mutation.reset(); };

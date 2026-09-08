@@ -6,13 +6,14 @@ import { getLocations, inventoryError, inventoryRequest, type StorageLocation } 
 import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
 import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 import "../../features/inventory/inventory.css";
+import { refreshAfterLocationEdit } from "../../shared/api/inventoryCache";
 
 const blank = {code:"",name:"",location_type:"WAREHOUSE" as "WAREHOUSE" | "DATACENTER",address:""};
 export function LocationsPage() {
   const auth = useAuthState(); const client = useQueryClient();
   const locations = useQuery({queryKey:["inventory","locations"],queryFn:({signal}) => getLocations(signal)});
   const [editing,setEditing] = useState<string | null>(null); const [open,setOpen] = useState(false); const [draft,setDraft] = useState(blank);
-  const mutation = useMutation({mutationFn:({id,body,action}:{id?:string;body?:unknown;action?:string}) => inventoryRequest<StorageLocation>(`/api/admin/inventory/locations${id ? `/${id}` : ""}${action ? `/${action}` : ""}`,body ?? {}, id && !action ? "PATCH" : "POST"),onSuccess:()=>{setOpen(false);void client.invalidateQueries({queryKey:["inventory"]});}});
+  const mutation = useMutation({mutationFn:({id,body,action}:{id?:string;body?:unknown;action?:string}) => inventoryRequest<StorageLocation>(`/api/admin/inventory/locations${id ? `/${id}` : ""}${action ? `/${action}` : ""}`,body ?? {}, id && !action ? "PATCH" : "POST"),onSuccess:async()=>{setOpen(false);await refreshAfterLocationEdit(client);}});
   const admin = auth.data?.user.role === "ADMIN";
   return <main className="catalog-page"><header className="category-header warehouse-page-header">
     <div className="page-toolbar page-toolbar--brand">

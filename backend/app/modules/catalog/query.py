@@ -37,8 +37,8 @@ from app.modules.catalog.service import (
     CatalogSchemaError,
     CatalogValidationError,
     ItemRecord,
-    _get_category,
-    _load_attributes_for_items,
+    get_category_by_key,
+    load_attributes_for_items,
     normalize_comparison,
     prepare_attribute_filter_value,
 )
@@ -163,7 +163,7 @@ async def build_catalog_query_spec(
     definitions: list[CategoryAttribute] = []
     category_ids: tuple[uuid.UUID, ...] = ()
     if category_key is not None:
-        category = await _get_category(db, category_key)
+        category = await get_category_by_key(db, category_key)
         category_ids = await scope_category_ids(db, category)
         definitions = list(
             (
@@ -308,7 +308,14 @@ def long_range_predicate() -> ColumnElement[bool]:
 async def equipment_scope(
     db: AsyncSession, key: str | None, long_range: bool
 ) -> list[ColumnElement[bool]]:
-    ids = await scope_category_ids(db, await _get_category(db, key)) if key is not None else ()
+    ids = (
+        await scope_category_ids(
+            db,
+            await get_category_by_key(db, key),
+        )
+        if key is not None
+        else ()
+    )
     predicates: list[ColumnElement[bool]] = [Item.category_id.in_(ids)] if key else []
     if long_range:
         predicates.append(long_range_predicate())
@@ -577,7 +584,7 @@ async def query_catalog_items(
     statement = _ordered_statement(statement, spec, inventory).limit(limit).offset(offset)
     rows = (await db.execute(statement)).tuples().all()
     items = [row[0] for row in rows]
-    attributes = await _load_attributes_for_items(db, [item.id for item in items])
+    attributes = await load_attributes_for_items(db, [item.id for item in items])
     records: list[CatalogListRecord] = []
     for item, available_count in rows:
         available = int(available_count)

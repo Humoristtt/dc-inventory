@@ -449,7 +449,7 @@ def validate_attribute_values(
     return prepared
 
 
-async def _get_category(
+async def get_category_by_key(
     db: AsyncSession,
     category_key: str,
 ) -> Category:
@@ -547,7 +547,7 @@ async def get_category_record(
     db: AsyncSession,
     category_key: str,
 ) -> CategoryRecord:
-    category = await _get_category(db, category_key)
+    category = await get_category_by_key(db, category_key)
     attributes = await _get_category_attributes(db, category.id)
     return CategoryRecord(category=category, attributes=attributes)
 
@@ -578,7 +578,7 @@ async def _prepare_identity(
     from app.modules.catalog.configuration import LEAVES, MANUFACTURED_LEAVES
     from app.modules.catalog.normalization import item_signature, normalize_reach
 
-    category = await _get_category(db, payload.category_key)
+    category = await get_category_by_key(db, payload.category_key)
     if category.parent_id is None or category.key not in LEAVES:
         raise CatalogValidationError(
             "leaf_category_required", "items require a fixed leaf category"
@@ -716,7 +716,7 @@ def _stored_attribute_value(
     raise CatalogSchemaError("stored item attribute value does not match metadata")
 
 
-async def _load_attributes_for_items(
+async def load_attributes_for_items(
     db: AsyncSession,
     item_ids: Sequence[uuid.UUID],
 ) -> dict[uuid.UUID, dict[str, str | int | Decimal | bool]]:
@@ -782,7 +782,7 @@ async def get_item_record(
     )
     if item is None:
         raise CatalogNotFoundError("item not found")
-    attributes = await _load_attributes_for_items(db, [item.id])
+    attributes = await load_attributes_for_items(db, [item.id])
     return ItemRecord(
         item=item,
         category=item.category,
@@ -801,7 +801,7 @@ async def list_items(
 ) -> ItemPage:
     category_id: uuid.UUID | None = None
     if category_key is not None:
-        category_id = (await _get_category(db, category_key)).id
+        category_id = (await get_category_by_key(db, category_key)).id
 
     filters = [Item.status == item_status]
     if category_id is not None:
@@ -817,7 +817,7 @@ async def list_items(
         .offset(offset)
     )
     items = list(result.unique().all())
-    attributes = await _load_attributes_for_items(
+    attributes = await load_attributes_for_items(
         db,
         [item.id for item in items],
     )

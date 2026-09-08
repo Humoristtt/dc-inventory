@@ -14,7 +14,8 @@ TRIVY_ACTION = (
 
 assert CI.count(TRIVY_ACTION) == 4
 assert CI.count("version: v0.74.0") == 4
-assert CI.count("severity: CRITICAL") == 4
+assert CI.count("severity: HIGH,CRITICAL") == 1
+assert CI.count("severity: CRITICAL") == 3
 assert CI.count('exit-code: "1"') == 4
 assert CI.count("scanners: vuln") == 4
 assert CI.count('ignore-unfixed: "true"') == 3
@@ -79,5 +80,5 @@ for name, ref in action_refs:
     )
 
 print("SECURITY_SCANNER_PINNING=PASS")
-print("CRITICAL_VULNERABILITY_GATE=PASS")
+print("HIGH_CRITICAL_FILESYSTEM_GATE=PASS")
 print("AUD14_SECURITY_SCAN_CONTRACT=PASS")

@@ -322,14 +322,14 @@ jobs:
         working-directory: frontend
         run: npx playwright install --with-deps chromium
 
-      - name: Scan dependencies for critical vulnerabilities
+      - name: Scan dependencies for high and critical vulnerabilities
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           version: v0.74.0
           scan-type: fs
           scan-ref: .
           scanners: vuln
-          severity: CRITICAL
+          severity: HIGH,CRITICAL
           exit-code: "1"
           ignore-unfixed: "false"
           format: table

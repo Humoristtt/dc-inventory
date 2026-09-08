@@ -1,68 +1,809 @@
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+import {
+  Navigate,
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
+
 import { useAuthState } from "../../features/auth/useAuthState";
 import { AttributeControl } from "../../features/catalog/AttributeControl";
-import { draftAttributesFromItem, validateDraftAttributes, type AttributeDraft } from "../../features/catalog/itemForm";
+import {
+  SuggestionInput,
+  type SuggestionOption,
+} from "../../features/catalog/SuggestionInput";
+import {
+  draftAttributesFromItem,
+  validateDraftAttributes,
+  type AttributeDraft,
+} from "../../features/catalog/itemForm";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
 import { ApiRequestError } from "../../shared/api/auth";
-import { createCatalogItem, createCatalogManufacturer, getCatalogCategories, getCatalogCategory, getCatalogItem, getCatalogManufacturers, patchCatalogItem, type CatalogItem, type ItemWritePayload } from "../../shared/api/catalog";
-import { getTelegramWebApp } from "../../shared/telegram/webApp";
-import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
+import {
+  createCatalogItem,
+  createCatalogManufacturer,
+  getCatalogCategories,
+  getCatalogCategory,
+  getCatalogFacets,
+  getCatalogItem,
+  getCatalogItems,
+  getCatalogManufacturers,
+  patchCatalogItem,
+  type CatalogItem,
+  type ItemWritePayload,
+} from "../../shared/api/catalog";
 import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
+import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
+import { getTelegramWebApp } from "../../shared/telegram/webApp";
+
 import "../../features/catalog/admin-catalog.css";
 import "../../features/inventory/inventory.css";
 
-const manufactured = new Set(["transceiver_ethernet", "transceiver_fc", "network_ethernet", "network_fc", "ssd", "hdd", "ram", "pcie_adapter"]);
-type Draft = {category:string;manufacturer:string;model:string;name:string;attributes:AttributeDraft};
-const empty:Draft = {category:"",manufacturer:"",model:"",name:"",attributes:{}};
-function itemDraft(item:CatalogItem):Draft {return {category:item.category.key,manufacturer:item.manufacturer?.id ?? "",model:item.model ?? "",name:item.name,attributes:draftAttributesFromItem(item)};}
+const manufactured = new Set([
+  "transceiver_ethernet",
+  "transceiver_fc",
+  "network_ethernet",
+  "network_fc",
+  "ssd",
+  "hdd",
+  "ram",
+  "pcie_adapter",
+]);
+
+type Draft = {
+  category: string;
+  manufacturer: string;
+  model: string;
+  name: string;
+  attributes: AttributeDraft;
+};
+
+const empty: Draft = {
+  category: "",
+  manufacturer: "",
+  model: "",
+  name: "",
+  attributes: {},
+};
+
+function itemDraft(item: CatalogItem): Draft {
+  return {
+    category: item.category.key,
+    manufacturer: item.manufacturer?.id ?? "",
+    model: item.model ?? "",
+    name: item.name,
+    attributes: draftAttributesFromItem(item),
+  };
+}
+
+function useDebouncedValue(value: string, delay = 180) {
+  const [debounced, setDebounced] = useState(value);
+
+  useEffect(() => {
+    const timer = window.setTimeout(
+      () => setDebounced(value),
+      delay,
+    );
+
+    return () => window.clearTimeout(timer);
+  }, [delay, value]);
+
+  return debounced;
+}
+
+function textSuggestions(
+  values: Array<string | null>,
+  query: string,
+): SuggestionOption[] {
+  const needle = query.trim().toLocaleLowerCase("ru-RU");
+
+  if (!needle) {
+    return [];
+  }
+
+  const unique = [
+    ...new Set(
+      values.filter(
+        (value): value is string => Boolean(value?.trim()),
+      ),
+    ),
+  ];
+
+  return unique
+    .filter((value) =>
+      value.toLocaleLowerCase("ru-RU").includes(needle),
+    )
+    .sort((left, right) => {
+      const normalizedLeft = left.toLocaleLowerCase("ru-RU");
+      const normalizedRight = right.toLocaleLowerCase("ru-RU");
+
+      const leftPrefix = normalizedLeft.startsWith(needle) ? 0 : 1;
+      const rightPrefix = normalizedRight.startsWith(needle) ? 0 : 1;
+
+      if (leftPrefix !== rightPrefix) {
+        return leftPrefix - rightPrefix;
+      }
+
+      return left.localeCompare(right, "ru");
+    })
+    .slice(0, 8)
+    .map((value) => ({
+      key: value,
+      label: value,
+    }));
+}
+
 export function ItemFormPage() {
-  const {itemId} = useParams(); const [params] = useSearchParams();
-  const auth = useAuthState(); const navigate = useNavigate(); const back = useInternalBackNavigation(); const client = useQueryClient();
-  const [state,setState] = useState<Draft | null>(null); const [family,setFamily] = useState("");
-  const [errors,setErrors] = useState<Record<string,string>>({}); const [manufacturerName,setManufacturerName] = useState("");
-  const [manufacturerSearch,setManufacturerSearch] = useState("");
-  const item = useQuery({queryKey:["catalog","item",itemId],queryFn:({signal})=>getCatalogItem(itemId ?? "",signal),enabled:!!itemId});
-  const categories = useQuery({queryKey:["catalog","categories"],queryFn:({signal})=>getCatalogCategories(signal)});
-  const draft = state ?? (item.data ? itemDraft(item.data) : {...empty,category:params.get("category") ?? ""});
-  const selected = categories.data?.find(x=>x.key === draft.category);
+  const { itemId } = useParams();
+  const [params] = useSearchParams();
+  const auth = useAuthState();
+  const navigate = useNavigate();
+  const back = useInternalBackNavigation();
+  const client = useQueryClient();
+
+  const [state, setState] = useState<Draft | null>(null);
+  const [family, setFamily] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [manufacturerName, setManufacturerName] = useState("");
+  const [manufacturerInput, setManufacturerInput] = useState("");
+
+  const manufacturerInitialized = useRef(false);
+
+  const item = useQuery({
+    queryKey: ["catalog", "item", itemId],
+    queryFn: ({ signal }) => getCatalogItem(itemId ?? "", signal),
+    enabled: Boolean(itemId),
+  });
+
+  const categories = useQuery({
+    queryKey: ["catalog", "categories"],
+    queryFn: ({ signal }) => getCatalogCategories(signal),
+  });
+
+  const draft = state
+    ?? (
+      item.data
+        ? itemDraft(item.data)
+        : {
+            ...empty,
+            category: params.get("category") ?? "",
+          }
+    );
+
+  const selected = categories.data?.find(
+    (category) => category.key === draft.category,
+  );
+
   const familyId = family || selected?.parent_id || "";
-  const leaves = categories.data?.filter(x=>x.parent_id === familyId) ?? [];
-  const schema = useQuery({queryKey:["catalog","category",draft.category],queryFn:({signal})=>getCatalogCategory(draft.category,signal),enabled:!!draft.category});
-  const definitions = schema.data?.attributes.filter(x=>x.key !== "reach_m") ?? [];
-  const manufacturers = useInfiniteQuery({queryKey:["catalog","manufacturers",manufacturerSearch],queryFn:({signal,pageParam})=>getCatalogManufacturers({q:manufacturerSearch,limit:100,offset:pageParam},signal),initialPageParam:0,getNextPageParam:last=>last.offset+last.items.length < last.total ? last.offset+last.items.length : undefined});
-  const manufacturerOptions = new Map((manufacturers.data?.pages.flatMap(x=>x.items) ?? []).map(x=>[x.id,x]));
-  if(item.data?.manufacturer && !manufacturerOptions.has(item.data.manufacturer.id)) manufacturerOptions.set(item.data.manufacturer.id,{...item.data.manufacturer,created_at:"",updated_at:""});
-  const makerMutation = useMutation({mutationFn:()=>createCatalogManufacturer(manufacturerName),onSuccess:maker=>{setState({...draft,manufacturer:maker.id});setManufacturerName("");setManufacturerSearch("");void client.invalidateQueries({queryKey:["catalog","manufacturers"]});}});
-  const mutation = useMutation({mutationFn:(payload:ItemWritePayload)=>{if(itemId){const {category_key:_,...patch}=payload;return patchCatalogItem(itemId,patch);}return createCatalogItem(payload);},onSuccess:saved=>{client.setQueryData(["catalog","item",saved.id],saved);void client.invalidateQueries({queryKey:["catalog","items"]});void client.invalidateQueries({queryKey:["catalog","facets"]});navigate(`/catalog/items/${saved.id}`,{replace:true});}});
-  const update = (next:Partial<Draft>)=>{setState({...draft,...next});setErrors({});mutation.reset();};
-  if(auth.isPending || itemId && item.isPending) return <p role="status">Загрузка…</p>;
-  if(auth.data?.user.role !== "ADMIN") return <Navigate replace to="/catalog"/>;
-  if(itemId && item.isError) return <p role="alert">Не удалось загрузить оборудование. <button onClick={()=>void item.refetch()}>Повторить</button></p>;
+
+  const leaves = categories.data?.filter(
+    (category) => category.parent_id === familyId,
+  ) ?? [];
+
   const identityRequired = manufactured.has(draft.category);
-  const telegramOwnsBack = getTelegramWebApp()?.BackButton !== undefined;
-  return <main className="catalog-page"><header className="detail-header">
-    <div className="page-toolbar page-toolbar--brand">
-      <SpikatelBrand inverse title="Инвентаризация ЦОД" />
-      <TelegramFullscreenButton />
-    </div>
-    <div className="detail-header__row detail-header__row--title">
-      {!telegramOwnsBack ? <button className="icon-button icon-button--light" type="button" onClick={back} aria-label="Назад">←</button> : null}
-      <h1>{itemId ? "Редактировать оборудование" : "Добавить оборудование"}</h1>
-    </div>
-  </header><div className="catalog-page__body">
-    <form className="catalog-form" onSubmit={event=>{event.preventDefault();const validation=validateDraftAttributes(definitions,draft.attributes);const next={...validation.errors};if(!draft.category) next.category="Выберите категорию";if(!draft.name.trim()) next.name="Укажите название";if(identityRequired && (!draft.manufacturer || !draft.model.trim())) next.identity="Укажите производителя и модель";setErrors(next);if(Object.keys(next).length || !schema.isSuccess || mutation.isPending)return;mutation.mutate({category_key:draft.category,manufacturer_id:identityRequired ? draft.manufacturer || null : null,model:identityRequired ? draft.model.trim() || null : null,name:draft.name.trim(),attributes:validation.values});}}>
-      <fieldset className="detail-panel" disabled={mutation.isPending}>
-        {!itemId ? <><label className="catalog-form__field">Раздел<select required value={familyId} onChange={event=>{setFamily(event.target.value);const options=categories.data?.filter(x=>x.parent_id === event.target.value) ?? [];update({...empty,category:options.length === 1 ? options[0].key : ""});}}><option value="">Выберите раздел</option>{categories.data?.filter(x=>x.parent_id === null).map(x=><option key={x.id} value={x.id}>{x.display_name}</option>)}</select></label><label className="catalog-form__field">Категория<select required value={draft.category} onChange={event=>update({...empty,category:event.target.value})}><option value="">Выберите категорию</option>{leaves.map(x=><option key={x.id} value={x.key}>{x.display_name}</option>)}</select></label></>:<p>{selected?.display_name}</p>}
-        {categories.isError ? <p role="alert">Не удалось загрузить категории. <button type="button" onClick={()=>void categories.refetch()}>Повторить</button></p>:null}
-        {identityRequired ? <><label className="catalog-form__field">Поиск производителя<input value={manufacturerSearch} onChange={e=>setManufacturerSearch(e.target.value)}/></label><label className="catalog-form__field">Производитель<select required value={draft.manufacturer} onChange={e=>update({manufacturer:e.target.value})}><option value="">Выберите производителя</option>{[...manufacturerOptions.values()].map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>{manufacturers.hasNextPage ? <button type="button" onClick={()=>void manufacturers.fetchNextPage()}>Ещё производители</button>:null}{manufacturers.isError ? <p role="alert">Не удалось загрузить производителей. <button type="button" onClick={()=>void manufacturers.refetch()}>Повторить</button></p>:null}<details><summary>Добавить производителя</summary><label className="catalog-form__field">Название производителя<input maxLength={255} value={manufacturerName} onChange={e=>setManufacturerName(e.target.value)}/></label><button className="button" type="button" disabled={!manufacturerName.trim() || makerMutation.isPending} onClick={()=>makerMutation.mutate()}>Создать производителя</button>{makerMutation.isError ? <p role="alert">Не удалось создать производителя. Возможно, он уже существует.</p>:null}</details><label className="catalog-form__field">Модель<input required maxLength={255} value={draft.model} onChange={e=>update({model:e.target.value})}/></label></>:null}
-        <label className="catalog-form__field">Название оборудования<input required maxLength={255} value={draft.name} onChange={e=>update({name:e.target.value})}/></label>
-      </fieldset>
-      {draft.category ? <fieldset className="detail-panel" disabled={mutation.isPending}><legend>Характеристики</legend>{schema.isPending ? <p>Загружаем поля…</p>:null}{schema.isError ? <p role="alert">Не удалось загрузить поля. <button type="button" onClick={()=>void schema.refetch()}>Повторить</button></p>:null}{definitions.map(attribute=><AttributeControl key={attribute.key} attribute={attribute} value={draft.attributes[attribute.key]} error={errors[attribute.key]} onChange={value=>{const attributes={...draft.attributes};if(value === undefined) delete attributes[attribute.key];else attributes[attribute.key]=value;update({attributes});}}/>)}</fieldset>:null}
-      {Object.keys(errors).length ? <p role="alert">{Object.values(errors).join(". ")}</p>:null}
-      {mutation.isError ? <p role="alert">{mutation.error instanceof ApiRequestError && mutation.error.status === 409 ? "Такая позиция уже существует. Проверьте полную техническую идентичность." : mutation.error instanceof ApiRequestError && mutation.error.status === 423 ? "Изменения каталога пока отключены администратором." : "Не удалось сохранить. Проверьте обязательные поля и дальность."}</p>:null}
-      <button className="button button--dark" disabled={mutation.isPending || !schema.isSuccess} type="submit">{mutation.isPending ? "Сохраняем…" : "Сохранить"}</button>
-    </form>
-  </div></main>;
+
+  const schema = useQuery({
+    queryKey: ["catalog", "category", draft.category],
+    queryFn: ({ signal }) =>
+      getCatalogCategory(draft.category, signal),
+    enabled: Boolean(draft.category),
+  });
+
+  const definitions = schema.data?.attributes.filter(
+    (attribute) => attribute.key !== "reach_m",
+  ) ?? [];
+
+  useEffect(() => {
+    if (
+      manufacturerInitialized.current
+      || !item.data
+    ) {
+      return;
+    }
+
+    manufacturerInitialized.current = true;
+    setManufacturerInput(item.data.manufacturer?.name ?? "");
+  }, [item.data]);
+
+  const debouncedManufacturer = useDebouncedValue(
+    manufacturerInput.trim(),
+  );
+
+  const manufacturers = useQuery({
+    queryKey: [
+      "catalog",
+      "manufacturer-suggestions",
+      debouncedManufacturer,
+    ],
+    queryFn: ({ signal }) =>
+      getCatalogManufacturers(
+        {
+          q: debouncedManufacturer,
+          limit: 8,
+          offset: 0,
+        },
+        signal,
+      ),
+    enabled:
+      identityRequired
+      && debouncedManufacturer.length >= 1,
+  });
+
+  const debouncedModel = useDebouncedValue(draft.model.trim());
+
+  const modelMatches = useQuery({
+    queryKey: [
+      "catalog",
+      "form-model-suggestions",
+      draft.category,
+      draft.manufacturer,
+      debouncedModel,
+    ],
+    queryFn: ({ signal }) =>
+      getCatalogItems(
+        {
+          q: debouncedModel,
+          category: draft.category,
+          manufacturerIds: draft.manufacturer
+            ? [draft.manufacturer]
+            : undefined,
+          limit: 8,
+          offset: 0,
+        },
+        signal,
+      ),
+    enabled:
+      identityRequired
+      && Boolean(draft.category)
+      && debouncedModel.length >= 2,
+  });
+
+  const debouncedName = useDebouncedValue(draft.name.trim());
+
+  const nameMatches = useQuery({
+    queryKey: [
+      "catalog",
+      "form-name-suggestions",
+      draft.category,
+      draft.manufacturer,
+      debouncedName,
+    ],
+    queryFn: ({ signal }) =>
+      getCatalogItems(
+        {
+          q: debouncedName,
+          category: draft.category || undefined,
+          manufacturerIds: draft.manufacturer
+            ? [draft.manufacturer]
+            : undefined,
+          limit: 8,
+          offset: 0,
+        },
+        signal,
+      ),
+    enabled:
+      Boolean(draft.category)
+      && debouncedName.length >= 2,
+  });
+
+  const facets = useQuery({
+    queryKey: [
+      "catalog",
+      "form-attribute-suggestions",
+      draft.category,
+    ],
+    queryFn: ({ signal }) =>
+      getCatalogFacets(
+        {
+          category: draft.category,
+        },
+        signal,
+      ),
+    enabled: Boolean(draft.category),
+  });
+
+  const attributeSuggestions = new Map(
+    (facets.data?.facets ?? []).map((facet) => [
+      facet.key,
+      [
+        ...new Set(
+          facet.values.map((entry) => String(entry.value)),
+        ),
+      ],
+    ]),
+  );
+
+  const manufacturerOptions: SuggestionOption[] = (
+    manufacturers.data?.items ?? []
+  ).map((manufacturer) => ({
+    key: manufacturer.id,
+    label: manufacturer.name,
+  }));
+
+  const modelOptions = textSuggestions(
+    modelMatches.data?.items.map((entry) => entry.model) ?? [],
+    debouncedModel,
+  );
+
+  const nameOptions = textSuggestions(
+    nameMatches.data?.items.map((entry) => entry.name) ?? [],
+    debouncedName,
+  );
+
+  const makerMutation = useMutation({
+    mutationFn: () =>
+      createCatalogManufacturer(manufacturerName),
+    onSuccess: (maker) => {
+      setState({
+        ...draft,
+        manufacturer: maker.id,
+      });
+      setManufacturerInput(maker.name);
+      setManufacturerName("");
+
+      void client.invalidateQueries({
+        queryKey: ["catalog", "manufacturer-suggestions"],
+      });
+    },
+  });
+
+  const mutation = useMutation({
+    mutationFn: (payload: ItemWritePayload) => {
+      if (itemId) {
+        const {
+          category_key: _categoryKey,
+          ...patch
+        } = payload;
+
+        return patchCatalogItem(itemId, patch);
+      }
+
+      return createCatalogItem(payload);
+    },
+    onSuccess: (saved) => {
+      client.setQueryData(
+        ["catalog", "item", saved.id],
+        saved,
+      );
+
+      void client.invalidateQueries({
+        queryKey: ["catalog", "items"],
+      });
+
+      void client.invalidateQueries({
+        queryKey: ["catalog", "facets"],
+      });
+
+      void client.invalidateQueries({
+        queryKey: ["catalog", "form-model-suggestions"],
+      });
+
+      void client.invalidateQueries({
+        queryKey: ["catalog", "form-name-suggestions"],
+      });
+
+      void client.invalidateQueries({
+        queryKey: ["catalog", "form-attribute-suggestions"],
+      });
+
+      navigate(
+        `/catalog/items/${saved.id}`,
+        { replace: true },
+      );
+    },
+  });
+
+  const update = (next: Partial<Draft>) => {
+    setState({
+      ...draft,
+      ...next,
+    });
+    setErrors({});
+    mutation.reset();
+  };
+
+  if (auth.isPending || (itemId && item.isPending)) {
+    return <p role="status">Загрузка…</p>;
+  }
+
+  if (auth.data?.user.role !== "ADMIN") {
+    return <Navigate replace to="/catalog" />;
+  }
+
+  if (itemId && item.isError) {
+    return (
+      <p role="alert">
+        Не удалось загрузить оборудование.{" "}
+        <button onClick={() => void item.refetch()}>
+          Повторить
+        </button>
+      </p>
+    );
+  }
+
+  const telegramOwnsBack =
+    getTelegramWebApp()?.BackButton !== undefined;
+
+  return (
+    <main className="catalog-page">
+      <header className="detail-header">
+        <div className="page-toolbar page-toolbar--brand">
+          <SpikatelBrand
+            inverse
+            title="Инвентаризация ЦОД"
+          />
+          <TelegramFullscreenButton />
+        </div>
+
+        <div className="detail-header__row detail-header__row--title">
+          {!telegramOwnsBack ? (
+            <button
+              aria-label="Назад"
+              className="icon-button icon-button--light"
+              onClick={back}
+              type="button"
+            >
+              ←
+            </button>
+          ) : null}
+
+          <h1>
+            {itemId
+              ? "Редактировать оборудование"
+              : "Добавить оборудование"}
+          </h1>
+        </div>
+      </header>
+
+      <div className="catalog-page__body">
+        <form
+          autoComplete="off"
+          className="catalog-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+
+            const validation = validateDraftAttributes(
+              definitions,
+              draft.attributes,
+            );
+
+            const next = {
+              ...validation.errors,
+            };
+
+            if (!draft.category) {
+              next.category = "Выберите категорию";
+            }
+
+            if (!draft.name.trim()) {
+              next.name = "Укажите название";
+            }
+
+            if (
+              identityRequired
+              && (
+                !draft.manufacturer
+                || !draft.model.trim()
+              )
+            ) {
+              next.identity =
+                "Укажите производителя и модель";
+            }
+
+            setErrors(next);
+
+            if (
+              Object.keys(next).length
+              || !schema.isSuccess
+              || mutation.isPending
+            ) {
+              return;
+            }
+
+            mutation.mutate({
+              category_key: draft.category,
+              manufacturer_id: identityRequired
+                ? draft.manufacturer || null
+                : null,
+              model: identityRequired
+                ? draft.model.trim() || null
+                : null,
+              name: draft.name.trim(),
+              attributes: validation.values,
+            });
+          }}
+        >
+          <fieldset
+            className="detail-panel"
+            disabled={mutation.isPending}
+          >
+            <h2 className="catalog-form__panel-title">
+              Основное
+            </h2>
+
+            {!itemId ? (
+              <>
+                <label className="catalog-form__field">
+                  Раздел
+                  <select
+                    onChange={(event) => {
+                      setFamily(event.target.value);
+                      setManufacturerInput("");
+
+                      const options =
+                        categories.data?.filter(
+                          (category) =>
+                            category.parent_id
+                            === event.target.value,
+                        ) ?? [];
+
+                      update({
+                        ...empty,
+                        category:
+                          options.length === 1
+                            ? options[0].key
+                            : "",
+                      });
+                    }}
+                    required
+                    value={familyId}
+                  >
+                    <option value="">
+                      Выберите раздел
+                    </option>
+
+                    {categories.data
+                      ?.filter(
+                        (category) =>
+                          category.parent_id === null,
+                      )
+                      .map((category) => (
+                        <option
+                          key={category.id}
+                          value={category.id}
+                        >
+                          {category.display_name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+
+                <label className="catalog-form__field">
+                  Категория
+                  <select
+                    onChange={(event) => {
+                      setManufacturerInput("");
+                      update({
+                        ...empty,
+                        category: event.target.value,
+                      });
+                    }}
+                    required
+                    value={draft.category}
+                  >
+                    <option value="">
+                      Выберите категорию
+                    </option>
+
+                    {leaves.map((category) => (
+                      <option
+                        key={category.id}
+                        value={category.key}
+                      >
+                        {category.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </>
+            ) : (
+              <p>{selected?.display_name}</p>
+            )}
+
+            {categories.isError ? (
+              <p role="alert">
+                Не удалось загрузить категории.{" "}
+                <button
+                  onClick={() => void categories.refetch()}
+                  type="button"
+                >
+                  Повторить
+                </button>
+              </p>
+            ) : null}
+
+            {identityRequired ? (
+              <>
+                <SuggestionInput
+                  label="Производитель"
+                  loading={manufacturers.isFetching}
+                  onChange={(value) => {
+                    setManufacturerInput(value);
+
+                    if (draft.manufacturer) {
+                      update({
+                        manufacturer: "",
+                      });
+                    }
+                  }}
+                  onSelect={(option) => {
+                    setManufacturerInput(option.label);
+                    update({
+                      manufacturer: option.key,
+                    });
+                  }}
+                  options={manufacturerOptions}
+                  required
+                  value={manufacturerInput}
+                />
+
+                <SuggestionInput
+                  label="Модель"
+                  loading={modelMatches.isFetching}
+                  maxLength={255}
+                  onChange={(value) =>
+                    update({
+                      model: value,
+                    })
+                  }
+                  options={modelOptions}
+                  required
+                  value={draft.model}
+                />
+
+                <details>
+                  <summary>Добавить производителя</summary>
+
+                  <label className="catalog-form__field">
+                    Название производителя
+                    <input
+                      autoComplete="off"
+                      maxLength={255}
+                      onChange={(event) =>
+                        setManufacturerName(
+                          event.target.value,
+                        )
+                      }
+                      value={manufacturerName}
+                    />
+                  </label>
+
+                  <button
+                    className="button"
+                    disabled={
+                      !manufacturerName.trim()
+                      || makerMutation.isPending
+                    }
+                    onClick={() =>
+                      makerMutation.mutate()
+                    }
+                    type="button"
+                  >
+                    Создать производителя
+                  </button>
+
+                  {makerMutation.isError ? (
+                    <p role="alert">
+                      Не удалось создать производителя.
+                      Возможно, он уже существует.
+                    </p>
+                  ) : null}
+                </details>
+              </>
+            ) : null}
+
+            <SuggestionInput
+              className="catalog-form__field--wide"
+              label="Название оборудования"
+              loading={nameMatches.isFetching}
+              maxLength={255}
+              onChange={(value) =>
+                update({
+                  name: value,
+                })
+              }
+              options={nameOptions}
+              required
+              value={draft.name}
+            />
+          </fieldset>
+
+          {draft.category ? (
+            <fieldset
+              className="detail-panel"
+              disabled={mutation.isPending}
+            >
+              <h2 className="catalog-form__panel-title">
+                Характеристики
+              </h2>
+
+              {schema.isPending ? (
+                <p>Загружаем поля…</p>
+              ) : null}
+
+              {schema.isError ? (
+                <p role="alert">
+                  Не удалось загрузить поля.{" "}
+                  <button
+                    onClick={() => void schema.refetch()}
+                    type="button"
+                  >
+                    Повторить
+                  </button>
+                </p>
+              ) : null}
+
+              {definitions.map((attribute) => (
+                <AttributeControl
+                  attribute={attribute}
+                  error={errors[attribute.key]}
+                  key={attribute.key}
+                  onChange={(value) => {
+                    const attributes = {
+                      ...draft.attributes,
+                    };
+
+                    if (value === undefined) {
+                      delete attributes[attribute.key];
+                    } else {
+                      attributes[attribute.key] = value;
+                    }
+
+                    update({
+                      attributes,
+                    });
+                  }}
+                  suggestions={
+                    attributeSuggestions.get(attribute.key)
+                    ?? []
+                  }
+                  value={draft.attributes[attribute.key]}
+                />
+              ))}
+            </fieldset>
+          ) : null}
+
+          {Object.keys(errors).length ? (
+            <p role="alert">
+              {Object.values(errors).join(". ")}
+            </p>
+          ) : null}
+
+          {mutation.isError ? (
+            <p role="alert">
+              {mutation.error instanceof ApiRequestError
+                && mutation.error.status === 409
+                ? "Такая позиция уже существует. Проверьте полную техническую идентичность."
+                : mutation.error instanceof ApiRequestError
+                    && mutation.error.status === 423
+                  ? "Изменения каталога пока отключены администратором."
+                  : "Не удалось сохранить. Проверьте обязательные поля и дальность."}
+            </p>
+          ) : null}
+
+          <button
+            className="button button--dark catalog-form__submit"
+            disabled={
+              mutation.isPending
+              || !schema.isSuccess
+            }
+            type="submit"
+          >
+            {mutation.isPending
+              ? "Сохраняем…"
+              : "Сохранить"}
+          </button>
+        </form>
+      </div>
+    </main>
+  );
 }

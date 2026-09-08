@@ -33,20 +33,16 @@ export function LocationsPage() {
       <label htmlFor="location-code">Код</label>
       <input
         id="location-code"
-        aria-describedby="location-code-hint"
+        autoComplete="off"
         required
         maxLength={64}
-        placeholder="Например: SKLAD-01"
         value={draft.code}
         onChange={e=>setDraft({...draft,code:e.target.value})}
       />
-      <small className="warehouse-form__hint" id="location-code-hint">
-        Короткий уникальный идентификатор места. Например: SKLAD-01 или DC-MSK-RACK-12.
-      </small>
     </div>:null}
-      <label>Название<input required maxLength={255} value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})}/></label>
+      <label>Название<input autoComplete="off" required maxLength={255} value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})}/></label>
       <label>Тип<select value={draft.location_type} onChange={e=>setDraft({...draft,location_type:e.target.value as "WAREHOUSE" | "DATACENTER"})}><option value="WAREHOUSE">Склад</option><option value="DATACENTER">ЦОД</option></select></label>
-      <label>Адрес<textarea maxLength={2000} value={draft.address} onChange={e=>setDraft({...draft,address:e.target.value})}/></label>
+      <label>Адрес<textarea autoComplete="off" maxLength={2000} value={draft.address} onChange={e=>setDraft({...draft,address:e.target.value})}/></label>
       <div className="warehouse-actions"><button className="button button--dark" type="submit">Сохранить</button><button className="button" type="button" onClick={()=>setOpen(false)}>Отмена</button></div></fieldset>
     </form>:null}
   </div></main>;

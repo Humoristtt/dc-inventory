@@ -3,6 +3,7 @@ Description=Spikatel Inventory PostgreSQL backup to S3
 After=network-online.target docker.service
 Wants=network-online.target
 Requires=docker.service
+OnFailure=dc-inventory-backup-alert.service
 
 [Service]
 Type=oneshot

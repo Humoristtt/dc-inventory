@@ -81,3 +81,6 @@ print("SECURITY_SCANNER_PINNING=PASS")
 print("HIGH_CRITICAL_VULNERABILITY_GATES=PASS")
 print("HARDENED_RUNTIME_IMAGES=PASS")
 print("AUD14_SECURITY_SCAN_CONTRACT=PASS")
+
+assert 'cron: "23 4 * * 1"' in CI
+assert "  workflow_dispatch:" in CI

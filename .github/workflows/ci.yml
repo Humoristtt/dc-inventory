@@ -5,6 +5,9 @@ on:
     branches:
       - main
   pull_request:
+  schedule:
+    - cron: "23 4 * * 1"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -105,7 +108,11 @@ jobs:
           mutable_images = []
 
           for source, image in image_refs:
-              if image.startswith("dc-inventory-"):
+              if image.startswith("dc-inventory-") or image in {
+                  "${BACKEND_IMAGE:-dc-inventory-backend:local}",
+                  "${WEB_IMAGE:-dc-inventory-web:local}",
+                  "${POSTGRES_IMAGE:-dc-inventory-postgres:local}",
+              }:
                   continue
 
               if re.search(
@@ -144,6 +151,12 @@ jobs:
       - name: Stage 15 runtime provenance contract
         shell: bash
         run: python3 ops/tests/test_runtime_provenance_contract.py
+
+      - name: Backup readiness and release artifact regressions
+        run: |
+          python3 ops/tests/test_backup_status.py
+          python3 ops/tests/test_release_artifacts.py
+          python3 ops/tests/test_provenance_behavior.py
 
       - name: Stage 15 S3 lifecycle prefix contract
         shell: bash
@@ -465,10 +478,15 @@ jobs:
 
           assert len(backend_networks) == 2
           assert len(postgres_networks) == 1
-          assert len(web_networks) == 1
+          assert len(web_networks) == 2
           assert backend_networks & postgres_networks
           assert backend_networks & web_networks
           assert not (postgres_networks & web_networks)
+          networks = json.loads(subprocess.check_output(
+              ["docker", "network", "inspect", *sorted(backend_networks)], text=True
+          ))
+          assert all(network["Internal"] for network in networks)
+          assert not any(name.endswith("_egress_net") for name in backend_networks)
           PY
 
           test "$(curl --silent --output /dev/null --write-out '%{http_code}' http://127.0.0.1:8080/api/docs)" = "404"

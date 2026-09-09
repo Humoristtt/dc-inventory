@@ -1,0 +1,10 @@
+[Unit]
+Description=Local Spikatel backup failure alert (configure external monitoring separately)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/logger --priority daemon.err --tag dc-inventory-backup BACKUP_NOT_READY: inspect backup and backup-status units; do not enable inventory mutations
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true

@@ -219,3 +219,74 @@ class AccessRequest(Base):
     decided_by: Mapped[User | None] = relationship(
         foreign_keys=[decided_by_user_id],
     )
+
+
+class UserAccessEvent(Base):
+    __tablename__ = "user_access_events"
+    __table_args__ = (
+        CheckConstraint(
+            "before_access_status <> after_access_status",
+            name="user_access_event_changed",
+        ),
+        CheckConstraint(
+            "before_access_status IN "
+            "('PENDING', 'APPROVED', 'REJECTED', 'BLOCKED')",
+            name="user_access_event_before_status",
+        ),
+        CheckConstraint(
+            "after_access_status IN "
+            "('PENDING', 'APPROVED', 'REJECTED', 'BLOCKED')",
+            name="user_access_event_after_status",
+        ),
+        Index(
+            "ix_user_access_events_target_occurred",
+            "target_user_id",
+            "occurred_at",
+        ),
+        Index(
+            "ix_user_access_events_actor_occurred",
+            "actor_user_id",
+            "occurred_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    target_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    before_access_status: Mapped[UserAccessStatus] = mapped_column(
+        Enum(
+            UserAccessStatus,
+            name="user_access_status",
+            native_enum=False,
+            create_constraint=False,
+            validate_strings=True,
+        ),
+        nullable=False,
+    )
+    after_access_status: Mapped[UserAccessStatus] = mapped_column(
+        Enum(
+            UserAccessStatus,
+            name="user_access_status",
+            native_enum=False,
+            create_constraint=False,
+            validate_strings=True,
+        ),
+        nullable=False,
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )

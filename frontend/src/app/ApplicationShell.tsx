@@ -14,6 +14,11 @@ function isActive(pathname: string, target: string): boolean {
   if (target === "/catalog") {
     return pathname === "/catalog" || pathname.startsWith("/catalog/");
   }
+
+  if (target === "/more") {
+    return pathname === "/more" || pathname.startsWith("/more/");
+  }
+
   return pathname === target;
 }
 

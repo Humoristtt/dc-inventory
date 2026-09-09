@@ -174,6 +174,14 @@ SELECT format(
 \gexec
 
 
+-- Administrative user lifecycle history is append-only.
+SELECT format(
+    'GRANT SELECT, INSERT ON TABLE user_access_events TO %I',
+    :'runtime_user'
+)
+\gexec
+
+
 -- Telegram ingress and backend-created delivery work.
 SELECT format(
     'GRANT SELECT, INSERT ON TABLE telegram_updates TO %I',

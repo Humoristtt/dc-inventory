@@ -8,7 +8,12 @@ from app.modules.catalog.models import (
     ItemAttributeValue,
     Manufacturer,
 )
-from app.modules.identity.models import AccessRequest, TelegramIdentity, User
+from app.modules.identity.models import (
+    AccessRequest,
+    TelegramIdentity,
+    User,
+    UserAccessEvent,
+)
 from app.modules.inventory.models import (
     Location,
     Movement,
@@ -40,4 +45,5 @@ __all__ = [
     "TelegramIdentity",
     "TelegramUpdate",
     "User",
+    "UserAccessEvent",
 ]

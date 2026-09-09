@@ -15,6 +15,8 @@ const ItemDetailPage = lazy(() => import("../pages/catalog/ItemDetailPage").then
 const ItemFormPage = lazy(() => import("../pages/catalog/ItemFormPage").then((module) => ({ default: module.ItemFormPage })));
 const MovementsPage = lazy(() => import("../pages/inventory/MovementsPage").then((module) => ({ default: module.MovementsPage })));
 const LocationsPage = lazy(() => import("../pages/inventory/LocationsPage").then((module) => ({ default: module.LocationsPage })));
+const MorePage = lazy(() => import("../pages/more/MorePage").then((module) => ({ default: module.MorePage })));
+const AdminUsersPage = lazy(() => import("../pages/admin/AdminUsersPage").then((module) => ({ default: module.AdminUsersPage })));
 
 
 export function ApplicationRoutes() {
@@ -28,7 +30,9 @@ export function ApplicationRoutes() {
         <Route path="catalog/items/:itemId" element={<ItemDetailPage />} />
         <Route path="catalog/:categoryKey" element={<CategoryPage />} />
         <Route path="movements" element={<MovementsPage />} />
-        <Route path="more" element={<LocationsPage />} />
+        <Route path="more" element={<MorePage />} />
+        <Route path="more/locations" element={<LocationsPage />} />
+        <Route path="more/users" element={<AdminUsersPage />} />
         <Route path="*" element={<Navigate replace to="/catalog" />} />
       </Route>
     </Routes>

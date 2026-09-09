@@ -79,6 +79,12 @@ async def test_readiness_checks_schema_even_when_tables_are_empty() -> None:
     query = str(connection.execute.call_args.args[0])
     assert "WHERE false" in query
     assert "m.journal_seq" in query and "s.expires_at" in query
+    assert "public.user_access_events ua" in query
+    assert "ua.actor_user_id" in query
+    assert "ua.target_user_id" in query
+    assert "ua.before_access_status" in query
+    assert "ua.after_access_status" in query
+    assert "ua.occurred_at" in query
     connection.execute.side_effect = ProgrammingError("sql", {}, Exception("missing column"))
     with pytest.raises(DatabaseUnavailableError):
         await ensure_database_ready(engine)

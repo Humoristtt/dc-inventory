@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from tests.migration_helpers import alembic
 
-HEAD = "d6e7f8a9b0c1"
+HEAD = "e7f8a9b0c1d2"
 PREVIOUS = "a2b3c4d5e6f7"
 pytestmark = pytest.mark.asyncio
 
@@ -161,6 +161,82 @@ async def test_downgrade_refuses_populated_v2_without_losing_data(
         ]
         assert before == after
         assert await db.scalar(text("SELECT version_num FROM alembic_version")) == HEAD
+    await engine.dispose()
+
+
+async def test_access_audit_downgrade_refuses_history(
+    migration_database: str,
+) -> None:
+    url = migration_database
+    alembic(url, "upgrade", HEAD)
+
+    engine = create_async_engine(url)
+
+    async with engine.begin() as db:
+        user_id = await db.scalar(
+            text(
+                """
+                INSERT INTO users (
+                    id,
+                    role,
+                    access_status
+                )
+                VALUES (
+                    gen_random_uuid(),
+                    'ADMIN',
+                    'APPROVED'
+                )
+                RETURNING id
+                """
+            )
+        )
+        assert user_id is not None
+
+        await db.execute(
+            text(
+                """
+                INSERT INTO user_access_events (
+                    id,
+                    actor_user_id,
+                    target_user_id,
+                    before_access_status,
+                    after_access_status
+                )
+                VALUES (
+                    gen_random_uuid(),
+                    :user_id,
+                    :user_id,
+                    'APPROVED',
+                    'BLOCKED'
+                )
+                """
+            ),
+            {"user_id": user_id},
+        )
+
+    output = alembic(
+        url,
+        "downgrade",
+        "d6e7f8a9b0c1",
+        success=False,
+    )
+
+    assert "user access audit downgrade refused" in output
+
+    async with engine.connect() as db:
+        assert (
+            await db.scalar(
+                text("SELECT version_num FROM alembic_version")
+            )
+            == HEAD
+        )
+        assert (
+            await db.scalar(
+                text("SELECT count(*) FROM user_access_events")
+            )
+            == 1
+        )
+
     await engine.dispose()
 
 

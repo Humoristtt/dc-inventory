@@ -420,7 +420,7 @@ it("ADMIN управляет местами хранения без выдума
     throw new Error(`unexpected fetch ${url}`);
   }));
 
-  renderRoute("/more", "ADMIN");
+  renderRoute("/more/locations", "ADMIN");
 
   expect(
     await screen.findByRole(

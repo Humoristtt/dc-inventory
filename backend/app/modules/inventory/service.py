@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime as datetime_module
 import hashlib
 import json
 import uuid
@@ -15,7 +16,8 @@ from sqlalchemy.sql.elements import ColumnElement
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Item, Manufacturer
 from app.modules.catalog.normalization import identity_text
-from app.modules.identity.models import TelegramIdentity
+from app.modules.identity.enums import UserAccessStatus, UserRole
+from app.modules.identity.models import TelegramIdentity, User
 from app.modules.inventory.enums import LocationStatus, MovementType
 from app.modules.inventory.models import (
     Location,
@@ -124,6 +126,22 @@ async def create_movement(
     )
 
 
+async def _movement_timestamp(
+    db: AsyncSession,
+) -> datetime:
+    value = await db.scalar(
+        select(func.clock_timestamp())
+    )
+    if not isinstance(
+        value,
+        datetime_module.datetime,
+    ):
+        raise RuntimeError(
+            "database did not return a movement timestamp"
+        )
+    return value
+
+
 async def _create_movement(
     db: AsyncSession,
     payload: MovementCreate,
@@ -134,7 +152,7 @@ async def _create_movement(
 ) -> MovementResult:
     """Caller owns transaction.
 
-    Lock order: request, original, locations, items, stock, custody.
+    Lock order: request, custody user, original, locations, items, stock, custody.
 
     Locking every involved item also serializes creation of previously absent
     stock and custody rows. Both projections and the sealed movement commit or
@@ -171,6 +189,46 @@ async def _create_movement(
     )
     if existing:
         return existing
+
+    # Every transaction capable of appending to the immutable journal holds a
+    # shared barrier lock until commit/rollback. A first-page feed snapshot
+    # takes the matching exclusive lock, which drains already-running journal
+    # writers before fixing its timestamp.
+    await _lock_journal_mutation(db)
+
+    movement_occurred_at = await _movement_timestamp(db)
+
+    custody_user: User | None = None
+
+    if custody_user_id is not None:
+        # Serialize custody-changing warehouse operations with administrative
+        # APPROVED -> BLOCKED transitions. update_user_access() locks the same
+        # users row before it checks whether blocking is allowed.
+        custody_user = await db.scalar(
+            select(User)
+            .where(User.id == custody_user_id)
+            .with_for_update()
+        )
+
+        if custody_user is None:
+            raise InventoryNotFoundError(
+                "custody user not found",
+                code="custody_user_not_found",
+            )
+
+        if (
+            payload.movement_type != MovementType.REVERSAL
+            and (
+                custody_user.role != UserRole.USER
+                or custody_user.access_status
+                != UserAccessStatus.APPROVED
+            )
+        ):
+            raise InventoryConflictError(
+                "custody user is not an approved user",
+                code="custody_user_not_approved",
+            )
+
     validate_positions(payload)
     original: MovementRecord | None = None
     if payload.original_movement_id:
@@ -203,6 +261,28 @@ async def _create_movement(
             raise InventoryConflictError(
                 "movement already reversed", code="movement_already_reversed"
             )
+
+        # Reversing a RETURN recreates employee custody. It must therefore
+        # obey the same approved-user boundary as a normal ISSUE.
+        #
+        # A reversal that reduces custody is not rejected here: that remains
+        # available as an administrative repair path.
+        if (
+            payload.movement_type == MovementType.REVERSAL
+            and custody_user_id is not None
+            and _custody_delta(payload.movement_type, original) > 0
+            and (
+                custody_user is None
+                or custody_user.role != UserRole.USER
+                or custody_user.access_status
+                != UserAccessStatus.APPROVED
+            )
+        ):
+            raise InventoryConflictError(
+                "custody user is not an approved user",
+                code="custody_user_not_approved",
+            )
+
     location_ids = {x for x in (payload.source_location_id, payload.destination_location_id) if x}
     locations = {
         x.id: x
@@ -312,7 +392,7 @@ async def _create_movement(
         original_movement_id=payload.original_movement_id,
         client_request_id=request_id,
         request_fingerprint=fingerprint,
-        occurred_at=datetime.now(UTC),
+        occurred_at=movement_occurred_at,
     )
     db.add(movement)
     await db.flush()
@@ -742,6 +822,54 @@ def _advisory_lock_key(namespace: str, *parts: object) -> int:
     value = "|".join([namespace, *(str(part) for part in parts)])
     digest = hashlib.sha256(value.encode("utf-8")).digest()
     return int.from_bytes(digest[:8], byteorder="big", signed=True)
+
+
+_JOURNAL_SNAPSHOT_LOCK_KEY = _advisory_lock_key(
+    "warehouse-journal-snapshot"
+)
+
+
+async def _lock_journal_mutation(
+    db: AsyncSession,
+) -> None:
+    await db.execute(
+        select(
+            func.pg_advisory_xact_lock_shared(
+                _JOURNAL_SNAPSHOT_LOCK_KEY
+            )
+        )
+    )
+
+
+async def acquire_movement_feed_snapshot(
+    db: AsyncSession,
+) -> datetime:
+    """Create a commit-stable journal timestamp boundary.
+
+    The exclusive transaction-scoped advisory lock waits for every movement
+    transaction that already holds the shared journal lock. New journal
+    writers cannot cross the boundary until this read transaction finishes.
+    clock_timestamp() is intentional: transaction_timestamp()/now() could
+    predate the wait itself.
+    """
+    await db.execute(
+        select(
+            func.pg_advisory_xact_lock(
+                _JOURNAL_SNAPSHOT_LOCK_KEY
+            )
+        )
+    )
+
+    snapshot = await db.scalar(
+        select(func.clock_timestamp())
+    )
+
+    if not isinstance(snapshot, datetime):
+        raise RuntimeError(
+            "database did not return a movement feed snapshot timestamp"
+        )
+
+    return snapshot
 
 
 async def _lock_idempotency_key(

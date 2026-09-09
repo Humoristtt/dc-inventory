@@ -8,7 +8,7 @@
 - [~] текущая приёмка;
 - [ ] будущая работа.
 
-Последнее обновление: 2026-09-08.
+Последнее обновление: 2026-09-10.
 
 ## 1. Базовая платформа
 
@@ -181,7 +181,11 @@ feature cycle.
 - [x] Очистить Mac development environment от obsolete branches/worktrees,
       temporary archives, caches и disposable Docker resources.
 - [~] Выполнить independent full source/security/runtime/data audit на clean baseline.
-- [ ] Исправить найденные P0/P1 blockers отдельными change sets.
+- [~] Исправить findings текущего audit до технически чистого baseline.
+- [x] Синхронизировать custody/access lifecycle и запретить BLOCKED при outstanding custody.
+- [x] Сделать restore reconciliation schema-version-safe через exact backend image.
+- [x] Сделать movement feed snapshot commit-stable при concurrent journal writers.
+- [x] Добавить narrow safe HTTP mapping известных custody DB-trigger violations.
 - [ ] Зафиксировать пользовательский список minor UX corrections.
 - [ ] Выполнить minor UX remediation отдельной веткой.
 - [ ] Повторить final affected/full acceptance после UX fixes.

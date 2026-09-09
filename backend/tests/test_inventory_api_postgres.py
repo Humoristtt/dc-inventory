@@ -1,16 +1,19 @@
 import uuid
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime, timedelta, tzinfo
+from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import pytest
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.identity.enums import UserAccessStatus, UserRole
+from app.modules.inventory.api import _raise_integrity_conflict
 from tests.warehouse_helpers import actor, move, scenario
 
 pytestmark = pytest.mark.asyncio
@@ -52,6 +55,91 @@ async def api_context(
     return app, users
 
 
+@pytest.mark.parametrize(
+    ("message", "expected_code"),
+    [
+        (
+            "custody is only valid for issue, return, or reversal",
+            "custody_movement_type_invalid",
+        ),
+        (
+            "user issue/return custody must match movement actor",
+            "custody_actor_mismatch",
+        ),
+        (
+            "admin issue/return must not carry custody",
+            "custody_admin_invalid",
+        ),
+        (
+            "correction of custody movement is forbidden",
+            "custody_correction_forbidden",
+        ),
+        (
+            "reversal original movement not found",
+            "reversal_original_not_found",
+        ),
+        (
+            "reversal custody must match original movement",
+            "reversal_custody_mismatch",
+        ),
+        (
+            "custody reversal requires issue or return original",
+            "reversal_custody_original_invalid",
+        ),
+    ],
+)
+async def test_known_custody_trigger_violation_is_safe_conflict(
+    message: str,
+    expected_code: str,
+) -> None:
+    class TriggerViolation(Exception):
+        sqlstate = "23514"
+
+        def __init__(self, value: str) -> None:
+            super().__init__(value)
+            self.message = value
+
+    error = IntegrityError(
+        "INSERT INTO movements ...",
+        {},
+        TriggerViolation(message),
+    )
+
+    with pytest.raises(HTTPException) as caught:
+        _raise_integrity_conflict(error)
+
+    assert caught.value.status_code == 409
+
+    detail = cast(dict[str, str], caught.value.detail)
+
+    assert detail == {
+        "code": expected_code,
+        "message": (
+            "inventory custody constraint rejected the operation"
+        ),
+    }
+
+    # Raw PostgreSQL trigger text must not leak through the API response.
+    assert message not in str(detail)
+
+
+async def test_unknown_check_violation_is_not_masked() -> None:
+    class UnknownViolation(Exception):
+        sqlstate = "23514"
+        message = "some unrelated database check failed"
+
+    error = IntegrityError(
+        "INSERT INTO unrelated_table ...",
+        {},
+        UnknownViolation(),
+    )
+
+    with pytest.raises(IntegrityError) as caught:
+        _raise_integrity_conflict(error)
+
+    assert caught.value is error
+
+
 async def test_read_access_and_actor_scoped_journal(warehouse_db: AsyncSession) -> None:
     db = warehouse_db
     s = await scenario(db)
@@ -65,17 +153,23 @@ async def test_read_access_and_actor_scoped_journal(warehouse_db: AsyncSession) 
         source=s[2],
         custody_user_id=users["user"][0],
     )
-    # Set the time before INSERT (the journal itself cannot be edited).
+    # Inject the timestamp before INSERT; the journal itself cannot be edited.
     from unittest.mock import patch
 
     from app.modules.inventory import service
 
-    class OldClock:
-        @staticmethod
-        def now(tz: tzinfo | None) -> datetime:
-            return datetime.now(UTC) - timedelta(days=150)
+    old_timestamp = datetime.now(UTC) - timedelta(days=150)
 
-    with patch.object(service, "datetime", OldClock):
+    async def old_movement_timestamp(
+        _db: AsyncSession,
+    ) -> datetime:
+        return old_timestamp
+
+    with patch.object(
+        service,
+        "_movement_timestamp",
+        old_movement_timestamp,
+    ):
         await move(
             db,
             (users["user"][0], *s[1:]),
@@ -402,16 +496,22 @@ async def test_movement_feed_uses_stable_journal_cursor(
         assert cursor == expected[1].journal_seq
 
         page2 = await client.get(
-            "/api/inventory/movements/feed"
-            f"?period=all&limit=2"
-            f"&actor_user_id={s[0]}"
-            f"&before_journal_seq={cursor}",
+            "/api/inventory/movements/feed",
+            params={
+                "period": "all",
+                "limit": 2,
+                "actor_user_id": str(s[0]),
+                "before_journal_seq": cursor,
+                "snapshot_at": body1["snapshot_at"],
+            },
             headers=users["admin"][1],
         )
 
         assert page2.status_code == 200, page2.text
 
         body2 = page2.json()
+
+        assert body2["snapshot_at"] == body1["snapshot_at"]
 
         assert [
             row["journal_seq"]
@@ -482,12 +582,22 @@ async def test_feed_period_uses_supplied_snapshot(warehouse_db: AsyncSession) ->
     anchor = datetime(2026, 9, 9, 12, tzinfo=UTC)
     await move(db, s, "RECEIPT", 1, destination=s[2])
 
-    class Clock:
-        @staticmethod
-        def now(tz: tzinfo | None) -> datetime:
-            return anchor - timedelta(days=7) + timedelta(seconds=1)
+    supplied_timestamp = (
+        anchor
+        - timedelta(days=7)
+        + timedelta(seconds=1)
+    )
 
-    with patch.object(service, "datetime", Clock):
+    async def supplied_movement_timestamp(
+        _db: AsyncSession,
+    ) -> datetime:
+        return supplied_timestamp
+
+    with patch.object(
+        service,
+        "_movement_timestamp",
+        supplied_movement_timestamp,
+    ):
         record = await move(
             db,
             (users["user"][0], *s[1:]),

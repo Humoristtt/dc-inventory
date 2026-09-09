@@ -21,6 +21,7 @@ from app.modules.identity.admin_service import (
     AdminUserNotFoundError,
     InvalidAccessTransitionError,
     LastApprovedAdminInvariantError,
+    OutstandingCustodyInvariantError,
     RecoveryAdminInvariantError,
     get_admin_user,
     list_admin_users,
@@ -168,6 +169,7 @@ async def patch_user(
     except (
         InvalidAccessTransitionError,
         LastApprovedAdminInvariantError,
+        OutstandingCustodyInvariantError,
         RecoveryAdminInvariantError,
     ) as exc:
         await db.rollback()

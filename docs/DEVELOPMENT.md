@@ -80,9 +80,14 @@ Baseline Alembic:
 
 Текущий source migration head:
 
+    f8a9b0c1d2e3
+
+Production migration head на текущем принятом production baseline:
+
     c5d6e7f8a9b0
 
-Production migration head принят на `c5d6e7f8a9b0`.
+Source head и production head не следует смешивать: новый source migration head
+считается production state только после отдельного deploy/migration acceptance.
 
 ## Локальный backend
 
@@ -134,8 +139,10 @@ Frontend:
     npm run build
     npm run test:e2e
 
-Текущий frontend включает Warehouse Domain V2 catalog/Admin/stock/«Моё» UX
-поверх существующего Telegram/auth/access gate. Focused Vitest regressions
+Текущий frontend включает Warehouse Domain V2 catalog/Admin/stock/movement UX
+поверх существующего Telegram/auth/access gate. Отдельного active «Моё
+оборудование» UI сейчас нет; custody является backend integrity projection.
+Focused Vitest regressions
 находятся рядом с components/pages. `frontend/e2e/warehouse-v2.spec.ts`
 использует deterministic synthetic API/Telegram boundaries и запускается на
 Telegram Desktop narrow, Android-like, iPhone-like и desktop profiles. Это

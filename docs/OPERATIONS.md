@@ -117,6 +117,21 @@ Host exposure:
 - backend `8000` — не публикуется;
 - PostgreSQL `5432` — не публикуется.
 
+Host security baseline:
+
+- UFW active;
+- default incoming policy — deny;
+- default outgoing policy — allow;
+- host inbound allowlist содержит SSH `22/tcp`;
+- `PermitRootLogin no`;
+- `PasswordAuthentication no`;
+- `PubkeyAuthentication yes`;
+- `X11Forwarding no`;
+- `GatewayPorts no`;
+- `AllowTcpForwarding yes` сохраняется для административных SSH tunnels;
+- application isolation не полагается только на UFW: Docker application
+  exposure остаётся loopback-only, backend/PostgreSQL host ports отсутствуют.
+
 HTTP:
 
     /healthz            -> 200

@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import ast
 from pathlib import Path
 
 
@@ -26,6 +27,78 @@ def forbid(name: str, value: str) -> None:
         raise RuntimeError(
             f"{name}: stale current-state assertion {value!r}"
         )
+
+
+def source_alembic_heads() -> set[str]:
+    versions = ROOT / "backend/migrations/versions"
+    revisions: set[str] = set()
+    parents: set[str] = set()
+
+    for path in versions.glob("*.py"):
+        tree = ast.parse(path.read_text(), filename=str(path))
+
+        revision: str | None = None
+        down_revisions: list[str] = []
+
+        for node in tree.body:
+            name: str | None = None
+            value_node: ast.expr | None = None
+
+            if (
+                isinstance(node, ast.AnnAssign)
+                and isinstance(node.target, ast.Name)
+                and node.value is not None
+            ):
+                name = node.target.id
+                value_node = node.value
+
+            elif (
+                isinstance(node, ast.Assign)
+                and len(node.targets) == 1
+                and isinstance(node.targets[0], ast.Name)
+            ):
+                name = node.targets[0].id
+                value_node = node.value
+
+            if name not in {"revision", "down_revision"}:
+                continue
+
+            if value_node is None:
+                continue
+
+            value = ast.literal_eval(value_node)
+
+            if name == "revision":
+                if isinstance(value, str):
+                    revision = value
+                continue
+
+            if isinstance(value, str):
+                down_revisions = [value]
+            elif isinstance(value, (tuple, list)):
+                down_revisions = [
+                    item
+                    for item in value
+                    if isinstance(item, str)
+                ]
+            elif value is None:
+                down_revisions = []
+
+        if revision is not None:
+            revisions.add(revision)
+            parents.update(down_revisions)
+
+    return revisions - parents
+
+
+SOURCE_HEADS = source_alembic_heads()
+
+if len(SOURCE_HEADS) != 1:
+    raise RuntimeError(
+        f"expected one source Alembic head, got {sorted(SOURCE_HEADS)}"
+    )
+
+SOURCE_ALEMBIC_HEAD = next(iter(SOURCE_HEADS))
 
 
 CURRENT_DOCS = (
@@ -66,6 +139,8 @@ for name in CURRENT_DOCS + HISTORICAL_STAGE15_DOCS:
 # Current production baseline
 # ---------------------------------------------------------------------------
 
+# Accepted production head remains an operational fact in production-facing
+# documentation. Source head is derived from the migration graph below.
 for name in (
     "README.md",
     "docs/DEPLOYMENT.md",
@@ -73,6 +148,13 @@ for name in (
     "docs/OPERATIONS.md",
 ):
     require(name, "c5d6e7f8a9b0")
+
+for name in (
+    "README.md",
+    "docs/DEVELOPMENT.md",
+    "docs/ROADMAP.md",
+):
+    require(name, SOURCE_ALEMBIC_HEAD)
 
 for name in (
     "README.md",
@@ -253,6 +335,62 @@ require(
     "docs/PRODUCT_REQUIREMENTS.md",
     "Warehouse Domain V2 развёрнут и принят в production.",
 )
+
+for name, assertion in (
+    (
+        "README.md",
+        "UserItemCustodyBalance",
+    ),
+    (
+        "docs/ARCHITECTURE.md",
+        "user_item_custody_balances(User, Item, quantity)",
+    ),
+    (
+        "docs/WAREHOUSE_DOMAIN.md",
+        "UserItemCustodyBalance = User × Item × positive quantity",
+    ),
+    (
+        "docs/PRODUCT_REQUIREMENTS.md",
+        "UserItemCustodyBalance",
+    ),
+    (
+        "docs/DEVELOPMENT.md",
+        "custody является backend integrity projection",
+    ),
+    (
+        "docs/ROADMAP.md",
+        "UserItemCustodyBalance = User × Item × positive quantity",
+    ),
+):
+    require(name, assertion)
+
+for name, stale_value in (
+    (
+        "README.md",
+        "legacy serial/custody model не является частью целевой схемы",
+    ),
+    (
+        "README.md",
+        "не содержит active serial/WWN/custody/current-holder accounting",
+    ),
+    (
+        "docs/WAREHOUSE_DOMAIN.md",
+        "Система не хранит и не вычисляет персональный остаток оборудования",
+    ),
+    (
+        "docs/WAREHOUSE_DOMAIN.md",
+        "- custody;",
+    ),
+    (
+        "docs/PRODUCT_REQUIREMENTS.md",
+        "Персональный баланс оборудования сотрудников не ведётся.",
+    ),
+    (
+        "docs/DEVELOPMENT.md",
+        "catalog/Admin/stock/«Моё» UX",
+    ),
+):
+    forbid(name, stale_value)
 require(
     "docs/PRODUCT_REQUIREMENTS.md",
     "атомарно создаёт target StorageLocation",
@@ -275,6 +413,20 @@ require(
     "docs/OPERATIONS.md",
     "desktop-capable runtime автоматически запрашивает fullscreen",
 )
+
+for assertion in (
+    "UFW active;",
+    "`PermitRootLogin no`;",
+    "`PasswordAuthentication no`;",
+    "`X11Forwarding no`;",
+    "`GatewayPorts no`;",
+    "`AllowTcpForwarding yes` сохраняется",
+):
+    require(
+        "docs/OPERATIONS.md",
+        assertion,
+    )
+
 require(
     "docs/OPERATIONS.md",
     "merged topic branches удаляются после acceptance",

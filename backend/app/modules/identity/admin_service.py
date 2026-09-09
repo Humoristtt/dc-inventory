@@ -18,6 +18,7 @@ from app.modules.identity.models import (
     User,
     UserAccessEvent,
 )
+from app.modules.inventory.models import UserItemCustodyBalance
 
 ADMIN_MANAGEMENT_LOCK_KEY = 4937638921054812071
 
@@ -40,6 +41,10 @@ class RecoveryAdminInvariantError(AdminUserError):
 
 class LastApprovedAdminInvariantError(AdminUserError):
     """At least one approved administrator must remain usable."""
+
+
+class OutstandingCustodyInvariantError(AdminUserError):
+    """A blocked user must not retain warehouse custody."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -286,6 +291,22 @@ async def update_user_access(
             raise LastApprovedAdminInvariantError(
                 "last approved administrator cannot be blocked"
             )
+
+    if (
+        before_access == UserAccessStatus.APPROVED
+        and access_status == UserAccessStatus.BLOCKED
+        and await db.scalar(
+            select(UserItemCustodyBalance.id)
+            .where(
+                UserItemCustodyBalance.user_id == target.id
+            )
+            .limit(1)
+        )
+        is not None
+    ):
+        raise OutstandingCustodyInvariantError(
+            "user with outstanding equipment custody cannot be blocked"
+        )
 
     target.access_status = access_status
 

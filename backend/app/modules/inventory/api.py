@@ -10,8 +10,10 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from app.core.config import Settings
 from app.core.safety import require_real_inventory_mutations_enabled
 from app.db.errors import (
+    POSTGRES_CHECK_VIOLATION_SQLSTATE,
     POSTGRES_UNIQUE_VIOLATION_SQLSTATE,
     RETRYABLE_POSTGRES_SQLSTATES,
+    postgres_error_message,
     postgres_sqlstate,
 )
 from app.modules.auth.dependencies import Admin, Approved, DbSession
@@ -45,6 +47,7 @@ from app.modules.inventory.service import (
     InventoryNotFoundError,
     MovementRecord,
     StockBalanceRecord,
+    acquire_movement_feed_snapshot,
     create_location,
     create_movement,
     display_identity,
@@ -65,6 +68,24 @@ from app.modules.notifications.service import (
 
 read_router = APIRouter(prefix="/api/inventory", tags=["inventory"])
 admin_router = APIRouter(prefix="/api/admin/inventory", tags=["admin-inventory"])
+
+
+_CUSTODY_TRIGGER_CONFLICT_CODES = {
+    "custody is only valid for issue, return, or reversal":
+        "custody_movement_type_invalid",
+    "user issue/return custody must match movement actor":
+        "custody_actor_mismatch",
+    "admin issue/return must not carry custody":
+        "custody_admin_invalid",
+    "correction of custody movement is forbidden":
+        "custody_correction_forbidden",
+    "reversal original movement not found":
+        "reversal_original_not_found",
+    "reversal custody must match original movement":
+        "reversal_custody_mismatch",
+    "custody reversal requires issue or return original":
+        "reversal_custody_original_invalid",
+}
 
 
 async def _enqueue_issue_admin_notification(
@@ -133,6 +154,26 @@ def _raise_integrity_conflict(error: IntegrityError) -> NoReturn:
 
     if sqlstate in RETRYABLE_POSTGRES_SQLSTATES:
         _raise_retryable_db_conflict(error)
+
+    if sqlstate == POSTGRES_CHECK_VIOLATION_SQLSTATE:
+        trigger_message = postgres_error_message(error)
+        trigger_code = (
+            _CUSTODY_TRIGGER_CONFLICT_CODES.get(trigger_message)
+            if trigger_message is not None
+            else None
+        )
+
+        if trigger_code is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": trigger_code,
+                    "message": (
+                        "inventory custody constraint "
+                        "rejected the operation"
+                    ),
+                },
+            ) from error
 
     if sqlstate != POSTGRES_UNIQUE_VIOLATION_SQLSTATE:
         raise error
@@ -368,7 +409,9 @@ async def get_movement_feed(
             )
         actor_user_id = approved.user.id
 
-    snapshot_at = snapshot_at or datetime.now(UTC)
+    if snapshot_at is None:
+        snapshot_at = await acquire_movement_feed_snapshot(db)
+
     if snapshot_at.tzinfo is None or snapshot_at.year < 2:
         raise HTTPException(status_code=422, detail="snapshot requires timezone and year >= 2")
     since: datetime | None = None

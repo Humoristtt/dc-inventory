@@ -4,33 +4,65 @@
 
 ## Основной принцип
 
-Warehouse V2 использует только количественный учёт.
+Warehouse V2 использует количественный учёт без модели индивидуальных физических
+экземпляров.
 
-Пользователь является только actor движения — человеком, который выполнил операцию
-в системе. Система не хранит и не вычисляет персональный остаток оборудования у
-сотрудника.
+Item является номенклатурной позицией, а не physical unit.
 
-Если сотрудник взял 20 единиц, а затем вернул 16, журнал содержит два факта:
+Система ведёт две транзакционные current-state projections:
 
-- ISSUE 20;
-- RETURN 16.
+    StockBalance = Item × StorageLocation × positive quantity
+    UserItemCustodyBalance = User × Item × positive quantity
 
-Состояние вида «у сотрудника осталось 4» из этого не выводится.
+`actor_user_id` отвечает на вопрос «кто выполнил операцию».
 
-## Остаток
+`custody_user_id` отвечает на вопрос «за каким USER сейчас числится количество
+оборудования».
 
-Единственная текущая складская проекция:
+Actor и custody — разные понятия.
 
-Item × StorageLocation → quantity
+## Складской остаток
+
+Складская проекция:
+
+    Item × StorageLocation → quantity
 
 Правила:
 
 - quantity — положительное целое число;
 - строки с нулевым остатком не хранятся;
 - отрицательный остаток запрещён;
-- общий остаток Item равен сумме остатков по локациям;
-- stock_balances является транзакционной проекцией immutable journal;
+- общий складской остаток Item равен сумме остатков по локациям;
+- `stock_balances` является транзакционной проекцией immutable journal;
 - прямое редактирование остатка не допускается.
+
+## Custody
+
+Персональная custody-проекция:
+
+    User × Item → quantity
+
+Правила:
+
+- custody существует только для USER;
+- USER ISSUE увеличивает custody;
+- USER RETURN уменьшает custody;
+- USER не может вернуть больше, чем числится в его custody;
+- ADMIN ISSUE/RETURN являются административными складскими движениями и не
+  создают персональную custody;
+- zero custody rows не хранятся;
+- negative custody запрещён;
+- correction custody-bearing movement запрещён;
+- reversal наследует custody исходного movement;
+- reversal RETURN, который снова увеличивает custody, допустим только для
+  APPROVED USER;
+- блокировка USER с ненулевым custody запрещена fail-closed;
+- изменение access-state и custody-changing movement сериализуются по row lock
+  пользователя.
+
+Custody является агрегированной количественной проекцией. Она не возвращает
+legacy модель InventoryUnit, serial/WWN lifecycle или current holder конкретного
+физического экземпляра.
 
 ## Локации
 
@@ -61,12 +93,33 @@ StorageLocation содержит:
 Movement хранит immutable snapshots actor, location и Item identity.
 Исторические движения не редактируются и не удаляются обычным API.
 
+## Transaction model
+
+Movement, MovementLine, stock projection, custody projection и transactional
+outbox effects фиксируются одной PostgreSQL transaction.
+
+Locking используется для:
+
+- idempotency key;
+- custody USER access boundary;
+- original movement context;
+- locations;
+- Items;
+- stock balances;
+- custody balances.
+
+Journal feed использует commit-stable snapshot barrier: уже начатые journal
+writers завершаются до фиксации первого `snapshot_at`, а следующие страницы
+повторно используют тот же snapshot.
+
 ## Idempotency
 
-Каждая mutation использует client_request_id.
+Каждая mutation использует `client_request_id`.
 
 Повтор идентичного запроса того же actor возвращает существующее движение.
 Повтор того же ключа с другим payload возвращает conflict.
+
+Fingerprint включает custody context.
 
 ## Archived Item
 
@@ -93,6 +146,8 @@ USER:
 - ISSUE;
 - RETURN.
 
+USER ISSUE/RETURN используют custody самого USER.
+
 ADMIN:
 
 - всё доступное USER;
@@ -106,6 +161,18 @@ ADMIN:
 - CORRECTION;
 - REVERSAL.
 
+ADMIN warehouse movement не назначает custody автоматически.
+
+## Access lifecycle
+
+APPROVED USER может выполнять разрешённые warehouse mutations.
+
+Переход APPROVED → BLOCKED запрещён, пока у пользователя существует ненулевой
+`UserItemCustodyBalance`.
+
+Это правило синхронизировано с concurrent custody-changing movement через lock
+той же строки `users`.
+
 ## Уведомления
 
 Каждый новый ISSUE ставит Telegram-уведомление ADMIN в transactional outbox в той
@@ -116,23 +183,31 @@ Dedupe строится от movement id, поэтому idempotent replay не 
 
 ## Reconciliation
 
-backend/scripts/reconcile_inventory_projections.sql пересчитывает ожидаемый
-остаток из immutable journal и сравнивает его со stock_balances.
+`backend/scripts/reconcile_inventory_projections.sql` пересчитывает ожидаемые:
+
+- stock balances по Item × Location;
+- custody balances по User × Item.
+
+Обе проекции сверяются с immutable journal.
 
 Нормальный результат reconciliation — zero rows.
 
-## Удалённая модель
+При recovery reconciliation SQL обязан соответствовать restored schema version
+и берётся из exact backend image, записанного в backup manifest.
+
+## Отсутствующая physical-unit модель
 
 Warehouse V2 не использует в active schema/API/UI:
 
 - SERIAL accounting mode;
 - InventoryUnit;
 - serial/WWN physical-unit lifecycle;
-- персональные holder/current-holder balances;
-- custody;
-- экран «Моё оборудование»;
-- /api/inventory/mine;
-- /api/inventory/units.
+- current holder конкретного физического экземпляра;
+- `/api/inventory/units`.
 
-Эти термины допустимы только в historical migrations, downgrade/regression tests
-и docs/HISTORY.md.
+Отдельного product UI «Моё оборудование» и отдельного `/api/inventory/mine`
+сейчас нет. Это не отменяет backend custody projection, используемую для
+целостности ISSUE/RETURN и access lifecycle.
+
+Historical physical-unit model допустима только в historical migrations,
+downgrade/regression tests и `docs/HISTORY.md`.

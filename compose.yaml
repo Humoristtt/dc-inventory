@@ -7,16 +7,18 @@ x-runtime-logging: &runtime-logging
     max-file: "5"
 
 x-backend-image: &backend-image
-  image: dc-inventory-backend:local
+  image: ${BACKEND_IMAGE:-dc-inventory-backend:local}
   build:
     context: ./backend
     args:
       APP_REVISION: ${APP_REVISION:-}
 
 x-postgres-image: &postgres-image
-  image: dc-inventory-postgres:local
+  image: ${POSTGRES_IMAGE:-dc-inventory-postgres:local}
   build:
     context: ./ops/postgres
+    args:
+      APP_REVISION: ${APP_REVISION:-}
 
 x-backend-environment: &backend-environment
   APP_ENV: production
@@ -273,7 +275,7 @@ services:
     restart: unless-stopped
 
   web:
-    image: dc-inventory-web:local
+    image: ${WEB_IMAGE:-dc-inventory-web:local}
     build:
       context: ./frontend
       args:
@@ -293,6 +295,7 @@ services:
       start_period: 5s
     networks:
       - app_net
+      - ingress_net
     read_only: true
     tmpfs:
       - /tmp
@@ -310,6 +313,8 @@ volumes:
 
 networks:
   app_net:
+    internal: true
+  ingress_net:
   egress_net:
   db_net:
     internal: true

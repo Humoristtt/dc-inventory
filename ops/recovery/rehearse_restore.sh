@@ -240,6 +240,31 @@ for key in (manifest_key, dump_key):
         )
 print("RESTORE_DOWNLOAD_VERIFICATION=PASS")
 PY
+# New manifests carry exact hardened PostgreSQL provenance. Legacy manifests
+# retain the explicit pinned PostgreSQL 18 compatibility path below.
+PG_IMAGE="$(python3 - "$WORK_DIR/selected.manifest.json" "$PG_IMAGE" <<'PYPG'
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+manifest = json.loads(Path(sys.argv[1]).read_text())
+postgres = manifest["runtime"].get("postgres")
+if postgres is None:
+    print("Legacy manifest: exact PostgreSQL image identity unavailable", file=sys.stderr)
+    print(sys.argv[2])
+else:
+    image_id = postgres["image_id"]
+    if re.fullmatch(r"sha256:[0-9a-f]{64}", image_id) is None:
+        raise RuntimeError("invalid PostgreSQL image identity")
+    image = json.loads(subprocess.check_output(
+        ["docker", "image", "inspect", image_id], text=True
+    ))[0]
+    if image["Config"]["Labels"].get("org.opencontainers.image.revision") != postgres["source_revision"]:
+        raise RuntimeError("PostgreSQL image revision mismatch")
+    print(image_id)
+PYPG
+)"
 docker run --rm \
   --network none \
   -v "$WORK_DIR:/restore:ro" \

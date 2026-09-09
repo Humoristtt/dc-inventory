@@ -78,7 +78,12 @@ def collect(
             f"{service}: invalid immutable image ID {image_id!r}"
         )
 
-    labels = inspected["Config"].get("Labels") or {}
+    # The immutable image is authoritative; container labels can be overridden.
+    image_metadata = json.loads(subprocess.run(
+        ["docker", "image", "inspect", image_id], check=True, text=True,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+    ).stdout)[0]
+    labels = image_metadata["Config"].get("Labels") or {}
     revision = labels.get(REVISION_LABEL, "")
 
     if SHA_RE.fullmatch(revision) is None:
@@ -132,6 +137,8 @@ def main() -> None:
         "web",
     )
 
+    postgres = collect(args.root, args.env_file, "postgres")
+
     if telegram != backend:
         raise RuntimeError(
             "telegram-worker runtime does not match backend runtime"
@@ -150,6 +157,7 @@ def main() -> None:
             "telegram_worker": telegram,
             "maintenance_worker": maintenance,
             "web": web,
+            "postgres": postgres,
         },
     }
 

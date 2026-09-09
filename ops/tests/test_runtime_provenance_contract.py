@@ -35,6 +35,7 @@ for service in (
     '"telegram_worker"',
     '"maintenance_worker"',
     '"web"',
+    '"postgres"',
 ):
     assert service in provenance
 
@@ -52,7 +53,7 @@ label = "org.opencontainers.image.revision"
 assert label in backend
 assert label in frontend
 
-for dockerfile in (backend, frontend):
+for dockerfile in (backend, frontend, (ROOT / "ops/postgres/Dockerfile").read_text()):
     assert "ARG APP_REVISION\n" in dockerfile
     assert 'test -n "$APP_REVISION"' in dockerfile
     assert 'test "$APP_REVISION" != "unknown"' in dockerfile
@@ -62,7 +63,7 @@ assert (
     compose.count(
         "APP_REVISION: ${APP_REVISION:-}"
     )
-    == 2
+    == 3
 )
 assert "APP_REVISION:-unknown" not in compose
 
@@ -75,3 +76,8 @@ assert (
 assert "APP_REVISION:-unknown" not in compose_dev
 
 print("AUD_02_SOURCE_CONTRACT=PASS")
+
+assert '["docker", "image", "inspect", image_id]' in provenance
+recovery = (ROOT / "ops/recovery/rehearse_restore.sh").read_text()
+assert 'manifest["runtime"].get("postgres")' in recovery
+assert "PostgreSQL image revision mismatch" in recovery

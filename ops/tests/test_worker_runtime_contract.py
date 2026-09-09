@@ -91,3 +91,12 @@ assert "/var/lib/postgresql" in db_permissions
 print("WORKER_HEALTH_CONTRACT=PASS")
 print("DOCKER_RUNTIME_POLICY_CONTRACT=PASS")
 print("AUD15_16_CONTRACT=PASS")
+
+assert "  app_net:\n    internal: true" in text
+assert "  db_net:\n    internal: true" in text
+assert "- ingress_net" in service_block("web")
+assert "- egress_net" in service_block("telegram-worker")
+for service in ("backend", "postgres", "maintenance-worker", "migrate"):
+    assert "- ingress_net" not in service_block(service)
+    assert "- egress_net" not in service_block(service)
+assert '- "127.0.0.1:${WEB_PORT:-8080}:8080"' in service_block("web")

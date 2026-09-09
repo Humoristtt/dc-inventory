@@ -529,7 +529,8 @@ it("Движения по умолчанию показывают 3 месяца
           },
         ],
         limit: 30,
-        next_before_journal_seq: null,
+        next_before_journal_seq: url.includes("before_journal_seq") ? null : 1,
+        snapshot_at: "2026-09-09T07:00:00Z",
       });
     }
 
@@ -556,6 +557,15 @@ it("Движения по умолчанию показывают 3 месяца
           && params.get("before_journal_seq") === null;
       }),
     ).toBe(true);
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: /Следующая страница/ }));
+  await waitFor(() => {
+    expect(movementRequests.some((url) => {
+      const params = new URL(url, "http://test").searchParams;
+      return params.get("before_journal_seq") === "1"
+        && params.get("snapshot_at") === "2026-09-09T07:00:00Z";
+    })).toBe(true);
   });
 
   fireEvent.change(

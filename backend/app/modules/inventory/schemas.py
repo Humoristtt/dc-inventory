@@ -109,6 +109,7 @@ class MovementOut(BaseModel):
     journal_seq: int
     movement_type: MovementType
     actor_user_id: UUID
+    custody_user_id: UUID | None
     actor_display_name_snapshot: str
     source_location_id: UUID | None
     source_location_code_snapshot: str | None

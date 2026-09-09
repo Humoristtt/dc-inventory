@@ -552,6 +552,12 @@ async def post_movement(
             payload,
             actor_user_id=approved.user.id,
             actor_display_name=display_identity(approved.identity),
+            custody_user_id=(
+                approved.user.id
+                if approved.user.role != UserRole.ADMIN
+                and payload.movement_type in {MovementType.ISSUE, MovementType.RETURN}
+                else None
+            ),
         )
         await _enqueue_issue_admin_notification(
             db,

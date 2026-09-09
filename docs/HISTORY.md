@@ -662,3 +662,12 @@ to `c5d6e7f8a9b0`.
 - `REAL_INVENTORY_MUTATIONS_ENABLED=false` сохранён.
 - Следующая активная фаза — independent full
   source/security/runtime/data audit на clean baseline.
+
+## 2026-09-09 — P1 user return / custody integrity
+
+- USER ISSUE/RETURN теперь атомарно обновляют warehouse stock и агрегированный
+  User × Item custody balance; возврат сверх custody отклоняется без частичных изменений.
+- Custody context фиксируется в immutable movement journal, наследуется REVERSAL
+  и входит в idempotency fingerprint; custody-bearing CORRECTION запрещён fail-closed.
+- Readiness, reconciliation, PostgreSQL permissions и migration safety расширены
+  на custody projection. Regular mutation gate остаётся выключенным.

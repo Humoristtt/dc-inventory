@@ -281,6 +281,14 @@ SELECT format(
 \gexec
 
 
+SELECT format(
+    'GRANT SELECT, INSERT, UPDATE, DELETE '
+    'ON TABLE user_item_custody_balances TO %I',
+    :'runtime_user'
+)
+\gexec
+
+
 -- Canonical movement journal is append-only from runtime.
 SELECT format(
     'GRANT SELECT, INSERT ON TABLE movements, movement_lines TO %I',

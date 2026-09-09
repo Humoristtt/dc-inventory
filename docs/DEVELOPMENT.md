@@ -281,11 +281,12 @@ projection drift. Для локального development runtime запусти
     psql "$PSQL_DATABASE_URL" -v ON_ERROR_STOP=1 \
       -f backend/scripts/reconcile_inventory_projections.sql
 
-Скрипт пересчитывает quantity-by-location projection из immutable
-Movement/MovementLine journal. Result set должен содержать zero rows. Любая
+Скрипт пересчитывает quantity-by-location и quantity-by-user custody projections
+из immutable Movement/MovementLine journal. Result set должен содержать zero rows. Любая
 строка означает data-integrity blocker: остановить inventory mutations,
 сохранить backup artifact и расследовать причину; скрипт сам ничего не чинит.
-Warehouse V2 не имеет active InventoryUnit/serial/custody projection.
+Warehouse V2 не имеет active InventoryUnit/serial projection; custody хранится
+отдельной агрегированной User × Item projection.
 
 Stage15A automated backup, Stage15B real isolated restore и Stage15
 technical hardening приняты.

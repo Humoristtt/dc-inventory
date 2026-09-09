@@ -129,6 +129,11 @@ class Movement(Base):
             name="movement_type",
         ),
         CheckConstraint(
+            "custody_user_id IS NULL OR "
+            "movement_type IN ('ISSUE', 'RETURN', 'REVERSAL')",
+            name="custody_movement_type",
+        ),
+        CheckConstraint(
             "btrim(client_request_id) <> ''",
             name="client_request_id_not_blank",
         ),
@@ -207,6 +212,11 @@ class Movement(Base):
         Uuid(as_uuid=True),
         ForeignKey("users.id", ondelete="RESTRICT"),
         nullable=False,
+    )
+    custody_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        index=True,
     )
     source_location_id: Mapped[uuid.UUID | None] = mapped_column(
         Uuid(as_uuid=True),
@@ -302,6 +312,47 @@ class StockBalance(Base):
     location_id: Mapped[uuid.UUID] = mapped_column(
         Uuid(as_uuid=True),
         ForeignKey("locations.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    quantity: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+        onupdate=func.now(),
+    )
+
+
+class UserItemCustodyBalance(Base):
+    __tablename__ = "user_item_custody_balances"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id",
+            "item_id",
+            name="uq_user_item_custody_balances_user_id_item_id",
+        ),
+        CheckConstraint("quantity > 0", name="quantity_positive"),
+        Index("ix_user_item_custody_balances_item_id", "item_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("items.id", ondelete="RESTRICT"),
         nullable=False,
     )
     quantity: Mapped[int] = mapped_column(BigInteger, nullable=False)

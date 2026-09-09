@@ -79,6 +79,11 @@ async def test_readiness_checks_schema_even_when_tables_are_empty() -> None:
     query = str(connection.execute.call_args.args[0])
     assert "WHERE false" in query
     assert "m.journal_seq" in query and "s.expires_at" in query
+    assert "m.custody_user_id" in query
+    assert "public.user_item_custody_balances c" in query
+    assert "c.user_id" in query
+    assert "c.item_id" in query
+    assert "c.quantity" in query
     assert "public.user_access_events ua" in query
     assert "ua.actor_user_id" in query
     assert "ua.target_user_id" in query

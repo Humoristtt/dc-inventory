@@ -554,6 +554,17 @@ jobs:
           printf '%s\n' "$worker_networks" | grep -q '_egress_net'
           ! printf '%s\n' "$worker_networks" | grep -q '_app_net'
 
+          test "$(
+            docker compose --env-file .env.ci -f compose.yaml exec -T postgres \
+              psql -U dc_inventory -d dc_inventory -At -c "
+                SELECT has_table_privilege(
+                  'dc_inventory_worker_ci',
+                  'user_item_custody_balances',
+                  'SELECT, INSERT, UPDATE, DELETE'
+                );
+              "
+          )" = "f"
+
       - name: Verify backend database role
         run: |
           owner_psql() {
@@ -612,6 +623,11 @@ jobs:
                   'movement_lines',
                   'UPDATE'
                 ),
+                has_table_privilege(
+                  'dc_inventory_app_ci',
+                  'user_item_custody_balances',
+                  'SELECT, INSERT, UPDATE, DELETE'
+                ),
                 has_schema_privilege(
                   'dc_inventory_app_ci',
                   'public',
@@ -620,7 +636,7 @@ jobs:
             "
           )"
 
-          test "$privilege_matrix" = "t|t|t|f|f|f|f|f"
+          test "$privilege_matrix" = "t|t|t|f|f|f|f|t|f"
 
           outbox_update_columns="$(
             owner_psql -At -c "
@@ -835,11 +851,12 @@ jobs:
                   has_table_privilege('dc_inventory_maintenance_ci', 'movements', 'DELETE'),
                   has_table_privilege('dc_inventory_maintenance_ci', 'access_requests', 'DELETE'),
                   has_table_privilege('dc_inventory_maintenance_ci', 'notification_outbox', 'UPDATE'),
+                  has_table_privilege('dc_inventory_maintenance_ci', 'user_item_custody_balances', 'SELECT, INSERT, UPDATE, DELETE'),
                   has_schema_privilege('dc_inventory_maintenance_ci', 'public', 'CREATE');
               "
           )"
 
-          test "$privilege_matrix" = "t|t|t|t|t|t|t|t|t|f|f|f|f|f"
+          test "$privilege_matrix" = "t|t|t|t|t|t|t|t|t|f|f|f|f|f|f"
 
           retention_ran=0
 

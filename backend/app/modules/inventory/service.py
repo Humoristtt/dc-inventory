@@ -17,7 +17,13 @@ from app.modules.catalog.models import Item, Manufacturer
 from app.modules.catalog.normalization import identity_text
 from app.modules.identity.models import TelegramIdentity
 from app.modules.inventory.enums import LocationStatus, MovementType
-from app.modules.inventory.models import Location, Movement, MovementLine, StockBalance
+from app.modules.inventory.models import (
+    Location,
+    Movement,
+    MovementLine,
+    StockBalance,
+    UserItemCustodyBalance,
+)
 from app.modules.inventory.schemas import (
     LocationCreate,
     LocationPatch,
@@ -105,11 +111,16 @@ async def create_movement(
     *,
     actor_user_id: uuid.UUID,
     actor_display_name: str,
+    custody_user_id: uuid.UUID | None = None,
 ) -> MovementResult:
     if payload.movement_type == MovementType.REVERSAL:
         raise InventoryValidationError("use the reversal endpoint")
     return await _create_movement(
-        db, payload, actor_user_id=actor_user_id, actor_display_name=actor_display_name
+        db,
+        payload,
+        actor_user_id=actor_user_id,
+        actor_display_name=actor_display_name,
+        custody_user_id=custody_user_id,
     )
 
 
@@ -119,17 +130,36 @@ async def _create_movement(
     *,
     actor_user_id: uuid.UUID,
     actor_display_name: str,
+    custody_user_id: uuid.UUID | None = None,
 ) -> MovementResult:
-    """Caller owns transaction. Lock order: request, original, locations, items.
+    """Caller owns transaction.
+
+    Lock order: request, original, locations, items, stock, custody.
 
     Locking every involved item also serializes creation of previously absent
-    balance rows. Projection and sealed movement commit or roll back together.
+    stock and custody rows. Both projections and the sealed movement commit or
+    roll back together.
     """
+    if payload.movement_type != MovementType.REVERSAL:
+        if custody_user_id is not None and payload.movement_type not in {
+            MovementType.ISSUE,
+            MovementType.RETURN,
+        }:
+            raise InventoryValidationError(
+                "custody is only valid for issue or return",
+                code="custody_movement_type_invalid",
+            )
+        if custody_user_id is not None and custody_user_id != actor_user_id:
+            raise InventoryValidationError(
+                "custody user must match movement actor",
+                code="custody_actor_mismatch",
+            )
     request_id = normalize_inline_text(
         payload.client_request_id, field="client_request_id", max_length=128
     )
     canonical = payload.model_dump(mode="json")
     canonical["client_request_id"] = request_id
+    canonical["custody_user_id"] = str(custody_user_id) if custody_user_id else None
     canonical["lines"] = sorted(canonical["lines"], key=lambda line: line["item_id"])
     fingerprint = _fingerprint(canonical)
     await _lock_idempotency_key(db, actor_user_id, request_id)
@@ -148,6 +178,22 @@ async def _create_movement(
         original = await get_movement_record(db, payload.original_movement_id)
         if original.movement.movement_type == MovementType.REVERSAL:
             raise InventoryValidationError("invalid correction/reversal target")
+        if (
+            payload.movement_type == MovementType.CORRECTION
+            and original.movement.custody_user_id is not None
+        ):
+            raise InventoryValidationError(
+                "correction of a custody movement is forbidden",
+                code="custody_correction_forbidden",
+            )
+        if (
+            payload.movement_type == MovementType.REVERSAL
+            and custody_user_id != original.movement.custody_user_id
+        ):
+            raise InventoryValidationError(
+                "reversal custody must match original movement",
+                code="reversal_custody_mismatch",
+            )
         if payload.movement_type == MovementType.REVERSAL and await db.scalar(
             select(Movement.id).where(
                 Movement.original_movement_id == payload.original_movement_id,
@@ -232,11 +278,28 @@ async def _create_movement(
             )
         ).all()
     }
+    custody_balances: dict[uuid.UUID, UserItemCustodyBalance] = {}
+    if custody_user_id is not None:
+        custody_balances = {
+            balance.item_id: balance
+            for balance in (
+                await db.scalars(
+                    select(UserItemCustodyBalance)
+                    .where(
+                        UserItemCustodyBalance.user_id == custody_user_id,
+                        UserItemCustodyBalance.item_id.in_(item_ids),
+                    )
+                    .order_by(UserItemCustodyBalance.item_id)
+                    .with_for_update()
+                )
+            ).all()
+        }
     movement = Movement(
         id=uuid.uuid4(),
         movement_type=payload.movement_type,
         line_count=len(payload.lines),
         actor_user_id=actor_user_id,
+        custody_user_id=custody_user_id,
         actor_display_name_snapshot=normalize_inline_text(
             actor_display_name, field="actor", max_length=579
         ),
@@ -280,6 +343,35 @@ async def _create_movement(
                 db.add(
                     StockBalance(item_id=line.item_id, location_id=location_id, quantity=quantity)
                 )
+        custody_delta = _custody_delta(payload.movement_type, original) * line.quantity
+        if custody_user_id is not None and custody_delta:
+            custody_balance = custody_balances.get(line.item_id)
+            custody_quantity = (
+                custody_balance.quantity if custody_balance is not None else 0
+            ) + custody_delta
+            if custody_quantity < 0:
+                raise InventoryConflictError(
+                    "insufficient user custody",
+                    code="insufficient_custody",
+                )
+            if custody_quantity > 2**53 - 1:
+                raise InventoryConflictError(
+                    "quantity exceeds supported range",
+                    code="quantity_overflow",
+                )
+            if custody_balance is not None:
+                if custody_quantity == 0:
+                    await db.delete(custody_balance)
+                else:
+                    custody_balance.quantity = custody_quantity
+            elif custody_quantity:
+                new_custody_balance = UserItemCustodyBalance(
+                    user_id=custody_user_id,
+                    item_id=line.item_id,
+                    quantity=custody_quantity,
+                )
+                db.add(new_custody_balance)
+                custody_balances[line.item_id] = new_custody_balance
         item = items[line.item_id]
         movement_lines.append(
             MovementLine(
@@ -322,7 +414,25 @@ async def reverse_movement(
         ),
         actor_user_id=actor_user_id,
         actor_display_name=actor_display_name,
+        custody_user_id=original.movement.custody_user_id,
     )
+
+
+def _custody_delta(
+    movement_type: MovementType,
+    original: MovementRecord | None,
+) -> int:
+    if movement_type == MovementType.ISSUE:
+        return 1
+    if movement_type == MovementType.RETURN:
+        return -1
+    if movement_type != MovementType.REVERSAL or original is None:
+        return 0
+    if original.movement.movement_type == MovementType.ISSUE:
+        return -1
+    if original.movement.movement_type == MovementType.RETURN:
+        return 1
+    return 0
 
 
 async def list_stock_balances(

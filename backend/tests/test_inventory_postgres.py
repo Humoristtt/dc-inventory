@@ -4,12 +4,18 @@ import uuid
 from pathlib import Path
 
 import pytest
-from sqlalchemy import delete, select, text, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.modules.catalog.service import set_item_archived
-from app.modules.inventory.models import Movement, MovementLine, StockBalance
+from app.modules.identity.enums import UserRole
+from app.modules.inventory.models import (
+    Movement,
+    MovementLine,
+    StockBalance,
+    UserItemCustodyBalance,
+)
 from app.modules.inventory.schemas import MovementReversalCreate
 from app.modules.inventory.service import (
     InventoryConflictError,
@@ -33,6 +39,18 @@ async def quantity(db: AsyncSession, item: uuid.UUID, location: uuid.UUID) -> in
     )
 
 
+async def custody_quantity(db: AsyncSession, user: uuid.UUID, item: uuid.UUID) -> int:
+    return (
+        await db.scalar(
+            select(UserItemCustodyBalance.quantity).where(
+                UserItemCustodyBalance.user_id == user,
+                UserItemCustodyBalance.item_id == item,
+            )
+        )
+        or 0
+    )
+
+
 async def test_lifecycle_idempotency_and_reconciliation(warehouse_db: AsyncSession) -> None:
     db = warehouse_db
     s = await scenario(db)
@@ -44,7 +62,7 @@ async def test_lifecycle_idempotency_and_reconciliation(warehouse_db: AsyncSessi
     await move(db, s, "ISSUE", 20, source=s[2])
     assert await quantity(db, s[1], s[2]) == 0
     assert not await db.scalar(select(StockBalance.id).where(StockBalance.item_id == s[1]))
-    # A return is independent of earlier actions, including a return greater than issued.
+    # Administrative warehouse returns intentionally have no custody context.
     await move(db, s, "RETURN", 23, destination=s[2])
     await move(db, s, "TRANSFER", 4, source=s[2], destination=s[3])
     await move(db, s, "WRITE_OFF", 2, source=s[3])
@@ -61,6 +79,134 @@ async def test_lifecycle_idempotency_and_reconciliation(warehouse_db: AsyncSessi
     drift = (await db.execute(text(sql))).mappings().all()
     assert len(drift) == 1 and drift[0]["journal_quantity"] == 2
     assert drift[0]["projected_quantity"] == 3
+
+
+async def test_user_custody_lifecycle_idempotency_failure_and_reconciliation(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    s = await scenario(db, UserRole.USER)
+    await move(db, s, "RECEIPT", 10, destination=s[2])
+
+    issue = await move(
+        db,
+        s,
+        "ISSUE",
+        4,
+        source=s[2],
+        key="custody-issue",
+        custody_user_id=s[0],
+    )
+    assert issue.record.movement.custody_user_id == s[0]
+    assert await quantity(db, s[1], s[2]) == 6
+    assert await custody_quantity(db, s[0], s[1]) == 4
+
+    issue_replay = await move(
+        db,
+        s,
+        "ISSUE",
+        4,
+        source=s[2],
+        key="custody-issue",
+        custody_user_id=s[0],
+    )
+    assert issue_replay.replayed
+    assert await quantity(db, s[1], s[2]) == 6
+    assert await custody_quantity(db, s[0], s[1]) == 4
+    with pytest.raises(InventoryConflictError, match="different payload"):
+        await move(
+            db,
+            s,
+            "ISSUE",
+            4,
+            source=s[2],
+            key="custody-issue",
+        )
+
+    returned = await move(
+        db,
+        s,
+        "RETURN",
+        3,
+        destination=s[2],
+        key="custody-return",
+        custody_user_id=s[0],
+    )
+    assert returned.record.movement.custody_user_id == s[0]
+    assert await quantity(db, s[1], s[2]) == 9
+    assert await custody_quantity(db, s[0], s[1]) == 1
+
+    return_replay = await move(
+        db,
+        s,
+        "RETURN",
+        3,
+        destination=s[2],
+        key="custody-return",
+        custody_user_id=s[0],
+    )
+    assert return_replay.replayed
+    assert await quantity(db, s[1], s[2]) == 9
+    assert await custody_quantity(db, s[0], s[1]) == 1
+
+    before_count = await db.scalar(select(func.count()).select_from(Movement))
+    with pytest.raises(InventoryConflictError) as error:
+        async with db.begin_nested():
+            await move(
+                db,
+                s,
+                "RETURN",
+                2,
+                destination=s[2],
+                key="custody-return-too-large",
+                custody_user_id=s[0],
+            )
+    assert error.value.code == "insufficient_custody"
+    assert await quantity(db, s[1], s[2]) == 9
+    assert await custody_quantity(db, s[0], s[1]) == 1
+    assert await db.scalar(select(func.count()).select_from(Movement)) == before_count
+
+    sql = (Path(__file__).parents[1] / "scripts/reconcile_inventory_projections.sql").read_text()
+    assert not (await db.execute(text(sql))).all()
+    await db.execute(
+        update(UserItemCustodyBalance)
+        .where(
+            UserItemCustodyBalance.user_id == s[0],
+            UserItemCustodyBalance.item_id == s[1],
+        )
+        .values(quantity=2)
+    )
+    drift = (await db.execute(text(sql))).mappings().all()
+    assert len(drift) == 1
+    assert drift[0]["projection"] == "custody"
+    assert drift[0]["journal_quantity"] == 1
+    assert drift[0]["projected_quantity"] == 2
+    await db.execute(
+        update(UserItemCustodyBalance)
+        .where(
+            UserItemCustodyBalance.user_id == s[0],
+            UserItemCustodyBalance.item_id == s[1],
+        )
+        .values(quantity=1)
+    )
+
+    await move(
+        db,
+        s,
+        "RETURN",
+        1,
+        destination=s[2],
+        custody_user_id=s[0],
+    )
+    assert await quantity(db, s[1], s[2]) == 10
+    assert await custody_quantity(db, s[0], s[1]) == 0
+    assert not await db.scalar(
+        select(UserItemCustodyBalance.id).where(
+            UserItemCustodyBalance.user_id == s[0],
+            UserItemCustodyBalance.item_id == s[1],
+        )
+    )
+    assert not (await db.execute(text(sql))).all()
 
 
 @pytest.mark.parametrize(
@@ -118,6 +264,222 @@ async def test_reversal_restores_stock_and_is_idempotent(
             actor_display_name="Synthetic actor",
         )
     await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+
+
+async def test_custody_reversals_and_correction_fail_closed(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    s = await scenario(db, UserRole.USER)
+    receipt = await move(db, s, "RECEIPT", 10, destination=s[2])
+    issue = await move(
+        db,
+        s,
+        "ISSUE",
+        4,
+        source=s[2],
+        custody_user_id=s[0],
+    )
+    issue_reversal = await reverse_movement(
+        db,
+        issue.record.movement.id,
+        MovementReversalCreate(client_request_id="reverse-custody-issue"),
+        actor_user_id=s[0],
+        actor_display_name="Synthetic actor",
+    )
+    assert issue_reversal.record.movement.custody_user_id == s[0]
+    assert await quantity(db, s[1], s[2]) == 10
+    assert await custody_quantity(db, s[0], s[1]) == 0
+
+    second_issue = await move(
+        db,
+        s,
+        "ISSUE",
+        4,
+        source=s[2],
+        custody_user_id=s[0],
+    )
+    returned = await move(
+        db,
+        s,
+        "RETURN",
+        3,
+        destination=s[2],
+        custody_user_id=s[0],
+    )
+    return_reversal = await reverse_movement(
+        db,
+        returned.record.movement.id,
+        MovementReversalCreate(client_request_id="reverse-custody-return"),
+        actor_user_id=s[0],
+        actor_display_name="Synthetic actor",
+    )
+    assert return_reversal.record.movement.custody_user_id == s[0]
+    assert await quantity(db, s[1], s[2]) == 6
+    assert await custody_quantity(db, s[0], s[1]) == 4
+
+    with pytest.raises(InventoryValidationError) as error:
+        await move(
+            db,
+            s,
+            "CORRECTION",
+            1,
+            source=s[2],
+            original=second_issue.record.movement.id,
+        )
+    assert error.value.code == "custody_correction_forbidden"
+    assert receipt.record.movement.custody_user_id is None
+
+
+async def test_admin_issue_and_return_do_not_mutate_custody(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    s = await scenario(db)
+    await move(db, s, "RECEIPT", 5, destination=s[2])
+    issue = await move(db, s, "ISSUE", 2, source=s[2])
+    returned = await move(db, s, "RETURN", 2, destination=s[2])
+    assert issue.record.movement.custody_user_id is None
+    assert returned.record.movement.custody_user_id is None
+    assert not await db.scalar(select(UserItemCustodyBalance.id))
+
+
+async def test_custody_reversal_failure_is_atomic(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    s = await scenario(db, UserRole.USER)
+    await move(db, s, "RECEIPT", 1, destination=s[2])
+    issue = await move(
+        db,
+        s,
+        "ISSUE",
+        1,
+        source=s[2],
+        custody_user_id=s[0],
+    )
+    await move(
+        db,
+        s,
+        "RETURN",
+        1,
+        destination=s[2],
+        custody_user_id=s[0],
+    )
+    request_id = "reverse-issue-without-custody"
+    with pytest.raises(InventoryConflictError) as error:
+        async with db.begin_nested():
+            await reverse_movement(
+                db,
+                issue.record.movement.id,
+                MovementReversalCreate(client_request_id=request_id),
+                actor_user_id=s[0],
+                actor_display_name="Synthetic actor",
+            )
+    assert error.value.code == "insufficient_custody"
+    assert await quantity(db, s[1], s[2]) == 1
+    assert await custody_quantity(db, s[0], s[1]) == 0
+    assert not await db.scalar(
+        select(Movement.id).where(Movement.client_request_id == request_id)
+    )
+
+
+async def test_database_rejects_invalid_custody_relationships(
+    warehouse_db: AsyncSession,
+) -> None:
+    from tests.warehouse_helpers import actor
+
+    db = warehouse_db
+    s = await scenario(db, UserRole.USER)
+    other, _ = await actor(db)
+    receipt = await move(db, s, "RECEIPT", 5, destination=s[2])
+
+    invalid_issue = Movement(
+        movement_type="ISSUE",
+        line_count=1,
+        actor_user_id=s[0],
+        custody_user_id=other.id,
+        actor_display_name_snapshot="Synthetic actor",
+        client_request_id=uuid.uuid4().hex,
+        request_fingerprint="d" * 64,
+        source_location_id=s[2],
+        source_location_code_snapshot=receipt.record.movement.destination_location_code_snapshot,
+        source_location_name_snapshot=receipt.record.movement.destination_location_name_snapshot,
+    )
+    async with db.begin_nested() as savepoint:
+        with pytest.raises(DBAPIError):
+            db.add(invalid_issue)
+            await db.flush()
+        await savepoint.rollback()
+
+    for actor_id, custody_id in ((s[0], None), (other.id, other.id)):
+        raw_issue = Movement(
+            movement_type="ISSUE",
+            line_count=1,
+            actor_user_id=actor_id,
+            custody_user_id=custody_id,
+            actor_display_name_snapshot="Synthetic actor",
+            client_request_id=uuid.uuid4().hex,
+            request_fingerprint="1" * 64,
+            source_location_id=s[2],
+            source_location_code_snapshot=(
+                receipt.record.movement.destination_location_code_snapshot
+            ),
+            source_location_name_snapshot=(
+                receipt.record.movement.destination_location_name_snapshot
+            ),
+        )
+        async with db.begin_nested() as savepoint:
+            with pytest.raises(DBAPIError):
+                db.add(raw_issue)
+                await db.flush()
+            await savepoint.rollback()
+
+    issue = await move(
+        db,
+        s,
+        "ISSUE",
+        1,
+        source=s[2],
+        custody_user_id=s[0],
+    )
+    row = issue.record.movement
+    invalid_reversal = Movement(
+        movement_type="REVERSAL",
+        line_count=1,
+        actor_user_id=other.id,
+        custody_user_id=other.id,
+        actor_display_name_snapshot="Synthetic actor",
+        client_request_id=uuid.uuid4().hex,
+        request_fingerprint="e" * 64,
+        original_movement_id=row.id,
+        destination_location_id=row.source_location_id,
+        destination_location_code_snapshot=row.source_location_code_snapshot,
+        destination_location_name_snapshot=row.source_location_name_snapshot,
+    )
+    async with db.begin_nested() as savepoint:
+        with pytest.raises(DBAPIError):
+            db.add(invalid_reversal)
+            await db.flush()
+        await savepoint.rollback()
+
+    invalid_correction = Movement(
+        movement_type="CORRECTION",
+        line_count=1,
+        actor_user_id=other.id,
+        actor_display_name_snapshot="Synthetic actor",
+        client_request_id=uuid.uuid4().hex,
+        request_fingerprint="f" * 64,
+        original_movement_id=row.id,
+        source_location_id=row.source_location_id,
+        source_location_code_snapshot=row.source_location_code_snapshot,
+        source_location_name_snapshot=row.source_location_name_snapshot,
+    )
+    async with db.begin_nested() as savepoint:
+        with pytest.raises(DBAPIError):
+            db.add(invalid_correction)
+            await db.flush()
+        await savepoint.rollback()
 
 
 @pytest.mark.parametrize("kind", ["RECEIPT", "TRANSFER"])
@@ -338,6 +700,64 @@ async def test_concurrent_issues_cannot_overspend() -> None:
         assert sorted(await asyncio.gather(issue(), issue())) == ["insufficient_stock", "ok"]
         async with AsyncSession(engine) as db:
             assert await quantity(db, s[1], s[2]) == 1
+    finally:
+        await engine.dispose()
+
+
+async def test_concurrent_last_unit_returns_exactly_once() -> None:
+    if os.getenv("RUN_POSTGRES_INTEGRATION") != "1":
+        pytest.skip("requires disposable PostgreSQL")
+    engine = create_async_engine(os.environ["DATABASE_URL"])
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            s = await scenario(db, UserRole.USER)
+            await move(db, s, "RECEIPT", 1, destination=s[2])
+            await move(
+                db,
+                s,
+                "ISSUE",
+                1,
+                source=s[2],
+                custody_user_id=s[0],
+            )
+            await db.commit()
+
+        async def return_last_unit() -> str:
+            async with AsyncSession(engine, expire_on_commit=False) as db:
+                try:
+                    await move(
+                        db,
+                        s,
+                        "RETURN",
+                        1,
+                        destination=s[2],
+                        custody_user_id=s[0],
+                    )
+                    await db.commit()
+                    return "ok"
+                except InventoryConflictError as error:
+                    await db.rollback()
+                    return error.code
+
+        results = await asyncio.wait_for(
+            asyncio.gather(return_last_unit(), return_last_unit()),
+            timeout=10,
+        )
+        assert sorted(results) == ["insufficient_custody", "ok"]
+        async with AsyncSession(engine) as db:
+            assert await quantity(db, s[1], s[2]) == 1
+            assert await custody_quantity(db, s[0], s[1]) == 0
+            assert (
+                await db.scalar(
+                    select(func.count())
+                    .select_from(Movement)
+                    .where(
+                        Movement.movement_type == "RETURN",
+                        Movement.custody_user_id == s[0],
+                    )
+                )
+                == 1
+            )
     finally:
         await engine.dispose()
 

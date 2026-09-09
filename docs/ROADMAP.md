@@ -28,8 +28,10 @@
 
 - [x] Quantity-only inventory.
 - [x] Удалена active physical-unit model.
-- [x] Удалены персональные holder/custody semantics.
-- [x] Пользователь является только movement actor.
+- [x] Удалена legacy physical-unit holder model.
+- [x] Actor операции отделён от custody пользователя.
+- [x] UserItemCustodyBalance = User × Item × positive quantity.
+- [x] USER RETURN ограничен фактическим custody balance.
 - [x] StockBalance = Item × Location × quantity.
 - [x] Zero balances не хранятся.
 - [x] Negative stock запрещён.
@@ -155,7 +157,7 @@ ADMIN:
 - [x] Responsive/mobile/desktop warehouse UI acceptance.
 - [x] Header/fullscreen/Escape remediation.
 - [x] Desktop form consistency and smart suggestions.
-- [x] Current migration head `c5d6e7f8a9b0`.
+- [x] Current migration head `f8a9b0c1d2e3`.
 - [x] External authoritative workbook contract.
 - [x] Fail-closed production one-shot bootstrap path.
 - [x] Empty-domain production preflight.

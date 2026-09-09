@@ -9,6 +9,7 @@ export type StorageLocation = { id: string; code: string; name: string; location
 export type MovementType = "ISSUE" | "RETURN" | "TRANSFER" | "RECEIPT" | "WRITE_OFF" | "CORRECTION" | "REVERSAL";
 export type Movement = {
   id: string; journal_seq: number; occurred_at: string; actor_user_id: string;
+  custody_user_id: string | null;
   actor_display_name_snapshot: string; movement_type: MovementType;
   source_location_name_snapshot: string | null; destination_location_name_snapshot: string | null;
   lines: { id: string; item_id: string; item_name_snapshot: string; quantity: number }[];
@@ -30,6 +31,7 @@ export function inventoryError(error: unknown): string {
   if (error instanceof ApiRequestError) {
     if (error.status === 423) return "Складские изменения пока отключены администратором.";
     if (error.code === "insufficient_stock") return "Недостаточно оборудования в выбранном месте хранения. Обновите остаток.";
+    if (error.code === "insufficient_custody") return "Нельзя вернуть больше оборудования, чем числится за вами.";
     if (error.code === "location_not_empty") return "Сначала переместите или спишите остаток в этом месте хранения.";
     if (error.status === 403) return "Недостаточно прав для этой операции.";
     if (error.status === 409) return "Данные изменились. Обновите страницу и проверьте операцию.";

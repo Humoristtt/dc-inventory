@@ -5,13 +5,122 @@ from pathlib import Path
 
 import pytest
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from tests.migration_helpers import alembic
 
-HEAD = "e7f8a9b0c1d2"
+HEAD = "f8a9b0c1d2e3"
 PREVIOUS = "a2b3c4d5e6f7"
 pytestmark = pytest.mark.asyncio
+
+
+async def _seed_user_item_location(db: AsyncConnection) -> tuple[str, str, str]:
+    user_id = str(await db.scalar(text(
+        "INSERT INTO users (id, role, access_status) "
+        "VALUES (gen_random_uuid(), 'USER', 'APPROVED') RETURNING id"
+    )))
+    item_id = str(await db.scalar(text(
+        "INSERT INTO items "
+        "(id, category_id, name, normalized_name, status, identity_signature) "
+        "SELECT gen_random_uuid(), id, 'test', 'test', 'ACTIVE', repeat('a', 64) "
+        "FROM categories WHERE key = 'optical_patch_cord' RETURNING id"
+    )))
+    location_id = str(await db.scalar(text(
+        "INSERT INTO locations (id, code, normalized_code, name, location_type) "
+        "VALUES (gen_random_uuid(), 'test', 'test', 'test', 'WAREHOUSE') RETURNING id"
+    )))
+    return user_id, item_id, location_id
+
+
+async def _seed_issue_history(
+    db: AsyncConnection,
+    *,
+    with_custody: bool = False,
+) -> tuple[str, str, str, str]:
+    user_id, item_id, location_id = await _seed_user_item_location(db)
+    custody_column = ", custody_user_id" if with_custody else ""
+    custody_value = ", :user_id" if with_custody else ""
+    movement_id = str(await db.scalar(text(
+        "INSERT INTO movements "
+        "(id, movement_type, line_count, actor_user_id, actor_display_name_snapshot, "
+        "source_location_id, source_location_code_snapshot, source_location_name_snapshot, "
+        f"client_request_id, request_fingerprint{custody_column}) "
+        "VALUES (gen_random_uuid(), 'ISSUE', 1, :user_id, 'test', :location_id, "
+        f"'test', 'test', 'test', repeat('b', 64){custody_value}) RETURNING id"
+    ), {"user_id": user_id, "location_id": location_id}))
+    await db.execute(text(
+        "INSERT INTO movement_lines "
+        "(id, movement_id, line_no, item_id, quantity, item_name_snapshot) "
+        "VALUES (gen_random_uuid(), :movement_id, 1, :item_id, 1, 'test')"
+    ), {"movement_id": movement_id, "item_id": item_id})
+    return user_id, item_id, location_id, movement_id
+
+
+async def test_custody_migration_clean_upgrade_and_empty_downgrade(
+    migration_database: str,
+) -> None:
+    url = migration_database
+    alembic(url, "upgrade", "e7f8a9b0c1d2")
+    engine = create_async_engine(url)
+    async with engine.connect() as db:
+        assert await db.scalar(text("SELECT to_regclass('user_item_custody_balances')")) is None
+    alembic(url, "upgrade", HEAD)
+    async with engine.connect() as db:
+        assert await db.scalar(text("SELECT version_num FROM alembic_version")) == HEAD
+        assert await db.scalar(text("SELECT to_regclass('user_item_custody_balances')"))
+        assert await db.scalar(text(
+            "SELECT 1 FROM information_schema.columns "
+            "WHERE table_name = 'movements' AND column_name = 'custody_user_id'"
+        )) == 1
+    alembic(url, "downgrade", "e7f8a9b0c1d2")
+    async with engine.connect() as db:
+        assert await db.scalar(text("SELECT version_num FROM alembic_version")) == "e7f8a9b0c1d2"
+        assert await db.scalar(text("SELECT to_regclass('user_item_custody_balances')")) is None
+    await engine.dispose()
+
+
+async def test_custody_upgrade_refuses_ambiguous_issue_return_history(
+    migration_database: str,
+) -> None:
+    url = migration_database
+    alembic(url, "upgrade", "e7f8a9b0c1d2")
+    engine = create_async_engine(url)
+    async with engine.begin() as db:
+        await _seed_issue_history(db)
+    output = alembic(url, "upgrade", HEAD, success=False)
+    assert "existing ISSUE/RETURN history" in output
+    async with engine.connect() as db:
+        assert await db.scalar(text("SELECT version_num FROM alembic_version")) == "e7f8a9b0c1d2"
+        assert await db.scalar(text("SELECT count(*) FROM movements")) == 1
+    await engine.dispose()
+
+
+@pytest.mark.parametrize("domain", ["history", "projection"])
+async def test_custody_downgrade_refuses_data(
+    migration_database: str,
+    domain: str,
+) -> None:
+    url = migration_database
+    alembic(url, "upgrade", HEAD)
+    engine = create_async_engine(url)
+    async with engine.begin() as db:
+        if domain == "history":
+            await _seed_issue_history(db, with_custody=True)
+        else:
+            user_id, item_id, _location_id = await _seed_user_item_location(db)
+            await db.execute(
+                text(
+                    "INSERT INTO user_item_custody_balances "
+                    "(id, user_id, item_id, quantity) "
+                    "VALUES (gen_random_uuid(), :user_id, :item_id, 1)"
+                ),
+                {"user_id": user_id, "item_id": item_id},
+            )
+    output = alembic(url, "downgrade", "e7f8a9b0c1d2", success=False)
+    assert "custody history or projection exists" in output
+    async with engine.connect() as db:
+        assert await db.scalar(text("SELECT version_num FROM alembic_version")) == HEAD
+    await engine.dispose()
 
 
 async def test_baseline_head_empty_downgrade_and_metadata(migration_database: str) -> None:

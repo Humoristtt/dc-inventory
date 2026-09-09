@@ -671,3 +671,41 @@ to `c5d6e7f8a9b0`.
   и входит в idempotency fingerprint; custody-bearing CORRECTION запрещён fail-closed.
 - Readiness, reconciliation, PostgreSQL permissions и migration safety расширены
   на custody projection. Regular mutation gate остаётся выключенным.
+
+## 2026-09-10 — Independent audit remediation and production closeout
+
+- Independent full source/security/runtime/data audit завершён.
+- Audit remediation принят через PR #49.
+- Required PR CI run #113: backend, frontend, runtime и telegram-gateway — PASS.
+- Accepted production runtime revision:
+  `c32df46426125d16cf8a1dc490a36706eaa9a50b`.
+- Production Alembic migration выполнена:
+  `d6e7f8a9b0c1 -> e7f8a9b0c1d2 -> f8a9b0c1d2e3`.
+- Idempotent production DB permissions повторно применены после migration.
+- Canonical stock + custody projection reconciliation вернул zero rows:
+  `PROJECTION_RECONCILIATION=ZERO_DRIFT`.
+- Backend, PostgreSQL, web, telegram-worker и maintenance-worker после cutover
+  подтверждены healthy.
+- Все production runtime images подтверждены по immutable image metadata с
+  `org.opencontainers.image.revision=c32df46426125d16cf8a1dc490a36706eaa9a50b`.
+- Regular mutation gate сохранён:
+  `REAL_INVENTORY_MUTATIONS_ENABLED=false`.
+- Internal `/healthz`, `/api/health/live`, `/api/health/ready` — PASS.
+- Те же endpoints через production Cloudflare hostname — PASS.
+- Verified post-deploy off-VM backup:
+  `postgres/full/2026/09/09/dc-inventory-20260909T222020Z.dump`.
+- Post-deploy dump SHA-256:
+  `6b5fb3730e23b5cfd0411e7babe9745ceec4b734b06ec9f49e0887fa5c8a16c6`.
+- Backup manifest зафиксировал production checkout, Alembic head и exact
+  runtime source revisions; backup readiness — PASS.
+- Real Telegram Mini App visual smoke после deployment — PASS, включая
+  ADMIN users/access page.
+- Production hygiene завершена: temporary cutover artifact удалён, completed
+  migrate/db-permissions containers удалены, reclaimable BuildKit cache очищен,
+  production Git worktree clean.
+- Mac Git hygiene завершена: obsolete merged topic branches удалены; active
+  repository branch — `main`.
+- Рабочий local development PostgreSQL сохранён намеренно и не является
+  disposable audit resource.
+- Independent audit / remediation / deployment baseline принят.
+- Следующий product/UX change set выполняется отдельной веткой.

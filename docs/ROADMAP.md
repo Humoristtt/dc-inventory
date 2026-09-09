@@ -180,12 +180,17 @@ feature cycle.
       сохранив operational state и намеренные rollback/recovery artifacts.
 - [x] Очистить Mac development environment от obsolete branches/worktrees,
       temporary archives, caches и disposable Docker resources.
-- [~] Выполнить independent full source/security/runtime/data audit на clean baseline.
-- [~] Исправить findings текущего audit до технически чистого baseline.
+- [x] Выполнить independent full source/security/runtime/data audit на clean baseline.
+- [x] Исправить findings текущего audit до технически чистого baseline.
 - [x] Синхронизировать custody/access lifecycle и запретить BLOCKED при outstanding custody.
 - [x] Сделать restore reconciliation schema-version-safe через exact backend image.
 - [x] Сделать movement feed snapshot commit-stable при concurrent journal writers.
 - [x] Добавить narrow safe HTTP mapping известных custody DB-trigger violations.
+- [x] Выкатить accepted audit baseline
+      `c32df46426125d16cf8a1dc490a36706eaa9a50b` в production.
+- [x] Мигрировать production до `f8a9b0c1d2e3` и подтвердить zero-drift reconciliation.
+- [x] Выполнить post-deploy verified backup, external smoke и real Telegram visual acceptance.
+- [x] Завершить production VM / Git / local hygiene после audit deployment.
 - [ ] Зафиксировать пользовательский список minor UX corrections.
 - [ ] Выполнить minor UX remediation отдельной веткой.
 - [ ] Повторить final affected/full acceptance после UX fixes.

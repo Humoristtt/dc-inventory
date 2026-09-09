@@ -26,14 +26,16 @@ Warehouse Domain V2 развёрнут и принят в production.
 
 Текущий production schema baseline:
 
-    ALEMBIC_HEAD=c5d6e7f8a9b0
+    ALEMBIC_HEAD=f8a9b0c1d2e3
 
 Текущий source migration head:
 
     SOURCE_ALEMBIC_HEAD=f8a9b0c1d2e3
 
-Production migration state и source migration head являются разными operational
-facts до отдельного deploy/migration acceptance.
+На текущем accepted production baseline production migration state и source
+migration head совпадают. При появлении новой source migration они снова
+считаются отдельными operational facts до отдельного deploy/migration
+acceptance.
 
 Stage 15 technical hardening завершён. Automated off-VM PostgreSQL backup,
 isolated restore rehearsal, runtime provenance, least-privilege DB identities,
@@ -64,14 +66,15 @@ warehouse domain.
 
 Повторный initial bootstrap запрещён.
 
-Следующая operational фаза перед обычным warehouse go-live:
+Текущая operational фаза перед обычным warehouse go-live:
 
-    documentation closeout
-      -> repository / VM / local hygiene
-      -> independent full audit
+    minor UX corrections
       -> minor UX remediation
-      -> final acceptance
+      -> final affected/full acceptance
       -> explicit regular-mutation gate decision
+
+Independent full source/security/runtime/data audit, remediation, production
+deploy и baseline hygiene завершены и приняты 2026-09-10.
 
 Production Git checkout и revision реально запущенных application images
 являются отдельными operational facts. Exact runtime provenance проверяется по

@@ -58,7 +58,7 @@ Warehouse Domain V2 принят в production.
 
 Current schema:
 
-    ALEMBIC_HEAD=c5d6e7f8a9b0
+    ALEMBIC_HEAD=f8a9b0c1d2e3
 
 Stage15:
 
@@ -73,6 +73,17 @@ Initial production inventory bootstrap:
     POST_IMPORT_RECONCILIATION=ZERO_DRIFT
     POST_IMPORT_BACKUP=PASS
     TELEGRAM_VISUAL_ACCEPTANCE=PASS
+
+Independent audit / production closeout 2026-09-10:
+
+    PRODUCTION_RUNTIME_REVISION=c32df46426125d16cf8a1dc490a36706eaa9a50b
+    ALEMBIC_HEAD=f8a9b0c1d2e3
+    AUDIT_REMEDIATION=PASS
+    PROJECTION_RECONCILIATION=ZERO_DRIFT
+    POST_DEPLOY_BACKUP=PASS
+    EXTERNAL_SMOKE=PASS
+    TELEGRAM_VISUAL_ACCEPTANCE=PASS
+    PRODUCTION_HYGIENE=PASS
 
 Authoritative workbook остаётся external operator input и не хранится в Git.
 
@@ -404,7 +415,7 @@ Pre-data Stage15 checklist исторически завершён.
 После него отдельным post-Stage15 change set выполнены:
 
 - Warehouse Domain V2 production rollout;
-- current migration head `c5d6e7f8a9b0`;
+- migration head initial bootstrap acceptance зафиксирован в `docs/HISTORY.md`;
 - external workbook validation;
 - guarded production bootstrap implementation;
 - required local PostgreSQL gates;

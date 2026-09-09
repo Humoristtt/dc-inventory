@@ -192,6 +192,63 @@ async function installApiMock(page:Page, role:"USER"|"ADMIN", failures=0) {
   return {requests,mutations};
 }
 
+
+test(
+  "category opens on first physical activation after scroll",
+  async ({ page }, testInfo) => {
+    await installTelegramMock(page);
+    await installApiMock(page, "USER");
+
+    const touchProject =
+      testInfo.project.name === "android-like"
+      || testInfo.project.name === "iphone-webkit";
+
+    await page.setViewportSize(
+      touchProject
+        ? { width: 360, height: 420 }
+        : { width: 1280, height: 500 },
+    );
+
+    await page.goto("/catalog");
+
+    const categoryLink = page.getByRole(
+      "link",
+      { name: /Трансиверы/ },
+    );
+
+    await expect(categoryLink).toBeVisible();
+    await categoryLink.scrollIntoViewIfNeeded();
+
+    await expect.poll(
+      () => page.evaluate(() => window.scrollY),
+    ).toBeGreaterThan(0);
+
+    const box = await categoryLink.boundingBox();
+    expect(box).not.toBeNull();
+
+    if (box === null) {
+      throw new Error("Category link has no bounding box");
+    }
+
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+
+    if (touchProject) {
+      await page.touchscreen.tap(x, y);
+    } else {
+      await page.mouse.click(x, y);
+    }
+
+    await expect(page).toHaveURL(
+      /\/catalog\/transceivers$/,
+    );
+
+    await expect.poll(
+      () => page.evaluate(() => window.scrollY),
+    ).toBe(0);
+  },
+);
+
 test("USER browses hierarchy, retains server filters, and uses Telegram back", async ({page})=>{
   await installTelegramMock(page); const api=await installApiMock(page,"USER");
   await page.goto("/catalog/new?category=transceiver_ethernet");

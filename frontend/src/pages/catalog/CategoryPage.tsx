@@ -1,5 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
 import {
   Link,
   useLocation,
@@ -71,6 +74,14 @@ export function CategoryPage() {
   });
   const filtersCount = activeFilterCount(viewState);
   const returnTo = `${location.pathname}${location.search}`;
+
+  useEffect(() => {
+    window.scrollTo({
+      top: 0,
+      left: 0,
+      behavior: "auto",
+    });
+  }, [categoryKey, longRange]);
 
   const clearAllFilters = () => {
     updateFilters(defaultCatalogFilterState);

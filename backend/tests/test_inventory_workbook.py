@@ -287,3 +287,36 @@ async def test_production_bootstrap_creates_single_location_and_receipt(
             await db.rollback()
     finally:
         await engine.dispose()
+
+
+@pytest.mark.parametrize("limit", ["MAX_WORKBOOK_BYTES", "MAX_ARCHIVE_MEMBERS",
+                                  "MAX_UNCOMPRESSED_BYTES", "MAX_XML_BYTES",
+                                  "MAX_XML_NODES", "MAX_XML_DEPTH"])
+def test_workbook_resource_limits(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, limit: str
+) -> None:
+    from app.bootstrap import inventory_workbook
+
+    path = synthetic_workbook(tmp_path / "synthetic.xlsx")
+    monkeypatch.setattr(inventory_workbook, limit, 1)
+    assert any("resource limit" in error for error in read_workbook(path).errors)
+
+
+def test_workbook_rejects_doctype_including_utf16(tmp_path: Path) -> None:
+    for encoding in ("utf-8", "utf-16"):
+        path = tmp_path / f"doctype-{encoding}.xlsx"
+        with ZipFile(path, "w") as archive:
+            archive.writestr("xl/_rels/workbook.xml.rels", (
+                f'<?xml version="1.0" encoding="{encoding}"?>'
+                '<!DOCTYPE r [<!ENTITY x "payload">]><r>&x;</r>'
+            ).encode(encoding))
+        assert any("document types" in error for error in read_workbook(path).errors)
+
+
+def test_workbook_rejects_duplicate_members(tmp_path: Path) -> None:
+    path = tmp_path / "duplicate.xlsx"
+    with ZipFile(path, "w") as archive:
+        archive.writestr("xl/workbook.xml", "<r/>")
+        with pytest.warns(UserWarning, match="Duplicate name"):
+            archive.writestr("xl/workbook.xml", "<other/>")
+    assert any("duplicate ZIP" in error for error in read_workbook(path).errors)

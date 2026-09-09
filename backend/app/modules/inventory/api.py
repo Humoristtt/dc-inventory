@@ -266,16 +266,21 @@ async def get_stock(
 
 @read_router.get("/movement-actors")
 async def get_movement_actors(db: DbSession, approved: Approved) -> list[dict[str, str]]:
-    query = select(Movement.actor_user_id, Movement.actor_display_name_snapshot).distinct()
+    query = (
+        select(Movement.actor_user_id, Movement.actor_display_name_snapshot)
+        .distinct(Movement.actor_user_id)
+        .order_by(Movement.actor_user_id, Movement.journal_seq.desc())
+    )
     if approved.user.role != UserRole.ADMIN:
         query = query.where(Movement.actor_user_id == approved.user.id)
-    rows = (await db.execute(query.order_by(Movement.actor_display_name_snapshot))).all()
+    rows = (await db.execute(query)).all()
     return [
-        {"id": str(key), "name": value} for key, value in {row[0]: row[1] for row in rows}.items()
+        {"id": str(key), "name": value}
+        for key, value in sorted(rows, key=lambda row: (row[1], str(row[0])))
     ]
 
 
-@read_router.get("/movements", response_model=MovementListOut)
+@read_router.get("/movements", response_model=MovementListOut, deprecated=True)
 async def get_movements(
     db: DbSession,
     approved: Approved,
@@ -350,6 +355,7 @@ async def get_movement_feed(
     period: Literal["7d", "30d", "3m", "year", "all"] = "3m",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     before_journal_seq: Annotated[int | None, Query(ge=1)] = None,
+    snapshot_at: datetime | None = None,
 ) -> MovementCursorListOut:
     if approved.user.role != UserRole.ADMIN:
         if (
@@ -362,10 +368,13 @@ async def get_movement_feed(
             )
         actor_user_id = approved.user.id
 
+    snapshot_at = snapshot_at or datetime.now(UTC)
+    if snapshot_at.tzinfo is None or snapshot_at.year < 2:
+        raise HTTPException(status_code=422, detail="snapshot requires timezone and year >= 2")
     since: datetime | None = None
 
     if period != "all":
-        now = datetime.now(UTC)
+        now = snapshot_at
 
         if period in {"7d", "30d"}:
             since = now - timedelta(
@@ -402,6 +411,7 @@ async def get_movement_feed(
             long_range=long_range,
             location_id=location_id,
             since=since,
+            until=snapshot_at,
             before_journal_seq=before_journal_seq,
             limit=limit,
         )
@@ -414,6 +424,7 @@ async def get_movement_feed(
             for record in page.items
         ],
         limit=limit,
+        snapshot_at=snapshot_at,
         next_before_journal_seq=(
             page.next_before_journal_seq
         ),

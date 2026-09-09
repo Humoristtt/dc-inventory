@@ -279,6 +279,36 @@ def normalize_row(sheet: str, row: dict[str, str], source: str) -> Equipment:
     )
 
 
+MAX_WORKBOOK_BYTES = 16 * 1024 * 1024
+MAX_ARCHIVE_MEMBERS = 256
+MAX_UNCOMPRESSED_BYTES = 32 * 1024 * 1024
+MAX_XML_BYTES = 4 * 1024 * 1024
+MAX_XML_NODES = 100_000
+MAX_XML_DEPTH = 64
+
+
+class _WorkbookTreeBuilder(ET.TreeBuilder):
+    def doctype(self, name: str, pubid: str | None, system: str | None) -> None:
+        raise ValueError("XML document types are not supported")
+
+
+def _read_xml(archive: ZipFile, member: str) -> ET.Element:
+    with archive.open(member) as source:
+        data = source.read(MAX_XML_BYTES + 1)
+    if len(data) > MAX_XML_BYTES:
+        raise ValueError("XML member exceeds resource limit")
+    root = ET.fromstring(data, parser=ET.XMLParser(target=_WorkbookTreeBuilder()))
+    stack = [(root, 1)]
+    count = 0
+    while stack:
+        node, depth = stack.pop()
+        count += 1
+        if count > MAX_XML_NODES or depth > MAX_XML_DEPTH:
+            raise ValueError("XML structure exceeds resource limit")
+        stack.extend((child, depth + 1) for child in node)
+    return root
+
+
 def read_workbook(path: Path = SOURCE) -> Validation:
     result = Validation(path.expanduser().resolve())
     if not path.exists():
@@ -286,18 +316,28 @@ def read_workbook(path: Path = SOURCE) -> Validation:
         return result
     grouped: dict[str, Equipment] = {}
     try:
+        if path.stat().st_size > MAX_WORKBOOK_BYTES:
+            raise ValueError("workbook exceeds resource limit")
         with ZipFile(path) as archive:
+            members = archive.infolist()
+            if (len(members) > MAX_ARCHIVE_MEMBERS
+                    or sum(member.file_size for member in members) > MAX_UNCOMPRESSED_BYTES):
+                raise ValueError("ZIP exceeds resource limit")
+            if len({member.filename for member in members}) != len(members):
+                raise ValueError("duplicate ZIP members")
+            if any(member.flag_bits & 1 for member in members):
+                raise ValueError("encrypted ZIP members are not supported")
             strings = []
             if "xl/sharedStrings.xml" in archive.namelist():
                 strings = [
                     "".join(node.itertext())
-                    for node in ET.fromstring(archive.read("xl/sharedStrings.xml"))
+                    for node in _read_xml(archive, "xl/sharedStrings.xml")
                 ]
             relationships = {
                 node.attrib["Id"]: node.attrib["Target"]
-                for node in ET.fromstring(archive.read("xl/_rels/workbook.xml.rels"))
+                for node in _read_xml(archive, "xl/_rels/workbook.xml.rels")
             }
-            workbook = ET.fromstring(archive.read("xl/workbook.xml"))
+            workbook = _read_xml(archive, "xl/workbook.xml")
             for sheet in workbook.findall("s:sheets/s:sheet", NS):
                 name = sheet.attrib["name"]
                 result.sheets.append(name)
@@ -313,7 +353,7 @@ def read_workbook(path: Path = SOURCE) -> Validation:
                     if target.startswith("/")
                     else posixpath.normpath("xl/" + target)
                 )
-                root = ET.fromstring(archive.read(member))
+                root = _read_xml(archive, member)
                 rows: list[tuple[int, dict[int, str]]] = []
                 for xml_row in root.findall("s:sheetData/s:row", NS):
                     cells = {}
@@ -321,15 +361,24 @@ def read_workbook(path: Path = SOURCE) -> Validation:
                         ref = cell.attrib["r"]
                         if cell.find("s:f", NS) is not None:
                             result.errors.append(f"{name}!{ref}: formulas are not supported")
+                        match = re.fullmatch(r"([A-Z]{1,3})[1-9][0-9]{0,6}", ref)
+                        if match is None:
+                            raise ValueError("invalid cell reference")
                         col = 0
-                        for char in re.match(r"[A-Z]+", ref)[0]:  # type: ignore[index]
+                        for char in match[1]:
                             col = col * 26 + ord(char) - 64
                         value = cell.find("s:v", NS)
                         text = value.text or "" if value is not None else ""
                         if cell.get("t") == "s":
-                            text = strings[int(text)]
+                            index = int(text)
+                            if not 0 <= index < len(strings):
+                                raise ValueError("invalid shared string index")
+                            text = strings[index]
                         elif cell.get("t") == "inlineStr":
-                            text = "".join(cell.find("s:is", NS).itertext())  # type: ignore[union-attr]
+                            inline = cell.find("s:is", NS)
+                            if inline is None:
+                                raise ValueError("missing inline string")
+                            text = "".join(inline.itertext())
                         if text.strip():
                             cells[col] = clean_text(text)
                     if cells:
@@ -372,7 +421,7 @@ def read_workbook(path: Path = SOURCE) -> Validation:
                         result.errors.append(f"{source}: {error}")
             for missing_sheet in sorted(set(SHEETS) - set(result.sheets)):
                 result.errors.append(f"missing worksheet: {missing_sheet}")
-    except (BadZipFile, ET.ParseError, KeyError, OSError) as error:
+    except (BadZipFile, ET.ParseError, KeyError, OSError, ValueError, RuntimeError) as error:
         result.errors.append(f"invalid workbook: {error}")
     result.items = sorted(grouped.values(), key=lambda x: (x.category, x.signature))
     for key, actual, expected_total in (

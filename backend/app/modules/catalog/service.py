@@ -622,9 +622,12 @@ async def create_item(db: AsyncSession, payload: ItemCreate) -> uuid.UUID:
         category_id=category.id,
         manufacturer_id=payload.manufacturer_id,
         name=normalize_inline_text(payload.name, field="name", max_length=255),
-        normalized_name=normalize_comparison(payload.name),
+        normalized_name=normalize_comparison(payload.name, field="name", max_length=255),
         model=normalize_optional_inline_text(payload.model, field="model", max_length=255),
-        normalized_model=normalize_comparison(payload.model) if payload.model else None,
+        normalized_model=(
+            normalize_comparison(payload.model, field="model", max_length=255)
+            if payload.model else None
+        ),
         identity_signature=signature,
         status=ItemStatus.ACTIVE,
     )
@@ -659,9 +662,11 @@ async def update_item(
     merged = ItemCreate.model_validate(data)
     category, values, signature = await _prepare_identity(db, merged)
     item.name = normalize_inline_text(merged.name, field="name", max_length=255)
-    item.normalized_name = normalize_comparison(item.name)
+    item.normalized_name = normalize_comparison(item.name, field="name", max_length=255)
     item.model = normalize_optional_inline_text(merged.model, field="model", max_length=255)
-    item.normalized_model = normalize_comparison(item.model) if item.model else None
+    item.normalized_model = (
+        normalize_comparison(item.model, field="model", max_length=255) if item.model else None
+    )
     item.manufacturer_id = merged.manufacturer_id
     item.identity_signature = signature
     await db.execute(delete(ItemAttributeValue).where(ItemAttributeValue.item_id == item.id))

@@ -76,3 +76,26 @@ async def test_telegram_webhook_validates_update_id_before_transaction() -> None
         application.dependency_overrides.clear()
 
     assert response.status_code == 400
+
+
+async def test_webhook_stops_reading_when_stream_exceeds_limit() -> None:
+    from types import SimpleNamespace
+    from typing import Any, cast
+
+    from fastapi import HTTPException
+
+    from app.modules.telegram_bot.api import MAX_TELEGRAM_UPDATE_BYTES, telegram_webhook
+
+    async def stream() -> Any:
+        yield b"x" * MAX_TELEGRAM_UPDATE_BYTES
+        yield b"x"
+        raise AssertionError("oversized request must not be fully buffered")
+
+    request = SimpleNamespace(
+        stream=stream,
+        app=SimpleNamespace(state=SimpleNamespace(settings=SimpleNamespace(
+            telegram_webhook_secret_value="synthetic-secret"))),
+    )
+    with pytest.raises(HTTPException) as error:
+        await telegram_webhook(cast(Any, request), cast(Any, None), "synthetic-secret")
+    assert error.value.status_code == 413

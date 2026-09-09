@@ -401,7 +401,7 @@ async def _run_worker_loop(
 async def run_worker() -> None:
     settings = get_settings()
     client = configured_gateway_client(settings)
-    engine = create_engine(settings)
+    engine = create_engine(settings, application_name="dc-inventory-telegram-worker")
 
     try:
         await _run_worker_loop(

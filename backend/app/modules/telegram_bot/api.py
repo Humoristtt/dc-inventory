@@ -40,15 +40,17 @@ async def telegram_webhook(
             detail="invalid Telegram webhook secret",
         )
 
-    raw = await request.body()
-    if len(raw) > MAX_TELEGRAM_UPDATE_BYTES:
-        raise HTTPException(
-            status_code=status.HTTP_413_CONTENT_TOO_LARGE,
-            detail="Telegram update is too large",
-        )
+    raw = bytearray()
+    async for chunk in request.stream():
+        if len(raw) + len(chunk) > MAX_TELEGRAM_UPDATE_BYTES:
+            raise HTTPException(
+                status_code=status.HTTP_413_CONTENT_TOO_LARGE,
+                detail="Telegram update is too large",
+            )
+        raw.extend(chunk)
 
     try:
-        payload = decode_update_json(raw)
+        payload = decode_update_json(bytes(raw))
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

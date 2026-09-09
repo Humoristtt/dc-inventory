@@ -398,3 +398,53 @@ async def test_movement_feed_uses_stable_journal_cursor(
         )
 
         assert forbidden.status_code == 403
+
+
+async def test_actor_names_use_latest_journal_snapshot(warehouse_db: AsyncSession) -> None:
+    from unittest.mock import patch
+
+    from app.modules.inventory import service
+
+    db = warehouse_db
+    s = await scenario(db)
+    app, users = await api_context(db)
+    for name in ("Zulu old", "Alpha latest"):
+        with patch.object(service, "normalize_inline_text", return_value=name):
+            await move(db, (users["user"][0], *s[1:]), "RETURN", 1, destination=s[2])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.get("/api/inventory/movement-actors", headers=users["user"][1])
+    assert response.json() == [{"id": str(users["user"][0]), "name": "Alpha latest"}]
+
+
+async def test_feed_period_uses_supplied_snapshot(warehouse_db: AsyncSession) -> None:
+    from unittest.mock import patch
+
+    from app.modules.inventory import service
+
+    db = warehouse_db
+    s = await scenario(db)
+    app, users = await api_context(db)
+    anchor = datetime(2026, 9, 9, 12, tzinfo=UTC)
+
+    class Clock:
+        @staticmethod
+        def now(tz: tzinfo | None) -> datetime:
+            return anchor - timedelta(days=7) + timedelta(seconds=1)
+
+    with patch.object(service, "datetime", Clock):
+        record = await move(db, (users["user"][0], *s[1:]), "RETURN", 1, destination=s[2])
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        path = "/api/inventory/movements/feed"
+        response = await client.get(path, headers=users["user"][1], params={
+            "period": "7d", "snapshot_at": anchor.isoformat(),
+        })
+        assert response.status_code == 200
+        assert [row["id"] for row in response.json()["items"]] == [str(record.record.movement.id)]
+        later = await client.get(path, headers=users["user"][1], params={
+            "period": "7d", "snapshot_at": (anchor + timedelta(seconds=2)).isoformat(),
+        })
+        assert later.json()["items"] == []
+        invalid = await client.get(path, headers=users["user"][1], params={
+            "snapshot_at": "2026-09-09T12:00:00",
+        })
+        assert invalid.status_code == 422

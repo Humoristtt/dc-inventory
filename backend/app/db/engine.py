@@ -3,7 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 from app.core.config import Settings, get_settings
 
 
-def create_engine(settings: Settings | None = None) -> AsyncEngine:
+def create_engine(
+    settings: Settings | None = None, *, application_name: str = "dc-inventory-backend"
+) -> AsyncEngine:
     runtime_settings = settings or get_settings()
 
     return create_async_engine(
@@ -15,7 +17,7 @@ def create_engine(settings: Settings | None = None) -> AsyncEngine:
         connect_args={
             "timeout": runtime_settings.database_connect_timeout_seconds,
             "server_settings": {
-                "application_name": "dc-inventory",
+                "application_name": application_name,
                 "timezone": "UTC",
                 "statement_timeout": str(
                     runtime_settings.database_statement_timeout_seconds * 1000

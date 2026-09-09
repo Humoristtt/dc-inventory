@@ -119,3 +119,21 @@ async def test_optional_blank_color_omitted_and_typed_db_constraints(
                 .where(ItemAttributeValue.id == value.id)
                 .values(category_attribute_id=other_attribute.id)
             )
+
+
+@pytest.mark.parametrize("field", ["name", "model"])
+async def test_normalized_item_storage_bounds(warehouse_db: AsyncSession, field: str) -> None:
+    db = warehouse_db
+    payload = cable_payload()
+    invalid = payload.model_copy(update={field: "ß" * 128})
+    with pytest.raises(CatalogValidationError, match="normalized value exceeds"):
+        await create_item(db, invalid)
+    item_id = await create_item(db, payload)
+    patch = ItemPatch.model_validate({field: "ß" * 128})
+    with pytest.raises(CatalogValidationError, match="normalized value exceeds"):
+        async with db.begin_nested():
+            await update_item(db, item_id, patch, fields_set=patch.model_fields_set)
+    accepted = ItemPatch.model_validate({field: "ß" * 127})
+    await update_item(db, item_id, accepted, fields_set=accepted.model_fields_set)
+    item = (await get_item_record(db, item_id)).item
+    assert len(getattr(item, f"normalized_{field}")) == 254

@@ -130,6 +130,7 @@ class MovementListOut(BaseModel):
 
 
 class MovementCursorListOut(BaseModel):
+    snapshot_at: datetime
     items: list[MovementOut]
     limit: int
     next_before_journal_seq: int | None

@@ -50,7 +50,7 @@ async def _run_worker_loop(
 
 async def run_worker() -> None:
     settings = get_settings()
-    engine = create_engine(settings)
+    engine = create_engine(settings, application_name="dc-inventory-maintenance-worker")
 
     try:
         async with asyncio.TaskGroup() as tasks:

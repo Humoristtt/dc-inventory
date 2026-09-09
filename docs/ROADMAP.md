@@ -8,7 +8,7 @@
 - [~] текущая приёмка;
 - [ ] будущая работа.
 
-Последнее обновление: 2026-09-08.
+Последнее обновление: 2026-09-10.
 
 ## 1. Базовая платформа
 
@@ -28,8 +28,10 @@
 
 - [x] Quantity-only inventory.
 - [x] Удалена active physical-unit model.
-- [x] Удалены персональные holder/custody semantics.
-- [x] Пользователь является только movement actor.
+- [x] Удалена legacy physical-unit holder model.
+- [x] Actor операции отделён от custody пользователя.
+- [x] UserItemCustodyBalance = User × Item × positive quantity.
+- [x] USER RETURN ограничен фактическим custody balance.
 - [x] StockBalance = Item × Location × quantity.
 - [x] Zero balances не хранятся.
 - [x] Negative stock запрещён.
@@ -155,7 +157,7 @@ ADMIN:
 - [x] Responsive/mobile/desktop warehouse UI acceptance.
 - [x] Header/fullscreen/Escape remediation.
 - [x] Desktop form consistency and smart suggestions.
-- [x] Current migration head `c5d6e7f8a9b0`.
+- [x] Current migration head `f8a9b0c1d2e3`.
 - [x] External authoritative workbook contract.
 - [x] Fail-closed production one-shot bootstrap path.
 - [x] Empty-domain production preflight.
@@ -179,7 +181,11 @@ feature cycle.
 - [x] Очистить Mac development environment от obsolete branches/worktrees,
       temporary archives, caches и disposable Docker resources.
 - [~] Выполнить independent full source/security/runtime/data audit на clean baseline.
-- [ ] Исправить найденные P0/P1 blockers отдельными change sets.
+- [~] Исправить findings текущего audit до технически чистого baseline.
+- [x] Синхронизировать custody/access lifecycle и запретить BLOCKED при outstanding custody.
+- [x] Сделать restore reconciliation schema-version-safe через exact backend image.
+- [x] Сделать movement feed snapshot commit-stable при concurrent journal writers.
+- [x] Добавить narrow safe HTTP mapping известных custody DB-trigger violations.
 - [ ] Зафиксировать пользовательский список minor UX corrections.
 - [ ] Выполнить minor UX remediation отдельной веткой.
 - [ ] Повторить final affected/full acceptance после UX fixes.

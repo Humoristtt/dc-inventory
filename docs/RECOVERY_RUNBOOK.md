@@ -142,9 +142,20 @@ For a selected artifact:
 
 ## 7. Projection reconciliation
 
-Run:
+Projection reconciliation is schema-version-bound.
 
-    backend/scripts/reconcile_inventory_projections.sql
+The rehearsal must use the reconciliation SQL shipped inside the **exact backend
+image** recorded in the selected backup manifest:
+
+    /app/scripts/reconcile_inventory_projections.sql
+
+It must not use `backend/scripts/reconcile_inventory_projections.sql` from the
+current production checkout. The current checkout may be newer than the
+restored Alembic head, and a newer reconciliation query may reference schema
+objects that did not exist when the backup was created.
+
+The immutable backend image revision is verified against the manifest before
+the reconciliation SQL is extracted.
 
 Required result:
 

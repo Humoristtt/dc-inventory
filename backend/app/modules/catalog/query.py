@@ -50,6 +50,9 @@ type FacetBound = int | Decimal
 
 DEFAULT_FACET_VALUE_LIMIT = 50
 MAX_FACET_VALUE_LIMIT = 100
+MAX_SEARCH_TOKENS = 12
+MAX_QUERY_VALUES = 50
+MAX_FILTER_EXPRESSION_LENGTH = 2048
 
 
 @dataclass(frozen=True, slots=True)
@@ -142,7 +145,10 @@ def _normalize_query_tokens(q: str | None) -> tuple[str, ...]:
         raise CatalogValidationError("search_too_long", "q exceeds 200 characters")
     if not normalized:
         return ()
-    return tuple(normalize_comparison(token) for token in normalized.split(" "))
+    tokens = tuple(dict.fromkeys(normalize_comparison(token) for token in normalized.split()))
+    if len(tokens) > MAX_SEARCH_TOKENS:
+        raise CatalogValidationError("search_too_complex", "q exceeds 12 distinct tokens")
+    return tokens
 
 
 async def build_catalog_query_spec(
@@ -159,6 +165,16 @@ async def build_catalog_query_spec(
     order: str = SortOrder.ASC.value,
     filter_expressions: Sequence[str] = (),
 ) -> CatalogQuerySpec:
+    tokens = _normalize_query_tokens(q)
+    for field, values in (
+        ("manufacturer_ids", manufacturer_ids),
+        ("location_ids", location_ids),
+        ("filter_expressions", filter_expressions),
+    ):
+        if len(values) > MAX_QUERY_VALUES:
+            raise CatalogValidationError("query_too_complex", f"{field} exceeds 50 values")
+    if any(len(expression) > MAX_FILTER_EXPRESSION_LENGTH for expression in filter_expressions):
+        raise CatalogValidationError("filter_too_long", "filter exceeds 2048 characters")
     category: Category | None = None
     definitions: list[CategoryAttribute] = []
     category_ids: tuple[uuid.UUID, ...] = ()
@@ -268,7 +284,7 @@ async def build_catalog_query_spec(
         )
 
     return CatalogQuerySpec(
-        tokens=_normalize_query_tokens(q),
+        tokens=tokens,
         category_ids=category_ids,
         definitions=tuple(definitions),
         long_range=long_range,

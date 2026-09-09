@@ -280,7 +280,7 @@ it("USER видит физический остаток и может взять
 });
 
 
-it("RETURN не требует персонального остатка пользователя", async () => {
+it("RETURN показывает понятную ошибку при недостаточном custody", async () => {
   let movementBody: Record<string, unknown> | null = null;
 
   vi.stubGlobal("fetch", vi.fn(async (
@@ -317,23 +317,11 @@ it("RETURN не требует персонального остатка пол�
       movementBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
 
       return jsonResponse({
-        id: "movement-return",
-        journal_seq: 2,
-        occurred_at: "2026-09-07T13:00:00Z",
-        actor_user_id: "user-vasya",
-        actor_display_name_snapshot: "Вася",
-        movement_type: "RETURN",
-        source_location_name_snapshot: null,
-        destination_location_name_snapshot: warehouse.name,
-        lines: [
-          {
-            id: "line-2",
-            item_id: item.id,
-            item_name_snapshot: item.name,
-            quantity: 16,
-          },
-        ],
-      }, 201);
+        detail: {
+          code: "insufficient_custody",
+          message: "insufficient user custody",
+        },
+      }, 409);
     }
 
     throw new Error(`unexpected fetch ${url}`);
@@ -383,6 +371,12 @@ it("RETURN не требует персонального остатка пол�
   expect(
     movementBody,
   ).not.toHaveProperty("holder_user_id");
+
+  expect(
+    await screen.findByRole("alert"),
+  ).toHaveTextContent(
+    "Нельзя вернуть больше оборудования, чем числится за вами.",
+  );
 });
 
 
@@ -420,7 +414,7 @@ it("ADMIN управляет местами хранения без выдума
     throw new Error(`unexpected fetch ${url}`);
   }));
 
-  renderRoute("/more", "ADMIN");
+  renderRoute("/more/locations", "ADMIN");
 
   expect(
     await screen.findByRole(
@@ -529,7 +523,8 @@ it("Движения по умолчанию показывают 3 месяца
           },
         ],
         limit: 30,
-        next_before_journal_seq: null,
+        next_before_journal_seq: url.includes("before_journal_seq") ? null : 1,
+        snapshot_at: "2026-09-09T07:00:00Z",
       });
     }
 
@@ -556,6 +551,15 @@ it("Движения по умолчанию показывают 3 месяца
           && params.get("before_journal_seq") === null;
       }),
     ).toBe(true);
+  });
+
+  fireEvent.click(screen.getByRole("button", { name: /Следующая страница/ }));
+  await waitFor(() => {
+    expect(movementRequests.some((url) => {
+      const params = new URL(url, "http://test").searchParams;
+      return params.get("before_journal_seq") === "1"
+        && params.get("snapshot_at") === "2026-09-09T07:00:00Z";
+    })).toBe(true);
   });
 
   fireEvent.change(

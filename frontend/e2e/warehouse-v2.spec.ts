@@ -688,7 +688,7 @@ test(
 
     await assertNoHorizontalOverflow(page);
 
-    await page.goto("/more");
+    await page.goto("/more/locations");
 
     await page
       .getByRole(

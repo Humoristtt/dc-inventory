@@ -9,7 +9,9 @@
 - PostgreSQL является каноническим источником данных.
 - Остатки изменяются только через складские операции.
 - История операций сохраняется и не переписывается задним числом.
-- Warehouse Domain V2 использует только количественный учёт; legacy serial/custody model не является частью целевой схемы этой ветки.
+- Warehouse Domain V2 использует количественный учёт без physical-unit/serial lifecycle.
+- Текущие транзакционные проекции: `StockBalance` = Item × Location и `UserItemCustodyBalance` = User × Item.
+- USER ISSUE/RETURN изменяют персональную custody-проекцию; ADMIN warehouse movements не создают custody.
 - Поддерживается несколько складов и локаций.
 - Каталог Warehouse V2 использует versioned fixed hierarchy и leaf schemas; изменения схем выполняются через код и миграции, а не runtime-конструктор.
 - Доступ пользователей осуществляется через Telegram.
@@ -25,6 +27,13 @@ Warehouse Domain V2 развёрнут и принят в production.
 Текущий production schema baseline:
 
     ALEMBIC_HEAD=c5d6e7f8a9b0
+
+Текущий source migration head:
+
+    SOURCE_ALEMBIC_HEAD=f8a9b0c1d2e3
+
+Production migration state и source migration head являются разными operational
+facts до отдельного deploy/migration acceptance.
 
 Stage 15 technical hardening завершён. Automated off-VM PostgreSQL backup,
 isolated restore rehearsal, runtime provenance, least-privilege DB identities,
@@ -96,7 +105,9 @@ Production runtime включает:
 - scoped search/facets;
 - immutable warehouse movement journal;
 - quantity-only `StockBalance`;
-- read-only projection reconciliation;
+- quantity-only `UserItemCustodyBalance`;
+- custody-aware USER ISSUE/RETURN;
+- read-only stock + custody projection reconciliation;
 - responsive Telegram/mobile/desktop Warehouse UI;
 - guarded external-workbook initial bootstrap.
 
@@ -104,7 +115,10 @@ Production runtime публикует на host только `127.0.0.1:8080`; b
 PostgreSQL доступны только внутри Docker-сетей.
 
 Item является номенклатурной позицией, а не физическим экземпляром.
-Warehouse V2 не содержит active serial/WWN/custody/current-holder accounting.
+Warehouse V2 не содержит active serial/WWN physical-unit lifecycle.
+Персональная ответственность за выданное USER оборудование хранится отдельно
+как агрегированная количественная custody-проекция User × Item; это не модель
+индивидуальных physical units.
 
 ## Номенклатура
 

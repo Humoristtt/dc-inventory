@@ -1,0 +1,14 @@
+[Unit]
+Description=Check verified Spikatel backup freshness and last attempt
+OnFailure=dc-inventory-backup-alert.service
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/usr/bin/python3 /opt/dc-inventory/ops/backup/check_status.py --max-age-seconds 93600
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+TimeoutStartSec=30s

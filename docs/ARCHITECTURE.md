@@ -49,7 +49,11 @@ Current projection:
 
 stock_balances(Item, Location, quantity)
 
-Physical-unit/custody projection отсутствует.
+user_item_custody_balances(User, Item, quantity)
+
+`actor_user_id` фиксирует исполнителя операции, а `custody_user_id` — пользователя,
+физически ответственного за оборудование. USER ISSUE/RETURN изменяют custody;
+ADMIN ISSUE/RETURN остаются административными движениями склада без custody.
 
 Movement types:
 
@@ -73,13 +77,14 @@ MovementLine хранит Item snapshot и positive quantity.
 4. lock original movement при необходимости;
 5. lock locations;
 6. lock Items;
-7. batch-lock StockBalance ordered by (item_id, location_id), then apply deltas;
-8. insert immutable Movement/MovementLine;
-9. enqueue transactional outbox effects;
-10. commit.
+7. batch-lock StockBalance ordered by (item_id, location_id);
+8. batch-lock UserItemCustodyBalance ordered by item_id;
+9. insert Movement header and apply stock/custody deltas;
+10. insert immutable MovementLine rows and enqueue transactional outbox effects;
+11. commit.
 
-Negative balance запрещён.
-Zero balance row удаляется.
+Negative stock/custody запрещён. Zero balance rows удаляются. REVERSAL наследует
+custody исходного movement; CORRECTION custody-bearing movement запрещён fail-closed.
 
 ## Idempotency
 
@@ -87,7 +92,8 @@ Scope:
 
 actor_user_id + client_request_id
 
-Replay одинакового payload возвращает существующий Movement.
+Fingerprint включает custody context. Replay одинакового payload возвращает
+существующий Movement.
 Другой payload под тем же ключом возвращает conflict.
 
 ## Notifications
@@ -165,7 +171,7 @@ Projection consistency проверяется:
 
 backend/scripts/reconcile_inventory_projections.sql
 
-Zero returned rows означает, что stock projection совпадает с journal.
+Zero returned rows означает, что stock и custody projections совпадают с journal.
 
 ## Bootstrap
 

@@ -200,9 +200,11 @@ export function bindDesktopEscapeGuard(): () => void {
       return;
     }
 
-    event.preventDefault();
-    event.stopPropagation();
-    event.stopImmediatePropagation();
+    const consume = () => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+    };
 
     const dismissTargets =
       document.querySelectorAll<HTMLElement>(
@@ -214,6 +216,7 @@ export function bindDesktopEscapeGuard(): () => void {
     );
 
     if (dismissTarget !== null) {
+      consume();
       dismissTarget.click();
       return;
     }
@@ -224,6 +227,7 @@ export function bindDesktopEscapeGuard(): () => void {
       webApp?.isFullscreen === true
       && webApp.exitFullscreen !== undefined
     ) {
+      consume();
       try {
         webApp.exitFullscreen();
       } catch {

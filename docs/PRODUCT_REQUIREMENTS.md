@@ -14,8 +14,11 @@ post-import reconciliation + verified backup + Telegram visual acceptance.
 2. Сколько оборудования есть сейчас?
 3. На каких складских локациях оно находится?
 4. Кто и когда выполнил приход, выдачу, возврат, перемещение или списание?
+5. Сколько оборудования сейчас числится в custody каждого USER?
 
-Персональный баланс оборудования сотрудников не ведётся.
+Персональная ответственность ведётся агрегированно как User × Item × quantity.
+Это не serial/current-holder модель физических экземпляров и пока не требует
+отдельного пользовательского экрана «Моё оборудование».
 
 Regular production warehouse mutations дополнительно защищены
 `REAL_INVENTORY_MUTATIONS_ENABLED`. Initial one-shot bootstrap и normal
@@ -76,6 +79,20 @@ Item detail показывает:
 - технические характеристики;
 - общий остаток;
 - breakdown по локациям.
+
+## Custody
+
+USER ISSUE увеличивает его `UserItemCustodyBalance`.
+
+USER RETURN уменьшает его `UserItemCustodyBalance` и не может превысить
+фактическое количество, числящееся за пользователем.
+
+ADMIN ISSUE/RETURN не создают персональную custody.
+
+APPROVED USER нельзя перевести в BLOCKED, пока за ним числится оборудование.
+
+Custody projection должна транзакционно согласовываться с immutable movement
+journal и участвует в canonical reconciliation.
 
 ## Движения
 

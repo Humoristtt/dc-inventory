@@ -10,8 +10,10 @@ from sqlalchemy.exc import DBAPIError, IntegrityError
 from app.core.config import Settings
 from app.core.safety import require_real_inventory_mutations_enabled
 from app.db.errors import (
+    POSTGRES_CHECK_VIOLATION_SQLSTATE,
     POSTGRES_UNIQUE_VIOLATION_SQLSTATE,
     RETRYABLE_POSTGRES_SQLSTATES,
+    postgres_error_message,
     postgres_sqlstate,
 )
 from app.modules.auth.dependencies import Admin, Approved, DbSession
@@ -45,6 +47,7 @@ from app.modules.inventory.service import (
     InventoryNotFoundError,
     MovementRecord,
     StockBalanceRecord,
+    acquire_movement_feed_snapshot,
     create_location,
     create_movement,
     display_identity,
@@ -65,6 +68,24 @@ from app.modules.notifications.service import (
 
 read_router = APIRouter(prefix="/api/inventory", tags=["inventory"])
 admin_router = APIRouter(prefix="/api/admin/inventory", tags=["admin-inventory"])
+
+
+_CUSTODY_TRIGGER_CONFLICT_CODES = {
+    "custody is only valid for issue, return, or reversal":
+        "custody_movement_type_invalid",
+    "user issue/return custody must match movement actor":
+        "custody_actor_mismatch",
+    "admin issue/return must not carry custody":
+        "custody_admin_invalid",
+    "correction of custody movement is forbidden":
+        "custody_correction_forbidden",
+    "reversal original movement not found":
+        "reversal_original_not_found",
+    "reversal custody must match original movement":
+        "reversal_custody_mismatch",
+    "custody reversal requires issue or return original":
+        "reversal_custody_original_invalid",
+}
 
 
 async def _enqueue_issue_admin_notification(
@@ -133,6 +154,26 @@ def _raise_integrity_conflict(error: IntegrityError) -> NoReturn:
 
     if sqlstate in RETRYABLE_POSTGRES_SQLSTATES:
         _raise_retryable_db_conflict(error)
+
+    if sqlstate == POSTGRES_CHECK_VIOLATION_SQLSTATE:
+        trigger_message = postgres_error_message(error)
+        trigger_code = (
+            _CUSTODY_TRIGGER_CONFLICT_CODES.get(trigger_message)
+            if trigger_message is not None
+            else None
+        )
+
+        if trigger_code is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "code": trigger_code,
+                    "message": (
+                        "inventory custody constraint "
+                        "rejected the operation"
+                    ),
+                },
+            ) from error
 
     if sqlstate != POSTGRES_UNIQUE_VIOLATION_SQLSTATE:
         raise error
@@ -266,16 +307,21 @@ async def get_stock(
 
 @read_router.get("/movement-actors")
 async def get_movement_actors(db: DbSession, approved: Approved) -> list[dict[str, str]]:
-    query = select(Movement.actor_user_id, Movement.actor_display_name_snapshot).distinct()
+    query = (
+        select(Movement.actor_user_id, Movement.actor_display_name_snapshot)
+        .distinct(Movement.actor_user_id)
+        .order_by(Movement.actor_user_id, Movement.journal_seq.desc())
+    )
     if approved.user.role != UserRole.ADMIN:
         query = query.where(Movement.actor_user_id == approved.user.id)
-    rows = (await db.execute(query.order_by(Movement.actor_display_name_snapshot))).all()
+    rows = (await db.execute(query)).all()
     return [
-        {"id": str(key), "name": value} for key, value in {row[0]: row[1] for row in rows}.items()
+        {"id": str(key), "name": value}
+        for key, value in sorted(rows, key=lambda row: (row[1], str(row[0])))
     ]
 
 
-@read_router.get("/movements", response_model=MovementListOut)
+@read_router.get("/movements", response_model=MovementListOut, deprecated=True)
 async def get_movements(
     db: DbSession,
     approved: Approved,
@@ -350,6 +396,7 @@ async def get_movement_feed(
     period: Literal["7d", "30d", "3m", "year", "all"] = "3m",
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     before_journal_seq: Annotated[int | None, Query(ge=1)] = None,
+    snapshot_at: datetime | None = None,
 ) -> MovementCursorListOut:
     if approved.user.role != UserRole.ADMIN:
         if (
@@ -362,10 +409,15 @@ async def get_movement_feed(
             )
         actor_user_id = approved.user.id
 
+    if snapshot_at is None:
+        snapshot_at = await acquire_movement_feed_snapshot(db)
+
+    if snapshot_at.tzinfo is None or snapshot_at.year < 2:
+        raise HTTPException(status_code=422, detail="snapshot requires timezone and year >= 2")
     since: datetime | None = None
 
     if period != "all":
-        now = datetime.now(UTC)
+        now = snapshot_at
 
         if period in {"7d", "30d"}:
             since = now - timedelta(
@@ -402,6 +454,7 @@ async def get_movement_feed(
             long_range=long_range,
             location_id=location_id,
             since=since,
+            until=snapshot_at,
             before_journal_seq=before_journal_seq,
             limit=limit,
         )
@@ -414,6 +467,7 @@ async def get_movement_feed(
             for record in page.items
         ],
         limit=limit,
+        snapshot_at=snapshot_at,
         next_before_journal_seq=(
             page.next_before_journal_seq
         ),
@@ -541,6 +595,12 @@ async def post_movement(
             payload,
             actor_user_id=approved.user.id,
             actor_display_name=display_identity(approved.identity),
+            custody_user_id=(
+                approved.user.id
+                if approved.user.role != UserRole.ADMIN
+                and payload.movement_type in {MovementType.ISSUE, MovementType.RETURN}
+                else None
+            ),
         )
         await _enqueue_issue_admin_notification(
             db,

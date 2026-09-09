@@ -71,8 +71,11 @@ async def actor(
     return user, token
 
 
-async def scenario(db: AsyncSession) -> Scenario:
-    user, _ = await actor(db)
+async def scenario(
+    db: AsyncSession,
+    role: UserRole = UserRole.ADMIN,
+) -> Scenario:
+    user, _ = await actor(db, role)
     item = await create_item(db, cable_payload())
     locations = [
         await create_location(
@@ -93,6 +96,7 @@ async def move(
     destination: uuid.UUID | None = None,
     key: str | None = None,
     original: uuid.UUID | None = None,
+    custody_user_id: uuid.UUID | None = None,
 ) -> MovementResult:
     result = await create_movement(
         db,
@@ -106,5 +110,6 @@ async def move(
         ),
         actor_user_id=scenario[0],
         actor_display_name="Synthetic actor",
+        custody_user_id=custody_user_id,
     )
     return result

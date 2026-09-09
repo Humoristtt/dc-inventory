@@ -63,3 +63,48 @@ async def test_ready_returns_503_when_database_is_unavailable() -> None:
 
     assert response.status_code == 503
     assert response.json() == {"detail": "database unavailable"}
+
+
+async def test_readiness_checks_schema_even_when_tables_are_empty() -> None:
+    from unittest.mock import MagicMock
+
+    from sqlalchemy.exc import ProgrammingError
+
+    from app.db.health import ensure_database_ready
+
+    engine = MagicMock()
+    connection = AsyncMock()
+    engine.connect.return_value.__aenter__.return_value = connection
+    await ensure_database_ready(engine)
+    query = str(connection.execute.call_args.args[0])
+    assert "WHERE false" in query
+    assert "m.journal_seq" in query and "s.expires_at" in query
+    assert "m.custody_user_id" in query
+    assert "public.user_item_custody_balances c" in query
+    assert "c.user_id" in query
+    assert "c.item_id" in query
+    assert "c.quantity" in query
+    assert "public.user_access_events ua" in query
+    assert "ua.actor_user_id" in query
+    assert "ua.target_user_id" in query
+    assert "ua.before_access_status" in query
+    assert "ua.after_access_status" in query
+    assert "ua.occurred_at" in query
+    connection.execute.side_effect = ProgrammingError("sql", {}, Exception("missing column"))
+    with pytest.raises(DatabaseUnavailableError):
+        await ensure_database_ready(engine)
+
+
+async def test_database_application_names_are_distinct() -> None:
+    from app.core.config import Settings
+    from app.db.engine import create_engine
+    from app.db.migration_settings import migration_server_settings
+
+    settings = Settings(app_env="test")
+    for name in ("dc-inventory-backend", "dc-inventory-telegram-worker",
+                 "dc-inventory-maintenance-worker"):
+        with patch("app.db.engine.create_async_engine") as factory:
+            create_engine(settings, application_name=name)
+        server = factory.call_args.kwargs["connect_args"]["server_settings"]
+        assert server["application_name"] == name
+    assert migration_server_settings(settings)["application_name"] == "dc-inventory-migrations"

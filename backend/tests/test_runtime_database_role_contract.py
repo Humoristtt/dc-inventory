@@ -31,6 +31,12 @@ def test_runtime_database_permission_source_is_least_privilege() -> None:
 
     assert "'journal_seq'" in permissions
 
+    assert (
+        "'GRANT SELECT, INSERT, UPDATE, DELETE '"
+        "\n    'ON TABLE user_item_custody_balances TO %I'" in permissions
+    )
+    assert permissions.count("user_item_custody_balances") == 1
+
 
 def test_runtime_outbox_recovery_update_is_column_scoped() -> None:
     permissions = (

@@ -22,6 +22,11 @@ for required in (
     "RESTORE_MANIFEST_CHECKOUT_METADATA=PASS",
     "RESTORE_ALEMBIC=PASS",
     "RESTORE_RECONCILIATION=ZERO_DRIFT",
+    "RESTORE_RECONCILIATION_SOURCE=BACKEND_IMAGE",
+    "RESTORE_RECONCILIATION_SOURCE_REVISION=",
+    "/app/scripts/reconcile_inventory_projections.sql",
+    "--entrypoint cat",
+    "EXACT_RUNTIME_ARTIFACTS_LOCAL=PASS",
     "RESTORE_RUNTIME_CONFIG=ISOLATED_PLACEHOLDERS",
     "pg_restore --list",
     "docker network create --internal",
@@ -48,10 +53,13 @@ for forbidden in (
     "REAL_INVENTORY_ENTRY=BLOCKED_STAGE15",
     "REAL_INVENTORY_ENTRY=BLOCKED_PENDING_NEXT_ROADMAP",
     "backup manifest does not match current production checkout",
+    '$ROOT/backend/scripts/reconcile_inventory_projections.sql',
 ):
     assert forbidden not in source, forbidden
 
 assert "ops/recovery/rehearse_restore.sh" in doc
 assert "production cutover" in doc.lower()
+assert "exact backend image" in doc.lower()
+assert "/app/scripts/reconcile_inventory_projections.sql" in doc
 
 print("AUD_06_RECOVERY_RUNBOOK_CONTRACT=PASS")

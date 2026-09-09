@@ -280,3 +280,18 @@ describe("Telegram Web App SDK delivery", () => {
     expect(backButton.hide).toHaveBeenCalledTimes(1);
   });
 });
+
+it("preserves browser Escape when there is no application action", () => {
+  delete window.Telegram;
+  const downstream = vi.fn();
+  const cleanup = bindDesktopEscapeGuard();
+  window.addEventListener("keydown", downstream);
+  const event = new KeyboardEvent("keydown", {
+    key: "Escape", bubbles: true, cancelable: true,
+  });
+  window.dispatchEvent(event);
+  expect(event.defaultPrevented).toBe(false);
+  expect(downstream).toHaveBeenCalledTimes(1);
+  window.removeEventListener("keydown", downstream);
+  cleanup();
+});

@@ -19,6 +19,10 @@ RUN set -eux; \
 
 FROM ${POSTGRES_IMAGE}
 
+ARG APP_REVISION
+RUN test -n "$APP_REVISION" && test "$APP_REVISION" != "unknown"
+LABEL org.opencontainers.image.revision=$APP_REVISION
+
 ARG OPENSSL_VERSION=3.5.7-1~deb13u2
 
 COPY --from=gosu-builder /out/gosu /usr/local/bin/gosu

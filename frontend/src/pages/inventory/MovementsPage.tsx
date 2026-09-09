@@ -24,8 +24,8 @@ export function MovementsPage() {
   const [location, setLocation] = useState("");
   const [movementType, setMovementType] = useState("");
   const [cursorStack, setCursorStack] = useState<
-    Array<number | null>
-  >([null]);
+    Array<{ before: number | null; snapshot?: string }>
+  >([{ before: null }]);
 
   const cursor = cursorStack[cursorStack.length - 1];
 
@@ -60,11 +60,15 @@ export function MovementsPage() {
     limit: String(PAGE_SIZE),
   });
 
-  if (cursor !== null) {
+  if (cursor.before !== null) {
     params.set(
       "before_journal_seq",
-      String(cursor),
+      String(cursor.before),
     );
+  }
+
+  if (cursor.snapshot) {
+    params.set("snapshot_at", cursor.snapshot);
   }
 
   if (actor) {
@@ -118,7 +122,7 @@ export function MovementsPage() {
     value: string,
   ) => {
     setter(value);
-    setCursorStack([null]);
+    setCursorStack([{ before: null }]);
   };
 
   const goBack = () => {
@@ -138,8 +142,10 @@ export function MovementsPage() {
     }
 
     setCursorStack((current) => [
-      ...current,
-      next,
+      ...current.map((entry) => ({
+        ...entry, snapshot: entry.snapshot ?? history.data?.snapshot_at,
+      })),
+      { before: next, snapshot: history.data?.snapshot_at },
     ]);
   };
 

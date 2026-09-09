@@ -147,13 +147,6 @@ export function CatalogLandingPage() {
                           : "category-tile category-tile--compact"
                       }
                       key={category.id}
-                      onClick={() => {
-                        window.scrollTo({
-                          top: 0,
-                          left: 0,
-                          behavior: "auto",
-                        });
-                      }}
                       to={`/catalog/${encodeURIComponent(category.key)}`}
                     >
                       <span className="category-tile__index">

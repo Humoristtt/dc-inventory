@@ -139,15 +139,26 @@ for name in CURRENT_DOCS + HISTORICAL_STAGE15_DOCS:
 # Current production baseline
 # ---------------------------------------------------------------------------
 
-# Accepted production head remains an operational fact in production-facing
-# documentation. Source head is derived from the migration graph below.
+# Accepted production head remains an explicit operational fact in
+# production-facing documentation. Source head is derived from the migration
+# graph independently.
+ACCEPTED_PRODUCTION_ALEMBIC_HEAD = "f8a9b0c1d2e3"
+
 for name in (
     "README.md",
     "docs/DEPLOYMENT.md",
     "docs/DEVELOPMENT.md",
     "docs/OPERATIONS.md",
 ):
-    require(name, "c5d6e7f8a9b0")
+    require(name, ACCEPTED_PRODUCTION_ALEMBIC_HEAD)
+
+for name in (
+    "README.md",
+    "docs/DEPLOYMENT.md",
+    "docs/DEVELOPMENT.md",
+    "docs/OPERATIONS.md",
+):
+    forbid(name, "c5d6e7f8a9b0")
 
 for name in (
     "README.md",
@@ -452,6 +463,14 @@ require(
 require(
     "docs/ROADMAP.md",
     "- [x] Canonical documentation reconciled with accepted production state.",
+)
+require(
+    "docs/ROADMAP.md",
+    "- [x] Выполнить independent full source/security/runtime/data audit на clean baseline.",
+)
+require(
+    "docs/ROADMAP.md",
+    "- [x] Исправить findings текущего audit до технически чистого baseline.",
 )
 
 

@@ -84,10 +84,11 @@ Baseline Alembic:
 
 Production migration head на текущем принятом production baseline:
 
-    c5d6e7f8a9b0
+    f8a9b0c1d2e3
 
-Source head и production head не следует смешивать: новый source migration head
-считается production state только после отдельного deploy/migration acceptance.
+На текущем accepted baseline source и production head совпадают. При появлении
+новой source migration её нельзя считать production state до отдельного
+deploy/migration acceptance.
 
 ## Локальный backend
 
@@ -191,7 +192,7 @@ Production VM имеет read-only GitHub Deploy Key.
 
 Runtime-changing application images обязаны получать source revision:
 
-    APP_REVISION="$(git rev-parse HEAD)" docker compose build backend web
+    APP_REVISION="$(git rev-parse HEAD)" docker compose build backend postgres web
 
 Dockerfiles сохраняют его в OCI label
 `org.opencontainers.image.revision`.

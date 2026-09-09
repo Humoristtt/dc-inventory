@@ -20,7 +20,7 @@ Production VM имеет read-only GitHub Deploy Key. Deploy выполняет�
 
 Текущий Alembic head:
 
-    c5d6e7f8a9b0
+    f8a9b0c1d2e3
 
 Stage15A automated off-VM backup, Stage15B real isolated restore и Stage15
 technical hardening — `PASS`.
@@ -94,7 +94,7 @@ Nginx применяет rate limiting после нормализации `CF-C
 Runtime-changing application build выполняется с exact Git revision:
 
     REVISION="$(git rev-parse HEAD)"
-    APP_REVISION="$REVISION" docker compose build backend web
+    APP_REVISION="$REVISION" docker compose build backend postgres web
 
 Backend/frontend Dockerfiles сохраняют revision в
 `org.opencontainers.image.revision`.

@@ -145,6 +145,7 @@ describe("Telegram Web App SDK delivery", () => {
     window.Telegram = {
       WebApp: {
         initData: "query_id=test",
+        platform: "tdesktop",
         ready,
         expand,
         requestFullscreen,

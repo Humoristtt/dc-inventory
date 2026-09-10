@@ -8,6 +8,7 @@ import {
 } from "react-router-dom";
 
 import { ApplicationShell } from "./ApplicationShell";
+import "../features/catalog/catalog.css";
 
 const CategoryPage = lazy(() => import("../pages/catalog/CategoryPage").then((module) => ({ default: module.CategoryPage })));
 const CatalogLandingPage = lazy(() => import("../pages/catalog/CatalogLandingPage").then((module) => ({ default: module.CatalogLandingPage })));

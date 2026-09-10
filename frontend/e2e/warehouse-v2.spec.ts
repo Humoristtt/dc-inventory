@@ -426,7 +426,27 @@ test(
     ));
 
     expect(telegramViewportState.expanded).toBe(true);
-    expect(telegramViewportState.fullscreenRequested).toBe(true);
+    expect(telegramViewportState.fullscreenRequested).toBe(false);
+
+    const initialFullscreenButton = page.getByRole(
+      "button",
+      { name: "На весь экран" },
+    );
+
+    await expect(initialFullscreenButton).toBeVisible();
+    await initialFullscreenButton.click();
+
+    await expect.poll(
+      () => page.evaluate(() => (
+        (
+          window as unknown as {
+            __stage8Telegram: {
+              fullscreenRequested: boolean;
+            };
+          }
+        ).__stage8Telegram.fullscreenRequested
+      )),
+    ).toBe(true);
 
     const exitFullscreenButton = page.getByRole(
       "button",
@@ -690,7 +710,7 @@ test(
           }
         ).__stage8Telegram.fullscreenRequested
       )),
-    ).toBe(true);
+    ).toBe(false);
 
     await speed.fill("10 Г");
 

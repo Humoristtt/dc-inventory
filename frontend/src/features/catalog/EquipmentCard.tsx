@@ -30,7 +30,11 @@ export function EquipmentCard({
   return (
     <Link
       className="equipment-card"
-      state={{ from: returnTo, inventory: item.inventory }}
+      state={{
+        from: returnTo,
+        inventory: item.inventory,
+        item,
+      }}
       to={`/catalog/items/${encodeURIComponent(item.id)}`}
     >
       <div className="equipment-card__visual" aria-hidden="true">

@@ -29,7 +29,7 @@ export function ApplicationShell() {
   return (
     <div className="app-shell">
       <div className="app-shell__content">
-        <RouteContent key={location.pathname}><Outlet /></RouteContent>
+        <RouteContent resetKey={location.pathname}><Outlet /></RouteContent>
       </div>
       <nav aria-label="Основная навигация" className="bottom-nav">
         <div className="bottom-nav__inner">

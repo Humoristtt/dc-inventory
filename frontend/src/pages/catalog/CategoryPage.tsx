@@ -1,4 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import {
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   useEffect,
   useState,
@@ -43,6 +46,7 @@ import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscre
 
 export function CategoryPage() {
   const webApp = useTelegramWebApp();
+  const queryClient = useQueryClient();
   const { categoryKey = "" } = useParams();
   const {
     updateFilters,
@@ -62,11 +66,35 @@ export function CategoryPage() {
     staleTime: 5 * 60_000,
   });
   const longRange = new URLSearchParams(location.search).get("long_range") === "true";
-  const hierarchy = useQuery({queryKey: ["catalog", "categories"], queryFn: ({signal}) => getCatalogCategories(signal), staleTime: 300_000});
-  const family = categoryQuery.data?.parent_id === null && !longRange;
-  const children = hierarchy.data?.filter(child => child.parent_id === categoryQuery.data?.id) ?? [];
-  const catalogQuery = {...toCatalogQuery(viewState, categoryKey), longRange};
-  const itemsQuery = useCatalogItems(catalogQuery, categoryKey !== "" && categoryQuery.isSuccess && !family);
+  const hierarchy = useQuery({
+    queryKey: ["catalog", "categories"],
+    queryFn: ({ signal }) => getCatalogCategories(signal),
+    staleTime: 300_000,
+  });
+  const categorySummary = hierarchy.data?.find(
+    (entry) => entry.key === categoryKey,
+  );
+  const categoryData = categoryQuery.data ?? categorySummary;
+  const family = categoryData?.parent_id === null && !longRange;
+  const categoryShapeKnown = longRange || categoryData !== undefined;
+  const children = hierarchy.data?.filter(
+    (child) => child.parent_id === categoryData?.id,
+  ) ?? [];
+  const familyId =
+    family ? categoryData?.id : undefined;
+  const catalogQuery = {
+    ...toCatalogQuery(viewState, categoryKey),
+    longRange,
+  };
+  const itemsQuery = useCatalogItems(
+    catalogQuery,
+    categoryKey !== ""
+      && !categoryQuery.isError
+      && categoryShapeKnown
+      && !family,
+  );
+  const categoryContentPending =
+    categoryQuery.isPending || itemsQuery.isPending;
   const facetsQuery = useQuery({
     queryKey: ["catalog", "facets", catalogQueryCacheKey(catalogQuery)],
     queryFn: ({ signal }) => getCatalogFacets(catalogQuery, signal),
@@ -82,6 +110,36 @@ export function CategoryPage() {
       behavior: "auto",
     });
   }, [categoryKey, longRange]);
+
+  useEffect(() => {
+    if (familyId === undefined) {
+      return;
+    }
+
+    for (const child of hierarchy.data ?? []) {
+      if (child.parent_id !== familyId) {
+        continue;
+      }
+
+      void queryClient.prefetchQuery({
+        queryKey: [
+          "catalog",
+          "category",
+          child.key,
+        ],
+        queryFn: ({ signal }) =>
+          getCatalogCategory(
+            child.key,
+            signal,
+          ),
+        staleTime: 5 * 60_000,
+      });
+    }
+  }, [
+    familyId,
+    hierarchy.data,
+    queryClient,
+  ]);
 
   const clearAllFilters = () => {
     updateFilters(defaultCatalogFilterState);
@@ -106,8 +164,8 @@ export function CategoryPage() {
         </div>
         <div className="category-header__title">
           <span className="section-kicker">Категория</span>
-          <h1>{longRange ? "Дальние трансиверы" : categoryQuery.data?.display_name ?? "Оборудование"}</h1>
-          {categoryQuery.data?.description ? <p>{categoryQuery.data.description}</p> : null}
+          <h1>{longRange ? "Дальние трансиверы" : categoryData?.display_name ?? "Оборудование"}</h1>
+          {categoryData?.description ? <p>{categoryData.description}</p> : null}
         </div>
         {!family ? <DebouncedSearchField
           busy={itemsQuery.isFetching}
@@ -119,7 +177,7 @@ export function CategoryPage() {
       </header>
 
       <div className="catalog-page__body">
-        {categoryQuery.isPending ? (
+        {categoryQuery.isPending && categorySummary === undefined ? (
           <div className="category-title-skeleton" aria-label="Загрузка категории" />
         ) : null}
         {categoryQuery.isError ? (
@@ -129,17 +187,17 @@ export function CategoryPage() {
           />
         ) : null}
 
-        {family ? <div className="category-grid">
+        {categoryShapeKnown && family ? <div className="category-grid">
           {children.map(child => <Link key={child.id} className="category-tile" to={`/catalog/${child.key}`}><strong>{child.display_name}</strong>{child.description ? <p>{child.description}</p> : null}<i aria-hidden="true">↗</i></Link>)}
           {categoryKey === "transceivers" ? <Link className="category-tile" to="/catalog/transceivers?long_range=true"><strong>Дальние</strong><p>Дальность от 2 км.</p><i aria-hidden="true">↗</i></Link> : null}
         </div> : null}
-        {!categoryQuery.isError && !family ? (
+        {categoryShapeKnown && !categoryQuery.isError && !family ? (
           <section aria-labelledby="category-items-title" className="catalog-section">
             <div className="result-toolbar">
               <div>
                 <span className="section-kicker">Подходящие позиции</span>
                 <h2 id="category-items-title">
-                  {itemsQuery.isPending ? "Загрузка" : `${itemsQuery.total} шт.`}
+                  {categoryContentPending ? "Загрузка" : `${itemsQuery.total} шт.`}
                 </h2>
               </div>
               <div className="result-toolbar__actions">
@@ -158,11 +216,11 @@ export function CategoryPage() {
               </div>
             </div>
 
-            {itemsQuery.isPending ? <CatalogListSkeleton /> : null}
+            {categoryContentPending ? <CatalogListSkeleton /> : null}
             {itemsQuery.isError ? (
               <CatalogErrorState onRetry={() => void itemsQuery.refetch()} />
             ) : null}
-            {!itemsQuery.isPending && !itemsQuery.isError && itemsQuery.items.length === 0 ? (
+            {!categoryContentPending && !itemsQuery.isError && itemsQuery.items.length === 0 ? (
               <CatalogEmptyState
                 action={filtersCount > 0 ? (
                   <button className="button button--ghost" onClick={clearAllFilters} type="button">
@@ -178,7 +236,7 @@ export function CategoryPage() {
                     : "Позиции появятся после наполнения каталога."}
               </CatalogEmptyState>
             ) : null}
-            {itemsQuery.items.length > 0 ? (
+            {!categoryContentPending && itemsQuery.items.length > 0 ? (
               <>
                 {itemsQuery.isFetching && !itemsQuery.isFetchingNextPage ? (
                   <p className="background-status" role="status">Обновляем список…</p>

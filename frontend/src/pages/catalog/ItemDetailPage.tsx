@@ -3,12 +3,14 @@ import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscre
 import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
 import { useQuery } from "@tanstack/react-query";
 import {
+  useLocation,
   useParams,
 } from "react-router-dom";
 
 import {
   getCatalogCategory,
   getCatalogItem,
+  type CatalogItem,
 } from "../../shared/api/catalog";
 import {
   CatalogErrorState,
@@ -24,13 +26,19 @@ import { useInternalBackNavigation } from "../../features/navigation/useTelegram
 
 export function ItemDetailPage() {
   const webApp = useTelegramWebApp();
+  const location = useLocation();
   const { itemId = "" } = useParams();
   const navigateBack = useInternalBackNavigation();
+  const previewItem = (
+    location.state as { item?: CatalogItem } | null
+  )?.item;
   const telegramOwnsBack = webApp?.BackButton !== undefined;
   const itemQuery = useQuery({
     queryKey: ["catalog", "item", itemId],
     queryFn: ({ signal }) => getCatalogItem(itemId, signal),
     enabled: itemId !== "",
+    placeholderData:
+      previewItem?.id === itemId ? previewItem : undefined,
   });
   const categoryKey = itemQuery.data?.category.key;
   const categoryQuery = useQuery({

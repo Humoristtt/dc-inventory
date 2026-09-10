@@ -1,4 +1,7 @@
-import { lazy } from "react";
+import {
+  lazy,
+  useEffect,
+} from "react";
 
 import {
   BrowserRouter,
@@ -8,17 +11,27 @@ import {
 } from "react-router-dom";
 
 import { ApplicationShell } from "./ApplicationShell";
+import {
+  loadAdminUsersPage,
+  loadCatalogLandingPage,
+  loadCategoryPage,
+  loadItemDetailPage,
+  loadItemFormPage,
+  loadLocationsPage,
+  loadMorePage,
+  loadMovementsPage,
+  preloadApplicationRoutes,
+} from "./routeModules";
 import "../features/catalog/catalog.css";
 
-const CategoryPage = lazy(() => import("../pages/catalog/CategoryPage").then((module) => ({ default: module.CategoryPage })));
-const CatalogLandingPage = lazy(() => import("../pages/catalog/CatalogLandingPage").then((module) => ({ default: module.CatalogLandingPage })));
-const ItemDetailPage = lazy(() => import("../pages/catalog/ItemDetailPage").then((module) => ({ default: module.ItemDetailPage })));
-const ItemFormPage = lazy(() => import("../pages/catalog/ItemFormPage").then((module) => ({ default: module.ItemFormPage })));
-const MovementsPage = lazy(() => import("../pages/inventory/MovementsPage").then((module) => ({ default: module.MovementsPage })));
-const LocationsPage = lazy(() => import("../pages/inventory/LocationsPage").then((module) => ({ default: module.LocationsPage })));
-const MorePage = lazy(() => import("../pages/more/MorePage").then((module) => ({ default: module.MorePage })));
-const AdminUsersPage = lazy(() => import("../pages/admin/AdminUsersPage").then((module) => ({ default: module.AdminUsersPage })));
-
+const CategoryPage = lazy(loadCategoryPage);
+const CatalogLandingPage = lazy(loadCatalogLandingPage);
+const ItemDetailPage = lazy(loadItemDetailPage);
+const ItemFormPage = lazy(loadItemFormPage);
+const MovementsPage = lazy(loadMovementsPage);
+const LocationsPage = lazy(loadLocationsPage);
+const MorePage = lazy(loadMorePage);
+const AdminUsersPage = lazy(loadAdminUsersPage);
 
 export function ApplicationRoutes() {
   return (
@@ -41,6 +54,19 @@ export function ApplicationRoutes() {
 }
 
 export function App() {
+  useEffect(() => {
+    // Give the first visible page/API requests a short head start, then warm
+    // the fixed and small MVP route set. These dynamic imports stay outside
+    // the initial bundle and are browser-cached for subsequent navigation.
+    const timer = window.setTimeout(() => {
+      void preloadApplicationRoutes();
+    }, 100);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, []);
+
   return (
     <BrowserRouter>
       <ApplicationRoutes />

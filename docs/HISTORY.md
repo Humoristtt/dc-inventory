@@ -709,3 +709,56 @@ to `c5d6e7f8a9b0`.
   disposable audit resource.
 - Independent audit / remediation / deployment baseline принят.
 - Следующий product/UX change set выполняется отдельной веткой.
+
+## 2026-09-11 — Telegram fullscreen experiment and frontend performance pass
+
+После real Telegram Desktop проверки isolated fullscreen experiment получены
+следующие факты:
+
+- PR #53 перевёл desktop fullscreen в user-initiated режим;
+- в windowed/expanded Telegram Desktop hover и первый click работали сразу;
+- после native fullscreen transition первый mouse input продолжал поглощаться;
+- PR #54 добавил best-effort window/DOM focus recovery после
+  `fullscreenChanged`;
+- real Telegram Desktop acceptance показал, что focus recovery не исправляет
+  native first-input behavior;
+- PR #55 вернул automatic desktop fullscreen и удалил экспериментальный focus
+  recovery;
+- rollback production baseline:
+  `676c5276b6427194bd75e6d8a0d2ffb16bbb8b61`;
+- после rollback выполнены runtime provenance/health checks и verified
+  off-VM PostgreSQL backup.
+
+Fullscreen first-input behavior зафиксирован как Telegram Desktop/native WebView
+limitation и отделён от React/catalog performance work.
+
+После rollback начат отдельный
+`perf/catalog-navigation-smoothness` change set.
+
+Performance audit подтвердил:
+
+- frontend не выполняет отдельную auth exchange при каждом переходе каталога;
+- backend session/APPROVED/ADMIN checks остаются обязательной security boundary;
+- cold startup последовательно мог показывать access loading, lazy-route loading
+  и page data loading;
+- `CategoryPage` serially ожидал category detail перед item-list request;
+- item detail повторно ожидал item endpoint несмотря на наличие того же catalog
+  item в list response.
+
+Принято MVP-решение:
+
+- preload current route параллельно startup auth;
+- background warmup фиксированного небольшого route set без нарушения lazy
+  bundle contract;
+- stable route Suspense/error boundary;
+- hierarchy-aware family/leaf fast path;
+- prefetch metadata только child leaf categories открытой family;
+- catalog item list data используется как non-authoritative detail placeholder,
+  а server request продолжает revalidation;
+- browser persistence/service worker/Redux/SSR/BFF не добавляются.
+
+Канонический performance contract вынесен в
+`docs/FRONTEND_PERFORMANCE.md`.
+
+Roadmap stage остаётся `current acceptance` до полного CI и реального Telegram
+deployment acceptance.

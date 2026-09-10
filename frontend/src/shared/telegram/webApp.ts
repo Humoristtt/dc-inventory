@@ -173,76 +173,25 @@ const DESKTOP_TELEGRAM_PLATFORMS = new Set([
   "windows",
 ]);
 
-function isDesktopTelegramPlatform(
+function requestDesktopFullscreen(
   webApp: TelegramWebApp | null,
-): boolean {
+): void {
   const platform = webApp?.platform?.toLowerCase();
 
-  return (
-    platform !== undefined
-    && DESKTOP_TELEGRAM_PLATFORMS.has(platform)
-  );
-}
-
-export function recoverTelegramFullscreenFocus(
-  target: HTMLElement | null,
-): () => void {
-  const webApp = getTelegramWebApp();
-
   if (
-    !isDesktopTelegramPlatform(webApp)
-    || webApp?.isFullscreen !== true
+    platform === undefined
+    || !DESKTOP_TELEGRAM_PLATFORMS.has(platform)
+    || webApp?.requestFullscreen === undefined
+    || webApp.isFullscreen === true
   ) {
-    return () => undefined;
+    return;
   }
 
-  let cancelled = false;
-  const timeoutIds: number[] = [];
-
-  const applyFocus = () => {
-    if (
-      cancelled
-      || getTelegramWebApp()?.isFullscreen !== true
-    ) {
-      return;
-    }
-
-    try {
-      window.focus();
-    } catch {
-      // Telegram Desktop may reject native focus restoration.
-    }
-
-    if (target?.isConnected === true) {
-      try {
-        target.focus({ preventScroll: true });
-      } catch {
-        try {
-          target.focus();
-        } catch {
-          // Keep recovery best-effort.
-        }
-      }
-    }
-  };
-
-  // Telegram Desktop can finish its native fullscreen transition
-  // slightly after fullscreenChanged. Retry across a short window.
-  applyFocus();
-
-  for (const delay of [0, 75, 180]) {
-    timeoutIds.push(
-      window.setTimeout(applyFocus, delay),
-    );
+  try {
+    webApp.requestFullscreen();
+  } catch {
+    // Unsupported Telegram clients keep the expanded fallback.
   }
-
-  return () => {
-    cancelled = true;
-
-    for (const timeoutId of timeoutIds) {
-      window.clearTimeout(timeoutId);
-    }
-  };
 }
 
 export function bindDesktopEscapeGuard(): () => void {
@@ -298,6 +247,7 @@ export function prepareTelegramWebApp(): TelegramWebApp | null {
   const webApp = getTelegramWebApp();
   webApp?.ready();
   webApp?.expand();
+  requestDesktopFullscreen(webApp);
   applyTelegramSafeArea(webApp);
   return webApp;
 }

@@ -23,7 +23,6 @@ async function installTelegramMock(
       expanded: boolean;
       fullscreen: boolean;
       fullscreenRequested: boolean;
-      focusRecoveries: number;
       ready: boolean;
       visible: boolean;
     } = {
@@ -31,17 +30,9 @@ async function installTelegramMock(
       expanded: false,
       fullscreen: false,
       fullscreenRequested: false,
-      focusRecoveries: 0,
       ready: false,
       visible: false,
     };
-
-    Object.defineProperty(window, "focus", {
-      configurable: true,
-      value: () => {
-        state.focusRecoveries += 1;
-      },
-    });
 
     const webAppEvents =
       new Map<string, Set<() => void>>();
@@ -435,39 +426,7 @@ test(
     ));
 
     expect(telegramViewportState.expanded).toBe(true);
-    expect(telegramViewportState.fullscreenRequested).toBe(false);
-
-    const initialFullscreenButton = page.getByRole(
-      "button",
-      { name: "На весь экран" },
-    );
-
-    await expect(initialFullscreenButton).toBeVisible();
-    await initialFullscreenButton.click();
-
-    await expect.poll(
-      () => page.evaluate(() => (
-        (
-          window as unknown as {
-            __stage8Telegram: {
-              fullscreenRequested: boolean;
-            };
-          }
-        ).__stage8Telegram.fullscreenRequested
-      )),
-    ).toBe(true);
-
-    await expect.poll(
-      () => page.evaluate(() => (
-        (
-          window as unknown as {
-            __stage8Telegram: {
-              focusRecoveries: number;
-            };
-          }
-        ).__stage8Telegram.focusRecoveries
-      )),
-    ).toBeGreaterThan(0);
+    expect(telegramViewportState.fullscreenRequested).toBe(true);
 
     const exitFullscreenButton = page.getByRole(
       "button",
@@ -731,7 +690,7 @@ test(
           }
         ).__stage8Telegram.fullscreenRequested
       )),
-    ).toBe(false);
+    ).toBe(true);
 
     await speed.fill("10 Г");
 

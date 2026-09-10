@@ -1,10 +1,12 @@
 import {
   useEffect,
+  useRef,
   useState,
 } from "react";
 
 import {
   exitTelegramFullscreen,
+  recoverTelegramFullscreenFocus,
   requestTelegramFullscreen,
 } from "./webApp";
 
@@ -12,6 +14,7 @@ import { useTelegramWebApp } from "./useTelegramWebApp";
 
 export function TelegramFullscreenButton() {
   const webApp = useTelegramWebApp();
+  const buttonRef = useRef<HTMLButtonElement>(null);
 
   const [fullscreen, setFullscreen] = useState(
     () => webApp?.isFullscreen === true,
@@ -22,21 +25,40 @@ export function TelegramFullscreenButton() {
       return;
     }
 
+    let cancelFocusRecovery: () => void = () => undefined;
+
     const syncFullscreen = () => {
       setFullscreen(webApp.isFullscreen === true);
+    };
+
+    const handleFullscreenChanged = () => {
+      const nextFullscreen =
+        webApp.isFullscreen === true;
+
+      setFullscreen(nextFullscreen);
+
+      cancelFocusRecovery();
+
+      cancelFocusRecovery = nextFullscreen
+        ? recoverTelegramFullscreenFocus(
+            buttonRef.current,
+          )
+        : () => undefined;
     };
 
     syncFullscreen();
 
     webApp.onEvent?.(
       "fullscreenChanged",
-      syncFullscreen,
+      handleFullscreenChanged,
     );
 
     return () => {
+      cancelFocusRecovery();
+
       webApp.offEvent?.(
         "fullscreenChanged",
-        syncFullscreen,
+        handleFullscreenChanged,
       );
     };
   }, [webApp]);
@@ -56,6 +78,7 @@ export function TelegramFullscreenButton() {
     <button
       aria-label={label}
       className="telegram-fullscreen-button"
+      ref={buttonRef}
       onClick={() => {
         if (fullscreen) {
           exitTelegramFullscreen();

@@ -162,6 +162,89 @@ export function loadTelegramWebAppSdk(): Promise<void> {
   return sdkLoadPromise;
 }
 
+const DESKTOP_TELEGRAM_PLATFORMS = new Set([
+  "desktop",
+  "linux",
+  "macos",
+  "tdesktop",
+  "web",
+  "weba",
+  "webk",
+  "windows",
+]);
+
+function isDesktopTelegramPlatform(
+  webApp: TelegramWebApp | null,
+): boolean {
+  const platform = webApp?.platform?.toLowerCase();
+
+  return (
+    platform !== undefined
+    && DESKTOP_TELEGRAM_PLATFORMS.has(platform)
+  );
+}
+
+export function recoverTelegramFullscreenFocus(
+  target: HTMLElement | null,
+): () => void {
+  const webApp = getTelegramWebApp();
+
+  if (
+    !isDesktopTelegramPlatform(webApp)
+    || webApp?.isFullscreen !== true
+  ) {
+    return () => undefined;
+  }
+
+  let cancelled = false;
+  const timeoutIds: number[] = [];
+
+  const applyFocus = () => {
+    if (
+      cancelled
+      || getTelegramWebApp()?.isFullscreen !== true
+    ) {
+      return;
+    }
+
+    try {
+      window.focus();
+    } catch {
+      // Telegram Desktop may reject native focus restoration.
+    }
+
+    if (target?.isConnected === true) {
+      try {
+        target.focus({ preventScroll: true });
+      } catch {
+        try {
+          target.focus();
+        } catch {
+          // Keep recovery best-effort.
+        }
+      }
+    }
+  };
+
+  // Telegram Desktop can finish its native fullscreen transition
+  // slightly after fullscreenChanged. Retry across a short window.
+  applyFocus();
+
+  for (const delay of [0, 75, 180]) {
+    timeoutIds.push(
+      window.setTimeout(applyFocus, delay),
+    );
+  }
+
+  return () => {
+    cancelled = true;
+
+    for (const timeoutId of timeoutIds) {
+      window.clearTimeout(timeoutId);
+    }
+  };
+}
+
 export function bindDesktopEscapeGuard(): () => void {
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key !== "Escape") {

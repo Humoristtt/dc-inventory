@@ -190,3 +190,71 @@ native WebView limitation, not as a React/catalog performance defect.
 
 No further synthetic click or focus-replay workaround is planned for
 the MVP.
+
+## Accepted production result
+
+The frontend performance pass was accepted after automated, production and
+real Telegram validation.
+
+Accepted implementation:
+
+- PR #56;
+- audited branch commit:
+  `7503aaf0b67512c31a618a845c6b571396234794`;
+- merged `main` / production commit:
+  `230ae967ed8346b3f3edae615025c7d4c011872b`.
+
+Local frontend acceptance before merge:
+
+- TypeScript: PASS;
+- lint: 0 warnings / 0 errors;
+- Vitest: 17 files / 85 tests passed;
+- production build and initial bundle contract: PASS;
+- initial JS: 283665 bytes;
+- initial JS gzip: approximately 90 KiB;
+- Playwright Warehouse suite: 62 passed / 8 expected skipped.
+
+GitHub PR CI completed successfully for all four jobs:
+
+- backend;
+- frontend;
+- runtime;
+- telegram-gateway.
+
+Production deployment preserved the established release provenance contract.
+The following running services all reported source revision
+`230ae967ed8346b3f3edae615025c7d4c011872b`:
+
+- PostgreSQL;
+- backend;
+- Telegram worker;
+- maintenance worker;
+- web.
+
+Production acceptance also confirmed:
+
+- Alembic head `f8a9b0c1d2e3`;
+- `REAL_INVENTORY_MUTATIONS_ENABLED=false`;
+- internal and external health checks successful;
+- web host bind remained `127.0.0.1:8080`;
+- real Telegram navigation felt responsive and the performance pass was
+  accepted by live testing.
+
+Verified release backups:
+
+- pre-cutover:
+  `postgres/full/2026/09/10/dc-inventory-20260910T230658Z.dump`,
+  SHA256
+  `168a32faf0f5b051b9e183864a14538b48add986d1d210e64c5b56e606979f36`;
+- post-deploy:
+  `postgres/full/2026/09/10/dc-inventory-20260910T230755Z.dump`,
+  SHA256
+  `f4f3f70f4b0b5143d3cee9e521fe632480aff2016903cfa0e34a28b40313662e`.
+
+After acceptance, operational cleanup removed obsolete release tags, completed
+one-shot containers and obsolete temporary release directories. The current
+release and the immediately previous accepted release
+`676c5276b6427194bd75e6d8a0d2ffb16bbb8b61` were retained for rollback.
+
+The performance phase is closed. Subsequent visual and interaction work belongs
+to a separate UX consistency change set.

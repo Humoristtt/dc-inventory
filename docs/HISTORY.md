@@ -762,3 +762,48 @@ Performance audit подтвердил:
 
 Roadmap stage остаётся `current acceptance` до полного CI и реального Telegram
 deployment acceptance.
+
+## 2026-09-11 — Frontend performance accepted in production
+
+Frontend startup/navigation performance pass завершён.
+
+Итоговый PR #56 был merged в `main` как:
+
+`230ae967ed8346b3f3edae615025c7d4c011872b`
+
+Acceptance:
+
+- local frontend gate: 85 unit tests;
+- lint: 0 warnings / 0 errors;
+- production build/bundle contract: PASS;
+- Warehouse Playwright: 62 passed / 8 expected skipped;
+- GitHub CI: backend/frontend/runtime/telegram-gateway PASS;
+- production runtime provenance для PostgreSQL/backend/Telegram worker/
+  maintenance worker/web совпадает с `230ae967ed8346b3f3edae615025c7d4c011872b`;
+- Alembic: `f8a9b0c1d2e3`;
+- `REAL_INVENTORY_MUTATIONS_ENABLED=false`;
+- internal/external health: PASS;
+- real Telegram acceptance: PASS.
+
+Verified release backups:
+
+- pre-cutover:
+  `postgres/full/2026/09/10/dc-inventory-20260910T230658Z.dump`,
+  SHA256
+  `168a32faf0f5b051b9e183864a14538b48add986d1d210e64c5b56e606979f36`;
+- post-deploy:
+  `postgres/full/2026/09/10/dc-inventory-20260910T230755Z.dump`,
+  SHA256
+  `f4f3f70f4b0b5143d3cee9e521fe632480aff2016903cfa0e34a28b40313662e`.
+
+После acceptance выполнен cleanup:
+
+- удалены obsolete local/remote feature branches;
+- удалены completed migrate/db-permissions containers;
+- удалены obsolete release temp directories;
+- удалены obsolete dc-inventory image tags;
+- сохранены current `230ae967...` и previous accepted `676c527...`
+  release images как rollback pair;
+- production services после cleanup остались healthy.
+
+Следующий product change set — отдельный UX consistency pass.

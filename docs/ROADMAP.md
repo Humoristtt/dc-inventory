@@ -174,7 +174,7 @@ ADMIN:
 документированный и независимо проверенный production baseline перед следующим
 feature cycle.
 
-- [~] Frontend startup/navigation performance pass:
+- [x] Frontend startup/navigation performance pass:
   - [x] определить фактический startup/catalog critical path;
   - [x] сохранить backend authorization как security boundary;
   - [x] добавить current-route preload параллельно startup auth;
@@ -183,8 +183,8 @@ feature cycle.
   - [x] добавить family child-metadata prefetch;
   - [x] добавить immediate item-detail preview с server revalidation;
   - [x] добавить deterministic slow/pending-network browser regressions;
-  - [ ] пройти final full frontend/CI acceptance;
-  - [ ] пройти real Telegram acceptance после deployment.
+  - [x] пройти final full frontend/CI acceptance;
+  - [x] пройти real Telegram acceptance после deployment.
 - [ ] После performance acceptance продолжить minor UX remediation.
 
 - [x] Canonical documentation reconciled with accepted production state.

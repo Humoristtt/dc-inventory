@@ -10,6 +10,22 @@ const categoryDetail = {...category,attributes:Object.keys(attributes).map((key,
 const location = {id:"location-1",code:"A-01",name:"Тестовый склад",location_type:"WAREHOUSE",address:null,status:"ACTIVE",archived_at:null,created_at:now,updated_at:now};
 function fixtureItem() {return {id:"item-1",category:{id:category.id,key:category.key,display_name:category.display_name},manufacturer:{id:"maker",name:"Synthetic"},name:"Тестовый трансивер",model:"TEST-10G",status:"ACTIVE",archived_at:null,created_at:now,updated_at:now,attributes:{...attributes,reach_m:10000}};}
 function json(route:Route, body:unknown, status=200) {return route.fulfill({json:body,status});}
+
+type ApiMockDelays = {
+  authMs?: number;
+  categoryDetailMs?: number;
+  itemsMs?: number;
+  itemDetailMs?: number;
+  authGate?: Promise<void>;
+  categoryDetailGate?: Promise<void>;
+  itemDetailGate?: Promise<void>;
+};
+
+async function delay(milliseconds = 0) {
+  if (milliseconds <= 0) return;
+  await new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
 async function installTelegramMock(
   page: Page,
   platform = "unknown",
@@ -114,7 +130,12 @@ async function assertBottomNavigationClearance(page: Page) {
   expect(hasClearance).toBe(true);
 }
 
-async function installApiMock(page:Page, role:"USER"|"ADMIN", failures=0) {
+async function installApiMock(
+  page: Page,
+  role: "USER" | "ADMIN",
+  failures = 0,
+  delays: ApiMockDelays = {},
+) {
   let item=fixtureItem(); let quantity=10;
   const requests:string[]=[]; const mutations:Record<string,unknown>[]=[];
   const makers=[{id:"maker",name:"Synthetic",created_at:now,updated_at:now}];
@@ -122,12 +143,27 @@ async function installApiMock(page:Page, role:"USER"|"ADMIN", failures=0) {
   await page.route(/^https?:\/\/[^/]+\/api\//, async route=>{
     const request=route.request(); const url=new URL(request.url()); const path=url.pathname;
     requests.push(path+url.search);
-    if(path === "/api/auth/me") return json(route,{user:{id:userId,telegram_user_id:1001,first_name:"Иван",last_name:null,username:"synthetic",role,access_status:"APPROVED"},support:{username:"support",url:"https://t.me/support"}});
+    if(path === "/api/auth/me") {
+      await delay(delays.authMs);
+      if (delays.authGate !== undefined) {
+        await delays.authGate;
+      }
+      return json(route,{user:{id:userId,telegram_user_id:1001,first_name:"Иван",last_name:null,username:"synthetic",role,access_status:"APPROVED"},support:{username:"support",url:"https://t.me/support"}});
+    }
     if(path === "/api/catalog/categories") {
       if(failures-- > 0) return json(route,{detail:"synthetic failure"},500);
       return json(route,[family,category]);
     }
-    if(path.startsWith("/api/catalog/categories/")) return json(route,path.endsWith(family.key) ? {...family,attributes:[]} : categoryDetail);
+    if(path.startsWith("/api/catalog/categories/")) {
+      await delay(delays.categoryDetailMs);
+      if (
+        delays.categoryDetailGate
+        !== undefined
+      ) {
+        await delays.categoryDetailGate;
+      }
+      return json(route,path.endsWith(family.key) ? {...family,attributes:[]} : categoryDetail);
+    }
     if(path === "/api/catalog/manufacturers") return json(route,{items:makers,total:makers.length,limit:100,offset:0});
     if(path === "/api/catalog/items/facets") {
       const facet = url.searchParams.get("facet");
@@ -157,8 +193,20 @@ async function installApiMock(page:Page, role:"USER"|"ADMIN", failures=0) {
 
       return json(route,{facets:[{key:"availability",label:"Наличие",data_type:"ENUM",unit:null,filter_type:"EXACT",values:[{value:"IN_STOCK",label:"В наличии",count:1},{value:"OUT_OF_STOCK",label:"Нет в наличии",count:1}],min:null,max:null}]});
     }
-    if(path === "/api/catalog/items") return json(route,{items:[{...item,inventory:{available_count:quantity,total_count:quantity}}],total:1,limit:20,offset:0});
-    if(path.startsWith("/api/catalog/items/")) return json(route,item);
+    if(path === "/api/catalog/items") {
+      await delay(delays.itemsMs);
+      return json(route,{items:[{...item,inventory:{available_count:quantity,total_count:quantity}}],total:1,limit:20,offset:0});
+    }
+    if(path.startsWith("/api/catalog/items/")) {
+      await delay(delays.itemDetailMs);
+      if (
+        delays.itemDetailGate
+        !== undefined
+      ) {
+        await delays.itemDetailGate;
+      }
+      return json(route,item);
+    }
     if(path === `/api/inventory/items/${item.id}/summary`) return json(route,{total_count:quantity,locations:[{id:"balance",item_id:item.id,item_name:item.name,quantity,location:{location_id:location.id,code:location.code,name:location.name},updated_at:now}]});
     if(path === "/api/inventory/locations") return json(route,{items:[location],total:1,limit:200,offset:0});
     if(path === "/api/inventory/movement-actors") return json(route,[{id:userId,name:"Иван"}]);
@@ -306,6 +354,187 @@ test(
     ).toBe(0);
   },
 );
+
+test(
+  "deep route chunk begins loading while startup auth is still pending",
+  async ({ page }) => {
+    await installTelegramMock(page);
+
+    let releaseAuth!: () => void;
+
+    const authGate = new Promise<void>(
+      (resolve) => {
+        releaseAuth = resolve;
+      },
+    );
+
+    await installApiMock(
+      page,
+      "USER",
+      0,
+      { authGate },
+    );
+
+    const categoryChunkRequest =
+      page.waitForRequest(
+        (request) => {
+          const pathname =
+            new URL(request.url()).pathname;
+
+          return (
+            pathname.endsWith(
+              "/src/pages/catalog/CategoryPage.tsx",
+            )
+            || /\/assets\/CategoryPage-[^/]+\.js$/
+              .test(pathname)
+          );
+        },
+      );
+
+    await page.goto(
+      "/catalog/transceiver_ethernet",
+    );
+
+    await categoryChunkRequest;
+
+    await expect(
+      page.getByRole("status"),
+    ).toContainText(
+      "Подтверждаем Telegram-сессию",
+    );
+
+    releaseAuth();
+
+    await expect(
+      page.getByRole(
+        "heading",
+        { name: "Ethernet" },
+      ),
+    ).toBeVisible();
+  },
+);
+
+test(
+  "catalog fast path overlaps leaf metadata/items and paints item detail from list preview",
+  async ({ page }) => {
+    await installTelegramMock(page);
+
+    let releaseCategoryDetail!: () => void;
+    let releaseItemDetail!: () => void;
+
+    const categoryDetailGate =
+      new Promise<void>((resolve) => {
+        releaseCategoryDetail = resolve;
+      });
+
+    const itemDetailGate =
+      new Promise<void>((resolve) => {
+        releaseItemDetail = resolve;
+      });
+
+    const api = await installApiMock(
+      page,
+      "USER",
+      0,
+      {
+        categoryDetailGate,
+        itemDetailGate,
+      },
+    );
+
+    await page.goto("/catalog");
+
+    await page.getByRole(
+      "link",
+      { name: /Трансиверы/ },
+    ).click();
+
+    const leafLink = page.getByRole(
+      "link",
+      { name: "Ethernet", exact: true },
+    );
+
+    await expect(
+      leafLink,
+    ).toBeVisible();
+
+    // The family screen prefetches metadata for
+    // its small set of leaf categories.
+    await expect.poll(
+      () =>
+        api.requests.some(
+          (url) =>
+            url.startsWith(
+              "/api/catalog/categories/transceiver_ethernet",
+            ),
+        ),
+      { timeout: 1_500 },
+    ).toBe(true);
+
+    await leafLink.click();
+
+    // Category metadata is still deliberately
+    // blocked, but the item request must start
+    // without waiting for it.
+    await expect.poll(
+      () =>
+        api.requests.some(
+          (url) =>
+            url.startsWith(
+              "/api/catalog/items?",
+            )
+            && url.includes(
+              "category=transceiver_ethernet",
+            ),
+        ),
+      { timeout: 1_500 },
+    ).toBe(true);
+
+    await expect(
+      page.getByText(
+        "Загружаем страницу…",
+      ),
+    ).toHaveCount(0);
+
+    releaseCategoryDetail();
+
+    const card = page.getByRole(
+      "link",
+      { name: /TEST-10G/ },
+    );
+
+    await expect(
+      card,
+    ).toBeVisible();
+
+    api.requests.length = 0;
+
+    await card.click();
+
+    // The detail HTTP request is still blocked.
+    // The heading must paint from list preview.
+    await expect(
+      page.getByRole(
+        "heading",
+        { name: "TEST-10G" },
+      ),
+    ).toBeVisible();
+
+    await expect.poll(
+      () =>
+        api.requests.some(
+          (url) =>
+            url.startsWith(
+              "/api/catalog/items/item-1",
+            ),
+        ),
+      { timeout: 1_500 },
+    ).toBe(true);
+
+    releaseItemDetail();
+  },
+);
+
 
 test("USER browses hierarchy, retains server filters, and uses Telegram back", async ({page})=>{
   await installTelegramMock(page); const api=await installApiMock(page,"USER");

@@ -37,9 +37,28 @@ React renders the access shell immediately. SDK loading runs independently of
 cookie-session lookup; Telegram authentication waits for SDK completion after
 an unauthenticated response. The auth exchange stays shared across StrictMode
 remounts. BackButton/fullscreen controls subscribe to delayed SDK availability.
-Pages load through route-level lazy imports with an accessible loading/error
-boundary that preserves navigation and does not remount on query-string changes.
-The production build checks the complete initial JS import graph and lazy routes.
+
+The module for the current pathname starts loading in parallel with startup
+authentication. After the approved application mounts, the small fixed route
+set is warmed in the background. Routes remain dynamic imports and outside the
+initial JS import graph; the production bundle contract continues to enforce
+that boundary.
+
+`RouteContent` provides the accessible Suspense/error recovery boundary without
+being remounted solely because the pathname changed. Navigation changes reset a
+failed route boundary.
+
+Catalog navigation uses cached family/leaf hierarchy metadata to start
+independent leaf-item loading without waiting for category-detail completion.
+A visible family page prefetches only its child leaf metadata. Item navigation
+can paint from the catalog-list payload as React Query placeholder data while
+the canonical item endpoint revalidates in the background.
+
+Authenticated query data remains in-memory only; persistent browser query
+storage is not part of the MVP.
+
+Detailed rationale and acceptance are canonical in
+`docs/FRONTEND_PERFORMANCE.md`.
 
 ## Warehouse
 

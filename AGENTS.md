@@ -10,6 +10,8 @@ Preserve existing architecture and conventions unless a real requirement justifi
 The canonical development roadmap is `docs/ROADMAP.md`.
 Architecture decisions are documented in `docs/ARCHITECTURE.md`.
 Development workflow is documented in `docs/DEVELOPMENT.md`.
+Frontend startup/navigation performance decisions are documented in
+`docs/FRONTEND_PERFORMANCE.md`.
 
 Before implementing a new stage, read only the relevant sections of those documents
 and the directly related source files. Do not repeatedly reread the whole repository.

@@ -187,6 +187,7 @@ Production VM:
 - [`docs/CATALOG_SCHEMA.md`](docs/CATALOG_SCHEMA.md)
 - [`docs/WAREHOUSE_DOMAIN.md`](docs/WAREHOUSE_DOMAIN.md)
 - [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)
+- [`docs/FRONTEND_PERFORMANCE.md`](docs/FRONTEND_PERFORMANCE.md)
 - [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md)
 - [`docs/OPERATIONS.md`](docs/OPERATIONS.md)
 - [`docs/STAGE15_PLAN.md`](docs/STAGE15_PLAN.md)

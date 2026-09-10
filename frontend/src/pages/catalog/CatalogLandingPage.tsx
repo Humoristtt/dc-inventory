@@ -22,7 +22,6 @@ import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useCatalogItems } from "../../features/catalog/useCatalogItems";
 import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
 import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
-import "../../features/catalog/catalog.css";
 
 export function CatalogLandingPage() {
   const auth = useAuthState();

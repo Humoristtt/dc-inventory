@@ -194,6 +194,64 @@ async function installApiMock(page:Page, role:"USER"|"ADMIN", failures=0) {
 
 
 test(
+  "catalog deep route keeps styles and first activation after hard reload",
+  async ({ page }, testInfo) => {
+    await installTelegramMock(page);
+    await installApiMock(page, "USER");
+
+    const touchProject =
+      testInfo.project.name === "android-like"
+      || testInfo.project.name === "iphone-like"
+      || testInfo.project.name === "iphone-webkit";
+
+    await page.goto("/catalog/transceiver_ethernet");
+
+    const equipmentCard = page.getByRole(
+      "link",
+      { name: /TEST-10G/ },
+    );
+
+    await expect(equipmentCard).toBeVisible();
+
+    await page.reload();
+
+    await expect(equipmentCard).toBeVisible();
+
+    await expect.poll(
+      () => equipmentCard.evaluate(
+        (element) => getComputedStyle(element).display,
+      ),
+    ).toBe("grid");
+
+    await expect.poll(
+      () => equipmentCard.evaluate(
+        (element) => getComputedStyle(element).textDecorationLine,
+      ),
+    ).toBe("none");
+
+    const box = await equipmentCard.boundingBox();
+    expect(box).not.toBeNull();
+
+    if (box === null) {
+      throw new Error("Equipment card has no bounding box");
+    }
+
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+
+    if (touchProject) {
+      await page.touchscreen.tap(x, y);
+    } else {
+      await page.mouse.click(x, y);
+    }
+
+    await expect(page).toHaveURL(
+      /\/catalog\/items\/item-1$/,
+    );
+  },
+);
+
+test(
   "category opens on first physical activation after scroll",
   async ({ page }, testInfo) => {
     await installTelegramMock(page);

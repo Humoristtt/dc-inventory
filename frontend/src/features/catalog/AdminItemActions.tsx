@@ -8,6 +8,7 @@ import { Link } from "react-router-dom";
 import type { CatalogItem } from "../../shared/api/catalog";
 import { setCatalogItemArchived } from "../../shared/api/catalog";
 import { useAuthState } from "../auth/useAuthState";
+import { hasCapability } from "../../shared/api/auth";
 import "./admin-catalog.css";
 
 export function AdminItemActions({ item }: { item: CatalogItem }) {
@@ -24,7 +25,7 @@ export function AdminItemActions({ item }: { item: CatalogItem }) {
     },
   });
 
-  if (authQuery.data?.user.role !== "ADMIN") {
+  if (!hasCapability(authQuery.data?.user, "catalog.archive")) {
     return null;
   }
 

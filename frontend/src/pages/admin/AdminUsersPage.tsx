@@ -9,19 +9,24 @@ import {
 } from "react";
 import { Navigate } from "react-router-dom";
 
-import { useAuthState } from "../../features/auth/useAuthState";
 import "../../features/admin/access-admin.css";
-import { PageHeader } from "../../shared/ui";
+import { useAuthState } from "../../features/auth/useAuthState";
 import {
   adminUserError,
   getAdminUsers,
   getUserAccessEvents,
+  getUserRoleEvents,
   setAdminUserAccess,
+  setAdminUserRole,
   type AdminUser,
 } from "../../shared/api/adminUsers";
-import type {
-  UserAccessStatus,
+import {
+  hasCapability,
+  ROLE_LABELS,
+  type UserAccessStatus,
+  type UserRole,
 } from "../../shared/api/auth";
+import { PageHeader } from "../../shared/ui";
 
 const accessLabels: Record<UserAccessStatus, string> = {
   PENDING: "Ожидает подтверждения",
@@ -29,6 +34,12 @@ const accessLabels: Record<UserAccessStatus, string> = {
   REJECTED: "Запрос отклонён",
   BLOCKED: "Заблокирован",
 };
+
+const standardAssignableRoles: readonly UserRole[] = [
+  "ENGINEER",
+  "SENIOR_ENGINEER",
+  "MANAGER",
+];
 
 function displayName(user: AdminUser): string {
   const fullName = [
@@ -58,7 +69,26 @@ export function AdminUsersPage() {
     null,
   );
 
-  const admin = auth.data?.user.role === "ADMIN";
+  const currentUser = auth.data?.user;
+
+  const canManageUsers = hasCapability(
+    currentUser,
+    "access.manage_users",
+  );
+  const canAssignStandardRoles = hasCapability(
+    currentUser,
+    "access.assign_standard_roles",
+  );
+  const canAssignAdmin = hasCapability(
+    currentUser,
+    "access.assign_admin",
+  );
+
+  const assignableRoles: readonly UserRole[] = canAssignAdmin
+    ? [...standardAssignableRoles, "ADMIN"]
+    : canAssignStandardRoles
+      ? standardAssignableRoles
+      : [];
 
   const usersQuery = useQuery({
     queryKey: [
@@ -78,10 +108,10 @@ export function AdminUsersPage() {
         },
         signal,
       ),
-    enabled: admin,
+    enabled: canManageUsers,
   });
 
-  const historyQuery = useQuery({
+  const accessHistoryQuery = useQuery({
     queryKey: [
       "admin",
       "user-access-events",
@@ -94,7 +124,23 @@ export function AdminUsersPage() {
 
       return getUserAccessEvents(historyUserId, signal);
     },
-    enabled: admin && historyUserId !== null,
+    enabled: canManageUsers && historyUserId !== null,
+  });
+
+  const roleHistoryQuery = useQuery({
+    queryKey: [
+      "admin",
+      "user-role-events",
+      historyUserId,
+    ],
+    queryFn: ({ signal }) => {
+      if (historyUserId === null) {
+        throw new Error("history user is not selected");
+      }
+
+      return getUserRoleEvents(historyUserId, signal);
+    },
+    enabled: canManageUsers && historyUserId !== null,
   });
 
   const accessMutation = useMutation({
@@ -121,11 +167,35 @@ export function AdminUsersPage() {
     },
   });
 
+  const roleMutation = useMutation({
+    mutationFn: ({
+      userId,
+      role,
+    }: {
+      userId: string;
+      role: UserRole;
+    }) => setAdminUserRole(userId, role),
+
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ["admin", "users"],
+      });
+
+      await queryClient.invalidateQueries({
+        queryKey: [
+          "admin",
+          "user-role-events",
+          variables.userId,
+        ],
+      });
+    },
+  });
+
   if (auth.data === undefined) {
     return null;
   }
 
-  if (!admin) {
+  if (!canManageUsers) {
     return <Navigate replace to="/more" />;
   }
 
@@ -134,11 +204,39 @@ export function AdminUsersPage() {
     setSearch(searchDraft.trim());
   };
 
-  const changeAccess = (user: AdminUser) => {
+  const canManageTargetAccess = (user: AdminUser): boolean => {
+    if (user.id === currentUser?.id || user.role === "OWNER") {
+      return false;
+    }
+
+    if (user.role === "ADMIN" && !canAssignAdmin) {
+      return false;
+    }
+
+    return (
+      user.access_status === "APPROVED"
+      || user.access_status === "BLOCKED"
+    );
+  };
+
+  const canManageTargetRole = (user: AdminUser): boolean => {
     if (
-      user.access_status !== "APPROVED"
-      && user.access_status !== "BLOCKED"
+      user.id === currentUser?.id
+      || user.role === "OWNER"
+      || assignableRoles.length === 0
     ) {
+      return false;
+    }
+
+    if (user.role === "ADMIN" && !canAssignAdmin) {
+      return false;
+    }
+
+    return true;
+  };
+
+  const changeAccess = (user: AdminUser) => {
+    if (!canManageTargetAccess(user)) {
       return;
     }
 
@@ -159,6 +257,24 @@ export function AdminUsersPage() {
     accessMutation.mutate({
       userId: user.id,
       accessStatus: nextStatus,
+    });
+  };
+
+  const changeRole = (
+    user: AdminUser,
+    nextRole: UserRole,
+  ) => {
+    if (
+      !canManageTargetRole(user)
+      || nextRole === user.role
+      || !assignableRoles.includes(nextRole)
+    ) {
+      return;
+    }
+
+    roleMutation.mutate({
+      userId: user.id,
+      role: nextRole,
     });
   };
 
@@ -216,8 +332,7 @@ export function AdminUsersPage() {
 
         {usersQuery.isError ? (
           <p role="alert">
-            Не удалось загрузить пользователей.
-            {" "}
+            Не удалось загрузить пользователей.{" "}
             <button
               type="button"
               onClick={() => void usersQuery.refetch()}
@@ -233,12 +348,12 @@ export function AdminUsersPage() {
 
         <div className="admin-users__list">
           {usersQuery.data?.items.map((user) => {
-            const mutable =
-              user.access_status === "APPROVED"
-              || user.access_status === "BLOCKED";
-
             const isCurrentUser =
-              user.id === auth.data.user.id;
+              user.id === currentUser?.id;
+            const roleMutable =
+              canManageTargetRole(user);
+            const accessMutable =
+              canManageTargetAccess(user);
 
             return (
               <section
@@ -259,17 +374,39 @@ export function AdminUsersPage() {
                 </div>
 
                 <p className="admin-user-card__meta">
-                  Роль:{" "}
-                  {user.role === "ADMIN"
-                    ? "Администратор"
-                    : "Пользователь"}
+                  Роль: {ROLE_LABELS[user.role]}
                   {isCurrentUser
                     ? " · Текущая учётная запись"
                     : ""}
                 </p>
 
+                {roleMutable ? (
+                  <label>
+                    Роль пользователя
+                    <select
+                      disabled={roleMutation.isPending}
+                      value={user.role}
+                      onChange={(event) =>
+                        changeRole(
+                          user,
+                          event.target.value as UserRole,
+                        )
+                      }
+                    >
+                      {assignableRoles.map((role) => (
+                        <option
+                          key={role}
+                          value={role}
+                        >
+                          {ROLE_LABELS[role]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
+
                 <div className="admin-user-card__actions">
-                  {mutable && !isCurrentUser ? (
+                  {accessMutable ? (
                     <button
                       className={
                         user.access_status === "APPROVED"
@@ -299,29 +436,65 @@ export function AdminUsersPage() {
                   >
                     {historyUserId === user.id
                       ? "Скрыть историю"
-                      : "История доступа"}
+                      : "История изменений"}
                   </button>
                 </div>
 
                 {historyUserId === user.id ? (
                   <div className="admin-user-history">
-                    {historyQuery.isFetching ? (
+                    {accessHistoryQuery.isFetching
+                    || roleHistoryQuery.isFetching ? (
                       <p role="status">
                         Загружаем историю…
                       </p>
                     ) : null}
 
-                    {historyQuery.isError ? (
+                    {accessHistoryQuery.isError ? (
                       <p role="alert">
                         Не удалось загрузить историю доступа.
                       </p>
                     ) : null}
 
-                    {historyQuery.data?.items.length === 0 ? (
+                    {roleHistoryQuery.isError ? (
+                      <p role="alert">
+                        Не удалось загрузить историю ролей.
+                      </p>
+                    ) : null}
+
+                    <h3>Роли</h3>
+
+                    {roleHistoryQuery.data?.items.length === 0 ? (
+                      <p>Изменений роли пока нет.</p>
+                    ) : null}
+
+                    {roleHistoryQuery.data?.items.map((event) => (
+                      <div
+                        className="admin-user-history__event"
+                        key={event.id}
+                      >
+                        <strong>
+                          {ROLE_LABELS[event.before_role]}
+                          {" → "}
+                          {ROLE_LABELS[event.after_role]}
+                        </strong>
+                        <span>
+                          Кем: {event.actor_user_id}
+                        </span>
+                        <span>
+                          {new Date(
+                            event.occurred_at,
+                          ).toLocaleString("ru-RU")}
+                        </span>
+                      </div>
+                    ))}
+
+                    <h3>Доступ</h3>
+
+                    {accessHistoryQuery.data?.items.length === 0 ? (
                       <p>Изменений доступа пока нет.</p>
                     ) : null}
 
-                    {historyQuery.data?.items.map((event) => (
+                    {accessHistoryQuery.data?.items.map((event) => (
                       <div
                         className="admin-user-history__event"
                         key={event.id}
@@ -351,6 +524,12 @@ export function AdminUsersPage() {
         {accessMutation.isError ? (
           <p role="alert">
             {adminUserError(accessMutation.error)}
+          </p>
+        ) : null}
+
+        {roleMutation.isError ? (
+          <p role="alert">
+            {adminUserError(roleMutation.error)}
           </p>
         ) : null}
       </div>

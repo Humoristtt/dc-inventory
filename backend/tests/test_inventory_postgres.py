@@ -93,7 +93,7 @@ async def test_user_custody_lifecycle_idempotency_failure_and_reconciliation(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
-    s = await scenario(db, UserRole.USER)
+    s = await scenario(db, UserRole.ENGINEER)
     await move(db, s, "RECEIPT", 10, destination=s[2])
 
     issue = await move(
@@ -221,7 +221,7 @@ async def test_outstanding_custody_blocks_access_transition(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
-    s = await scenario(db, UserRole.USER)
+    s = await scenario(db, UserRole.ENGINEER)
     admin, _ = await actor(db, UserRole.ADMIN)
 
     admin_scenario = (
@@ -376,7 +376,7 @@ async def test_custody_reversals_and_correction_fail_closed(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
-    s = await scenario(db, UserRole.USER)
+    s = await scenario(db, UserRole.ENGINEER)
     receipt = await move(db, s, "RECEIPT", 10, destination=s[2])
     issue = await move(
         db,
@@ -447,14 +447,19 @@ async def test_admin_issue_and_return_do_not_mutate_custody(
     returned = await move(db, s, "RETURN", 2, destination=s[2])
     assert issue.record.movement.custody_user_id is None
     assert returned.record.movement.custody_user_id is None
-    assert not await db.scalar(select(UserItemCustodyBalance.id))
+    assert not await db.scalar(
+        select(UserItemCustodyBalance.id).where(
+            UserItemCustodyBalance.user_id == s[0],
+            UserItemCustodyBalance.item_id == s[1],
+        )
+    )
 
 
 async def test_custody_reversal_failure_is_atomic(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
-    s = await scenario(db, UserRole.USER)
+    s = await scenario(db, UserRole.ENGINEER)
     await move(db, s, "RECEIPT", 1, destination=s[2])
     issue = await move(
         db,
@@ -496,7 +501,7 @@ async def test_database_rejects_invalid_custody_relationships(
     from tests.warehouse_helpers import actor
 
     db = warehouse_db
-    s = await scenario(db, UserRole.USER)
+    s = await scenario(db, UserRole.ENGINEER)
     other, _ = await actor(db)
     receipt = await move(db, s, "RECEIPT", 5, destination=s[2])
 
@@ -816,7 +821,7 @@ async def test_concurrent_last_unit_returns_exactly_once() -> None:
     engine = create_async_engine(os.environ["DATABASE_URL"])
     try:
         async with AsyncSession(engine, expire_on_commit=False) as db:
-            s = await scenario(db, UserRole.USER)
+            s = await scenario(db, UserRole.ENGINEER)
             await move(db, s, "RECEIPT", 1, destination=s[2])
             await move(
                 db,
@@ -881,7 +886,7 @@ async def test_concurrent_issue_serializes_with_user_block() -> None:
             engine,
             expire_on_commit=False,
         ) as db:
-            s = await scenario(db, UserRole.USER)
+            s = await scenario(db, UserRole.ENGINEER)
             admin, _ = await actor(db, UserRole.ADMIN)
 
             admin_scenario = (

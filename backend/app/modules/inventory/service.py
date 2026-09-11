@@ -16,8 +16,9 @@ from sqlalchemy.sql.elements import ColumnElement
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Item, Manufacturer
 from app.modules.catalog.normalization import identity_text
-from app.modules.identity.enums import UserAccessStatus, UserRole
+from app.modules.identity.enums import UserAccessStatus
 from app.modules.identity.models import TelegramIdentity, User
+from app.modules.identity.policy import CUSTODY_ROLES
 from app.modules.inventory.enums import LocationStatus, MovementType
 from app.modules.inventory.models import (
     Location,
@@ -219,7 +220,7 @@ async def _create_movement(
         if (
             payload.movement_type != MovementType.REVERSAL
             and (
-                custody_user.role != UserRole.USER
+                custody_user.role not in CUSTODY_ROLES
                 or custody_user.access_status
                 != UserAccessStatus.APPROVED
             )
@@ -273,7 +274,7 @@ async def _create_movement(
             and _custody_delta(payload.movement_type, original) > 0
             and (
                 custody_user is None
-                or custody_user.role != UserRole.USER
+                or custody_user.role not in CUSTODY_ROLES
                 or custody_user.access_status
                 != UserAccessStatus.APPROVED
             )

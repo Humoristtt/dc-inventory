@@ -17,7 +17,13 @@ from app.modules.identity.enums import (
     UserAccessStatus,
     UserRole,
 )
-from app.modules.identity.models import AccessRequest, TelegramIdentity, User
+from app.modules.identity.models import (
+    AccessRequest,
+    TelegramIdentity,
+    User,
+    UserRoleEvent,
+)
+from app.modules.identity.policy import IDENTITY_MANAGEMENT_LOCK_KEY
 
 SESSION_TOKEN_BYTES = 32
 
@@ -33,6 +39,10 @@ class AuthenticatedContext:
     session: AuthSession
     user: User
     identity: TelegramIdentity
+
+
+class RecoveryOwnerConflictError(RuntimeError):
+    """Configured recovery identity conflicts with an existing OWNER."""
 
 
 def hash_session_token(raw_token: str) -> bytes:
@@ -61,9 +71,20 @@ async def upsert_telegram_identity(
 
     bootstrap_admin = settings.admin_telegram_user_id == telegram_user_id
 
+    if bootstrap_admin:
+        await db.execute(
+            select(func.pg_advisory_xact_lock(IDENTITY_MANAGEMENT_LOCK_KEY))
+        )
+
     if identity is None:
+        if bootstrap_admin and await db.scalar(
+            select(User.id).where(User.role == UserRole.OWNER).limit(1)
+        ) is not None:
+            raise RecoveryOwnerConflictError(
+                "configured recovery identity conflicts with existing owner"
+            )
         user = User(
-            role=UserRole.ADMIN if bootstrap_admin else UserRole.USER,
+            role=UserRole.OWNER if bootstrap_admin else UserRole.ENGINEER,
             access_status=(
                 UserAccessStatus.APPROVED
                 if bootstrap_admin
@@ -92,9 +113,33 @@ async def upsert_telegram_identity(
     identity.language_code = validated.user.language_code
     identity.last_auth_at = current_time
 
-    # Configured bootstrap admin является постоянным recovery/admin identity.
+    # ADMIN_TELEGRAM_USER_ID remains the permanent recovery/OWNER identity.
     if bootstrap_admin:
-        user.role = UserRole.ADMIN
+        conflicting_owner_id = await db.scalar(
+            select(User.id)
+            .where(
+                User.role == UserRole.OWNER,
+                User.id != user.id,
+            )
+            .limit(1)
+        )
+        if conflicting_owner_id is not None:
+            raise RecoveryOwnerConflictError(
+                "configured recovery identity conflicts with existing owner"
+            )
+
+        if user.role != UserRole.OWNER:
+            before_role = user.role
+            user.role = UserRole.OWNER
+            db.add(
+                UserRoleEvent(
+                    actor_user_id=user.id,
+                    target_user_id=user.id,
+                    before_role=before_role,
+                    after_role=UserRole.OWNER,
+                    occurred_at=current_time,
+                )
+            )
         user.access_status = UserAccessStatus.APPROVED
         if user.approved_at is None:
             user.approved_at = current_time
@@ -113,7 +158,7 @@ async def upsert_telegram_identity(
             pending_request.status = AccessRequestStatus.APPROVED
             pending_request.decided_at = current_time
             pending_request.decided_by_user_id = user.id
-            pending_request.decision_note = "bootstrap admin configuration"
+            pending_request.decision_note = "configured recovery owner"
 
     await db.flush()
     return user, identity

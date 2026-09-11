@@ -39,10 +39,13 @@ async def api_context(
     users: ApiUsers = {}
     for name, role, access in [
         ("admin", UserRole.ADMIN, UserAccessStatus.APPROVED),
-        ("user", UserRole.USER, UserAccessStatus.APPROVED),
-        ("pending", UserRole.USER, UserAccessStatus.PENDING),
-        ("blocked", UserRole.USER, UserAccessStatus.BLOCKED),
-        ("rejected", UserRole.USER, UserAccessStatus.REJECTED),
+        ("owner", UserRole.OWNER, UserAccessStatus.APPROVED),
+        ("senior", UserRole.SENIOR_ENGINEER, UserAccessStatus.APPROVED),
+        ("manager", UserRole.MANAGER, UserAccessStatus.APPROVED),
+        ("user", UserRole.ENGINEER, UserAccessStatus.APPROVED),
+        ("pending", UserRole.ENGINEER, UserAccessStatus.PENDING),
+        ("blocked", UserRole.ENGINEER, UserAccessStatus.BLOCKED),
+        ("rejected", UserRole.ENGINEER, UserAccessStatus.REJECTED),
     ]:
         user, token = await actor(db, role, access)
         users[name] = (
@@ -242,7 +245,7 @@ async def test_mutation_roles_idempotency_and_gate(warehouse_db: AsyncSession) -
                 "/api/inventory/movements", headers=users["user"][1], json=payload
             )
             assert replay.json()["id"] == response.json()["id"]
-            for restricted in ("RECEIPT", "TRANSFER", "WRITE_OFF", "CORRECTION", "REVERSAL"):
+            for restricted in ("WRITE_OFF", "CORRECTION", "REVERSAL"):
                 assert (
                     await client.post(
                         "/api/inventory/movements",
@@ -250,6 +253,33 @@ async def test_mutation_roles_idempotency_and_gate(warehouse_db: AsyncSession) -
                         json={**payload, "movement_type": restricted},
                     )
                 ).status_code == 403
+
+        receipt = await client.post(
+            "/api/inventory/movements",
+            headers=users["user"][1],
+            json={
+                "movement_type": "RECEIPT",
+                "destination_location_id": str(s[2]),
+                "client_request_id": "engineer-receipt",
+                "lines": [{"item_id": str(s[1]), "quantity": 1}],
+            },
+        )
+        assert receipt.status_code == 201, receipt.text
+        assert receipt.json()["custody_user_id"] is None
+
+        transfer = await client.post(
+            "/api/inventory/movements",
+            headers=users["user"][1],
+            json={
+                "movement_type": "TRANSFER",
+                "source_location_id": str(s[2]),
+                "destination_location_id": str(s[3]),
+                "client_request_id": "engineer-transfer",
+                "lines": [{"item_id": str(s[1]), "quantity": 1}],
+            },
+        )
+        assert transfer.status_code == 201, transfer.text
+        assert transfer.json()["custody_user_id"] is None
         over_return = await client.post(
             "/api/inventory/movements",
             headers=users["user"][1],
@@ -321,6 +351,83 @@ async def test_mutation_roles_idempotency_and_gate(warehouse_db: AsyncSession) -
                 },
             )
         ).status_code == 423
+
+
+async def test_new_role_inventory_and_movement_authorization_matrix(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    s = await scenario(db)
+    movement = await move(db, s, "RECEIPT", 5, destination=s[2])
+    app, users = await api_context(db)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        assert (
+            await client.get("/api/inventory/stock", headers=users["manager"][1])
+        ).status_code == 200
+        assert (
+            await client.get("/api/inventory/movements", headers=users["manager"][1])
+        ).status_code == 403
+        assert (
+            await client.post(
+                "/api/inventory/movements",
+                headers=users["manager"][1],
+                json={
+                    "movement_type": "RECEIPT",
+                    "destination_location_id": str(s[2]),
+                    "client_request_id": "manager-forbidden",
+                    "lines": [{"item_id": str(s[1]), "quantity": 1}],
+                },
+            )
+        ).status_code == 403
+
+        senior_feed = await client.get(
+            "/api/inventory/movements/feed?period=all",
+            headers=users["senior"][1],
+        )
+        assert senior_feed.status_code == 200
+        assert str(movement.record.movement.id) in {
+            row["id"] for row in senior_feed.json()["items"]
+        }
+        senior_issue = await client.post(
+            "/api/inventory/movements",
+            headers=users["senior"][1],
+            json={
+                "movement_type": "ISSUE",
+                "source_location_id": str(s[2]),
+                "client_request_id": "senior-custody",
+                "lines": [{"item_id": str(s[1]), "quantity": 1}],
+            },
+        )
+        assert senior_issue.status_code == 201, senior_issue.text
+        assert senior_issue.json()["custody_user_id"] == str(users["senior"][0])
+
+        for privileged in ("admin", "owner"):
+            location = await client.post(
+                "/api/admin/inventory/locations",
+                headers=users[privileged][1],
+                json={
+                    "code": uuid.uuid4().hex,
+                    "name": f"{privileged} location",
+                    "location_type": "WAREHOUSE",
+                },
+            )
+            assert location.status_code == 201, location.text
+
+        assert (
+            await client.post(
+                "/api/admin/inventory/locations",
+                headers=users["senior"][1],
+                json={
+                    "code": uuid.uuid4().hex,
+                    "name": "senior forbidden",
+                    "location_type": "WAREHOUSE",
+                },
+            )
+        ).status_code == 403
 
 
 async def test_issue_enqueues_one_admin_notification_and_replay_does_not_duplicate(

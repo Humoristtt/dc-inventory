@@ -16,7 +16,12 @@ from app.modules.auth.service import (
 )
 from app.modules.auth.telegram import TelegramWebAppUser, ValidatedTelegramInitData
 from app.modules.identity.enums import AccessRequestStatus, UserAccessStatus, UserRole
-from app.modules.identity.models import AccessRequest, TelegramIdentity, User
+from app.modules.identity.models import (
+    AccessRequest,
+    TelegramIdentity,
+    User,
+    UserRoleEvent,
+)
 
 DATABASE_URL = "postgresql+asyncpg://dc_inventory:test@postgres:5432/dc_inventory"
 NOW = datetime(2026, 9, 1, 1, 0, tzinfo=UTC)
@@ -44,7 +49,7 @@ async def test_new_telegram_identity_starts_pending() -> None:
 
     user, identity = await upsert_telegram_identity(db, _validated(), settings, now=NOW)
 
-    assert user.role == UserRole.USER
+    assert user.role == UserRole.ENGINEER
     assert user.access_status == UserAccessStatus.PENDING
     assert identity.telegram_user_id == 42424242
     assert identity.username == "ivanov"
@@ -54,10 +59,26 @@ async def test_new_telegram_identity_starts_pending() -> None:
 
 
 @pytest.mark.asyncio
+async def test_new_configured_identity_is_approved_owner() -> None:
+    db = AsyncMock(spec=AsyncSession)
+    db.scalar.side_effect = [None, None]
+    settings = Settings(
+        database_url=DATABASE_URL,
+        admin_telegram_user_id=42424242,
+    )
+
+    user, _ = await upsert_telegram_identity(db, _validated(), settings, now=NOW)
+
+    assert user.role == UserRole.OWNER
+    assert user.access_status == UserAccessStatus.APPROVED
+    assert user.approved_at == NOW
+
+
+@pytest.mark.asyncio
 async def test_existing_identity_profile_is_refreshed() -> None:
     user = User(
         id=uuid.uuid4(),
-        role=UserRole.USER,
+        role=UserRole.ENGINEER,
         access_status=UserAccessStatus.PENDING,
     )
     identity = TelegramIdentity(
@@ -92,7 +113,7 @@ async def test_existing_identity_profile_is_refreshed() -> None:
 async def test_bootstrap_admin_recovery_resolves_existing_pending_request() -> None:
     user = User(
         id=uuid.uuid4(),
-        role=UserRole.USER,
+        role=UserRole.ADMIN,
         access_status=UserAccessStatus.PENDING,
     )
     identity = TelegramIdentity(
@@ -108,7 +129,7 @@ async def test_bootstrap_admin_recovery_resolves_existing_pending_request() -> N
         status=AccessRequestStatus.PENDING,
     )
     db = AsyncMock(spec=AsyncSession)
-    db.scalar.return_value = identity
+    db.scalar.side_effect = [identity, None]
     pending_result = MagicMock()
     pending_result.first.return_value = pending
     db.scalars.return_value = pending_result
@@ -119,13 +140,54 @@ async def test_bootstrap_admin_recovery_resolves_existing_pending_request() -> N
 
     await upsert_telegram_identity(db, _validated(), settings, now=NOW)
 
-    assert user.role == UserRole.ADMIN
+    assert user.role == UserRole.OWNER
     assert user.access_status == UserAccessStatus.APPROVED
     assert user.approved_at == NOW
     assert pending.status == AccessRequestStatus.APPROVED
     assert pending.decided_at == NOW
     assert pending.decided_by_user_id == user.id
-    assert pending.decision_note == "bootstrap admin configuration"
+    assert pending.decision_note == "configured recovery owner"
+    role_events = [
+        call.args[0]
+        for call in db.add.call_args_list
+        if isinstance(call.args[0], UserRoleEvent)
+    ]
+    assert len(role_events) == 1
+    assert role_events[0].before_role == UserRole.ADMIN
+    assert role_events[0].after_role == UserRole.OWNER
+
+
+@pytest.mark.asyncio
+async def test_existing_configured_owner_login_is_idempotent() -> None:
+    user = User(
+        id=uuid.uuid4(),
+        role=UserRole.OWNER,
+        access_status=UserAccessStatus.APPROVED,
+    )
+    identity = TelegramIdentity(
+        id=uuid.uuid4(),
+        user=user,
+        user_id=user.id,
+        telegram_user_id=42424242,
+        first_name="Иван",
+    )
+    db = AsyncMock(spec=AsyncSession)
+    db.scalar.side_effect = [identity, None]
+    pending_result = MagicMock()
+    pending_result.first.return_value = None
+    db.scalars.return_value = pending_result
+    settings = Settings(
+        database_url=DATABASE_URL,
+        admin_telegram_user_id=42424242,
+    )
+
+    await upsert_telegram_identity(db, _validated(), settings, now=NOW)
+
+    assert user.role == UserRole.OWNER
+    assert not any(
+        isinstance(call.args[0], UserRoleEvent)
+        for call in db.add.call_args_list
+    )
 
 
 @pytest.mark.asyncio

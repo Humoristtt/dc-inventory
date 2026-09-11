@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuthState } from "../auth/useAuthState";
+import { hasCapability } from "../../shared/api/auth";
 import { createMovement, getInventorySummary, getLocations, inventoryError, type MovementType } from "../../shared/api/inventory";
 import "./inventory.css";
 import { refreshAfterMovement } from "../../shared/api/inventoryCache";
@@ -43,7 +44,7 @@ export function ItemInventoryPanel({itemId, archived = false}: {itemId: string; 
     <dl className="detail-list">{summary.data?.locations.map(row => <div key={row.id}><dt>{row.location.name}</dt><dd>{row.quantity}</dd></div>)}</dl>
     {summary.data?.total_count === 0 ? <p>Оборудования в местах хранения пока нет.</p> : null}
     {locations.isError ? <p role="alert">Не удалось загрузить места хранения. <button onClick={() => void locations.refetch()}>Повторить</button></p> : null}
-    <div className="warehouse-actions">{(Object.keys(actionNames) as Action[]).filter(key => auth.data?.user.role === "ADMIN" || key === "ISSUE" || key === "RETURN").filter(key => !archived || key !== "ISSUE" && key !== "RECEIPT").map(key => <button type="button" className="button button--dark" key={key} disabled={summary.isPending || summary.isError || locations.isError || locations.isPending || mutation.isPending} onClick={() => {setAction(key); setSource(""); setDestination(""); setQuantity("1"); setNotice(""); changed();}}>{actionNames[key]}</button>)}</div>
+    <div className="warehouse-actions">{(Object.keys(actionNames) as Action[]).filter(key => hasCapability(auth.data?.user, "inventory.operate") && (hasCapability(auth.data?.user, "inventory.admin") || key !== "WRITE_OFF")).filter(key => !archived || key !== "ISSUE" && key !== "RECEIPT").map(key => <button type="button" className="button button--dark" key={key} disabled={summary.isPending || summary.isError || locations.isError || locations.isPending || mutation.isPending} onClick={() => {setAction(key); setSource(""); setDestination(""); setQuantity("1"); setNotice(""); changed();}}>{actionNames[key]}</button>)}</div>
     {notice ? <p role="status">{notice} <Link to="/movements">Движения</Link></p> : null}
     {action ? <form className="warehouse-form form-surface" onSubmit={event => {event.preventDefault(); if(valid && !mutation.isPending) mutation.mutate();}}>
       <h3>{actionNames[action]}</h3>

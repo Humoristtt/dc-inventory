@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from tests.migration_helpers import alembic
 
 HEAD = "f8a9b0c1d2e3"
+CURRENT_HEAD = "a1b2c3d4e5f6"
 PREVIOUS = "a2b3c4d5e6f7"
 pytestmark = pytest.mark.asyncio
 
@@ -130,7 +131,10 @@ async def test_baseline_head_empty_downgrade_and_metadata(migration_database: st
     engine = create_async_engine(url)
     async with engine.connect() as db:
         assert (await db.scalar(text("SHOW server_version"))).startswith("18")
-        assert await db.scalar(text("SELECT version_num FROM alembic_version")) == HEAD
+        assert (
+            await db.scalar(text("SELECT version_num FROM alembic_version"))
+            == CURRENT_HEAD
+        )
         assert await db.scalar(text("SELECT to_regclass('inventory_units')")) is None
         columns = (
             (
@@ -171,7 +175,7 @@ async def test_baseline_head_empty_downgrade_and_metadata(migration_database: st
     await engine.dispose()
     assert "No new upgrade operations detected" in alembic(url, "check")
     alembic(url, "downgrade", PREVIOUS)
-    alembic(url, "upgrade", HEAD)
+    alembic(url, "upgrade", CURRENT_HEAD)
     assert "No new upgrade operations detected" in alembic(url, "check")
 
 

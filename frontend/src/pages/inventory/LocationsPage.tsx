@@ -10,6 +10,7 @@ import {
 import { Link } from "react-router-dom";
 
 import { useAuthState } from "../../features/auth/useAuthState";
+import { hasCapability } from "../../shared/api/auth";
 import {
   getLocations,
   inventoryError,
@@ -82,15 +83,21 @@ export function LocationsPage() {
     },
   });
 
-  const admin =
-    auth.data?.user.role === "ADMIN";
+  const canManageLocations = hasCapability(
+    auth.data?.user,
+    "inventory.admin",
+  );
+  const canManageCatalog = hasCapability(
+    auth.data?.user,
+    "catalog.manage",
+  );
 
   useEffect(() => {
     if (!open) {
       return;
     }
 
-    if (!admin) {
+    if (!canManageLocations) {
       const closeTimer =
         window.setTimeout(() => {
           setOpen(false);
@@ -111,7 +118,7 @@ export function LocationsPage() {
       document.body.style.overflow =
         previousOverflow;
     };
-  }, [admin, open]);
+  }, [canManageLocations, open]);
 
   const closeEditor = () => {
     if (mutation.isPending) {
@@ -154,22 +161,26 @@ export function LocationsPage() {
       />
 
       <div className="catalog-page__body">
-        {admin ? (
+        {canManageLocations || canManageCatalog ? (
           <div className="warehouse-actions">
-            <button
-              className="button button--dark"
-              onClick={openCreate}
-              type="button"
-            >
-              Добавить место хранения
-            </button>
+            {canManageLocations ? (
+              <button
+                className="button button--dark"
+                onClick={openCreate}
+                type="button"
+              >
+                Добавить место хранения
+              </button>
+            ) : null}
 
-            <Link
-              className="button"
-              to="/catalog/new"
-            >
-              Добавить оборудование
-            </Link>
+            {canManageCatalog ? (
+              <Link
+                className="button"
+                to="/catalog/new"
+              >
+                Добавить оборудование
+              </Link>
+            ) : null}
           </div>
         ) : null}
 
@@ -212,7 +223,7 @@ export function LocationsPage() {
                 <p>{row.address}</p>
               ) : null}
 
-              {admin ? (
+              {canManageLocations ? (
                 <div className="warehouse-actions">
                   <button
                     className="button"
@@ -267,7 +278,7 @@ export function LocationsPage() {
         ) : null}
       </div>
 
-      {open && admin ? (
+      {open && canManageLocations ? (
         <div
           className="location-editor-backdrop"
           onMouseDown={(event) => {

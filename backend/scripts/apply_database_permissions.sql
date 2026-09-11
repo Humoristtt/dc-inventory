@@ -174,9 +174,9 @@ SELECT format(
 \gexec
 
 
--- Administrative user lifecycle history is append-only.
+-- Administrative user lifecycle and role history are append-only.
 SELECT format(
-    'GRANT SELECT, INSERT ON TABLE user_access_events TO %I',
+    'GRANT SELECT, INSERT ON TABLE user_access_events, user_role_events TO %I',
     :'runtime_user'
 )
 \gexec

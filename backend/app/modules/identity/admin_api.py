@@ -9,27 +9,33 @@ from fastapi import (
     status,
 )
 
-from app.modules.auth.dependencies import Admin, DbSession
+from app.modules.auth.dependencies import DbSession, ManageUsers
 from app.modules.identity.admin_schemas import (
     AdminUserOut,
     AdminUserPageOut,
     AdminUserPatch,
+    AdminUserRolePatch,
     UserAccessEventOut,
     UserAccessEventPageOut,
+    UserRoleEventOut,
+    UserRoleEventPageOut,
 )
 from app.modules.identity.admin_service import (
+    AdminUserForbiddenError,
     AdminUserNotFoundError,
     InvalidAccessTransitionError,
-    LastApprovedAdminInvariantError,
+    InvalidRoleTransitionError,
     OutstandingCustodyInvariantError,
     RecoveryAdminInvariantError,
     get_admin_user,
     list_admin_users,
     list_user_access_events,
+    list_user_role_events,
     update_user_access,
+    update_user_role,
 )
 from app.modules.identity.enums import UserAccessStatus, UserRole
-from app.modules.identity.models import User, UserAccessEvent
+from app.modules.identity.models import User, UserAccessEvent, UserRoleEvent
 
 router = APIRouter(
     prefix="/api/admin/users",
@@ -37,7 +43,10 @@ router = APIRouter(
 )
 
 
-def _user_out(user: User) -> AdminUserOut:
+def _user_out(
+    user: User,
+    recovery_telegram_user_id: int | None,
+) -> AdminUserOut:
     identity = user.telegram_identity
     if identity is None:
         raise RuntimeError("managed user has no Telegram identity")
@@ -53,6 +62,10 @@ def _user_out(user: User) -> AdminUserOut:
         created_at=user.created_at,
         updated_at=user.updated_at,
         approved_at=user.approved_at,
+        is_recovery_identity=(
+            recovery_telegram_user_id is not None
+            and identity.telegram_user_id == recovery_telegram_user_id
+        ),
     )
 
 
@@ -69,11 +82,23 @@ def _event_out(
     )
 
 
+def _role_event_out(event: UserRoleEvent) -> UserRoleEventOut:
+    return UserRoleEventOut(
+        id=event.id,
+        actor_user_id=event.actor_user_id,
+        target_user_id=event.target_user_id,
+        before_role=event.before_role,
+        after_role=event.after_role,
+        occurred_at=event.occurred_at,
+    )
+
+
 @router.get("", response_model=AdminUserPageOut)
 async def get_users(
+    request: Request,
     response: Response,
     db: DbSession,
-    admin: Admin,
+    admin: ManageUsers,
     q: str | None = Query(default=None, max_length=100),
     role: UserRole | None = None,
     access_status: UserAccessStatus | None = None,
@@ -94,7 +119,13 @@ async def get_users(
     response.headers["Cache-Control"] = "no-store"
 
     return AdminUserPageOut(
-        items=[_user_out(user) for user in page.items],
+        items=[
+            _user_out(
+                user,
+                request.app.state.settings.admin_telegram_user_id,
+            )
+            for user in page.items
+        ],
         total=page.total,
     )
 
@@ -107,7 +138,7 @@ async def get_user_events(
     user_id: UUID,
     response: Response,
     db: DbSession,
-    admin: Admin,
+    admin: ManageUsers,
     limit: int = Query(default=100, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
 ) -> UserAccessEventPageOut:
@@ -135,6 +166,38 @@ async def get_user_events(
     )
 
 
+@router.get(
+    "/{user_id}/role-events",
+    response_model=UserRoleEventPageOut,
+)
+async def get_user_role_events(
+    user_id: UUID,
+    response: Response,
+    db: DbSession,
+    admin: ManageUsers,
+    limit: int = Query(default=100, ge=1, le=200),
+    offset: int = Query(default=0, ge=0),
+) -> UserRoleEventPageOut:
+    del admin
+    user = await get_admin_user(db, user_id)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="user not found",
+        )
+    page = await list_user_role_events(
+        db,
+        target_user_id=user_id,
+        limit=limit,
+        offset=offset,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return UserRoleEventPageOut(
+        items=[_role_event_out(event) for event in page.items],
+        total=page.total,
+    )
+
+
 @router.patch(
     "/{user_id}",
     response_model=AdminUserOut,
@@ -145,7 +208,7 @@ async def patch_user(
     request: Request,
     response: Response,
     db: DbSession,
-    admin: Admin,
+    admin: ManageUsers,
 ) -> AdminUserOut:
     try:
         await update_user_access(
@@ -166,9 +229,15 @@ async def patch_user(
             detail="user not found",
         ) from exc
 
+    except AdminUserForbiddenError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+
     except (
         InvalidAccessTransitionError,
-        LastApprovedAdminInvariantError,
         OutstandingCustodyInvariantError,
         RecoveryAdminInvariantError,
     ) as exc:
@@ -185,4 +254,63 @@ async def patch_user(
         )
 
     response.headers["Cache-Control"] = "no-store"
-    return _user_out(user)
+    return _user_out(
+        user,
+        request.app.state.settings.admin_telegram_user_id,
+    )
+
+
+@router.patch(
+    "/{user_id}/role",
+    response_model=AdminUserOut,
+)
+async def patch_user_role(
+    user_id: UUID,
+    payload: AdminUserRolePatch,
+    request: Request,
+    response: Response,
+    db: DbSession,
+    admin: ManageUsers,
+) -> AdminUserOut:
+    try:
+        await update_user_role(
+            db,
+            actor_user_id=admin.user.id,
+            target_user_id=user_id,
+            role=payload.role,
+            recovery_telegram_user_id=(
+                request.app.state.settings.admin_telegram_user_id
+            ),
+        )
+        await db.commit()
+    except AdminUserNotFoundError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="user not found",
+        ) from exc
+    except AdminUserForbiddenError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=str(exc),
+        ) from exc
+    except (
+        InvalidRoleTransitionError,
+        OutstandingCustodyInvariantError,
+        RecoveryAdminInvariantError,
+    ) as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    user = await get_admin_user(db, user_id)
+    if user is None:
+        raise RuntimeError("managed user disappeared after committed update")
+    response.headers["Cache-Control"] = "no-store"
+    return _user_out(
+        user,
+        request.app.state.settings.admin_telegram_user_id,
+    )

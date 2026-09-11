@@ -18,9 +18,77 @@ import { ApplicationRoutes } from "../../app/App";
 import {
   AUTH_QUERY_KEY,
   type AuthState,
+  type Capability,
+  type UserRole,
 } from "../../shared/api/auth";
 
-function authState(role: "USER" | "ADMIN"): AuthState {
+
+function testCapabilities(role: UserRole): Capability[] {
+  switch (role) {
+    case "ENGINEER":
+      return [
+        "catalog.read",
+        "inventory.read",
+        "inventory.operate",
+        "movement.read_own",
+      ];
+    case "SENIOR_ENGINEER":
+      return [
+        "catalog.read",
+        "catalog.manage",
+        "catalog.archive",
+        "catalog.delete_unused",
+        "inventory.read",
+        "inventory.operate",
+        "movement.read_own",
+        "movement.read_all",
+        "procurement.read",
+        "procurement.accept",
+      ];
+    case "MANAGER":
+      return [
+        "catalog.read",
+        "inventory.read",
+        "procurement.read",
+        "procurement.manage",
+      ];
+    case "ADMIN":
+      return [
+        "catalog.read",
+        "catalog.manage",
+        "catalog.archive",
+        "catalog.delete_unused",
+        "inventory.read",
+        "inventory.operate",
+        "inventory.admin",
+        "movement.read_all",
+        "procurement.read",
+        "procurement.create",
+        "procurement.accept",
+        "access.manage_users",
+        "access.assign_standard_roles",
+      ];
+    case "OWNER":
+      return [
+        "catalog.read",
+        "catalog.manage",
+        "catalog.archive",
+        "catalog.delete_unused",
+        "inventory.read",
+        "inventory.operate",
+        "inventory.admin",
+        "movement.read_all",
+        "procurement.read",
+        "procurement.create",
+        "procurement.accept",
+        "access.manage_users",
+        "access.assign_standard_roles",
+        "access.assign_admin",
+      ];
+  }
+}
+
+function authState(role: UserRole): AuthState {
   return {
     user: {
       id: role === "ADMIN" ? "admin-1" : "user-1",
@@ -29,6 +97,7 @@ function authState(role: "USER" | "ADMIN"): AuthState {
       first_name: role === "ADMIN" ? "Администратор" : "Вася",
       last_name: null,
       role,
+      capabilities: testCapabilities(role),
       access_status: "APPROVED",
     },
     support: {
@@ -48,7 +117,7 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-function renderRoute(path: string, role: "USER" | "ADMIN") {
+function renderRoute(path: string, role: UserRole) {
   const client = new QueryClient({
     defaultOptions: {
       queries: {
@@ -81,7 +150,7 @@ const managedUser = {
   username: "petrov",
   first_name: "Пётр",
   last_name: "Петров",
-  role: "USER" as const,
+  role: "ENGINEER" as const,
   access_status: "APPROVED" as const,
   created_at: "2026-09-01T10:00:00Z",
   updated_at: "2026-09-01T10:00:00Z",
@@ -94,14 +163,14 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-it("USER не видит управление пользователями и не может открыть admin route", async () => {
+it("ENGINEER не видит управление пользователями и не может открыть admin route", async () => {
   const fetchMock = vi.fn(async () => {
     throw new Error("USER must not call admin users API");
   });
 
   vi.stubGlobal("fetch", fetchMock);
 
-  const view = renderRoute("/more", "USER");
+  const view = renderRoute("/more", "ENGINEER");
 
   expect(
     await screen.findByRole("heading", { name: "Ещё" }),
@@ -117,7 +186,7 @@ it("USER не видит управление пользователями и н
 
   view.unmount();
 
-  renderRoute("/more/users", "USER");
+  renderRoute("/more/users", "ENGINEER");
 
   expect(
     await screen.findByRole("heading", { name: "Ещё" }),
@@ -257,7 +326,7 @@ it("ADMIN видит раздел пользователей, блокирует
   fireEvent.click(
     screen.getByRole(
       "button",
-      { name: "История доступа" },
+      { name: "История изменений" },
     ),
   );
 

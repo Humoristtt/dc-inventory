@@ -136,7 +136,7 @@ test(
 
     expect(authBody.user.telegram_user_id)
       .toBe(telegramUserId);
-    expect(authBody.user.role).toBe("ADMIN");
+    expect(authBody.user.role).toBe("OWNER");
     expect(authBody.user.access_status).toBe("APPROVED");
 
     const catalogResponse = await catalog;

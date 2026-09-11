@@ -17,9 +17,9 @@ from app.core.config import Settings
 from app.modules.identity.enums import (
     AccessRequestStatus,
     UserAccessStatus,
-    UserRole,
 )
 from app.modules.identity.models import AccessRequest, TelegramIdentity, User
+from app.modules.identity.policy import Capability, has_capability
 from app.modules.notifications.service import (
     enqueue_telegram_call,
     notification_dedupe_key,
@@ -363,7 +363,7 @@ async def _load_approved_admin(
     user = await db.scalar(select(User).where(User.id == identity.user_id).with_for_update())
     if (
         user is None
-        or user.role != UserRole.ADMIN
+        or not has_capability(user.role, Capability.ACCESS_MANAGE_USERS)
         or user.access_status != UserAccessStatus.APPROVED
     ):
         raise TelegramAdminAuthorizationError

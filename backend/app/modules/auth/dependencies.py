@@ -1,3 +1,4 @@
+from collections.abc import Awaitable, Callable
 from typing import Annotated
 from urllib.parse import urlsplit
 
@@ -7,7 +8,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.db.session import get_db_session
 from app.modules.auth.service import AuthenticatedContext, load_auth_context
-from app.modules.identity.enums import UserAccessStatus, UserRole
+from app.modules.identity.enums import UserAccessStatus
+from app.modules.identity.policy import Capability, has_capability
 
 DbSession = Annotated[AsyncSession, Depends(get_db_session)]
 
@@ -100,12 +102,87 @@ Approved = Annotated[AuthenticatedContext, Depends(get_approved_context)]
 async def get_admin_context(
     approved: Approved,
 ) -> AuthenticatedContext:
-    if approved.user.role != UserRole.ADMIN:
+    if not has_capability(
+        approved.user.role,
+        Capability.ACCESS_MANAGE_USERS,
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="administrator role required",
+            detail="required capability missing",
         )
     return approved
 
 
 Admin = Annotated[AuthenticatedContext, Depends(get_admin_context)]
+
+
+def require_capability(
+    capability: Capability,
+) -> Callable[[Approved], Awaitable[AuthenticatedContext]]:
+    async def dependency(approved: Approved) -> AuthenticatedContext:
+        if not has_capability(approved.user.role, capability):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="required capability missing",
+            )
+        return approved
+
+    return dependency
+
+
+def require_any_capability(
+    *capabilities: Capability,
+) -> Callable[[Approved], Awaitable[AuthenticatedContext]]:
+    required = frozenset(capabilities)
+
+    async def dependency(approved: Approved) -> AuthenticatedContext:
+        if not any(
+            has_capability(approved.user.role, capability)
+            for capability in required
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="required capability missing",
+            )
+        return approved
+
+    return dependency
+
+
+CatalogRead = Annotated[
+    AuthenticatedContext,
+    Depends(require_capability(Capability.CATALOG_READ)),
+]
+CatalogManage = Annotated[
+    AuthenticatedContext,
+    Depends(require_capability(Capability.CATALOG_MANAGE)),
+]
+CatalogArchive = Annotated[
+    AuthenticatedContext,
+    Depends(require_capability(Capability.CATALOG_ARCHIVE)),
+]
+InventoryRead = Annotated[
+    AuthenticatedContext,
+    Depends(require_capability(Capability.INVENTORY_READ)),
+]
+InventoryOperate = Annotated[
+    AuthenticatedContext,
+    Depends(require_capability(Capability.INVENTORY_OPERATE)),
+]
+InventoryAdmin = Annotated[
+    AuthenticatedContext,
+    Depends(require_capability(Capability.INVENTORY_ADMIN)),
+]
+MovementRead = Annotated[
+    AuthenticatedContext,
+    Depends(
+        require_any_capability(
+            Capability.MOVEMENT_READ_OWN,
+            Capability.MOVEMENT_READ_ALL,
+        )
+    ),
+]
+ManageUsers = Annotated[
+    AuthenticatedContext,
+    Depends(require_capability(Capability.ACCESS_MANAGE_USERS)),
+]

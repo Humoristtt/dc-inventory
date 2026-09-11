@@ -17,6 +17,7 @@ class AdminUserOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     approved_at: datetime | None
+    is_recovery_identity: bool
 
 
 class AdminUserPageOut(BaseModel):
@@ -26,6 +27,10 @@ class AdminUserPageOut(BaseModel):
 
 class AdminUserPatch(BaseModel):
     access_status: UserAccessStatus
+
+
+class AdminUserRolePatch(BaseModel):
+    role: UserRole
 
 
 class UserAccessEventOut(BaseModel):
@@ -39,4 +44,18 @@ class UserAccessEventOut(BaseModel):
 
 class UserAccessEventPageOut(BaseModel):
     items: list[UserAccessEventOut]
+    total: int
+
+
+class UserRoleEventOut(BaseModel):
+    id: UUID
+    actor_user_id: UUID
+    target_user_id: UUID
+    before_role: UserRole
+    after_role: UserRole
+    occurred_at: datetime
+
+
+class UserRoleEventPageOut(BaseModel):
+    items: list[UserRoleEventOut]
     total: int

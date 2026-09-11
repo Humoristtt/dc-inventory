@@ -3,6 +3,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 from app.modules.identity.enums import UserAccessStatus, UserRole
+from app.modules.identity.policy import Capability
 
 
 class TelegramAuthRequest(BaseModel):
@@ -21,6 +22,7 @@ class AuthUserOut(BaseModel):
     first_name: str
     last_name: str | None
     role: UserRole
+    capabilities: list[Capability]
     access_status: UserAccessStatus
 
 

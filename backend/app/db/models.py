@@ -13,6 +13,7 @@ from app.modules.identity.models import (
     TelegramIdentity,
     User,
     UserAccessEvent,
+    UserRoleEvent,
 )
 from app.modules.inventory.models import (
     Location,
@@ -48,4 +49,5 @@ __all__ = [
     "TelegramUpdate",
     "User",
     "UserAccessEvent",
+    "UserRoleEvent",
 ]

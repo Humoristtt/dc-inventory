@@ -32,7 +32,7 @@ async def _api_context(
     )
     user, user_token = await actor(
         db,
-        UserRole.USER,
+        UserRole.ENGINEER,
         UserAccessStatus.APPROVED,
     )
 
@@ -148,7 +148,7 @@ async def test_admin_user_access_api_security(
         assert block_user.status_code == 200, block_user.text
         assert block_user.headers["cache-control"] == "no-store"
         assert block_user.json()["access_status"] == "BLOCKED"
-        assert block_user.json()["role"] == "USER"
+        assert block_user.json()["role"] == "ENGINEER"
 
         old_user_session = await client.get(
             "/api/admin/users",
@@ -183,7 +183,7 @@ async def test_admin_user_access_api_security(
             },
         )
         assert recovery_block.status_code == 409
-        assert "recovery administrator" in recovery_block.json()["detail"]
+        assert "owner/recovery identity" in recovery_block.json()["detail"]
 
 
 async def test_admin_can_unblock_user_via_api(
@@ -250,7 +250,7 @@ async def test_admin_user_access_rejects_workflow_bypass(
 
     pending, _ = await actor(
         warehouse_db,
-        UserRole.USER,
+        UserRole.ENGINEER,
         UserAccessStatus.PENDING,
     )
 

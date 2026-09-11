@@ -17,10 +17,16 @@ from app.modules.identity.models import (
     TelegramIdentity,
     User,
     UserAccessEvent,
+    UserRoleEvent,
+)
+from app.modules.identity.policy import (
+    CUSTODY_ROLES,
+    IDENTITY_MANAGEMENT_LOCK_KEY,
+    STANDARD_ASSIGNABLE_ROLES,
+    Capability,
+    has_capability,
 )
 from app.modules.inventory.models import UserItemCustodyBalance
-
-ADMIN_MANAGEMENT_LOCK_KEY = 4937638921054812071
 
 
 class AdminUserError(RuntimeError):
@@ -35,12 +41,16 @@ class InvalidAccessTransitionError(AdminUserError):
     """Requested access transition is not allowed."""
 
 
+class AdminUserForbiddenError(AdminUserError):
+    """Actor may not perform the requested privileged mutation."""
+
+
 class RecoveryAdminInvariantError(AdminUserError):
-    """Configured recovery administrator must remain usable."""
+    """Configured recovery OWNER must remain usable."""
 
 
-class LastApprovedAdminInvariantError(AdminUserError):
-    """At least one approved administrator must remain usable."""
+class InvalidRoleTransitionError(AdminUserError):
+    """Requested role transition is not allowed."""
 
 
 class OutstandingCustodyInvariantError(AdminUserError):
@@ -56,6 +66,12 @@ class AdminUserPage:
 @dataclass(frozen=True, slots=True)
 class UserAccessEventPage:
     items: list[UserAccessEvent]
+    total: int
+
+
+@dataclass(frozen=True, slots=True)
+class UserRoleEventPage:
+    items: list[UserRoleEvent]
     total: int
 
 
@@ -186,6 +202,86 @@ async def list_user_access_events(
     )
 
 
+async def list_user_role_events(
+    db: AsyncSession,
+    *,
+    target_user_id: UUID,
+    limit: int = 100,
+    offset: int = 0,
+) -> UserRoleEventPage:
+    total = await db.scalar(
+        select(func.count(UserRoleEvent.id)).where(
+            UserRoleEvent.target_user_id == target_user_id
+        )
+    )
+    rows = (
+        await db.scalars(
+            select(UserRoleEvent)
+            .where(UserRoleEvent.target_user_id == target_user_id)
+            .order_by(
+                UserRoleEvent.occurred_at.desc(),
+                UserRoleEvent.id.desc(),
+            )
+            .limit(limit)
+            .offset(offset)
+        )
+    ).all()
+    return UserRoleEventPage(items=list(rows), total=int(total or 0))
+
+
+async def _lock_actor_and_target(
+    db: AsyncSession,
+    *,
+    actor_user_id: UUID,
+    target_user_id: UUID,
+) -> tuple[User, User]:
+    await db.execute(
+        select(func.pg_advisory_xact_lock(IDENTITY_MANAGEMENT_LOCK_KEY))
+    )
+    actor = cast(
+        User | None,
+        await db.scalar(
+            select(User).where(User.id == actor_user_id).with_for_update()
+        ),
+    )
+    if (
+        actor is None
+        or actor.access_status != UserAccessStatus.APPROVED
+        or not has_capability(actor.role, Capability.ACCESS_MANAGE_USERS)
+    ):
+        raise AdminUserForbiddenError(
+            "approved user-management capability required"
+        )
+
+    target = cast(
+        User | None,
+        await db.scalar(
+            select(User).where(User.id == target_user_id).with_for_update()
+        ),
+    )
+    if target is None:
+        raise AdminUserNotFoundError
+    return actor, target
+
+
+async def _is_recovery_identity(
+    db: AsyncSession,
+    *,
+    user_id: UUID,
+    recovery_telegram_user_id: int | None,
+) -> bool:
+    if recovery_telegram_user_id is None:
+        return False
+    return (
+        await db.scalar(
+            select(TelegramIdentity.telegram_user_id).where(
+                TelegramIdentity.user_id == user_id
+            )
+        )
+        == recovery_telegram_user_id
+    )
+
+
 async def update_user_access(
     db: AsyncSession,
     *,
@@ -197,41 +293,11 @@ async def update_user_access(
 ) -> tuple[User, UserAccessEvent | None]:
     current_time = now or datetime.now(UTC)
 
-    await db.execute(
-        select(
-            func.pg_advisory_xact_lock(
-                ADMIN_MANAGEMENT_LOCK_KEY
-            )
-        )
+    actor, target = await _lock_actor_and_target(
+        db,
+        actor_user_id=actor_user_id,
+        target_user_id=target_user_id,
     )
-
-    actor = cast(
-        User | None,
-        await db.scalar(
-            select(User)
-            .where(User.id == actor_user_id)
-            .with_for_update()
-        ),
-    )
-    if (
-        actor is None
-        or actor.role != UserRole.ADMIN
-        or actor.access_status != UserAccessStatus.APPROVED
-    ):
-        raise InvalidAccessTransitionError(
-            "actor is not an approved administrator"
-        )
-
-    target = cast(
-        User | None,
-        await db.scalar(
-            select(User)
-            .where(User.id == target_user_id)
-            .with_for_update()
-        ),
-    )
-    if target is None:
-        raise AdminUserNotFoundError
 
     before_access = target.access_status
 
@@ -254,43 +320,28 @@ async def update_user_access(
             "pending/rejected users use the access-request workflow"
         )
 
-    identity = cast(
-        TelegramIdentity | None,
-        await db.scalar(
-            select(TelegramIdentity).where(
-                TelegramIdentity.user_id == target.id
-            )
-        ),
-    )
-
     if (
-        recovery_telegram_user_id is not None
-        and identity is not None
-        and identity.telegram_user_id
-        == recovery_telegram_user_id
-        and access_status != UserAccessStatus.APPROVED
+        target.role == UserRole.OWNER
+        or await _is_recovery_identity(
+            db,
+            user_id=target.id,
+            recovery_telegram_user_id=recovery_telegram_user_id,
+        )
     ):
         raise RecoveryAdminInvariantError(
-            "configured recovery administrator "
-            "must remain APPROVED"
+            "owner/recovery identity cannot be changed"
         )
 
     if (
         target.role == UserRole.ADMIN
-        and before_access == UserAccessStatus.APPROVED
-        and access_status == UserAccessStatus.BLOCKED
+        and not has_capability(actor.role, Capability.ACCESS_ASSIGN_ADMIN)
     ):
-        approved_admin_count = await db.scalar(
-            select(func.count(User.id)).where(
-                User.role == UserRole.ADMIN,
-                User.access_status == UserAccessStatus.APPROVED,
-            )
+        raise AdminUserForbiddenError(
+            "only owner may manage administrator access"
         )
 
-        if int(approved_admin_count or 0) <= 1:
-            raise LastApprovedAdminInvariantError(
-                "last approved administrator cannot be blocked"
-            )
+    if actor.id == target.id:
+        raise AdminUserForbiddenError("self access mutation is forbidden")
 
     if (
         before_access == UserAccessStatus.APPROVED
@@ -336,5 +387,83 @@ async def update_user_access(
     )
     db.add(event)
 
+    await db.flush()
+    return target, event
+
+
+async def update_user_role(
+    db: AsyncSession,
+    *,
+    actor_user_id: UUID,
+    target_user_id: UUID,
+    role: UserRole,
+    recovery_telegram_user_id: int | None,
+    now: datetime | None = None,
+) -> tuple[User, UserRoleEvent | None]:
+    current_time = now or datetime.now(UTC)
+    actor, target = await _lock_actor_and_target(
+        db,
+        actor_user_id=actor_user_id,
+        target_user_id=target_user_id,
+    )
+
+    if actor.id == target.id:
+        raise AdminUserForbiddenError("self role mutation is forbidden")
+    if role == UserRole.OWNER:
+        raise AdminUserForbiddenError("owner role cannot be assigned")
+    if (
+        target.role == UserRole.OWNER
+        or await _is_recovery_identity(
+            db,
+            user_id=target.id,
+            recovery_telegram_user_id=recovery_telegram_user_id,
+        )
+    ):
+        raise RecoveryAdminInvariantError(
+            "owner/recovery identity role cannot be changed"
+        )
+    if target.role == UserRole.ADMIN and not has_capability(
+        actor.role,
+        Capability.ACCESS_ASSIGN_ADMIN,
+    ):
+        raise AdminUserForbiddenError(
+            "only owner may change administrator membership"
+        )
+
+    can_assign = (
+        role in STANDARD_ASSIGNABLE_ROLES
+        and has_capability(
+            actor.role,
+            Capability.ACCESS_ASSIGN_STANDARD_ROLES,
+        )
+    ) or (
+        role == UserRole.ADMIN
+        and has_capability(actor.role, Capability.ACCESS_ASSIGN_ADMIN)
+    )
+    if not can_assign:
+        raise AdminUserForbiddenError("requested role cannot be assigned")
+
+    before_role = target.role
+    if role == before_role:
+        return target, None
+
+    if role not in CUSTODY_ROLES and await db.scalar(
+        select(UserItemCustodyBalance.id)
+        .where(UserItemCustodyBalance.user_id == target.id)
+        .limit(1)
+    ) is not None:
+        raise OutstandingCustodyInvariantError(
+            "outstanding equipment custody must be returned before role change"
+        )
+
+    target.role = role
+    event = UserRoleEvent(
+        actor_user_id=actor.id,
+        target_user_id=target.id,
+        before_role=before_role,
+        after_role=role,
+        occurred_at=current_time,
+    )
+    db.add(event)
     await db.flush()
     return target, event

@@ -1,6 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { Navigate } from "react-router-dom";
 
+import { useAuthState } from "../../features/auth/useAuthState";
+import {
+  hasAnyCapability,
+  hasCapability,
+} from "../../shared/api/auth";
 import {
   getCatalogCategories,
 } from "../../shared/api/catalog";
@@ -17,6 +23,22 @@ import { PageHeader } from "../../shared/ui";
 const PAGE_SIZE = 30;
 
 export function MovementsPage() {
+  const auth = useAuthState();
+  const user = auth.data?.user;
+
+  const canReadAll = hasCapability(
+    user,
+    "movement.read_all",
+  );
+
+  const canReadMovements = hasAnyCapability(
+    user,
+    [
+      "movement.read_own",
+      "movement.read_all",
+    ],
+  );
+
   const [period, setPeriod] = useState("3m");
   const [actor, setActor] = useState("");
   const [equipment, setEquipment] = useState("");
@@ -33,12 +55,14 @@ export function MovementsPage() {
     queryKey: ["catalog", "categories"],
     queryFn: ({ signal }) =>
       getCatalogCategories(signal),
+    enabled: canReadMovements,
   });
 
   const locations = useQuery({
     queryKey: ["inventory", "locations"],
     queryFn: ({ signal }) =>
       getLocations(signal),
+    enabled: canReadMovements,
   });
 
   const actors = useQuery({
@@ -52,6 +76,7 @@ export function MovementsPage() {
         "GET",
         signal,
       ),
+    enabled: canReadAll,
   });
 
   const params = new URLSearchParams({
@@ -70,7 +95,7 @@ export function MovementsPage() {
     params.set("snapshot_at", cursor.snapshot);
   }
 
-  if (actor) {
+  if (canReadAll && actor) {
     params.set("actor_user_id", actor);
   }
 
@@ -114,6 +139,7 @@ export function MovementsPage() {
         "GET",
         signal,
       ),
+    enabled: canReadMovements,
   });
 
   const changeFilter = (
@@ -147,6 +173,14 @@ export function MovementsPage() {
       { before: next, snapshot: history.data?.snapshot_at },
     ]);
   };
+
+  if (auth.isPending) {
+    return null;
+  }
+
+  if (!canReadMovements) {
+    return <Navigate replace to="/catalog" />;
+  }
 
   return (
     <main className="catalog-page">
@@ -212,30 +246,32 @@ export function MovementsPage() {
             </select>
           </label>
 
-          <label>
-            Сотрудник
-            <select
-              value={actor}
-              onChange={(event) =>
-                changeFilter(
-                  setActor,
-                  event.target.value,
-                )
-              }
-            >
-              <option value="">
-                Все доступные
-              </option>
-              {actors.data?.map((item) => (
-                <option
-                  key={item.id}
-                  value={item.id}
-                >
-                  {item.name}
+          {canReadAll ? (
+            <label>
+              Сотрудник
+              <select
+                value={actor}
+                onChange={(event) =>
+                  changeFilter(
+                    setActor,
+                    event.target.value,
+                  )
+                }
+              >
+                <option value="">
+                  Все доступные
                 </option>
-              ))}
-            </select>
-          </label>
+                {actors.data?.map((item) => (
+                  <option
+                    key={item.id}
+                    value={item.id}
+                  >
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <label>
             Оборудование

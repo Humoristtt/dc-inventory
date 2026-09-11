@@ -10,11 +10,13 @@ from app.modules.auth.dependencies import (
     _enforce_cookie_mutation_origin,
     get_admin_context,
     get_approved_context,
+    require_capability,
 )
 from app.modules.auth.models import AuthSession
 from app.modules.auth.service import AuthenticatedContext
 from app.modules.identity.enums import UserAccessStatus, UserRole
 from app.modules.identity.models import TelegramIdentity, User
+from app.modules.identity.policy import Capability
 
 
 def _request(
@@ -45,7 +47,7 @@ def _request(
 def _context(
     *,
     access_status: UserAccessStatus,
-    role: UserRole = UserRole.USER,
+    role: UserRole = UserRole.ENGINEER,
 ) -> AuthenticatedContext:
     now = datetime(2026, 9, 1, 1, 0, tzinfo=UTC)
     user = User(id=uuid.uuid4(), role=role, access_status=access_status)
@@ -104,7 +106,7 @@ async def test_admin_dependency_rejects_regular_approved_user() -> None:
         await get_admin_context(context)
 
     assert exc_info.value.status_code == 403
-    assert exc_info.value.detail == "administrator role required"
+    assert exc_info.value.detail == "required capability missing"
 
 
 @pytest.mark.asyncio
@@ -114,6 +116,36 @@ async def test_admin_dependency_accepts_approved_admin() -> None:
         role=UserRole.ADMIN,
     )
     assert await get_admin_context(context) is context
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("role", "capability", "allowed"),
+    [
+        (UserRole.ENGINEER, Capability.INVENTORY_OPERATE, True),
+        (UserRole.ENGINEER, Capability.INVENTORY_ADMIN, False),
+        (UserRole.SENIOR_ENGINEER, Capability.CATALOG_MANAGE, True),
+        (UserRole.MANAGER, Capability.INVENTORY_OPERATE, False),
+        (UserRole.ADMIN, Capability.ACCESS_ASSIGN_ADMIN, False),
+        (UserRole.OWNER, Capability.ACCESS_ASSIGN_ADMIN, True),
+    ],
+)
+async def test_capability_dependency_allow_deny(
+    role: UserRole,
+    capability: Capability,
+    allowed: bool,
+) -> None:
+    dependency = require_capability(capability)
+    context = _context(
+        access_status=UserAccessStatus.APPROVED,
+        role=role,
+    )
+    if allowed:
+        assert await dependency(context) is context
+    else:
+        with pytest.raises(HTTPException) as exc_info:
+            await dependency(context)
+        assert exc_info.value.status_code == 403
 
 
 @pytest.mark.parametrize("method", ["GET", "HEAD", "OPTIONS"])

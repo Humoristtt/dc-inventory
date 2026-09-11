@@ -16,11 +16,17 @@ from app.db.errors import (
     postgres_error_message,
     postgres_sqlstate,
 )
-from app.modules.auth.dependencies import Admin, Approved, DbSession
+from app.modules.auth.dependencies import (
+    DbSession,
+    InventoryAdmin,
+    InventoryOperate,
+    InventoryRead,
+    MovementRead,
+)
 from app.modules.catalog.api import _raise_catalog_error
 from app.modules.catalog.models import Item
 from app.modules.catalog.service import CatalogError
-from app.modules.identity.enums import UserRole
+from app.modules.identity.policy import CUSTODY_ROLES, Capability, has_capability
 from app.modules.inventory.enums import (
     LocationStatus,
     MovementType,
@@ -232,7 +238,7 @@ def _stock_balance_out(record: StockBalanceRecord) -> StockBalanceOut:
 @read_router.get("/locations", response_model=LocationListOut)
 async def get_locations(
     db: DbSession,
-    _approved: Approved,
+    _approved: InventoryRead,
     location_status: Annotated[LocationStatus | None, Query(alias="status")] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -255,7 +261,7 @@ async def get_locations(
 async def get_location_detail(
     location_id: UUID,
     db: DbSession,
-    _approved: Approved,
+    _approved: InventoryRead,
 ) -> LocationOut:
     try:
         return _location_out(await get_location(db, location_id))
@@ -265,7 +271,7 @@ async def get_location_detail(
 
 @read_router.get("/items/{item_id}/summary", response_model=InventoryCurrentSummaryOut)
 async def get_item_inventory_summary(
-    item_id: UUID, db: DbSession, _approved: Approved
+    item_id: UUID, db: DbSession, _approved: InventoryRead
 ) -> InventoryCurrentSummaryOut:
     if await db.get(Item, item_id) is None:
         raise HTTPException(status_code=404, detail="item not found")
@@ -288,7 +294,7 @@ async def get_item_inventory_summary(
 @read_router.get("/stock", response_model=StockBalanceListOut)
 async def get_stock(
     db: DbSession,
-    _approved: Approved,
+    _approved: InventoryRead,
     item_id: UUID | None = None,
     location_id: UUID | None = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
@@ -306,13 +312,13 @@ async def get_stock(
 
 
 @read_router.get("/movement-actors")
-async def get_movement_actors(db: DbSession, approved: Approved) -> list[dict[str, str]]:
+async def get_movement_actors(db: DbSession, approved: MovementRead) -> list[dict[str, str]]:
     query = (
         select(Movement.actor_user_id, Movement.actor_display_name_snapshot)
         .distinct(Movement.actor_user_id)
         .order_by(Movement.actor_user_id, Movement.journal_seq.desc())
     )
-    if approved.user.role != UserRole.ADMIN:
+    if not has_capability(approved.user.role, Capability.MOVEMENT_READ_ALL):
         query = query.where(Movement.actor_user_id == approved.user.id)
     rows = (await db.execute(query)).all()
     return [
@@ -324,7 +330,7 @@ async def get_movement_actors(db: DbSession, approved: Approved) -> list[dict[st
 @read_router.get("/movements", response_model=MovementListOut, deprecated=True)
 async def get_movements(
     db: DbSession,
-    approved: Approved,
+    approved: MovementRead,
     movement_type: MovementType | None = None,
     item_id: UUID | None = None,
     actor_user_id: UUID | None = None,
@@ -339,9 +345,9 @@ async def get_movements(
 ) -> MovementListOut:
     # Existing journal policy restricted employee-wide history to ADMIN.
     # Users can now see their own immutable actions; no cross-user disclosure.
-    if approved.user.role != UserRole.ADMIN:
+    if not has_capability(approved.user.role, Capability.MOVEMENT_READ_ALL):
         if actor_user_id is not None and actor_user_id != approved.user.id:
-            raise HTTPException(status_code=403, detail="employee history requires administrator")
+            raise HTTPException(status_code=403, detail="all movement history capability required")
         actor_user_id = approved.user.id
     if since is None and period != "all":
         now = datetime.now(UTC)
@@ -387,7 +393,7 @@ async def get_movements(
 )
 async def get_movement_feed(
     db: DbSession,
-    approved: Approved,
+    approved: MovementRead,
     movement_type: MovementType | None = None,
     actor_user_id: UUID | None = None,
     category: str | None = None,
@@ -398,14 +404,14 @@ async def get_movement_feed(
     before_journal_seq: Annotated[int | None, Query(ge=1)] = None,
     snapshot_at: datetime | None = None,
 ) -> MovementCursorListOut:
-    if approved.user.role != UserRole.ADMIN:
+    if not has_capability(approved.user.role, Capability.MOVEMENT_READ_ALL):
         if (
             actor_user_id is not None
             and actor_user_id != approved.user.id
         ):
             raise HTTPException(
                 status_code=403,
-                detail="employee history requires administrator",
+                detail="all movement history capability required",
             )
         actor_user_id = approved.user.id
 
@@ -475,14 +481,17 @@ async def get_movement_feed(
 
 
 @read_router.get("/movements/{movement_id}", response_model=MovementOut)
-async def get_movement(movement_id: UUID, db: DbSession, approved: Approved) -> MovementOut:
+async def get_movement(movement_id: UUID, db: DbSession, approved: MovementRead) -> MovementOut:
     try:
         record = await get_movement_record(db, movement_id)
         if (
-            approved.user.role != UserRole.ADMIN
+            not has_capability(
+                approved.user.role,
+                Capability.MOVEMENT_READ_ALL,
+            )
             and record.movement.actor_user_id != approved.user.id
         ):
-            raise HTTPException(status_code=403, detail="employee history requires administrator")
+            raise HTTPException(status_code=403, detail="all movement history capability required")
         return _movement_out(record)
     except InventoryError as error:
         _raise_inventory_error(error)
@@ -490,7 +499,11 @@ async def get_movement(movement_id: UUID, db: DbSession, approved: Approved) -> 
 
 @admin_router.patch("/locations/{location_id}", response_model=LocationOut)
 async def patch_location(
-    location_id: UUID, payload: LocationPatch, request: Request, db: DbSession, _admin: Admin
+    location_id: UUID,
+    payload: LocationPatch,
+    request: Request,
+    db: DbSession,
+    _admin: InventoryAdmin,
 ) -> LocationOut:
     require_real_inventory_mutations_enabled(request)
     try:
@@ -514,7 +527,7 @@ async def post_location(
     payload: LocationCreate,
     request: Request,
     db: DbSession,
-    _admin: Admin,
+    _admin: InventoryAdmin,
 ) -> LocationOut:
     require_real_inventory_mutations_enabled(request)
     try:
@@ -537,7 +550,7 @@ async def archive_location(
     location_id: UUID,
     request: Request,
     db: DbSession,
-    _admin: Admin,
+    _admin: InventoryAdmin,
 ) -> LocationOut:
     require_real_inventory_mutations_enabled(request)
     try:
@@ -557,7 +570,7 @@ async def unarchive_location(
     location_id: UUID,
     request: Request,
     db: DbSession,
-    _admin: Admin,
+    _admin: InventoryAdmin,
 ) -> LocationOut:
     require_real_inventory_mutations_enabled(request)
     try:
@@ -581,13 +594,18 @@ async def post_movement(
     payload: MovementCreate,
     request: Request,
     db: DbSession,
-    approved: Approved,
+    approved: InventoryOperate,
 ) -> MovementOut:
-    if approved.user.role != UserRole.ADMIN and payload.movement_type not in {
-        MovementType.ISSUE,
-        MovementType.RETURN,
-    }:
-        raise HTTPException(status_code=403, detail="administrator operation")
+    if (
+        not has_capability(approved.user.role, Capability.INVENTORY_ADMIN)
+        and payload.movement_type not in {
+            MovementType.RECEIPT,
+            MovementType.ISSUE,
+            MovementType.RETURN,
+            MovementType.TRANSFER,
+        }
+    ):
+        raise HTTPException(status_code=403, detail="inventory admin capability required")
     require_real_inventory_mutations_enabled(request)
     try:
         result = await create_movement(
@@ -597,7 +615,7 @@ async def post_movement(
             actor_display_name=display_identity(approved.identity),
             custody_user_id=(
                 approved.user.id
-                if approved.user.role != UserRole.ADMIN
+                if approved.user.role in CUSTODY_ROLES
                 and payload.movement_type in {MovementType.ISSUE, MovementType.RETURN}
                 else None
             ),
@@ -630,7 +648,7 @@ async def post_movement_reversal(
     payload: MovementReversalCreate,
     request: Request,
     db: DbSession,
-    admin: Admin,
+    admin: InventoryAdmin,
 ) -> MovementOut:
     require_real_inventory_mutations_enabled(request)
     try:

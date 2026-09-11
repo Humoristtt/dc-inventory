@@ -36,6 +36,20 @@ export type UserAccessEventPage = {
   total: number;
 };
 
+export type UserRoleEvent = {
+  id: string;
+  actor_user_id: string;
+  target_user_id: string;
+  before_role: UserRole;
+  after_role: UserRole;
+  occurred_at: string;
+};
+
+export type UserRoleEventPage = {
+  items: UserRoleEvent[];
+  total: number;
+};
+
 async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     throw new ApiRequestError(
@@ -99,6 +113,25 @@ export async function setAdminUserAccess(
   return readJson<AdminUser>(response);
 }
 
+export async function setAdminUserRole(
+  userId: string,
+  role: UserRole,
+): Promise<AdminUser> {
+  const response = await fetch(
+    `/api/admin/users/${encodeURIComponent(userId)}/role`,
+    {
+      method: "PATCH",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ role }),
+    },
+  );
+
+  return readJson<AdminUser>(response);
+}
+
 export async function getUserAccessEvents(
   userId: string,
   signal?: AbortSignal,
@@ -114,18 +147,37 @@ export async function getUserAccessEvents(
   return readJson<UserAccessEventPage>(response);
 }
 
+export async function getUserRoleEvents(
+  userId: string,
+  signal?: AbortSignal,
+): Promise<UserRoleEventPage> {
+  const response = await fetch(
+    `/api/admin/users/${encodeURIComponent(userId)}/role-events?limit=100&offset=0`,
+    {
+      credentials: "same-origin",
+      signal,
+    },
+  );
+
+  return readJson<UserRoleEventPage>(response);
+}
+
 export function adminUserError(error: unknown): string {
   if (error instanceof ApiRequestError) {
     if (error.status === 403) {
-      return "Недостаточно прав для управления пользователями.";
+      return "Недостаточно прав для этой операции.";
     }
 
     if (error.status === 409) {
-      return "Операция запрещена правилами управления доступом.";
+      return "Операция запрещена текущими правилами ролей или доступа.";
     }
 
     if (error.status === 404) {
       return "Пользователь больше не существует.";
+    }
+
+    if (error.status === 422) {
+      return "Изменение невозможно для текущего состояния пользователя.";
     }
   }
 

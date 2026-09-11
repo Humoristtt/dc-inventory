@@ -1,9 +1,41 @@
-export type UserRole = "USER" | "ADMIN";
+export type UserRole =
+  | "ENGINEER"
+  | "SENIOR_ENGINEER"
+  | "MANAGER"
+  | "ADMIN"
+  | "OWNER";
+
+export type Capability =
+  | "catalog.read"
+  | "catalog.manage"
+  | "catalog.archive"
+  | "catalog.delete_unused"
+  | "inventory.read"
+  | "inventory.operate"
+  | "inventory.admin"
+  | "movement.read_own"
+  | "movement.read_all"
+  | "procurement.read"
+  | "procurement.create"
+  | "procurement.manage"
+  | "procurement.accept"
+  | "access.manage_users"
+  | "access.assign_standard_roles"
+  | "access.assign_admin";
+
 export type UserAccessStatus =
   | "PENDING"
   | "APPROVED"
   | "REJECTED"
   | "BLOCKED";
+
+export const ROLE_LABELS: Record<UserRole, string> = {
+  ENGINEER: "Инженер",
+  SENIOR_ENGINEER: "Старший инженер",
+  MANAGER: "Менеджер",
+  ADMIN: "Администратор",
+  OWNER: "Владелец",
+};
 
 export type SupportContact = {
   username: string;
@@ -17,6 +49,7 @@ export type AuthUser = {
   first_name: string;
   last_name: string | null;
   role: UserRole;
+  capabilities: Capability[];
   access_status: UserAccessStatus;
 };
 
@@ -24,6 +57,22 @@ export type AuthState = {
   user: AuthUser;
   support: SupportContact;
 };
+
+export function hasCapability(
+  user: Pick<AuthUser, "capabilities"> | null | undefined,
+  capability: Capability,
+): boolean {
+  return user?.capabilities.includes(capability) ?? false;
+}
+
+export function hasAnyCapability(
+  user: Pick<AuthUser, "capabilities"> | null | undefined,
+  capabilities: readonly Capability[],
+): boolean {
+  return capabilities.some((capability) =>
+    hasCapability(user, capability),
+  );
+}
 
 export const AUTH_QUERY_KEY = ["auth", "state"] as const;
 
@@ -43,14 +92,18 @@ async function readJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     throw new ApiRequestError(response.status, `HTTP ${response.status}`);
   }
+
   return (await response.json()) as T;
 }
 
-export async function getAuthState(signal?: AbortSignal): Promise<AuthState> {
+export async function getAuthState(
+  signal?: AbortSignal,
+): Promise<AuthState> {
   const response = await fetch("/api/auth/me", {
     credentials: "same-origin",
     signal,
   });
+
   return readJson<AuthState>(response);
 }
 
@@ -67,5 +120,6 @@ export async function authenticateWithTelegram(
     body: JSON.stringify({ init_data: initData }),
     signal,
   });
+
   return readJson<AuthState>(response);
 }

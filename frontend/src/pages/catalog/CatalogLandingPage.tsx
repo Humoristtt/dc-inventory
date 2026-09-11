@@ -1,4 +1,5 @@
 import { useAuthState } from "../../features/auth/useAuthState";
+import { hasCapability } from "../../shared/api/auth";
 import { useQuery } from "@tanstack/react-query";
 import {
   Link,
@@ -34,6 +35,10 @@ export function CatalogLandingPage() {
   const searchActive = viewState.q !== "";
   const itemsQuery = useCatalogItems(toCatalogQuery(viewState), searchActive);
   const returnTo = `${location.pathname}${location.search}`;
+  const canManageCatalog = hasCapability(
+    auth.data?.user,
+    "catalog.manage",
+  );
 
   return (
     <main className="catalog-page catalog-page--landing">
@@ -51,7 +56,7 @@ export function CatalogLandingPage() {
       </PageHeader>
 
       <div className="catalog-page__body">
-        {auth.data?.user.role === "ADMIN" ? (
+        {canManageCatalog ? (
           <div className="catalog-admin-action">
             <Link className="button button--dark" to="/catalog/new">
               + Добавить оборудование

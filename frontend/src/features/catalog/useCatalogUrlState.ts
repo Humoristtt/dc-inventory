@@ -6,6 +6,7 @@ import {
 
 import {
   catalogViewStateToSearchParams,
+  defaultCatalogSort,
   readCatalogViewState,
   withCatalogFilters,
   withCatalogSort,
@@ -14,39 +15,132 @@ import {
   type CatalogViewState,
 } from "./catalogQuery";
 
-type CatalogViewStateUpdate = (current: CatalogViewState) => CatalogViewState;
+type CatalogViewStateUpdate = (
+  current: CatalogViewState,
+) => CatalogViewState;
 
-export function useCatalogUrlState() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  const serializedSearch = searchParams.toString();
+export function useCatalogUrlState(
+  defaultSort: CatalogSortState = defaultCatalogSort,
+) {
+  const {
+    sort: defaultSortKey,
+    order: defaultSortOrder,
+  } = defaultSort;
+
+  const [
+    searchParams,
+    setSearchParams,
+  ] = useSearchParams();
+
+  const serializedSearch =
+    searchParams.toString();
+
   const viewState = useMemo(
-    () => readCatalogViewState(new URLSearchParams(serializedSearch)),
-    [serializedSearch],
+    () =>
+      readCatalogViewState(
+        new URLSearchParams(
+          serializedSearch,
+        ),
+        {
+          sort: defaultSortKey,
+          order: defaultSortOrder,
+        },
+      ),
+    [
+      defaultSortKey,
+      defaultSortOrder,
+      serializedSearch,
+    ],
   );
 
-  const updateViewState = useCallback((
-    update: CatalogViewStateUpdate,
-    options?: NavigateOptions,
-  ) => {
-    setSearchParams((currentParams) => {
-      const currentState = readCatalogViewState(currentParams);
-      const next = catalogViewStateToSearchParams(update(currentState));
-      if (currentParams.get("long_range") === "true") next.set("long_range", "true");
-      return next;
-    }, options);
-  }, [setSearchParams]);
+  const updateViewState = useCallback(
+    (
+      update: CatalogViewStateUpdate,
+      options?: NavigateOptions,
+    ) => {
+      setSearchParams(
+        (currentParams) => {
+          const currentState =
+            readCatalogViewState(
+              currentParams,
+              {
+                sort: defaultSortKey,
+                order: defaultSortOrder,
+              },
+            );
 
-  const updateSearch = useCallback((q: string) => {
-    updateViewState((current) => ({ ...current, q }), { replace: true });
-  }, [updateViewState]);
+          const next =
+            catalogViewStateToSearchParams(
+              update(currentState),
+              {
+                sort: defaultSortKey,
+                order: defaultSortOrder,
+              },
+            );
 
-  const updateFilters = useCallback((filters: CatalogFilterState) => {
-    updateViewState((current) => withCatalogFilters(current, filters));
-  }, [updateViewState]);
+          if (
+            currentParams.get(
+              "long_range",
+            ) === "true"
+          ) {
+            next.set(
+              "long_range",
+              "true",
+            );
+          }
 
-  const updateSort = useCallback((selection: CatalogSortState) => {
-    updateViewState((current) => withCatalogSort(current, selection));
-  }, [updateViewState]);
+          return next;
+        },
+        options,
+      );
+    },
+    [
+      defaultSortKey,
+      defaultSortOrder,
+      setSearchParams,
+    ],
+  );
+
+  const updateSearch = useCallback(
+    (q: string) => {
+      updateViewState(
+        (current) => ({
+          ...current,
+          q,
+        }),
+        { replace: true },
+      );
+    },
+    [updateViewState],
+  );
+
+  const updateFilters = useCallback(
+    (
+      filters: CatalogFilterState,
+    ) => {
+      updateViewState((current) =>
+        withCatalogFilters(
+          current,
+          filters,
+        ),
+      );
+    },
+    [updateViewState],
+  );
+
+  const updateSort = useCallback(
+    (
+      selection: CatalogSortState,
+    ) => {
+      updateViewState((current) =>
+        withCatalogSort(
+          current,
+          selection,
+        ),
+      );
+    },
+    [updateViewState],
+  );
 
   return {
     updateFilters,

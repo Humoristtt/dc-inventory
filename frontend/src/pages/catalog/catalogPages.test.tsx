@@ -310,28 +310,184 @@ it("показывает ошибку категорий и повторяет �
   expect(calls).toBe(2);
 });
 
-it("category request содержит key, а смена сортировки меняет query", async () => {
+it("быстрая сортировка меняет query одним кликом и сохраняет полный fallback", async () => {
   const fetchMock = vi.fn(catalogFetch);
   vi.stubGlobal("fetch", fetchMock);
-  renderRoutes("/catalog/sfp");
 
-  expect(await screen.findByRole("heading", { name: "MFM1T02A-LR" })).toBeInTheDocument();
-  expect(fetchMock.mock.calls.some(([input]) => {
-    const url = String(input);
-    return url.startsWith("/api/catalog/items?") && new URL(url, "https://app.test").searchParams.get("category") === "sfp";
-  })).toBe(true);
+  renderRoutes(
+    "/catalog/sfp",
+    routesWithLocationProbe(),
+  );
 
-  fireEvent.click(screen.getByRole("button", { name: /По названию/ }));
-  fireEvent.click(screen.getByRole("button", { name: /Сначала доступные/ }));
+  expect(
+    await screen.findByRole(
+      "heading",
+      { name: "MFM1T02A-LR" },
+    ),
+  ).toBeInTheDocument();
+
+  /*
+   * Для SFP отсутствие sort/order в URL теперь
+   * означает contextual default: available desc.
+   */
+  expect(
+    currentSearchParams().get("sort"),
+  ).toBeNull();
+
+  expect(
+    currentSearchParams().get("order"),
+  ).toBeNull();
+
+  expect(
+    screen.getByRole(
+      "button",
+      { name: "Наличие" },
+    ),
+  ).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
 
   await waitFor(() => {
-    expect(fetchMock.mock.calls.some(([input]) => {
-      const params = new URL(String(input), "https://app.test").searchParams;
-      return params.get("category") === "sfp"
-        && params.get("sort") === "available"
-        && params.get("order") === "desc";
-    })).toBe(true);
+    expect(
+      fetchMock.mock.calls.some(([input]) => {
+        const url = String(input);
+
+        if (
+          !url.startsWith(
+            "/api/catalog/items?",
+          )
+        ) {
+          return false;
+        }
+
+        const params = new URL(
+          url,
+          "https://app.test",
+        ).searchParams;
+
+        return (
+          params.get("category") === "sfp"
+          && params.get("sort") === "available"
+          && params.get("order") === "desc"
+        );
+      }),
+    ).toBe(true);
   });
+
+  /*
+   * Явный переход на Название должен сохраниться
+   * в URL, иначе contextual default снова победит
+   * после следующего чтения search params.
+   */
+  fireEvent.click(
+    screen.getByRole(
+      "button",
+      { name: "Название" },
+    ),
+  );
+
+  await waitFor(() => {
+    const params = currentSearchParams();
+
+    expect(params.get("sort"))
+      .toBe("name");
+
+    expect(params.get("order"))
+      .toBeNull();
+  });
+
+  expect(
+    screen.getByRole(
+      "button",
+      { name: "Название" },
+    ),
+  ).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  /*
+   * Повторный click — обычный toggle asc -> desc.
+   */
+  fireEvent.click(
+    screen.getByRole(
+      "button",
+      { name: "Название" },
+    ),
+  );
+
+  await waitFor(() => {
+    const params = currentSearchParams();
+
+    expect(params.get("sort"))
+      .toBe("name");
+
+    expect(params.get("order"))
+      .toBe("desc");
+  });
+
+  /*
+   * Полный fallback остаётся доступен.
+   */
+  fireEvent.click(
+    screen.getByRole(
+      "button",
+      {
+        name:
+          "Другие варианты сортировки",
+      },
+    ),
+  );
+
+  expect(
+    screen.getByRole(
+      "dialog",
+      { name: "Сортировка" },
+    ),
+  ).toBeInTheDocument();
+
+  fireEvent.click(
+    screen.getByRole(
+      "button",
+      { name: /По производителю/ },
+    ),
+  );
+
+  await waitFor(() => {
+    const params = currentSearchParams();
+
+    expect(params.get("sort"))
+      .toBe("manufacturer");
+
+    expect(params.get("order"))
+      .toBeNull();
+  });
+
+  expect(
+    screen.getByRole(
+      "button",
+      {
+        name:
+          "Другие варианты сортировки",
+      },
+    ),
+  ).toHaveAttribute(
+    "aria-pressed",
+    "true",
+  );
+
+  expect(
+    screen.getByRole(
+      "button",
+      {
+        name:
+          "Другие варианты сортировки",
+      },
+    ),
+  ).toHaveTextContent(
+    "По производителю",
+  );
 });
 
 it("не дублирует inline back, когда навигацию назад предоставляет Telegram", async () => {
@@ -362,23 +518,65 @@ it("не дублирует inline back, когда навигацию наза�
 });
 
 it("pending debounce не откатывает более новую сортировку", async () => {
-  vi.stubGlobal("fetch", vi.fn(catalogFetch));
-  renderRoutes("/catalog/sfp", routesWithLocationProbe());
-  await screen.findByRole("heading", { name: "MFM1T02A-LR" });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(catalogFetch),
+  );
+
+  renderRoutes(
+    "/catalog/sfp",
+    routesWithLocationProbe(),
+  );
+
+  await screen.findByRole(
+    "heading",
+    { name: "MFM1T02A-LR" },
+  );
+
   vi.useFakeTimers();
 
   fireEvent.change(
-    screen.getByRole("searchbox", { name: "Поиск внутри категории" }),
-    { target: { value: "needle" } },
+    screen.getByRole(
+      "searchbox",
+      {
+        name:
+          "Поиск внутри категории",
+      },
+    ),
+    {
+      target: {
+        value: "needle",
+      },
+    },
   );
-  fireEvent.click(screen.getByRole("button", { name: /По названию/ }));
-  fireEvent.click(screen.getByRole("button", { name: /Сначала доступные/ }));
-  act(() => vi.advanceTimersByTime(320));
 
-  const params = currentSearchParams();
-  expect(params.get("q")).toBe("needle");
-  expect(params.get("sort")).toBe("available");
-  expect(params.get("order")).toBe("desc");
+  /*
+   * SFP уже находится на available desc.
+   * Более новая пользовательская сортировка —
+   * явный переход на name asc.
+   */
+  fireEvent.click(
+    screen.getByRole(
+      "button",
+      { name: "Название" },
+    ),
+  );
+
+  act(() =>
+    vi.advanceTimersByTime(320),
+  );
+
+  const params =
+    currentSearchParams();
+
+  expect(params.get("q"))
+    .toBe("needle");
+
+  expect(params.get("sort"))
+    .toBe("name");
+
+  expect(params.get("order"))
+    .toBeNull();
 });
 
 it("pending debounce не откатывает более новый filter state", async () => {

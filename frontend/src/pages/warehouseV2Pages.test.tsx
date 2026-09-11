@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -430,6 +431,20 @@ it("ADMIN управляет местами хранения без выдума
     ),
   );
 
+  expect(
+    screen.getByRole(
+      "dialog",
+      { name: "Новое место хранения" },
+    ),
+  ).toBeInTheDocument();
+
+  expect(
+    screen.getByRole(
+      "button",
+      { name: "Закрыть редактор места хранения" },
+    ),
+  ).toBeInTheDocument();
+
   fireEvent.change(
     screen.getByLabelText("Код"),
     { target: { value: "DC-DATAPRO" } },
@@ -461,6 +476,99 @@ it("ADMIN управляет местами хранения без выдума
       location_type: "DATACENTER",
       address: "Москва, тестовый адрес",
     });
+  });
+});
+
+
+it("Locations снимает scroll lock при потере роли ADMIN", async () => {
+  vi.stubGlobal("fetch", vi.fn(async (
+    input: RequestInfo | URL,
+  ) => {
+    const url = String(input);
+
+    if (
+      url
+      === "/api/inventory/locations?limit=200&offset=0"
+    ) {
+      return jsonResponse({
+        items: [warehouse],
+        total: 1,
+        limit: 200,
+        offset: 0,
+      });
+    }
+
+    throw new Error(
+      `unexpected fetch ${url}`,
+    );
+  }));
+
+  const { client } = renderRoute(
+    "/more/locations",
+    "ADMIN",
+  );
+
+  await screen.findByRole(
+    "heading",
+    { name: warehouse.name },
+  );
+
+  fireEvent.click(
+    screen.getByRole(
+      "button",
+      { name: "Добавить место хранения" },
+    ),
+  );
+
+  expect(
+    screen.getByRole(
+      "dialog",
+      { name: "Новое место хранения" },
+    ),
+  ).toBeInTheDocument();
+
+  await waitFor(() => {
+    expect(
+      document.body.style.overflow,
+    ).toBe("hidden");
+  });
+
+  act(() => {
+    client.setQueryData(
+      AUTH_QUERY_KEY,
+      authState("USER"),
+    );
+  });
+
+  await waitFor(() => {
+    expect(
+      screen.queryByRole(
+        "dialog",
+        { name: "Новое место хранения" },
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  await waitFor(() => {
+    expect(
+      document.body.style.overflow,
+    ).toBe("");
+  });
+
+  act(() => {
+    client.setQueryData(
+      AUTH_QUERY_KEY,
+      authState("ADMIN"),
+    );
+  });
+
+  await waitFor(() => {
+    expect(
+      screen.queryByRole(
+        "dialog",
+        { name: "Новое место хранения" },
+      ),
+    ).not.toBeInTheDocument();
   });
 });
 

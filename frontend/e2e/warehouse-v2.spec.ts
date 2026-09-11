@@ -860,6 +860,138 @@ test(
 );
 
 test(
+  "locations editor uses responsive dialog geometry",
+  async ({ page }) => {
+    await installTelegramMock(
+      page,
+      "tdesktop",
+    );
+    await installApiMock(
+      page,
+      "ADMIN",
+    );
+
+    await page.goto("/more/locations");
+
+    await page
+      .getByRole(
+        "button",
+        { name: "Добавить место хранения" },
+      )
+      .click();
+
+    const dialog = page.getByRole(
+      "dialog",
+      { name: "Новое место хранения" },
+    );
+
+    await expect(dialog).toBeVisible();
+
+    const geometry = await page.evaluate(() => {
+      const dialog =
+        document.querySelector<HTMLElement>(
+          ".location-editor",
+        );
+
+      const code =
+        document.querySelector<HTMLElement>(
+          'input[required][maxlength="64"]',
+        );
+
+      const name =
+        document.querySelector<HTMLElement>(
+          'input[required][maxlength="255"]',
+        );
+
+      if (
+        dialog === null
+        || code === null
+        || name === null
+      ) {
+        return null;
+      }
+
+      const dialogRect =
+        dialog.getBoundingClientRect();
+
+      const codeRect =
+        code.getBoundingClientRect();
+
+      const nameRect =
+        name.getBoundingClientRect();
+
+      return {
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        dialogLeft: dialogRect.left,
+        dialogRight: dialogRect.right,
+        dialogBottom: dialogRect.bottom,
+        dialogWidth: dialogRect.width,
+        codeTop: codeRect.top,
+        codeBottom: codeRect.bottom,
+        nameTop: nameRect.top,
+      };
+    });
+
+    expect(geometry).not.toBeNull();
+
+    if (geometry === null) {
+      throw new Error(
+        "location editor geometry unavailable",
+      );
+    }
+
+    if (geometry.viewportWidth < 680) {
+      expect(
+        Math.abs(
+          geometry.viewportHeight
+          - geometry.dialogBottom,
+        ),
+      ).toBeLessThanOrEqual(2);
+
+      expect(
+        geometry.dialogWidth,
+      ).toBeGreaterThanOrEqual(
+        geometry.viewportWidth - 2,
+      );
+
+      expect(
+        geometry.nameTop,
+      ).toBeGreaterThan(
+        geometry.codeBottom,
+      );
+    } else {
+      expect(
+        geometry.dialogWidth,
+      ).toBeLessThanOrEqual(721);
+
+      expect(
+        Math.abs(
+          geometry.dialogLeft
+          - (
+            geometry.viewportWidth
+            - geometry.dialogRight
+          ),
+        ),
+      ).toBeLessThanOrEqual(2);
+
+      expect(
+        Math.abs(
+          geometry.codeTop
+          - geometry.nameTop,
+        ),
+      ).toBeLessThanOrEqual(2);
+    }
+
+    await assertNoHorizontalOverflow(page);
+
+    await page.keyboard.press("Escape");
+
+    await expect(dialog).toHaveCount(0);
+  },
+);
+
+test(
   "desktop forms keep centered two-column geometry",
   async ({ page }, testInfo) => {
     test.skip(

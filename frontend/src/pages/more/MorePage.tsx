@@ -12,13 +12,13 @@ export function MorePage() {
   return (
     <main className="more-page">
       <header className="more-page__header">
-        <div className="more-page__toolbar">
+        <div className="page-toolbar page-toolbar--brand">
           <SpikatelBrand inverse title="Инвентаризация ЦОД" />
           <TelegramFullscreenButton />
         </div>
 
         <div>
-          <span className="more-page__kicker">Управление</span>
+          <span className="section-kicker">Управление</span>
           <h1>Ещё</h1>
         </div>
       </header>

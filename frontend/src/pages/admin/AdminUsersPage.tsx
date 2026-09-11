@@ -166,13 +166,13 @@ export function AdminUsersPage() {
   return (
     <main className="admin-users-page">
       <header className="admin-users-page__header">
-        <div className="more-page__toolbar">
+        <div className="page-toolbar page-toolbar--brand">
           <SpikatelBrand inverse title="Инвентаризация ЦОД" />
           <TelegramFullscreenButton />
         </div>
 
         <div>
-          <span className="more-page__kicker">Администрирование</span>
+          <span className="section-kicker">Администрирование</span>
           <h1>Пользователи</h1>
         </div>
       </header>

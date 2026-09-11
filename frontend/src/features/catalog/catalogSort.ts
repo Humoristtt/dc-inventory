@@ -14,6 +14,67 @@ export const sortOptions: Array<SortSelection & { label: string; hint: string }>
   { sort: "total", order: "desc", label: "По общему остатку", hint: "Больше → меньше" },
 ];
 
+export type QuickSortOption = {
+  sort: ItemSort;
+  label: string;
+  defaultOrder: SortOrder;
+};
+
+export const quickSortOptions: QuickSortOption[] = [
+  {
+    sort: "available",
+    label: "Наличие",
+    defaultOrder: "desc",
+  },
+  {
+    sort: "name",
+    label: "Название",
+    defaultOrder: "asc",
+  },
+];
+
+export function nextQuickSort(
+  current: SortSelection,
+  option: QuickSortOption,
+): SortSelection {
+  if (current.sort !== option.sort) {
+    return {
+      sort: option.sort,
+      order: option.defaultOrder,
+    };
+  }
+
+  return {
+    sort: option.sort,
+    order: current.order === "asc"
+      ? "desc"
+      : "asc",
+  };
+}
+
+const availabilityFirstCategoryKeys = new Set([
+  "transceivers",
+  "sfp",
+  "transceiver_ethernet",
+  "transceiver_fc",
+]);
+
+export function catalogDefaultSort(
+  categoryKey: string,
+): SortSelection {
+  return availabilityFirstCategoryKeys.has(
+    categoryKey,
+  )
+    ? {
+        sort: "available",
+        order: "desc",
+      }
+    : {
+        sort: "name",
+        order: "asc",
+      };
+}
+
 export function sortLabel(selection: SortSelection): string {
   return sortOptions.find(
     (option) => option.sort === selection.sort && option.order === selection.order,

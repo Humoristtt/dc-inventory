@@ -128,11 +128,15 @@
 .warehouse-page-header__title {
   position: relative;
   z-index: 1;
-  margin-top: 24px;
+  margin: 30px 0 0;
+}
+
+.warehouse-page-header__title .section-kicker {
+  color: var(--color-acid);
 }
 
 .warehouse-page-header__title h1 {
-  margin-top: 5px;
+  margin: 8px 0 0;
 }
 
 @media (min-width: 1100px) {
@@ -213,5 +217,213 @@
     gap: 0.55rem;
     margin-block: 1rem;
     font-size: 1.05rem;
+  }
+}
+
+/* UX consistency: responsive storage-location editor. */
+
+.location-editor-backdrop {
+  position: fixed;
+  z-index: 110;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-top: var(--safe-area-top);
+  background: rgb(0 0 0 / 56%);
+}
+
+.location-editor {
+  display: flex;
+  width: 100%;
+  max-height: calc(
+    90dvh - var(--safe-area-top)
+  );
+  overflow: hidden;
+  flex-direction: column;
+  border-radius: 24px 24px 0 0;
+  background: var(--color-surface);
+  box-shadow:
+    0 -18px 60px rgb(0 0 0 / 28%);
+}
+
+.location-editor__header {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding:
+    16px
+    max(
+      var(--page-inline),
+      var(--safe-area-right)
+    )
+    13px
+    max(
+      var(--page-inline),
+      var(--safe-area-left)
+    );
+  border-bottom:
+    1px solid var(--color-border);
+}
+
+.location-editor__header h2 {
+  margin: 4px 0 0;
+  font-size: 25px;
+  letter-spacing: -0.045em;
+  line-height: 1;
+}
+
+.location-editor__form {
+  display: flex;
+  width: 100%;
+  min-height: 0;
+  max-width: none;
+  flex: 1 1 auto;
+  flex-direction: column;
+  margin: 0;
+}
+
+.location-editor__body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding:
+    16px
+    max(
+      var(--page-inline),
+      var(--safe-area-right)
+    )
+    18px
+    max(
+      var(--page-inline),
+      var(--safe-area-left)
+    );
+}
+
+.location-editor__form fieldset {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr);
+  gap: 14px;
+}
+
+.location-editor__form label {
+  display: grid;
+  min-width: 0;
+  gap: 6px;
+  margin: 0;
+  font-size: 13px;
+  font-weight: 680;
+}
+
+.location-editor__form input,
+.location-editor__form select,
+.location-editor__form textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 48px;
+  padding: 11px 12px;
+  border:
+    1px solid var(--color-border);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--color-ink);
+}
+
+.location-editor__form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.location-editor__error {
+  margin: 14px 0 0;
+  padding: 11px 12px;
+  border-radius: 10px;
+  background: var(--color-danger-soft);
+  color: var(--color-wine);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.location-editor__footer {
+  display: grid;
+  flex: 0 0 auto;
+  grid-template-columns:
+    minmax(0, 0.8fr)
+    minmax(0, 1.2fr);
+  gap: 8px;
+  padding:
+    12px
+    max(
+      var(--page-inline),
+      var(--safe-area-right)
+    )
+    max(
+      12px,
+      var(--safe-area-bottom)
+    )
+    max(
+      var(--page-inline),
+      var(--safe-area-left)
+    );
+  border-top:
+    1px solid var(--color-border);
+  background: var(--color-surface);
+}
+
+@media (min-width: 680px) {
+  .location-editor-backdrop {
+    align-items: center;
+    padding:
+      max(
+        24px,
+        var(--safe-area-top)
+      )
+      24px
+      max(
+        24px,
+        var(--safe-area-bottom)
+      );
+  }
+
+  .location-editor {
+    width: min(100%, 720px);
+    max-height: min(80dvh, 760px);
+    border-radius: 24px;
+    box-shadow:
+      0 24px 80px rgb(0 0 0 / 32%);
+  }
+
+  .location-editor__header {
+    padding: 20px 22px 16px;
+  }
+
+  .location-editor__body {
+    padding: 20px 22px 22px;
+  }
+
+  .location-editor__form fieldset {
+    grid-template-columns:
+      repeat(2, minmax(0, 1fr));
+    gap: 16px;
+  }
+
+  .location-editor__wide {
+    grid-column: 1 / -1;
+  }
+
+  .location-editor__form input,
+  .location-editor__form select {
+    min-height: 52px;
+  }
+
+  .location-editor__form textarea {
+    min-height: 112px;
+  }
+
+  .location-editor__footer {
+    padding: 14px 22px 18px;
   }
 }

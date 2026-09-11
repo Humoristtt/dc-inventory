@@ -171,12 +171,19 @@
 
   .warehouse-form input,
   .warehouse-form select,
-  .warehouse-form textarea,
   .history-filters select {
-    min-height: 52px;
-    padding: 0.8rem 0.95rem;
-    border-radius: 12px;
-    font-size: 1rem;
+    height: var(--form-control-height);
+    min-height: var(--form-control-height);
+    padding: 0 var(--form-control-padding-inline);
+    border-radius: var(--form-control-radius);
+    font-size: var(--form-control-font-size);
+  }
+
+  .warehouse-form textarea {
+    min-height: var(--form-textarea-min-height);
+    padding: 14px var(--form-control-padding-inline);
+    border-radius: var(--form-control-radius);
+    font-size: var(--form-control-font-size);
   }
 
   .warehouse-form textarea {
@@ -306,15 +313,16 @@
   display: grid;
   grid-template-columns:
     minmax(0, 1fr);
+  align-items: start;
   gap: 14px;
 }
 
 .location-editor__form label {
   display: grid;
   min-width: 0;
-  gap: 6px;
+  gap: 7px;
   margin: 0;
-  font-size: 13px;
+  font-size: var(--form-label-font-size);
   font-weight: 680;
 }
 
@@ -323,18 +331,26 @@
 .location-editor__form textarea {
   width: 100%;
   min-width: 0;
-  min-height: 48px;
-  padding: 11px 12px;
   border:
     1px solid var(--color-border);
-  border-radius: 12px;
+  border-radius: var(--form-control-radius);
   background: #fff;
   color: var(--color-ink);
+  font-size: var(--form-control-font-size);
+}
+
+.location-editor__form input,
+.location-editor__form select {
+  height: var(--form-control-height);
+  min-height: var(--form-control-height);
+  padding: 0 var(--form-control-padding-inline);
 }
 
 .location-editor__form textarea {
-  min-height: 96px;
+  min-height: var(--form-textarea-min-height);
+  padding: 14px var(--form-control-padding-inline);
   resize: vertical;
+  line-height: 1.4;
 }
 
 .location-editor__error {
@@ -416,11 +432,12 @@
 
   .location-editor__form input,
   .location-editor__form select {
-    min-height: 52px;
+    height: var(--form-control-height);
+    min-height: var(--form-control-height);
   }
 
   .location-editor__form textarea {
-    min-height: 112px;
+    min-height: var(--form-textarea-min-height);
   }
 
   .location-editor__footer {

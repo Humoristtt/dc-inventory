@@ -869,3 +869,83 @@ set не изменяются.
 Статус на момент этой записи: implementation/local acceptance завершены.
 PR/CI, production deployment/provenance/health и real Telegram visual acceptance
 ещё не заявлены выполненными.
+
+## 2026-09-11 — UX production review and typography/form standards follow-up
+
+Предыдущий `fix/ux-consistency-pass` был завершён после записи его initial local
+acceptance:
+
+- PR #58 merged;
+- accepted main / production revision:
+  `ffe099000b78b775c5a04e48c3170d57fb2884ed`;
+- required GitHub CI passed;
+- production cutover/provenance/health checks passed;
+- backend/domain/database contracts и Alembic head не изменялись.
+
+Последующий real Telegram desktop review не выявил functional regression, но
+показал следующий отдельный слой visual consistency findings:
+
+- item-detail header отличался от общего page-header language;
+- section headings detail page были непропорционально крупными относительно
+  label/value text;
+- equipment-card metadata/chips/stock text были слишком мелкими для desktop;
+- create/edit equipment controls использовали локальные размеры и визуально
+  отличались от других форм;
+- Locations editor имел разную воспринимаемую геометрию `Название` и `Тип`;
+- отсутствовал единый contract высоты form controls и единая typography scale.
+
+Для remediation создан отдельный
+`fix/ux-typography-form-standards`.
+
+В change set введены shared frontend design tokens:
+
+- typography roles для kicker/meta/secondary/body/control/emphasis,
+  card/section/page titles;
+- responsive single-line form-control height:
+  `52px` default, `56px >=680px`, `60px >=1100px`;
+- shared control font-size/padding/radius и textarea minimum height.
+
+Desktop остаётся текущим visual acceptance target. Responsive tablet/mobile
+поведение сохраняется, но их отдельный visual-polish pass отложен до завершения
+desktop feature set.
+
+На основе токенов:
+
+- увеличена desktop readability equipment cards и stock strip;
+- detail label/value text увеличен, а section-title hierarchy уменьшена до
+  общего scale;
+- item detail и Add/Edit equipment получили общий branded
+  toolbar/kicker/page-title pattern;
+- Add/Edit equipment controls используют общую form geometry;
+- Locations editor input/select приведены к одинаковой высоте и колонной
+  геометрии;
+- desktop width-bounded/ultrawide behavior сохранён.
+
+Добавлены browser regression contracts для:
+
+- читаемости equipment card;
+- detail typography hierarchy;
+- общего catalog form-control height;
+- одинаковой высоты/ширины/vertical alignment `Название` и `Тип` в Locations;
+- shared catalog header kicker;
+- desktop-standard и desktop-ultrawide geometry.
+
+Local acceptance текущего follow-up change set:
+
+- frontend unit: `94 passed / 94`;
+- TypeScript typecheck: PASS;
+- frontend lint: `0 warnings / 0 errors`;
+- production build/bundle contract: PASS;
+- initial JS: `283665` bytes, gzip `90150` bytes, `2` initial chunks;
+- canonical Warehouse Playwright:
+  `79 passed / 12 expected skipped`;
+- desktop acceptance projects включают `1280x900`, `1920x1080` и
+  `2560x1440`;
+- `git diff --check`: PASS.
+
+Backend API, warehouse domain, database schema и Alembic migrations текущим
+follow-up change set не изменяются.
+
+Статус на момент этой записи: implementation и local technical acceptance
+завершены. GitHub PR/CI, production deployment и final real Telegram visual
+acceptance ещё не заявлены выполненными.

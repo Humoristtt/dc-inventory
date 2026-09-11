@@ -49,6 +49,25 @@
   --bottom-nav-height: 68px;
   --shadow-card: 0 12px 30px rgb(34 21 0 / 8%);
 
+  /* Shared typography scale: mobile-first. */
+  --font-kicker: 12px;
+  --font-meta: 13px;
+  --font-secondary: 15px;
+  --font-body: 16px;
+  --font-control: 16px;
+  --font-emphasis: 17px;
+  --font-card-title: clamp(20px, 5.4vw, 28px);
+  --font-section-title: clamp(26px, 7vw, 32px);
+  --font-page-title: clamp(34px, 7vw, 52px);
+
+  /* Shared form-control geometry: mobile-first. */
+  --form-control-height: 52px;
+  --form-control-font-size: 16px;
+  --form-label-font-size: 14px;
+  --form-control-padding-inline: 14px;
+  --form-control-radius: 12px;
+  --form-textarea-min-height: 104px;
+
   --safe-area-top: max(
     env(safe-area-inset-top, 0px),
     var(--tg-safe-area-inset-top, 0px),
@@ -73,4 +92,31 @@
     var(--tg-content-safe-area-inset-left, 0px),
     var(--app-safe-area-left, 0px)
   );
+}
+
+@media (min-width: 680px) {
+  :root {
+    --font-meta: 14px;
+    --font-secondary: 16px;
+    --font-body: 16px;
+    --font-control: 16px;
+    --font-emphasis: 18px;
+
+    --form-control-height: 56px;
+    --form-control-font-size: 16px;
+    --form-control-padding-inline: 15px;
+    --form-textarea-min-height: 112px;
+  }
+}
+
+@media (min-width: 1100px) {
+  :root {
+    --font-body: 17px;
+    --font-control: 17px;
+
+    --form-control-height: 60px;
+    --form-control-font-size: 17px;
+    --form-control-padding-inline: 16px;
+    --form-textarea-min-height: 120px;
+  }
 }

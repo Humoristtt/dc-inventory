@@ -8,12 +8,13 @@ export type SortSelection = {
   order: SortOrder;
 };
 
-export const sortOptions: Array<
+export type SortOption =
   SortSelection & {
     label: string;
     hint: string;
-  }
-> = [
+  };
+
+export const sortOptions: SortOption[] = [
   {
     sort: "name",
     order: "asc",
@@ -95,14 +96,42 @@ const transceiverSpeedCategoryKeys = new Set([
   "transceiver_fc",
 ]);
 
+function supportsSpeedSort(
+  categoryKey: string,
+  longRange: boolean,
+): boolean {
+  return (
+    longRange
+    || transceiverSpeedCategoryKeys.has(
+      categoryKey,
+    )
+  );
+}
+
+export function sortOptionsForContext(
+  categoryKey: string,
+  longRange: boolean,
+): SortOption[] {
+  return sortOptions.filter(
+    (option) =>
+      option.sort !== "speed"
+      || supportsSpeedSort(
+        categoryKey,
+        longRange,
+      ),
+  );
+}
+
 export function quickSortOptions(
   categoryKey: string,
   longRange: boolean,
 ): QuickSortOption[] {
   return [
     availabilityQuickSort,
-    longRange
-    || transceiverSpeedCategoryKeys.has(categoryKey)
+    supportsSpeedSort(
+      categoryKey,
+      longRange,
+    )
       ? speedQuickSort
       : nameQuickSort,
   ];

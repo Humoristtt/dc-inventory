@@ -1088,3 +1088,15 @@ acceptance ещё не заявлены выполненными.
   `.ds-page-header__toolbar` and `.ds-page-header__title`.
 - The old header selectors were removed from canonical E2E instead of
   reintroducing legacy application markup.
+
+### Pre-PR audit: contextual speed sorting
+
+- Remote branch audit found that adding `speed` to the shared sort option
+  registry also exposed `По скорости` in the fallback SortSheet for categories
+  that do not have meaningful speed metadata.
+- Backend behavior was safe because missing speed values sort as NULL and fall
+  back to item name, but the UI option was misleading.
+- SortSheet options are now category-aware: transceiver/long-range contexts
+  expose speed sorting; unrelated categories do not.
+- Quick-sort behavior remains `Наличие / Скорость` for transceivers and
+  `Наличие / Название` elsewhere.

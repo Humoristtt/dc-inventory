@@ -10,6 +10,7 @@ import {
 } from "./catalogQuery";
 import {
   catalogDefaultSort,
+  sortOptionsForContext,
 } from "./catalogSort";
 import {
   formatCatalogAttributeValue,
@@ -197,5 +198,36 @@ describe("catalog speed sort URL state", () => {
 
     expect(params.get("order"))
       .toBe("desc");
+  });
+});
+
+describe("context-aware catalog sort options", () => {
+  it("показывает speed только там, где speed имеет смысл", () => {
+    expect(
+      sortOptionsForContext(
+        "transceiver_ethernet",
+        false,
+      ).some(
+        (option) => option.sort === "speed",
+      ),
+    ).toBe(true);
+
+    expect(
+      sortOptionsForContext(
+        "transceivers",
+        true,
+      ).some(
+        (option) => option.sort === "speed",
+      ),
+    ).toBe(true);
+
+    expect(
+      sortOptionsForContext(
+        "ssd",
+        false,
+      ).some(
+        (option) => option.sort === "speed",
+      ),
+    ).toBe(false);
   });
 });

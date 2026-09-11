@@ -38,6 +38,7 @@ import {
   nextQuickSort,
   quickSortOptions,
   sortLabel,
+  sortOptionsForContext,
 } from "../../features/catalog/catalogSort";
 import {
   SortSheet,
@@ -112,6 +113,11 @@ export function CategoryPage() {
     categoryKey,
     longRange,
   );
+  const sortSheetOptions =
+    sortOptionsForContext(
+      categoryKey,
+      longRange,
+    );
   const quickSortHasSelection = quickSortChoices.some(
     (option) => option.sort === viewState.sort,
   );
@@ -367,6 +373,7 @@ export function CategoryPage() {
       {sortOpen ? (
         <SortSheet
           active={viewState}
+          options={sortSheetOptions}
           onCancel={() => setSortOpen(false)}
           onSelect={(selection) => {
             updateSort(selection);

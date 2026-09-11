@@ -860,6 +860,228 @@ test(
 );
 
 test(
+  "desktop catalog uses readable card and detail typography",
+  async ({ page }, testInfo) => {
+    test.skip(
+      ![
+        "desktop-admin",
+        "desktop-standard",
+        "desktop-ultrawide",
+      ].includes(testInfo.project.name),
+      "desktop typography acceptance",
+    );
+
+    await installTelegramMock(
+      page,
+      "tdesktop",
+    );
+
+    await installApiMock(
+      page,
+      "ADMIN",
+    );
+
+    await page.goto(
+      "/catalog/transceiver_ethernet",
+    );
+
+    const card = page.getByRole(
+      "link",
+      { name: /TEST-10G/ },
+    );
+
+    await expect(card).toBeVisible();
+
+    const cardTypography =
+      await card.evaluate((element) => {
+        const title =
+          element.querySelector<HTMLElement>("h3");
+
+        const maker =
+          element.querySelector<HTMLElement>(
+            ".equipment-card__maker",
+          );
+
+        const secondary =
+          element.querySelector<HTMLElement>(
+            ".equipment-card__identity > p",
+          );
+
+        const stockLabel =
+          element.querySelector<HTMLElement>(
+            ".stock-strip dt",
+          );
+
+        const stockValue =
+          element.querySelector<HTMLElement>(
+            ".stock-strip dd",
+          );
+
+        if (
+          title === null
+          || maker === null
+          || secondary === null
+          || stockLabel === null
+          || stockValue === null
+        ) {
+          return null;
+        }
+
+        return {
+          cardHeight:
+            element
+              .getBoundingClientRect()
+              .height,
+          title:
+            Number.parseFloat(
+              getComputedStyle(title)
+                .fontSize,
+            ),
+          maker:
+            Number.parseFloat(
+              getComputedStyle(maker)
+                .fontSize,
+            ),
+          secondary:
+            Number.parseFloat(
+              getComputedStyle(secondary)
+                .fontSize,
+            ),
+          stockLabel:
+            Number.parseFloat(
+              getComputedStyle(stockLabel)
+                .fontSize,
+            ),
+          stockValue:
+            Number.parseFloat(
+              getComputedStyle(stockValue)
+                .fontSize,
+            ),
+        };
+      });
+
+    expect(cardTypography).not.toBeNull();
+
+    if (cardTypography === null) {
+      throw new Error(
+        "equipment card typography unavailable",
+      );
+    }
+
+    expect(cardTypography.cardHeight)
+      .toBeGreaterThanOrEqual(150);
+
+    expect(cardTypography.title)
+      .toBeGreaterThanOrEqual(22);
+
+    expect(cardTypography.maker)
+      .toBeGreaterThanOrEqual(14);
+
+    expect(cardTypography.secondary)
+      .toBeGreaterThanOrEqual(16);
+
+    expect(cardTypography.stockLabel)
+      .toBeGreaterThanOrEqual(17);
+
+    expect(cardTypography.stockValue)
+      .toBeGreaterThanOrEqual(18);
+
+    await card.click();
+
+    await expect(
+      page.getByText(
+        "Карточка оборудования",
+        { exact: true },
+      ),
+    ).toBeVisible();
+
+    await expect(
+      page.locator(
+        ".detail-header__title .section-kicker",
+      ),
+    ).toHaveText("Каталог");
+
+    const detailTypography =
+      await page.evaluate(() => {
+        const headerTitle =
+          document.querySelector<HTMLElement>(
+            ".detail-header__title > strong",
+          );
+
+        const sectionTitle =
+          document.querySelector<HTMLElement>(
+            ".detail-panel__heading h2",
+          );
+
+        const label =
+          document.querySelector<HTMLElement>(
+            ".detail-list dt",
+          );
+
+        const value =
+          document.querySelector<HTMLElement>(
+            ".detail-list dd",
+          );
+
+        if (
+          headerTitle === null
+          || sectionTitle === null
+          || label === null
+          || value === null
+        ) {
+          return null;
+        }
+
+        return {
+          headerTitle:
+            Number.parseFloat(
+              getComputedStyle(headerTitle)
+                .fontSize,
+            ),
+          sectionTitle:
+            Number.parseFloat(
+              getComputedStyle(sectionTitle)
+                .fontSize,
+            ),
+          label:
+            Number.parseFloat(
+              getComputedStyle(label)
+                .fontSize,
+            ),
+          value:
+            Number.parseFloat(
+              getComputedStyle(value)
+                .fontSize,
+            ),
+        };
+      });
+
+    expect(detailTypography).not.toBeNull();
+
+    if (detailTypography === null) {
+      throw new Error(
+        "detail typography unavailable",
+      );
+    }
+
+    expect(detailTypography.headerTitle)
+      .toBeGreaterThanOrEqual(34);
+
+    expect(detailTypography.sectionTitle)
+      .toBeGreaterThanOrEqual(28);
+
+    expect(detailTypography.label)
+      .toBeGreaterThanOrEqual(16);
+
+    expect(detailTypography.value)
+      .toBeGreaterThanOrEqual(17);
+
+    await assertNoHorizontalOverflow(page);
+    await assertBottomNavigationClearance(page);
+  },
+);
+
+test(
   "locations editor uses responsive dialog geometry",
   async ({ page }) => {
     await installTelegramMock(
@@ -981,6 +1203,127 @@ test(
           - geometry.nameTop,
         ),
       ).toBeLessThanOrEqual(2);
+    }
+
+    await assertNoHorizontalOverflow(page);
+
+    await page.keyboard.press("Escape");
+
+    await expect(dialog).toHaveCount(0);
+  },
+);
+
+test(
+  "location edit keeps name and type controls aligned",
+  async ({ page }) => {
+    await installTelegramMock(
+      page,
+      "tdesktop",
+    );
+
+    await installApiMock(
+      page,
+      "ADMIN",
+    );
+
+    await page.goto("/more/locations");
+
+    await page
+      .getByRole(
+        "button",
+        { name: "Редактировать" },
+      )
+      .click();
+
+    const dialog = page.getByRole(
+      "dialog",
+      { name: "Редактировать место" },
+    );
+
+    await expect(dialog).toBeVisible();
+
+    const geometry =
+      await dialog.evaluate((element) => {
+        const name =
+          element.querySelector<HTMLElement>(
+            'input[maxlength="255"]',
+          );
+
+        const type =
+          element.querySelector<HTMLElement>(
+            "select",
+          );
+
+        if (
+          name === null
+          || type === null
+        ) {
+          return null;
+        }
+
+        const nameRect =
+          name.getBoundingClientRect();
+
+        const typeRect =
+          type.getBoundingClientRect();
+
+        return {
+          viewportWidth:
+            window.innerWidth,
+          nameTop:
+            nameRect.top,
+          typeTop:
+            typeRect.top,
+          nameWidth:
+            nameRect.width,
+          typeWidth:
+            typeRect.width,
+          nameHeight:
+            nameRect.height,
+          typeHeight:
+            typeRect.height,
+        };
+      });
+
+    expect(geometry).not.toBeNull();
+
+    if (geometry === null) {
+      throw new Error(
+        "location control geometry unavailable",
+      );
+    }
+
+    expect(
+      Math.abs(
+        geometry.nameHeight
+        - geometry.typeHeight,
+      ),
+    ).toBeLessThanOrEqual(1);
+
+    if (geometry.viewportWidth >= 680) {
+      expect(
+        Math.abs(
+          geometry.nameTop
+          - geometry.typeTop,
+        ),
+      ).toBeLessThanOrEqual(2);
+
+      expect(
+        Math.abs(
+          geometry.nameWidth
+          - geometry.typeWidth,
+        ),
+      ).toBeLessThanOrEqual(2);
+    }
+
+    if (geometry.viewportWidth >= 1100) {
+      expect(
+        geometry.nameHeight,
+      ).toBeGreaterThanOrEqual(59);
+
+      expect(
+        geometry.nameHeight,
+      ).toBeLessThanOrEqual(61);
     }
 
     await assertNoHorizontalOverflow(page);
@@ -1150,13 +1493,61 @@ test(
         catalogGeometry.titleTop + 0.5,
       );
 
-    const speedHeight = await speed.evaluate(
-      (element) =>
-        element.getBoundingClientRect().height,
-    );
+    const standardControls = [
+      page.getByRole(
+        "combobox",
+        { name: "Раздел" },
+      ),
+      page.getByRole(
+        "combobox",
+        { name: "Категория" },
+      ),
+      page.getByLabel(
+        "Название оборудования",
+        { exact: true },
+      ),
+      page.getByRole(
+        "combobox",
+        { name: "Производитель" },
+      ),
+      page.getByLabel(
+        "Модель",
+        { exact: true },
+      ),
+      speed,
+    ];
 
-    expect(speedHeight).toBeGreaterThanOrEqual(58);
-    expect(speedHeight).toBeLessThanOrEqual(66);
+    const controlHeights =
+      await Promise.all(
+        standardControls.map(
+          (control) =>
+            control.evaluate(
+              (element) =>
+                element
+                  .getBoundingClientRect()
+                  .height,
+            ),
+        ),
+      );
+
+    for (const height of controlHeights) {
+      expect(height)
+        .toBeGreaterThanOrEqual(59);
+
+      expect(height)
+        .toBeLessThanOrEqual(61);
+    }
+
+    expect(
+      Math.max(...controlHeights)
+      - Math.min(...controlHeights),
+    ).toBeLessThanOrEqual(1);
+
+    await expect(
+      page.locator(
+        ".detail-header__title .section-kicker",
+      ),
+    ).toHaveText("Каталог");
 
     await expect(
       page.locator(".catalog-form textarea"),

@@ -508,11 +508,17 @@ export function ItemFormPage() {
             </button>
           ) : null}
 
-          <h1>
-            {itemId
-              ? "Редактировать оборудование"
-              : "Добавить оборудование"}
-          </h1>
+          <div className="detail-header__title">
+            <span className="section-kicker">
+              Каталог
+            </span>
+
+            <h1>
+              {itemId
+                ? "Редактировать оборудование"
+                : "Добавить оборудование"}
+            </h1>
+          </div>
         </div>
       </header>
 

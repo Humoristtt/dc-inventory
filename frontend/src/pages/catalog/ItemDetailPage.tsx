@@ -91,7 +91,10 @@ export function ItemDetailPage() {
                 ←
               </button>
             ) : null}
-            <span>Карточка оборудования</span>
+            <div className="detail-header__title">
+              <span className="section-kicker">Каталог</span>
+              <strong>Карточка оборудования</strong>
+            </div>
           </div>
         </header>
         <div className="catalog-page__body">
@@ -130,7 +133,10 @@ export function ItemDetailPage() {
             ←
           </button>
         ) : null}
-        <span>Карточка оборудования</span>
+        <div className="detail-header__title">
+          <span className="section-kicker">Каталог</span>
+          <strong>Карточка оборудования</strong>
+        </div>
         <div className="detail-header__actions">
           <span
             className={

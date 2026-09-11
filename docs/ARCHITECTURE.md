@@ -43,6 +43,43 @@ Compound `reach` formatting is presentation-only: card/detail rendering may
 replace human-readable `/` or `;` separators with middle dots, while the stored
 attribute value and backend catalog contract remain unchanged.
 
+## Frontend design system
+
+Frontend typography and form geometry use shared CSS design tokens rather than
+page-local arbitrary sizes.
+
+The typography scale defines common roles for kicker/meta/secondary/body/control/
+emphasis/card-title/section-title/page-title text. Equipment cards, item detail
+and catalog forms consume these roles so readability changes can be tuned from
+one contract instead of diverging per page.
+
+Single-line form controls share one responsive geometry contract:
+
+- mobile/default: `52px`;
+- tablet (`>=680px`): `56px`;
+- desktop (`>=1100px`): `60px`.
+
+Input, select, combobox and equivalent single-line controls are expected to use
+the same height, font size, horizontal padding and radius at a given breakpoint.
+Textarea uses a separate shared minimum-height token.
+
+The current product workflow is desktop-first for visual acceptance: desktop is
+tuned first while the responsive tablet/mobile contract remains functional.
+Tablet/mobile visual polish is intentionally deferred until the desktop feature
+set is complete; responsive behavior is not removed or replaced by a fixed
+desktop-only layout.
+
+Desktop content remains centered and width-bounded rather than stretching
+indefinitely on ultrawide displays. Browser acceptance covers compact desktop,
+`1920x1080` and ultrawide desktop viewports. Vertical content continues to use
+normal document scrolling / viewport-bounded dialogs instead of scaling UI to
+fill screen height.
+
+Catalog detail and equipment create/edit pages share the same branded
+toolbar/kicker/page-title header hierarchy. Section titles are intentionally
+smaller than page titles, while field labels and values remain readable enough
+to avoid the previous oversized-heading/small-data contrast.
+
 ## Frontend startup
 
 React renders the access shell immediately. SDK loading runs independently of

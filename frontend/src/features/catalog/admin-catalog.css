@@ -96,7 +96,7 @@
   display: flex;
   align-items: baseline;
   gap: 5px;
-  font-size: 11px;
+  font-size: var(--form-label-font-size);
   font-weight: 720;
 }
 
@@ -110,22 +110,23 @@
   width: 100%;
   min-width: 0;
   border: 1px solid var(--color-border);
-  border-radius: 11px;
+  border-radius: var(--form-control-radius);
   background: #fff;
   color: var(--color-ink);
-  font-size: 16px;
+  font-size: var(--form-control-font-size);
 }
 
 .catalog-form__field input,
 .catalog-form__field select,
 .inline-manufacturer input {
-  min-height: 44px;
-  padding: 0 11px;
+  height: var(--form-control-height);
+  min-height: var(--form-control-height);
+  padding: 0 var(--form-control-padding-inline);
 }
 
 .catalog-form__field textarea {
-  min-height: 76px;
-  padding: 10px 11px;
+  min-height: var(--form-textarea-min-height);
+  padding: 14px var(--form-control-padding-inline);
   resize: vertical;
   line-height: 1.4;
 }
@@ -341,8 +342,8 @@
   .catalog-form .detail-panel {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 20px 24px;
-    padding: 28px 30px;
+    gap: 14px 24px;
+    padding: 24px 28px;
   }
 
   .catalog-form__panel-title,
@@ -354,13 +355,13 @@
   }
 
   .catalog-form__field {
-    gap: 8px;
+    gap: 7px;
     margin: 0;
-    font-size: 14px;
+    font-size: var(--form-label-font-size);
   }
 
   .catalog-form__label {
-    font-size: 14px;
+    font-size: var(--form-label-font-size);
   }
 
   .catalog-form__label small {
@@ -374,15 +375,16 @@
   .catalog-form__field input,
   .catalog-form__field select,
   .inline-manufacturer input {
-    min-height: 60px;
-    padding-inline: 16px;
-    font-size: 17px;
+    height: var(--form-control-height);
+    min-height: var(--form-control-height);
+    padding-inline: var(--form-control-padding-inline);
+    font-size: var(--form-control-font-size);
   }
 
   .catalog-form__field textarea {
-    min-height: 86px;
-    padding: 14px 16px;
-    font-size: 17px;
+    min-height: var(--form-textarea-min-height);
+    padding: 14px var(--form-control-padding-inline);
+    font-size: var(--form-control-font-size);
   }
 
   .catalog-form__submit {

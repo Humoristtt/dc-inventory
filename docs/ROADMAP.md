@@ -185,7 +185,12 @@ feature cycle.
   - [x] добавить deterministic slow/pending-network browser regressions;
   - [x] пройти final full frontend/CI acceptance;
   - [x] пройти real Telegram acceptance после deployment.
-- [~] После performance acceptance выполняется UX consistency pass: implementation и local acceptance завершены; PR/CI/deployment acceptance ещё не выполнены.
+- [x] UX consistency pass после performance acceptance завершён:
+  implementation/local acceptance, PR #58, required CI и production cutover
+  выполнены; production baseline переведён на
+  `ffe099000b78b775c5a04e48c3170d57fb2884ed`.
+  Последующий real Telegram desktop review выявил отдельные follow-up findings
+  по typography/form consistency, вынесенные в новый change set.
 
 - [x] Canonical documentation reconciled with accepted production state.
 - [x] Очистить merged Git branches; после closeout оставить только `main`.
@@ -215,9 +220,25 @@ feature cycle.
   - [x] привести compound reach presentation к middle-dot separators;
   - [x] сделать Locations editor responsive bottom-sheet/modal;
   - [x] закрыть role-loss lifecycle и удалить dead/duplicate CSS.
-- [~] Повторить final affected/full acceptance после UX fixes:
+- [x] Завершить delivery предыдущего UX consistency pass:
   - [x] local unit/typecheck/lint/build acceptance;
   - [x] canonical frontend Playwright acceptance;
+  - [x] GitHub PR #58 / required CI acceptance;
+  - [x] production deploy/provenance/health acceptance;
+  - [x] real Telegram visual review.
+- [~] Follow-up typography/form consistency pass после real Telegram review:
+  - [x] ввести shared typography scale в design tokens;
+  - [x] ввести shared responsive form-control geometry;
+  - [x] сохранить desktop как текущий visual acceptance target,
+        не ломая tablet/mobile responsive contract;
+  - [x] увеличить readability equipment cards;
+  - [x] перебалансировать detail-page typography;
+  - [x] унифицировать detail/create/edit page header pattern;
+  - [x] выровнять input/select geometry в Locations editor;
+  - [x] привести Add/Edit equipment controls к общей высоте;
+  - [x] добавить browser regression contracts для typography/form geometry;
+  - [x] local unit/typecheck/lint/build acceptance;
+  - [x] canonical Warehouse Playwright acceptance;
   - [ ] GitHub PR/CI acceptance;
   - [ ] production deploy/provenance/health acceptance;
   - [ ] real Telegram visual acceptance.

@@ -154,7 +154,7 @@ a {
 .section-kicker {
   display: block;
   color: inherit;
-  font-size: 11px;
+  font-size: var(--font-kicker);
   font-weight: 750;
   letter-spacing: 0.09em;
   line-height: 1.2;

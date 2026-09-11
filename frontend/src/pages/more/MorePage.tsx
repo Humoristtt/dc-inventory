@@ -2,8 +2,7 @@ import { Link } from "react-router-dom";
 
 import { useAuthState } from "../../features/auth/useAuthState";
 import "../../features/admin/access-admin.css";
-import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
-import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
+import { PageHeader } from "../../shared/ui";
 
 export function MorePage() {
   const auth = useAuthState();
@@ -11,17 +10,10 @@ export function MorePage() {
 
   return (
     <main className="more-page">
-      <header className="more-page__header">
-        <div className="page-toolbar page-toolbar--brand">
-          <SpikatelBrand inverse title="Инвентаризация ЦОД" />
-          <TelegramFullscreenButton />
-        </div>
-
-        <div>
-          <span className="section-kicker">Управление</span>
-          <h1>Ещё</h1>
-        </div>
-      </header>
+      <PageHeader
+        kicker="Управление"
+        title="Ещё"
+      />
 
       <div className="more-page__body">
         <div className="more-grid">

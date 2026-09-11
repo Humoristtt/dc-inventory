@@ -20,8 +20,7 @@ import { EquipmentList } from "../../features/catalog/EquipmentList";
 import { DebouncedSearchField } from "../../features/catalog/DebouncedSearchField";
 import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useCatalogItems } from "../../features/catalog/useCatalogItems";
-import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
-import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
+import { PageHeader } from "../../shared/ui";
 
 export function CatalogLandingPage() {
   const auth = useAuthState();
@@ -38,15 +37,10 @@ export function CatalogLandingPage() {
 
   return (
     <main className="catalog-page catalog-page--landing">
-      <header className="catalog-landing-header">
-        <div className="page-toolbar page-toolbar--brand">
-          <SpikatelBrand inverse title="Инвентаризация ЦОД" />
-        <TelegramFullscreenButton />
-        </div>
-        <div className="catalog-landing-header__copy">
-          <span className="section-kicker">Рабочий каталог</span>
-          <h1>Найти оборудование</h1>
-        </div>
+      <PageHeader
+        kicker="Рабочий каталог"
+        title="Найти оборудование"
+      >
         <DebouncedSearchField
           busy={itemsQuery.isFetching}
           committedValue={viewState.q}
@@ -54,7 +48,7 @@ export function CatalogLandingPage() {
           onCommit={updateSearch}
           placeholder="Найдёт всё, что только есть"
         />
-      </header>
+      </PageHeader>
 
       <div className="catalog-page__body">
         {auth.data?.user.role === "ADMIN" ? (

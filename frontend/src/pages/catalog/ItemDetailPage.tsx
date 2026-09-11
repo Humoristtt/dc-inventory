@@ -1,5 +1,3 @@
-import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
-import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -23,6 +21,7 @@ import {
   formatItemStatus,
 } from "../../features/catalog/format";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
+import { PageHeader } from "../../shared/ui";
 
 export function ItemDetailPage() {
   const webApp = useTelegramWebApp();
@@ -51,22 +50,15 @@ export function ItemDetailPage() {
   if (itemQuery.isPending) {
     return (
       <main className="catalog-page detail-page">
-        <header className="detail-header detail-header--loading">
-          <div className="page-toolbar page-toolbar--brand">
-            <SpikatelBrand inverse title="Инвентаризация ЦОД" />
-            <TelegramFullscreenButton />
-          </div>
-          {!telegramOwnsBack ? (
-            <button
-              aria-label="Назад"
-              className="icon-button icon-button--light"
-              onClick={navigateBack}
-              type="button"
-            >
-              ←
-            </button>
-          ) : null}
-        </header>
+        <PageHeader
+          kicker="Каталог"
+          onBack={
+            !telegramOwnsBack
+              ? navigateBack
+              : undefined
+          }
+          title="Карточка оборудования"
+        />
         <div className="catalog-page__body"><CatalogListSkeleton count={2} /></div>
       </main>
     );
@@ -75,28 +67,15 @@ export function ItemDetailPage() {
   if (itemQuery.isError || itemQuery.data === undefined) {
     return (
       <main className="catalog-page detail-page">
-        <header className="detail-header">
-          <div className="page-toolbar page-toolbar--brand">
-            <SpikatelBrand inverse title="Инвентаризация ЦОД" />
-            <TelegramFullscreenButton />
-          </div>
-          <div className="detail-header__row detail-header__row--title">
-            {!telegramOwnsBack ? (
-              <button
-                aria-label="Назад"
-                className="icon-button icon-button--light"
-                onClick={navigateBack}
-                type="button"
-              >
-                ←
-              </button>
-            ) : null}
-            <div className="detail-header__title">
-              <span className="section-kicker">Каталог</span>
-              <strong>Карточка оборудования</strong>
-            </div>
-          </div>
-        </header>
+        <PageHeader
+          kicker="Каталог"
+          onBack={
+            !telegramOwnsBack
+              ? navigateBack
+              : undefined
+          }
+          title="Карточка оборудования"
+        />
         <div className="catalog-page__body">
           <CatalogErrorState
             title="Не удалось загрузить карточку"
@@ -117,27 +96,8 @@ export function ItemDetailPage() {
 
   return (
     <main className="catalog-page detail-page">
-      <header className="detail-header">
-      <div className="page-toolbar page-toolbar--brand">
-        <SpikatelBrand inverse title="Инвентаризация ЦОД" />
-        <TelegramFullscreenButton />
-      </div>
-      <div className="detail-header__row detail-header__row--title">
-        {!telegramOwnsBack ? (
-          <button
-            aria-label="Назад"
-            className="icon-button icon-button--light"
-            onClick={navigateBack}
-            type="button"
-          >
-            ←
-          </button>
-        ) : null}
-        <div className="detail-header__title">
-          <span className="section-kicker">Каталог</span>
-          <strong>Карточка оборудования</strong>
-        </div>
-        <div className="detail-header__actions">
+      <PageHeader
+        actions={
           <span
             className={
               item.status === "ARCHIVED"
@@ -145,11 +105,19 @@ export function ItemDetailPage() {
                 : "status-badge"
             }
           >
-            {item.status === "ARCHIVED" ? "Архив" : "Активно"}
+            {item.status === "ARCHIVED"
+              ? "Архив"
+              : "Активно"}
           </span>
-        </div>
-      </div>
-    </header>
+        }
+        kicker="Каталог"
+        onBack={
+          !telegramOwnsBack
+            ? navigateBack
+            : undefined
+        }
+        title="Карточка оборудования"
+      />
 
       <div className="detail-hero">
         <div className="detail-visual" aria-hidden="true">

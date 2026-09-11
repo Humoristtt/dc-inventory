@@ -48,14 +48,17 @@ Architecture refactor начат от source baseline:
 
 `refactor/frontend-design-system`
 
-На момент начала refactor production runtime остаётся на предыдущем принятом
-baseline:
+На момент начала refactor production runtime уже переведён на:
 
-`ffe099000b78b775c5a04e48c3170d57fb2884ed`
+`1a34aa407696163ad81e913d346bb8d334feafc6`
 
-Source baseline `1a34aa...` уже прошёл PR/required CI, но его production
-deployment отложен до завершения текущего design-system refactor и новой
-приёмки.
+Для этого revision подтверждены exact image provenance, successful migrations,
+healthy runtime, Alembic `f8a9b0c1d2e3`, закрытый regular mutation gate,
+internal/external health `200`, loopback-only web bind и active backup timer.
+
+Последующий real Telegram Desktop review именно этого production revision
+выявил visual/design-system inconsistencies, из-за которых начат текущий
+architecture refactor.
 
 Regular warehouse mutation gate остаётся:
 

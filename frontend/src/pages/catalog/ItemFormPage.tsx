@@ -28,6 +28,7 @@ import {
 } from "../../features/catalog/itemForm";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
 import { ApiRequestError } from "../../shared/api/auth";
+import { PageHeader } from "../../shared/ui";
 import {
   createCatalogItem,
   createCatalogManufacturer,
@@ -41,8 +42,6 @@ import {
   type CatalogItem,
   type ItemWritePayload,
 } from "../../shared/api/catalog";
-import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
-import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
 
 import "../../features/catalog/admin-catalog.css";
@@ -487,40 +486,19 @@ export function ItemFormPage() {
 
   return (
     <main className="catalog-page">
-      <header className="detail-header">
-        <div className="page-toolbar page-toolbar--brand">
-          <SpikatelBrand
-            inverse
-            title="Инвентаризация ЦОД"
-          />
-          <TelegramFullscreenButton />
-        </div>
-
-        <div className="detail-header__row detail-header__row--title">
-          {!telegramOwnsBack ? (
-            <button
-              aria-label="Назад"
-              className="icon-button icon-button--light"
-              onClick={back}
-              type="button"
-            >
-              ←
-            </button>
-          ) : null}
-
-          <div className="detail-header__title">
-            <span className="section-kicker">
-              Каталог
-            </span>
-
-            <h1>
-              {itemId
-                ? "Редактировать оборудование"
-                : "Добавить оборудование"}
-            </h1>
-          </div>
-        </div>
-      </header>
+      <PageHeader
+        kicker="Каталог"
+        onBack={
+          !telegramOwnsBack
+            ? back
+            : undefined
+        }
+        title={
+          itemId
+            ? "Редактировать оборудование"
+            : "Добавить оборудование"
+        }
+      />
 
       <div className="catalog-page__body">
         <form

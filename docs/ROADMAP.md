@@ -240,13 +240,13 @@ feature cycle.
   - [x] local unit/typecheck/lint/build acceptance;
   - [x] canonical Warehouse Playwright acceptance;
   - [x] GitHub PR/CI acceptance;
-  - [ ] production deploy/provenance/health acceptance;
-  - [ ] real Telegram visual acceptance.
+  - [x] production deploy/provenance/health acceptance;
+  - [~] real Telegram visual acceptance выявил follow-up design-system findings.
 - [~] Frontend design-system architecture refactor перед следующим production cutover:
   - [x] провести source audit текущего visual ownership;
   - [x] зафиксировать canonical design-system contract;
   - [x] создать `frontend/src/shared/ui` как единственный shared visual layer;
-  - [ ] заменить независимые page headers единым `PageHeader`;
+  - [x] заменить независимые page headers единым `PageHeader`;
   - [ ] унифицировать Button / form-field / single-line control contracts;
   - [ ] удалить shared toolbar/header/control rules из feature CSS;
   - [ ] удалить obsolete cascade refinements и duplicate geometry;

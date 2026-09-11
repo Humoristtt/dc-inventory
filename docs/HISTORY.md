@@ -952,10 +952,14 @@ acceptance ещё не заявлены выполненными.
 
 ## 2026-09-11 — Frontend design-system architecture audit
 
-- Source baseline `1a34aa407696163ad81e913d346bb8d334feafc6` прошёл PR/required CI,
-  но production deployment отложен до завершения design-system architecture refactor.
-- Production runtime на момент начала refactor остаётся на
-  `ffe099000b78b775c5a04e48c3170d57fb2884ed`.
+- Source baseline `1a34aa407696163ad81e913d346bb8d334feafc6` прошёл PR/required CI
+  и был успешно развёрнут в production до начала design-system refactor.
+- Production cutover `1a34aa407696163ad81e913d346bb8d334feafc6` подтвердил exact
+  runtime provenance, healthy services, successful one-shot migrations,
+  Alembic `f8a9b0c1d2e3`, закрытый regular mutation gate, external/internal
+  health и безопасный host bind.
+- Последующий real Telegram Desktop review этого production revision выявил
+  design-system inconsistencies и стал основанием для architecture refactor.
 - Source audit подтвердил архитектурную фрагментацию общего UI:
   catalog/category, detail/form, warehouse и admin/more pages используют
   несколько независимых header implementations.
@@ -1000,3 +1004,16 @@ acceptance ещё не заявлены выполненными.
   catalog feature stylesheet для своего базового visual contract.
 - Добавлены focused component regressions для header anatomy, back action,
   actions и contextual content.
+
+### PageHeader route migration
+
+- Catalog landing, Category, Item detail, Item create/edit, Movements,
+  Locations, More и Admin users переведены на canonical `shared/ui/PageHeader`.
+- Page-level code больше не собирает branded header вручную из
+  `SpikatelBrand` и `TelegramFullscreenButton`.
+- Kicker, page title, back action, status action, description и contextual
+  search теперь проходят через единый shared header contract.
+- Catalog search сохраняет feature-specific presentation, но размещается
+  внутри shared PageHeader content slot.
+- Legacy header CSS пока намеренно остаётся dead code до отдельного cleanup
+  checkpoint; его удаление не смешивается с route migration.

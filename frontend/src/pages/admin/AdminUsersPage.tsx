@@ -11,6 +11,7 @@ import { Navigate } from "react-router-dom";
 
 import { useAuthState } from "../../features/auth/useAuthState";
 import "../../features/admin/access-admin.css";
+import { PageHeader } from "../../shared/ui";
 import {
   adminUserError,
   getAdminUsers,
@@ -21,8 +22,6 @@ import {
 import type {
   UserAccessStatus,
 } from "../../shared/api/auth";
-import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
-import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 
 const accessLabels: Record<UserAccessStatus, string> = {
   PENDING: "Ожидает подтверждения",
@@ -165,17 +164,10 @@ export function AdminUsersPage() {
 
   return (
     <main className="admin-users-page">
-      <header className="admin-users-page__header">
-        <div className="page-toolbar page-toolbar--brand">
-          <SpikatelBrand inverse title="Инвентаризация ЦОД" />
-          <TelegramFullscreenButton />
-        </div>
-
-        <div>
-          <span className="section-kicker">Администрирование</span>
-          <h1>Пользователи</h1>
-        </div>
-      </header>
+      <PageHeader
+        kicker="Администрирование"
+        title="Пользователи"
+      />
 
       <div className="admin-users-page__body">
         <form

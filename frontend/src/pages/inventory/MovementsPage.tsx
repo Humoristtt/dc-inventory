@@ -11,9 +11,8 @@ import {
   type Movement,
   type MovementCursorPage,
 } from "../../shared/api/inventory";
-import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
-import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 import "../../features/inventory/inventory.css";
+import { PageHeader } from "../../shared/ui";
 
 const PAGE_SIZE = 30;
 
@@ -151,22 +150,10 @@ export function MovementsPage() {
 
   return (
     <main className="catalog-page">
-      <header className="category-header warehouse-page-header">
-        <div className="page-toolbar page-toolbar--brand">
-          <SpikatelBrand
-            inverse
-            title="Инвентаризация ЦОД"
-          />
-          <TelegramFullscreenButton />
-        </div>
-
-        <div className="warehouse-page-header__title">
-          <span className="section-kicker">
-            Складской журнал
-          </span>
-          <h1>Движения</h1>
-        </div>
-      </header>
+      <PageHeader
+        kicker="Складской журнал"
+        title="Движения"
+      />
 
       <div className="catalog-page__body">
         <div className="history-filters">

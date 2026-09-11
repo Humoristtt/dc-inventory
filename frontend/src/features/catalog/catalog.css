@@ -67,8 +67,7 @@
     box-shadow 160ms ease;
 }
 
-.catalog-landing-header .search-field,
-.category-header .search-field {
+.ds-page-header .search-field {
   width: 100%;
   max-width: none;
 }
@@ -1098,8 +1097,7 @@
     letter-spacing: 0.11em;
   }
 
-  .catalog-landing-header .search-field,
-  .category-header .search-field {
+  .ds-page-header .search-field {
     min-height: 62px;
   }
 

@@ -57,13 +57,19 @@
     auto
     minmax(0, 1fr)
     auto;
+  grid-template-areas: "back title actions";
   align-items: center;
   gap: 14px;
   margin-top: 30px;
 }
 
+.ds-page-header__back-slot {
+  grid-area: back;
+}
+
 .ds-page-header__title {
   min-width: 0;
+  grid-area: title;
 }
 
 .ds-page-header__title .section-kicker {
@@ -89,6 +95,7 @@
 }
 
 .ds-page-header__actions {
+  grid-area: actions;
   display: flex;
   min-width: 0;
   align-items: center;
@@ -116,12 +123,18 @@
     grid-template-columns:
       auto
       minmax(0, 1fr);
+    grid-template-areas:
+      "back title"
+      "actions actions";
     gap: 12px;
   }
 
   .ds-page-header__actions {
-    grid-column: 1 / -1;
     justify-content: flex-start;
+  }
+
+  .ds-page-header__actions:empty {
+    display: none;
   }
 
   .ds-page-header__content {
@@ -143,5 +156,89 @@
 
   .ds-page-header__content {
     margin-top: 22px;
+  }
+}
+
+/*
+ * Shared brand presentation.
+ * Owned here because PageHeader is the canonical consumer.
+ */
+
+.compact-brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: clamp(14px, 2vw, 28px);
+}
+
+.compact-brand__logo {
+  display: block;
+  width: clamp(118px, 13vw, 168px);
+  height: auto;
+  flex: 0 0 auto;
+  object-fit: contain;
+}
+
+.compact-brand__title {
+  min-width: 0;
+  overflow: hidden;
+  font-size: clamp(14px, 1.45vw, 20px);
+  font-weight: 720;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-brand--inverse {
+  color: #fff;
+}
+
+.telegram-fullscreen-button {
+  display: none;
+}
+
+@media (min-width: 400px) {
+  .telegram-fullscreen-button {
+    display: inline-flex;
+    min-height: 42px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 0 14px;
+    border: 1px solid rgb(255 255 255 / 24%);
+    border-radius: 999px;
+    background: rgb(255 255 255 / 10%);
+    color: #fff;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 720;
+    line-height: 1;
+  }
+
+  .telegram-fullscreen-button:hover {
+    border-color: rgb(249 235 110 / 62%);
+    background: rgb(249 235 110 / 12%);
+  }
+
+  .telegram-fullscreen-button svg {
+    width: 17px;
+    height: 17px;
+    flex: 0 0 17px;
+  }
+}
+
+@media (max-width: 430px) {
+  .compact-brand {
+    gap: 12px;
+  }
+
+  .compact-brand__logo {
+    width: 112px;
+  }
+
+  .compact-brand__title {
+    font-size: 13px;
   }
 }

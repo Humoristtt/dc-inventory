@@ -989,3 +989,14 @@ acceptance ещё не заявлены выполненными.
 - На этом checkpoint страницы ещё намеренно не мигрированы: legacy headers
   остаются до следующего атомарного migration step, чтобы новый shared
   foundation можно было проверить независимо до удаления старого CSS.
+
+### Shared UI foundation hardening
+
+- До migration реальных pages проверена structural устойчивость `PageHeader`.
+- Optional back/action content больше не удаляет grid slots: back/title/actions
+  имеют стабильные semantic areas, поэтому title не меняет колонку между routes.
+- Shared brand и Telegram fullscreen presentation перенесены в canonical
+  `shared/ui/design-system.css`; PageHeader больше не должен зависеть от
+  catalog feature stylesheet для своего базового visual contract.
+- Добавлены focused component regressions для header anatomy, back action,
+  actions и contextual content.

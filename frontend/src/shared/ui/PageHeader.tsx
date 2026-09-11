@@ -29,7 +29,10 @@ export function PageHeader({
   title,
 }: PageHeaderProps) {
   return (
-    <header className="ds-page-header">
+    <header
+      className="ds-page-header"
+      data-ui="page-header"
+    >
       <div className="ds-page-header__toolbar">
         <SpikatelBrand
           inverse
@@ -40,16 +43,18 @@ export function PageHeader({
       </div>
 
       <div className="ds-page-header__heading-row">
-        {onBack ? (
-          <button
-            aria-label={backLabel}
-            className="icon-button icon-button--light ds-page-header__back"
-            onClick={onBack}
-            type="button"
-          >
-            ←
-          </button>
-        ) : null}
+        <div className="ds-page-header__back-slot">
+          {onBack ? (
+            <button
+              aria-label={backLabel}
+              className="icon-button icon-button--light ds-page-header__back"
+              onClick={onBack}
+              type="button"
+            >
+              ←
+            </button>
+          ) : null}
+        </div>
 
         <div className="ds-page-header__title">
           <span className="section-kicker">
@@ -65,11 +70,9 @@ export function PageHeader({
           ) : null}
         </div>
 
-        {actions ? (
-          <div className="ds-page-header__actions">
-            {actions}
-          </div>
-        ) : null}
+        <div className="ds-page-header__actions">
+          {actions}
+        </div>
       </div>
 
       {children ? (

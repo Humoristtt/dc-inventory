@@ -222,6 +222,10 @@ surface принадлежат `PageHeader`, а не конкретной стр
 Back action и page actions являются slots одного header, а не поводом создавать
 новый header class.
 
+`PageHeader` всегда сохраняет structural back/title/actions slots в DOM,
+даже когда optional back/action content отсутствует. Это не позволяет CSS grid
+auto-placement сдвигать title между разными страницами.
+
 ## 7. Buttons
 
 Основные actions используют единый Button contract.

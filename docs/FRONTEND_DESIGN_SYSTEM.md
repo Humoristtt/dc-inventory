@@ -297,6 +297,16 @@ Native input, select и combobox должны визуально совпада�
 Location editor, catalog create/edit, movement filters и admin filters должны
 потреблять один control contract.
 
+Формы с application-owned validation не должны отдавать пользователю native
+browser validation bubble: такой form использует `noValidate`, а обязательность,
+ошибки и тексты валидации остаются в React/application layer и показываются на
+русском языке.
+
+Secondary description text у одинаковых card surfaces использует semantic
+typography role `meta` (`--font-meta`), а не feature-local hardcoded font size.
+В частности этот контракт общий для category-card description и More-card
+description.
+
 ## 9. Dialogs and sheets
 
 Modal dialog и bottom sheet могут иметь разную responsive placement, но общие:

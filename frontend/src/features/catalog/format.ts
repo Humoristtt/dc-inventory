@@ -1,11 +1,37 @@
 import type {
+  AttributeDataType,
   CatalogScalar,
   ItemStatus,
 } from "../../shared/api/catalog";
 
+function formatDecimalString(
+  value: string,
+): string {
+  const normalized = value.trim();
+
+  const match = /^([+-]?)(\d+)(?:\.(\d+))?$/.exec(
+    normalized,
+  );
+
+  if (!match) {
+    return value;
+  }
+
+  const sign = match[1] ?? "";
+  const integer = match[2] ?? "0";
+  const fraction = (
+    match[3] ?? ""
+  ).replace(/0+$/, "");
+
+  return fraction
+    ? `${sign}${integer},${fraction}`
+    : `${sign}${integer}`;
+}
+
 export function formatAttributeValue(
   value: CatalogScalar,
   unit?: string | null,
+  dataType?: AttributeDataType,
 ): string {
   let formatted: string;
 
@@ -18,6 +44,8 @@ export function formatAttributeValue(
         maximumFractionDigits: 6,
       },
     ).format(value);
+  } else if (dataType === "DECIMAL") {
+    formatted = formatDecimalString(value);
   } else {
     formatted = value;
   }
@@ -31,9 +59,14 @@ export function formatCatalogAttributeValue(
   key: string,
   value: CatalogScalar,
   unit?: string | null,
+  dataType?: AttributeDataType,
 ): string {
   const formatted =
-    formatAttributeValue(value, unit);
+    formatAttributeValue(
+      value,
+      unit,
+      dataType,
+    );
 
   if (
     key !== "reach"

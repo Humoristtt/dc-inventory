@@ -504,6 +504,7 @@ export function ItemFormPage() {
         <form
           autoComplete="off"
           className="catalog-form form-surface"
+          noValidate
           onSubmit={(event) => {
             event.preventDefault();
 

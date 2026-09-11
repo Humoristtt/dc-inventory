@@ -214,7 +214,7 @@
   margin: 7px 0 0;
   overflow: hidden;
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: var(--font-meta);
   line-height: 1.35;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -890,7 +890,7 @@
     display: block;
     margin-top: 9px;
     overflow: visible;
-    font-size: 11px;
+    font-size: var(--font-meta);
     line-height: 1.4;
     -webkit-line-clamp: unset;
   }
@@ -967,7 +967,7 @@
 
   .category-tile p {
     max-width: 92%;
-    font-size: 14px;
+    font-size: var(--font-meta);
     line-height: 1.45;
   }
 

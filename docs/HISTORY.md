@@ -1100,3 +1100,28 @@ acceptance ещё не заявлены выполненными.
   expose speed sorting; unrelated categories do not.
 - Quick-sort behavior remains `Наличие / Скорость` for transceivers and
   `Наличие / Название` elsewhere.
+
+### Post-PR60 Telegram acceptance findings
+
+Real Telegram/Desktop acceptance после production cutover PR #60 выявил
+четыре UX regressions, не пойманные pre-merge browser acceptance:
+
+- catalog create/edit позволял native Chromium validation показывать
+  англоязычный `Fill out this field` раньше application validation;
+- More-card secondary copy оставался на feature-local `11px`, несмотря на
+  design-system typography migration;
+- DECIMAL attributes, сериализованные API как строки, отображались с
+  техническим scale (`1.5000000000`, `10.0000`);
+- filter/sort query-state создавал отдельные browser-history entries, поэтому
+  Telegram Back сначала разматывал действия внутри страницы.
+
+Исправления:
+
+- catalog form использует `noValidate` и application-owned русскую validation;
+- secondary card descriptions используют `--font-meta`;
+- DECIMAL presentation удаляет trailing zero без изменения stored value;
+- search/filter/sort state внутри одной category route изменяет URL через
+  history replace; Back снова отражает переходы между страницами.
+
+Search relevance оставлена отдельным follow-up, потому что меняет server-side
+query ordering contract.

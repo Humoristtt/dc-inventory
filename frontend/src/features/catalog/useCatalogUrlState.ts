@@ -118,11 +118,13 @@ export function useCatalogUrlState(
     (
       filters: CatalogFilterState,
     ) => {
-      updateViewState((current) =>
-        withCatalogFilters(
-          current,
-          filters,
-        ),
+      updateViewState(
+        (current) =>
+          withCatalogFilters(
+            current,
+            filters,
+          ),
+        { replace: true },
       );
     },
     [updateViewState],
@@ -132,11 +134,13 @@ export function useCatalogUrlState(
     (
       selection: CatalogSortState,
     ) => {
-      updateViewState((current) =>
-        withCatalogSort(
-          current,
-          selection,
-        ),
+      updateViewState(
+        (current) =>
+          withCatalogSort(
+            current,
+            selection,
+          ),
+        { replace: true },
       );
     },
     [updateViewState],

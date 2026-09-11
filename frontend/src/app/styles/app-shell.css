@@ -89,49 +89,6 @@
   line-height: 1;
 }
 
-.compact-brand {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  gap: clamp(14px, 2vw, 28px);
-}
-
-.compact-brand__logo {
-  display: block;
-  width: clamp(118px, 13vw, 168px);
-  height: auto;
-  flex: 0 0 auto;
-  object-fit: contain;
-}
-
-.compact-brand__title {
-  min-width: 0;
-  overflow: hidden;
-  font-size: clamp(14px, 1.45vw, 20px);
-  font-weight: 720;
-  letter-spacing: -0.025em;
-  line-height: 1.1;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.compact-brand--inverse {
-  color: #fff;
-}
-
-@media (max-width: 430px) {
-  .compact-brand {
-    gap: 12px;
-  }
-
-  .compact-brand__logo {
-    width: 112px;
-  }
-
-  .compact-brand__title {
-    font-size: 13px;
-  }
-}
 
 .route-status {
   padding: 2rem;

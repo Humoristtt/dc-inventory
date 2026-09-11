@@ -38,6 +38,7 @@ import {
   nextQuickSort,
   quickSortOptions,
   sortLabel,
+  sortOptionsForContext,
 } from "../../features/catalog/catalogSort";
 import {
   SortSheet,
@@ -45,9 +46,8 @@ import {
 import { useCatalogItems } from "../../features/catalog/useCatalogItems";
 import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
-import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
+import { PageHeader } from "../../shared/ui";
 import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
-import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 
 export function CategoryPage() {
   const webApp = useTelegramWebApp();
@@ -109,7 +109,16 @@ export function CategoryPage() {
     enabled: filtersOpen && categoryKey !== "",
   });
   const filtersCount = activeFilterCount(viewState);
-  const quickSortHasSelection = quickSortOptions.some(
+  const quickSortChoices = quickSortOptions(
+    categoryKey,
+    longRange,
+  );
+  const sortSheetOptions =
+    sortOptionsForContext(
+      categoryKey,
+      longRange,
+    );
+  const quickSortHasSelection = quickSortChoices.some(
     (option) => option.sort === viewState.sort,
   );
   const returnTo = `${location.pathname}${location.search}`;
@@ -158,34 +167,32 @@ export function CategoryPage() {
 
   return (
     <main className="catalog-page category-page">
-      <header className="category-header">
-        <div className="page-toolbar page-toolbar--brand">
-          {!telegramOwnsBack ? (
-            <button
-              aria-label="Назад в каталог"
-              className="icon-button icon-button--light"
-              onClick={navigateBack}
-              type="button"
-            >
-              ←
-            </button>
-          ) : null}
-          <SpikatelBrand inverse title="Инвентаризация ЦОД" />
-        <TelegramFullscreenButton />
-        </div>
-        <div className="category-header__title">
-          <span className="section-kicker">Категория</span>
-          <h1>{longRange ? "Дальние трансиверы" : categoryData?.display_name ?? "Оборудование"}</h1>
-          {categoryData?.description ? <p>{categoryData.description}</p> : null}
-        </div>
-        {!family ? <DebouncedSearchField
-          busy={itemsQuery.isFetching}
-          committedValue={viewState.q}
-          label="Поиск внутри категории"
-          onCommit={updateSearch}
-          placeholder="Поиск внутри категории…"
-        /> : null}
-      </header>
+      <PageHeader
+        backLabel="Назад в каталог"
+        description={categoryData?.description}
+        kicker="Категория"
+        onBack={
+          !telegramOwnsBack
+            ? navigateBack
+            : undefined
+        }
+        title={
+          longRange
+            ? "Дальние трансиверы"
+            : categoryData?.display_name
+              ?? "Оборудование"
+        }
+      >
+        {!family ? (
+          <DebouncedSearchField
+            busy={itemsQuery.isFetching}
+            committedValue={viewState.q}
+            label="Поиск внутри категории"
+            onCommit={updateSearch}
+            placeholder="Поиск внутри категории…"
+          />
+        ) : null}
+      </PageHeader>
 
       <div className="catalog-page__body">
         {categoryQuery.isPending && categorySummary === undefined ? (
@@ -232,7 +239,7 @@ export function CategoryPage() {
                   className="quick-sort"
                   role="group"
                 >
-                  {quickSortOptions.map((option) => {
+                  {quickSortChoices.map((option) => {
                     const selected =
                       viewState.sort === option.sort;
                     const order = selected
@@ -366,6 +373,7 @@ export function CategoryPage() {
       {sortOpen ? (
         <SortSheet
           active={viewState}
+          options={sortSheetOptions}
           onCancel={() => setSortOpen(false)}
           onSelect={(selection) => {
             updateSort(selection);

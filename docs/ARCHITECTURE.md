@@ -45,6 +45,8 @@ attribute value and backend catalog contract remain unchanged.
 
 ## Frontend design system
 
+Нормативный визуальный контракт и ownership rules находятся в `docs/FRONTEND_DESIGN_SYSTEM.md`. Этот файл является источником истины для shared headers, buttons, form controls, typography и responsive UI primitives. Feature CSS не является design-system boundary.
+
 Frontend typography and form geometry use shared CSS design tokens rather than
 page-local arbitrary sizes.
 

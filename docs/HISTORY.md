@@ -949,3 +949,154 @@ follow-up change set не изменяются.
 Статус на момент этой записи: implementation и local technical acceptance
 завершены. GitHub PR/CI, production deployment и final real Telegram visual
 acceptance ещё не заявлены выполненными.
+
+## 2026-09-11 — Frontend design-system architecture audit
+
+- Source baseline `1a34aa407696163ad81e913d346bb8d334feafc6` прошёл PR/required CI
+  и был успешно развёрнут в production до начала design-system refactor.
+- Production cutover `1a34aa407696163ad81e913d346bb8d334feafc6` подтвердил exact
+  runtime provenance, healthy services, successful one-shot migrations,
+  Alembic `f8a9b0c1d2e3`, закрытый regular mutation gate, external/internal
+  health и безопасный host bind.
+- Последующий real Telegram Desktop review этого production revision выявил
+  design-system inconsistencies и стал основанием для architecture refactor.
+- Source audit подтвердил архитектурную фрагментацию общего UI:
+  catalog/category, detail/form, warehouse и admin/more pages используют
+  несколько независимых header implementations.
+- Общая `page-toolbar` и часть shared header/fullscreen presentation исторически
+  находятся внутри `features/catalog/catalog.css`, из-за чего feature stylesheet
+  фактически выполняет роль скрытой design system.
+- Form/button geometry распределена между `global.css`, `catalog.css`,
+  `admin-catalog.css`, `inventory.css` и `access-admin.css`; существуют
+  параллельные hardcoded heights/radii/font sizes и поздние cascade refinements.
+- Принято решение прекратить page-local UX patching и выполнить отдельный
+  architecture refactor в ветке `refactor/frontend-design-system`.
+- Канонический visual contract вынесен в `docs/FRONTEND_DESIGN_SYSTEM.md`.
+- Целевая архитектура: tokens -> shared/ui -> feature layout -> page composition.
+- После migration основные page headers обязаны использовать единый `PageHeader`;
+  base buttons/form controls/dialog surfaces принадлежат shared UI layer.
+- Будет добавлен static `check:design-system` gate и browser geometry regressions,
+  чтобы документированный contract нельзя было незаметно нарушить следующим UX change.
+- Backend domain/schema, production safety gates и warehouse mutation semantics
+  этим refactor не изменяются.
+
+### Shared UI foundation
+
+- Создан `frontend/src/shared/ui` как явный ownership boundary общего UI.
+- Добавлен canonical `PageHeader`; он инкапсулирует Spikatel brand toolbar,
+  Telegram fullscreen control, kicker, page title, optional back action,
+  actions и contextual header content.
+- Shared visual implementation вынесена в
+  `frontend/src/shared/ui/design-system.css`.
+- Shared stylesheet подключён из frontend application entrypoint, а не через
+  feature stylesheet.
+- На этом checkpoint страницы ещё намеренно не мигрированы: legacy headers
+  остаются до следующего атомарного migration step, чтобы новый shared
+  foundation можно было проверить независимо до удаления старого CSS.
+
+### Shared UI foundation hardening
+
+- До migration реальных pages проверена structural устойчивость `PageHeader`.
+- Optional back/action content больше не удаляет grid slots: back/title/actions
+  имеют стабильные semantic areas, поэтому title не меняет колонку между routes.
+- Shared brand и Telegram fullscreen presentation перенесены в canonical
+  `shared/ui/design-system.css`; PageHeader больше не должен зависеть от
+  catalog feature stylesheet для своего базового visual contract.
+- Добавлены focused component regressions для header anatomy, back action,
+  actions и contextual content.
+
+### PageHeader route migration
+
+- Catalog landing, Category, Item detail, Item create/edit, Movements,
+  Locations, More и Admin users переведены на canonical `shared/ui/PageHeader`.
+- Page-level code больше не собирает branded header вручную из
+  `SpikatelBrand` и `TelegramFullscreenButton`.
+- Kicker, page title, back action, status action, description и contextual
+  search теперь проходят через единый shared header contract.
+- Catalog search сохраняет feature-specific presentation, но размещается
+  внутри shared PageHeader content slot.
+- Legacy header CSS пока намеренно остаётся dead code до отдельного cleanup
+  checkpoint; его удаление не смешивается с route migration.
+
+### Legacy header CSS removal and enforcement
+
+- После migration основных routes физически удалены legacy visual systems:
+  `catalog-landing-header`, `category-header`, `detail-header`,
+  `warehouse-page-header`, `more-page__header`,
+  `admin-users-page__header` и старый `page-toolbar`.
+- `compact-brand` и Telegram fullscreen presentation имеют одного CSS owner:
+  `frontend/src/shared/ui/design-system.css`.
+- Architecture gate обнаружил дополнительный скрытый feature override
+  `SpikatelBrand` внутри access gate.
+- Вместо исключения из проверки создан explicit shared brand variant
+  `compact`; feature-level descendant overrides удалены.
+- Добавлен `npm run check:design-system`.
+- Production frontend build теперь запускает design-system architecture gate,
+  поэтому возврат известных legacy header tokens и duplicate shared ownership
+  ломает build/CI.
+- Header/toolbar migration завершена; shared form-control/button migration
+  остаётся следующим этапом design-system refactor.
+
+### Shared button and form-control migration
+
+- Base `.button`, `.icon-button` and `.section-kicker` ownership moved from
+  `global.css` to `shared/ui/design-system.css`.
+- Removed duplicate `--radius-control`; ordinary buttons and ordinary form
+  controls now share `--form-control-height` and `--form-control-radius`.
+- Added canonical `.form-surface` contract and migrated Catalog item form,
+  Admin users filters, inventory movement form, Locations editor and Movements
+  filters.
+- Admin users and Access Gate actions now use shared semantic button variants
+  instead of independent button geometry.
+- Removed feature-level base input/select/textarea geometry from catalog,
+  admin and inventory CSS.
+- Removed the desktop-only warehouse textarea `110px` override; textarea size
+  now follows the responsive shared token.
+- `Создать производителя` uses the normal shared button contract and is
+  explicitly aligned to the right in the catalog form.
+- `check:design-system` now rejects the known legacy control ownership patterns
+  and missing canonical form-surface boundaries.
+
+### Catalog speed sorting and strict long-range separation
+
+- Catalog API получил server-side `sort=speed`.
+- Speed sorting использует числовую часть атрибута `speed`, поэтому
+  типовые значения `1`, `10` и `25 Гбит/с` сортируются численно.
+- Для transceiver surfaces быстрые sort chips теперь:
+  `Наличие` и `Скорость`.
+- Первый click по `Скорость` использует descending order; повторный click
+  переключает направление.
+- Ordinary `transceiver_ethernet` и `transceiver_fc` теперь исключают
+  позиции с derived `reach_m >= 2000`.
+- `long_range=true` является отдельным explicit scope и включает только
+  Ethernet/FC transceivers с `reach_m >= 2000`.
+- Catalog и inventory equipment scopes используют одну и ту же границу
+  дальности.
+- Добавлены backend regressions для boundary separation и numeric speed
+  ordering, а также frontend regressions для API encoding, URL state и
+  quick-sort behavior.
+
+### Desktop E2E selector migration after PageHeader refactor
+
+- Production-shaped Playwright acceptance exposed two stale desktop
+  assertions repeated across all three desktop projects.
+- Application runtime was healthy; the failures queried removed
+  `.detail-header*` and `.page-toolbar` markup left over from the
+  pre-design-system header implementation.
+- Typography and form-geometry acceptance now target the canonical
+  `PageHeader` contract through `data-ui="page-header"`,
+  `.ds-page-header__toolbar` and `.ds-page-header__title`.
+- The old header selectors were removed from canonical E2E instead of
+  reintroducing legacy application markup.
+
+### Pre-PR audit: contextual speed sorting
+
+- Remote branch audit found that adding `speed` to the shared sort option
+  registry also exposed `По скорости` in the fallback SortSheet for categories
+  that do not have meaningful speed metadata.
+- Backend behavior was safe because missing speed values sort as NULL and fall
+  back to item name, but the UI option was misleading.
+- SortSheet options are now category-aware: transceiver/long-range contexts
+  expose speed sorting; unrelated categories do not.
+- Quick-sort behavior remains `Наличие / Скорость` for transceivers and
+  `Наличие / Название` elsewhere.

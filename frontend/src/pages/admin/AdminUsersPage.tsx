@@ -11,6 +11,7 @@ import { Navigate } from "react-router-dom";
 
 import { useAuthState } from "../../features/auth/useAuthState";
 import "../../features/admin/access-admin.css";
+import { PageHeader } from "../../shared/ui";
 import {
   adminUserError,
   getAdminUsers,
@@ -21,8 +22,6 @@ import {
 import type {
   UserAccessStatus,
 } from "../../shared/api/auth";
-import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
-import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 
 const accessLabels: Record<UserAccessStatus, string> = {
   PENDING: "Ожидает подтверждения",
@@ -165,21 +164,14 @@ export function AdminUsersPage() {
 
   return (
     <main className="admin-users-page">
-      <header className="admin-users-page__header">
-        <div className="page-toolbar page-toolbar--brand">
-          <SpikatelBrand inverse title="Инвентаризация ЦОД" />
-          <TelegramFullscreenButton />
-        </div>
-
-        <div>
-          <span className="section-kicker">Администрирование</span>
-          <h1>Пользователи</h1>
-        </div>
-      </header>
+      <PageHeader
+        kicker="Администрирование"
+        title="Пользователи"
+      />
 
       <div className="admin-users-page__body">
         <form
-          className="admin-users__filters"
+          className="admin-users__filters form-surface"
           onSubmit={submitSearch}
         >
           <label>
@@ -215,7 +207,7 @@ export function AdminUsersPage() {
           </label>
 
           <button
-            className="admin-users__button"
+            className="button button--dark"
             type="submit"
           >
             Найти
@@ -281,8 +273,8 @@ export function AdminUsersPage() {
                     <button
                       className={
                         user.access_status === "APPROVED"
-                          ? "admin-users__button admin-users__button--danger"
-                          : "admin-users__button"
+                          ? "button button--danger"
+                          : "button button--dark"
                       }
                       disabled={accessMutation.isPending}
                       onClick={() => changeAccess(user)}
@@ -295,7 +287,7 @@ export function AdminUsersPage() {
                   ) : null}
 
                   <button
-                    className="admin-users__button admin-users__button--secondary"
+                    className="button button--ghost"
                     onClick={() =>
                       setHistoryUserId(
                         historyUserId === user.id

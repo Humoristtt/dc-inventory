@@ -239,9 +239,25 @@ feature cycle.
   - [x] добавить browser regression contracts для typography/form geometry;
   - [x] local unit/typecheck/lint/build acceptance;
   - [x] canonical Warehouse Playwright acceptance;
-  - [ ] GitHub PR/CI acceptance;
+  - [x] GitHub PR/CI acceptance;
+  - [x] production deploy/provenance/health acceptance;
+  - [~] real Telegram visual acceptance выявил follow-up design-system findings.
+- [~] Frontend design-system architecture refactor перед следующим production cutover:
+  - [x] провести source audit текущего visual ownership;
+  - [x] зафиксировать canonical design-system contract;
+  - [x] создать `frontend/src/shared/ui` как единственный shared visual layer;
+  - [x] заменить независимые page headers единым `PageHeader`;
+  - [ ] унифицировать Button / form-field / single-line control contracts;
+  - [x] удалить shared toolbar/header/control rules из feature CSS;
+  - [ ] удалить obsolete cascade refinements и duplicate geometry;
+  - [x] добавить `npm run check:design-system`;
+  - [ ] добавить browser regressions общей header/control geometry;
+  - [ ] пройти unit/typecheck/lint/build/E2E;
+  - [ ] провести финальный source audit на отсутствие второго design-system layer;
+  - [ ] GitHub PR / required CI acceptance;
   - [ ] production deploy/provenance/health acceptance;
-  - [ ] real Telegram visual acceptance.
+  - [ ] real Telegram desktop acceptance.
+
 - [ ] Принять explicit operational decision по normal warehouse mutations.
 
 До последнего пункта regular mutation gate остаётся:
@@ -282,3 +298,16 @@ schema/API/UI.
 
 Историческое развитие сохраняется в docs/HISTORY.md, старых migrations и
 migration regression tests.
+
+## Catalog functional follow-up — 2026-09-11
+
+- [x] server-side сортировка каталога по `speed`;
+- [x] быстрые sort chips `Наличие / Скорость` для трансиверов;
+- [x] strict separation: ordinary Ethernet/FC `< 2000 м`,
+  `Дальние >= 2000 м`;
+- [x] catalog и inventory equipment scopes используют одинаковую границу;
+- [x] backend/frontend regression coverage;
+- [x] PostgreSQL integration acceptance;
+- [x] canonical browser E2E acceptance;
+- [ ] PR/required CI;
+- [ ] production deploy + real Telegram acceptance.

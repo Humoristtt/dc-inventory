@@ -376,14 +376,14 @@ it("быстрая сортировка меняет query одним клико
   });
 
   /*
-   * Явный переход на Название должен сохраниться
+   * Явный переход на Скорость должен сохраниться
    * в URL, иначе contextual default снова победит
    * после следующего чтения search params.
    */
   fireEvent.click(
     screen.getByRole(
       "button",
-      { name: "Название" },
+      { name: "Скорость" },
     ),
   );
 
@@ -391,16 +391,16 @@ it("быстрая сортировка меняет query одним клико
     const params = currentSearchParams();
 
     expect(params.get("sort"))
-      .toBe("name");
+      .toBe("speed");
 
     expect(params.get("order"))
-      .toBeNull();
+      .toBe("desc");
   });
 
   expect(
     screen.getByRole(
       "button",
-      { name: "Название" },
+      { name: "Скорость" },
     ),
   ).toHaveAttribute(
     "aria-pressed",
@@ -408,12 +408,12 @@ it("быстрая сортировка меняет query одним клико
   );
 
   /*
-   * Повторный click — обычный toggle asc -> desc.
+   * Повторный click — обычный toggle desc -> asc.
    */
   fireEvent.click(
     screen.getByRole(
       "button",
-      { name: "Название" },
+      { name: "Скорость" },
     ),
   );
 
@@ -421,10 +421,10 @@ it("быстрая сортировка меняет query одним клико
     const params = currentSearchParams();
 
     expect(params.get("sort"))
-      .toBe("name");
+      .toBe("speed");
 
     expect(params.get("order"))
-      .toBe("desc");
+      .toBeNull();
   });
 
   /*
@@ -553,12 +553,12 @@ it("pending debounce не откатывает более новую сорти�
   /*
    * SFP уже находится на available desc.
    * Более новая пользовательская сортировка —
-   * явный переход на name asc.
+   * явный переход на speed desc.
    */
   fireEvent.click(
     screen.getByRole(
       "button",
-      { name: "Название" },
+      { name: "Скорость" },
     ),
   );
 
@@ -573,10 +573,10 @@ it("pending debounce не откатывает более новую сорти�
     .toBe("needle");
 
   expect(params.get("sort"))
-    .toBe("name");
+    .toBe("speed");
 
   expect(params.get("order"))
-    .toBeNull();
+    .toBe("desc");
 });
 
 it("pending debounce не откатывает более новый filter state", async () => {

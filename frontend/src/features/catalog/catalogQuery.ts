@@ -58,6 +58,7 @@ const itemSorts = new Set<ItemSort>([
   "manufacturer",
   "available",
   "total",
+  "speed",
 ]);
 
 function uniqueSorted(values: string[]): string[] {

@@ -39,6 +39,22 @@ Frontend использует Node.js 24:
     npx playwright install chromium webkit
     npm run test:e2e
 
+## Frontend UI contract
+
+Перед изменением общего UI разработчик обязан прочитать:
+
+    docs/FRONTEND_DESIGN_SYSTEM.md
+
+Общие header/button/form-control/dialog primitives принадлежат `shared/ui`.
+Feature CSS отвечает за layout и предметное presentation, но не создаёт
+альтернативные базовые controls.
+
+Изменение общего visual contract требует синхронного обновления
+`docs/FRONTEND_DESIGN_SYSTEM.md` и соответствующих regression checks.
+
+Нельзя исправлять shared component page-local cascade override, если проблема
+относится к общему component contract.
+
 ## Конфигурация
 
 Пример конфигурации находится в `.env.example`.

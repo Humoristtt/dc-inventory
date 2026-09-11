@@ -31,6 +31,7 @@ class ItemSort(StrEnum):
     MANUFACTURER = "manufacturer"
     AVAILABLE = "available"
     TOTAL = "total"
+    SPEED = "speed"
 
 
 class SortOrder(StrEnum):

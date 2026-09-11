@@ -17,9 +17,8 @@ import {
   type StorageLocation,
 } from "../../shared/api/inventory";
 import { refreshAfterLocationEdit } from "../../shared/api/inventoryCache";
-import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
-import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 import "../../features/inventory/inventory.css";
+import { PageHeader } from "../../shared/ui";
 
 type LocationDraft = {
   code: string;
@@ -149,22 +148,10 @@ export function LocationsPage() {
 
   return (
     <main className="catalog-page">
-      <header className="category-header warehouse-page-header">
-        <div className="page-toolbar page-toolbar--brand">
-          <SpikatelBrand
-            inverse
-            title="Инвентаризация ЦОД"
-          />
-          <TelegramFullscreenButton />
-        </div>
-
-        <div className="warehouse-page-header__title">
-          <span className="section-kicker">
-            Склад
-          </span>
-          <h1>Места хранения</h1>
-        </div>
-      </header>
+      <PageHeader
+        kicker="Склад"
+        title="Места хранения"
+      />
 
       <div className="catalog-page__body">
         {admin ? (
@@ -329,7 +316,7 @@ export function LocationsPage() {
             </header>
 
             <form
-              className="warehouse-form location-editor__form"
+              className="warehouse-form location-editor__form form-surface"
               onSubmit={(event) => {
                 event.preventDefault();
 

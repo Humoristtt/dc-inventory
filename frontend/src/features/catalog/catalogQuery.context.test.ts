@@ -10,6 +10,7 @@ import {
 } from "./catalogQuery";
 import {
   catalogDefaultSort,
+  sortOptionsForContext,
 } from "./catalogSort";
 import {
   formatCatalogAttributeValue,
@@ -165,5 +166,68 @@ describe("catalog attribute presentation", () => {
     ).toBe(
       "Ethernet / Storage; Backup",
     );
+  });
+});
+
+describe("catalog speed sort URL state", () => {
+  it("сохраняет explicit speed desc", () => {
+    const defaultSort =
+      catalogDefaultSort(
+        "transceiver_ethernet",
+      );
+
+    const state =
+      readCatalogViewState(
+        new URLSearchParams(
+          "sort=speed&order=desc",
+        ),
+        defaultSort,
+      );
+
+    expect(state.sort).toBe("speed");
+    expect(state.order).toBe("desc");
+
+    const params =
+      catalogViewStateToSearchParams(
+        state,
+        defaultSort,
+      );
+
+    expect(params.get("sort"))
+      .toBe("speed");
+
+    expect(params.get("order"))
+      .toBe("desc");
+  });
+});
+
+describe("context-aware catalog sort options", () => {
+  it("показывает speed только там, где speed имеет смысл", () => {
+    expect(
+      sortOptionsForContext(
+        "transceiver_ethernet",
+        false,
+      ).some(
+        (option) => option.sort === "speed",
+      ),
+    ).toBe(true);
+
+    expect(
+      sortOptionsForContext(
+        "transceivers",
+        true,
+      ).some(
+        (option) => option.sort === "speed",
+      ),
+    ).toBe(true);
+
+    expect(
+      sortOptionsForContext(
+        "ssd",
+        false,
+      ).some(
+        (option) => option.sort === "speed",
+      ),
+    ).toBe(false);
   });
 });

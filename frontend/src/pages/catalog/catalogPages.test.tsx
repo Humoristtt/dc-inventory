@@ -960,3 +960,53 @@ it("filter и sort не заставляют Back разматывать дей�
     ),
   ).toBeInTheDocument();
 });
+
+it("новый поиск в категории включает relevance desc", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(catalogFetch),
+  );
+
+  renderRoutes(
+    "/catalog/sfp",
+    routesWithLocationProbe(),
+  );
+
+  await screen.findByRole(
+    "heading",
+    { name: "MFM1T02A-LR" },
+  );
+
+  vi.useFakeTimers();
+
+  fireEvent.change(
+    screen.getByRole(
+      "searchbox",
+      {
+        name:
+          "Поиск внутри категории",
+      },
+    ),
+    {
+      target: {
+        value: "sfp 25",
+      },
+    },
+  );
+
+  act(() =>
+    vi.advanceTimersByTime(320),
+  );
+
+  const params =
+    currentSearchParams();
+
+  expect(params.get("q"))
+    .toBe("sfp 25");
+
+  expect(params.get("sort"))
+    .toBe("relevance");
+
+  expect(params.get("order"))
+    .toBe("desc");
+});

@@ -231,3 +231,50 @@ describe("context-aware catalog sort options", () => {
     ).toBe(false);
   });
 });
+
+describe("search relevance defaults", () => {
+  it("делает relevance desc implicit sort при поиске", () => {
+    const defaultSort =
+      catalogDefaultSort("sfp");
+
+    const state =
+      readCatalogViewState(
+        new URLSearchParams(
+          "q=sfp%2025",
+        ),
+        defaultSort,
+      );
+
+    expect(state.q)
+      .toBe("sfp 25");
+
+    expect(state.sort)
+      .toBe("relevance");
+
+    expect(state.order)
+      .toBe("desc");
+  });
+
+  it("показывает relevance в полном sort sheet только во время поиска", () => {
+    expect(
+      sortOptionsForContext(
+        "sfp",
+        false,
+      ).some(
+        (option) =>
+          option.sort === "relevance",
+      ),
+    ).toBe(false);
+
+    expect(
+      sortOptionsForContext(
+        "sfp",
+        false,
+        true,
+      ).some(
+        (option) =>
+          option.sort === "relevance",
+      ),
+    ).toBe(true);
+  });
+});

@@ -319,6 +319,6 @@ migration regression tests.
 - [x] нормализовать DECIMAL presentation (`10.0000` → `10`,
   `1.5000000000` → `1,5`) без изменения данных;
 - [x] page-local search/filter/sort state не создаёт history steps для Back;
-- [ ] server-side search relevance: strongest match first;
+- [x] server-side search relevance: strongest match first;
 - [ ] canonical E2E + PR/CI;
 - [ ] production deploy + повторная real Telegram acceptance.

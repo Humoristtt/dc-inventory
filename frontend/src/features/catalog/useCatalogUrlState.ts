@@ -103,15 +103,62 @@ export function useCatalogUrlState(
 
   const updateSearch = useCallback(
     (q: string) => {
+      const nextQuery = q.trim();
+
       updateViewState(
-        (current) => ({
-          ...current,
-          q,
-        }),
+        (current) => {
+          const currentQuery =
+            current.q.trim();
+
+          const enteringSearch =
+            currentQuery === ""
+            && nextQuery !== "";
+
+          const leavingSearch =
+            currentQuery !== ""
+            && nextQuery === "";
+
+          if (
+            enteringSearch
+            && current.sort
+              === defaultSortKey
+            && current.order
+              === defaultSortOrder
+          ) {
+            return {
+              ...current,
+              q,
+              sort: "relevance",
+              order: "desc",
+            };
+          }
+
+          if (
+            leavingSearch
+            && current.sort
+              === "relevance"
+          ) {
+            return {
+              ...current,
+              q,
+              sort: defaultSortKey,
+              order: defaultSortOrder,
+            };
+          }
+
+          return {
+            ...current,
+            q,
+          };
+        },
         { replace: true },
       );
     },
-    [updateViewState],
+    [
+      defaultSortKey,
+      defaultSortOrder,
+      updateViewState,
+    ],
   );
 
   const updateFilters = useCallback(

@@ -82,3 +82,20 @@ describe("catalog speed sort", () => {
     expect(params.get("order")).toBe("desc");
   });
 });
+
+describe("catalog relevance sort", () => {
+  it("кодирует server-side relevance ordering", () => {
+    const params =
+      encodeCatalogQuery({
+        q: "sfp 25",
+        sort: "relevance",
+        order: "desc",
+      });
+
+    expect(params.get("sort"))
+      .toBe("relevance");
+
+    expect(params.get("order"))
+      .toBe("desc");
+  });
+});

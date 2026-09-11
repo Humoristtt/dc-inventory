@@ -117,6 +117,7 @@ export function CategoryPage() {
     sortOptionsForContext(
       categoryKey,
       longRange,
+      viewState.q.trim() !== "",
     );
   const quickSortHasSelection = quickSortChoices.some(
     (option) => option.sort === viewState.sort,

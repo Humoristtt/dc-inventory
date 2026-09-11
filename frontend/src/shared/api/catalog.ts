@@ -9,7 +9,13 @@ export type AttributeDataType =
   | "ENUM";
 export type FilterType = "NONE" | "EXACT" | "RANGE";
 export type Availability = "ANY" | "IN_STOCK" | "OUT_OF_STOCK";
-export type ItemSort = "name" | "manufacturer" | "available" | "total" | "speed";
+export type ItemSort =
+  | "name"
+  | "relevance"
+  | "manufacturer"
+  | "available"
+  | "total"
+  | "speed";
 export type SortOrder = "asc" | "desc";
 export type AttributeFilterOperator = "eq" | "gte" | "lte";
 export type CatalogScalar = string | number | boolean;

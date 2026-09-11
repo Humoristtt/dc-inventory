@@ -1125,3 +1125,19 @@ Real Telegram/Desktop acceptance после production cutover PR #60 выяви
 
 Search relevance оставлена отдельным follow-up, потому что меняет server-side
 query ordering contract.
+
+### Search relevance after PR60 acceptance
+
+- Catalog search получает отдельный server-side `sort=relevance`.
+- Relevance считается в PostgreSQL до pagination, а не на уже загруженной
+  frontend page.
+- Ranking суммирует качество совпадений по каждому search token:
+  model/name имеют наибольший вес, затем manufacturer, затем searchable
+  attributes.
+- Для каждой поверхности действует порядок exact > prefix > substring;
+  numeric searchable attributes получают сильный exact-match score.
+- Новый поиск автоматически использует `relevance desc`, если пользователь
+  ещё не выбрал другую сортировку.
+- Более новая ручная сортировка (`Наличие`, `Скорость`, manufacturer и т.д.)
+  не перетирается delayed search commit.
+- При очистке поиска implicit relevance возвращается к category default sort.

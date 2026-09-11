@@ -38,14 +38,6 @@
   margin-bottom: 30px;
 }
 
-.access-gate__brand .compact-brand__logo {
-  width: clamp(118px, 13vw, 152px);
-}
-
-.access-gate__brand .compact-brand__title {
-  font-size: clamp(13px, 1.4vw, 17px);
-}
-
 .access-gate__eyebrow {
   display: inline-flex;
   margin-bottom: 16px;

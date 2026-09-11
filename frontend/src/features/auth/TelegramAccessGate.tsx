@@ -123,7 +123,7 @@ function AccessScreen({
       <div className="access-gate__glow" aria-hidden="true" />
       <section className="access-gate__card">
         <div className="access-gate__brand">
-          <SpikatelBrand title="Инвентаризация ЦОД" />
+          <SpikatelBrand size="compact" title="Инвентаризация ЦОД" />
         </div>
         <span className="access-gate__eyebrow">{eyebrow}</span>
         <h1>{title}</h1>

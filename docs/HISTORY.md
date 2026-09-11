@@ -1017,3 +1017,22 @@ acceptance ещё не заявлены выполненными.
   внутри shared PageHeader content slot.
 - Legacy header CSS пока намеренно остаётся dead code до отдельного cleanup
   checkpoint; его удаление не смешивается с route migration.
+
+### Legacy header CSS removal and enforcement
+
+- После migration основных routes физически удалены legacy visual systems:
+  `catalog-landing-header`, `category-header`, `detail-header`,
+  `warehouse-page-header`, `more-page__header`,
+  `admin-users-page__header` и старый `page-toolbar`.
+- `compact-brand` и Telegram fullscreen presentation имеют одного CSS owner:
+  `frontend/src/shared/ui/design-system.css`.
+- Architecture gate обнаружил дополнительный скрытый feature override
+  `SpikatelBrand` внутри access gate.
+- Вместо исключения из проверки создан explicit shared brand variant
+  `compact`; feature-level descendant overrides удалены.
+- Добавлен `npm run check:design-system`.
+- Production frontend build теперь запускает design-system architecture gate,
+  поэтому возврат известных legacy header tokens и duplicate shared ownership
+  ломает build/CI.
+- Header/toolbar migration завершена; shared form-control/button migration
+  остаётся следующим этапом design-system refactor.

@@ -122,22 +122,6 @@
 .movement-entry p { margin: 0.5rem 0; }
 .movement-entry ul { padding-left: 1.2rem; }
 
-/* Warehouse V2 responsive forms and journal */
-
-
-.warehouse-page-header__title {
-  position: relative;
-  z-index: 1;
-  margin: 30px 0 0;
-}
-
-.warehouse-page-header__title .section-kicker {
-  color: var(--color-acid);
-}
-
-.warehouse-page-header__title h1 {
-  margin: 8px 0 0;
-}
 
 @media (min-width: 1100px) {
   .warehouse-actions {

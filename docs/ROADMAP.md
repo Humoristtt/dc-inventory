@@ -248,9 +248,9 @@ feature cycle.
   - [x] создать `frontend/src/shared/ui` как единственный shared visual layer;
   - [x] заменить независимые page headers единым `PageHeader`;
   - [ ] унифицировать Button / form-field / single-line control contracts;
-  - [ ] удалить shared toolbar/header/control rules из feature CSS;
+  - [~] удалить shared toolbar/header/control rules из feature CSS: header/toolbar завершены, control migration ещё впереди;
   - [ ] удалить obsolete cascade refinements и duplicate geometry;
-  - [ ] добавить `npm run check:design-system`;
+  - [x] добавить `npm run check:design-system`;
   - [ ] добавить browser regressions общей header/control geometry;
   - [ ] пройти unit/typecheck/lint/build/E2E;
   - [ ] провести финальный source audit на отсутствие второго design-system layer;

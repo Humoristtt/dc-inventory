@@ -229,6 +229,25 @@ Back action и page actions являются slots одного header, а не 
 даже когда optional back/action content отсутствует. Это не позволяет CSS grid
 auto-placement сдвигать title между разными страницами.
 
+### SpikatelBrand variants
+
+`SpikatelBrand` является shared primitive.
+
+Feature CSS не имеет права изменять внутреннюю геометрию
+`.compact-brand__logo`, `.compact-brand__title` или других внутренних
+selectors этого component.
+
+Различия размера оформляются только explicit shared variants.
+
+Текущие variants:
+
+- `default` — canonical branded application header;
+- `compact` — access/auth surfaces с уменьшенной brand presentation.
+
+Если потребуется новый визуальный размер бренда, сначала добавляется
+semantic shared variant и документируется здесь. Descendant override из
+feature CSS запрещён.
+
 ## 7. Buttons
 
 Основные actions используют единый Button contract.

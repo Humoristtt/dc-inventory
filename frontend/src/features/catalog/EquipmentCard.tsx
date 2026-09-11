@@ -4,7 +4,7 @@ import type {
   CatalogItemListEntry,
   CategoryAttribute,
 } from "../../shared/api/catalog";
-import { formatAttributeValue } from "./format";
+import { formatCatalogAttributeValue } from "./format";
 
 type EquipmentCardProps = {
   item: CatalogItemListEntry;
@@ -65,7 +65,8 @@ export function EquipmentCard({
               <div key={attribute.key}>
                 <dt>{attribute.label}</dt>
                 <dd>
-                  {formatAttributeValue(
+                  {formatCatalogAttributeValue(
+                    attribute.key,
                     item.attributes[attribute.key],
                     attribute.unit,
                   )}
@@ -76,8 +77,18 @@ export function EquipmentCard({
         )}
 
         <dl className="stock-strip">
-          <div className={item.inventory.available_count > 0 ? "stock-strip__available" : "stock-strip__zero"}>
-            <dt>В наличии</dt>
+          <div
+            className={
+              item.inventory.available_count > 0
+                ? "stock-strip__available"
+                : "stock-strip__zero"
+            }
+          >
+            <dt>
+              {item.inventory.available_count > 0
+                ? "В наличии"
+                : "Нет в наличии"}
+            </dt>
             <dd>{item.inventory.available_count}</dd>
           </div>
         </dl>

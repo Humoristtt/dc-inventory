@@ -807,3 +807,65 @@ Verified release backups:
 - production services после cleanup остались healthy.
 
 Следующий product change set — отдельный UX consistency pass.
+
+## 2026-09-11 — UX consistency pass: implementation and local acceptance
+
+После принятого frontend performance baseline выполнен отдельный
+`fix/ux-consistency-pass` без изменения backend/domain/database contracts.
+
+Пользовательские UX corrections реализованы следующим образом:
+
+- основной bottom navigation приведён к фактическим трём пунктам;
+- search placeholder каталога приведён к принятому тексту;
+- equipment availability strip стал полноширинным и явно различает
+  `В наличии N` / `Нет в наличии`;
+- category descriptions стали заметнее и контрастнее;
+- для трансиверов принят contextual default `available desc`, для остальных
+  categories сохранён `name asc`;
+- parser и serializer catalog URL state используют один contextual sort
+  contract, поэтому explicit `name asc` на transceiver route не теряется;
+- добавлены one-click quick-sort controls для наличия/названия с сохранением
+  полного SortSheet fallback;
+- filter sheet уплотнён, но touch targets сохранены увеличенными; дополнительное
+  уплотнение применяется только для `pointer: fine`;
+- compound transceiver `reach` отображается с middle-dot separators только на
+  presentation layer, без изменения stored source value;
+- Locations create/edit UI переведён в responsive bottom sheet на mobile и
+  centered modal на desktop;
+- Catalog, Warehouse, More и Users headers приведены к общему
+  toolbar/kicker/rhythm contract;
+- удалены obsolete/duplicate header CSS selectors.
+
+Финальный source audit отдельно выявил lifecycle-хвост Locations: при потере
+ADMIN диалог скрывался, но внутренний `open` state мог сохраниться. Исправление
+закрывает editor при role downgrade, снимает body scroll lock и regression test
+подтверждает, что возврат ADMIN не воскрешает старый dialog/draft.
+
+Первая реализация role-loss close использовала synchronous `setState` внутри
+effect и была отвергнута lint (`react(set-state-in-effect)`). Она заменена на
+deferred zero-delay close с cleanup; после этого lint снова вернулся к
+`0 warnings / 0 errors`.
+
+Во время проверки также был запущен слишком широкий
+`npx playwright test`, который включил отдельный fullstack spec и завершился
+ошибкой только из-за отсутствующего локального
+`FULLSTACK_TELEGRAM_BOT_TOKEN`. Это не считалось UX regression:
+канонический frontend browser gate — `npm run test:e2e`; fullstack runtime
+остаётся отдельным CI boundary с собственным test token.
+
+Финальный local acceptance после всех remediation:
+
+- frontend unit: `94 passed / 94`;
+- TypeScript typecheck: PASS;
+- frontend lint: `0 warnings / 0 errors`;
+- production build/bundle contract: PASS;
+- initial JS: `283665` bytes, gzip `90152` bytes, `2` initial chunks;
+- canonical Warehouse Playwright: `69 passed / 8 expected skipped`;
+- `git diff --check`: PASS.
+
+Backend API, warehouse domain, database schema и Alembic migrations этим change
+set не изменяются.
+
+Статус на момент этой записи: implementation/local acceptance завершены.
+PR/CI, production deployment/provenance/health и real Telegram visual acceptance
+ещё не заявлены выполненными.

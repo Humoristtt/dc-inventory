@@ -33,7 +33,12 @@ import {
 import { EquipmentList } from "../../features/catalog/EquipmentList";
 import { FilterSheet } from "../../features/catalog/FilterSheet";
 import { DebouncedSearchField } from "../../features/catalog/DebouncedSearchField";
-import { sortLabel } from "../../features/catalog/catalogSort";
+import {
+  catalogDefaultSort,
+  nextQuickSort,
+  quickSortOptions,
+  sortLabel,
+} from "../../features/catalog/catalogSort";
 import {
   SortSheet,
 } from "../../features/catalog/SortSheet";
@@ -48,12 +53,15 @@ export function CategoryPage() {
   const webApp = useTelegramWebApp();
   const queryClient = useQueryClient();
   const { categoryKey = "" } = useParams();
+  const defaultSort =
+    catalogDefaultSort(categoryKey);
+
   const {
     updateFilters,
     updateSearch,
     updateSort,
     viewState,
-  } = useCatalogUrlState();
+  } = useCatalogUrlState(defaultSort);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const location = useLocation();
@@ -101,6 +109,9 @@ export function CategoryPage() {
     enabled: filtersOpen && categoryKey !== "",
   });
   const filtersCount = activeFilterCount(viewState);
+  const quickSortHasSelection = quickSortOptions.some(
+    (option) => option.sort === viewState.sort,
+  );
   const returnTo = `${location.pathname}${location.search}`;
 
   useEffect(() => {
@@ -202,17 +213,76 @@ export function CategoryPage() {
               </div>
               <div className="result-toolbar__actions">
                 <button
-                  className={filtersCount > 0 ? "tool-button tool-button--active" : "tool-button"}
+                  className={
+                    filtersCount > 0
+                      ? "tool-button tool-button--active"
+                      : "tool-button"
+                  }
                   onClick={() => setFiltersOpen(true)}
                   type="button"
                 >
                   Фильтры
-                  {filtersCount > 0 ? <span>{filtersCount}</span> : null}
+                  {filtersCount > 0 ? (
+                    <span>{filtersCount}</span>
+                  ) : null}
                 </button>
-                <button className="tool-button" onClick={() => setSortOpen(true)} type="button">
-                  {sortLabel(viewState)}
-                  <span aria-hidden="true">↕</span>
-                </button>
+
+                <div
+                  aria-label="Быстрая сортировка"
+                  className="quick-sort"
+                  role="group"
+                >
+                  {quickSortOptions.map((option) => {
+                    const selected =
+                      viewState.sort === option.sort;
+                    const order = selected
+                      ? viewState.order
+                      : option.defaultOrder;
+
+                    return (
+                      <button
+                        aria-pressed={selected}
+                        className={
+                          selected
+                            ? "tool-button quick-sort__button quick-sort__button--active"
+                            : "tool-button quick-sort__button"
+                        }
+                        key={option.sort}
+                        onClick={() =>
+                          updateSort(
+                            nextQuickSort(
+                              viewState,
+                              option,
+                            ),
+                          )
+                        }
+                        type="button"
+                      >
+                        {option.label}
+                        <span aria-hidden="true">
+                          {order === "asc" ? "↑" : "↓"}
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                  <button
+                    aria-label="Другие варианты сортировки"
+                    aria-pressed={!quickSortHasSelection}
+                    className={
+                      !quickSortHasSelection
+                        ? "tool-button quick-sort__more quick-sort__button--active"
+                        : "tool-button quick-sort__more"
+                    }
+                    onClick={() => setSortOpen(true)}
+                    type="button"
+                  >
+                    {quickSortHasSelection
+                      ? "Ещё"
+                      : sortLabel(viewState)}
+                    <span aria-hidden="true">•••</span>
+                  </button>
+                </div>
               </div>
             </div>
 

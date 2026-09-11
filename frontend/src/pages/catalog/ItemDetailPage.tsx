@@ -19,7 +19,7 @@ import {
 import { AdminItemActions } from "../../features/catalog/AdminItemActions";
 import { ItemInventoryPanel } from "../../features/inventory/ItemInventoryPanel";
 import {
-  formatAttributeValue,
+  formatCatalogAttributeValue,
   formatItemStatus,
 } from "../../features/catalog/format";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
@@ -203,7 +203,7 @@ export function ItemDetailPage() {
               {visibleAttributes.map((attribute) => (
                 <div key={attribute.key}>
                   <dt>{attribute.label}</dt>
-                  <dd>{formatAttributeValue(item.attributes[attribute.key], attribute.unit)}</dd>
+                  <dd>{formatCatalogAttributeValue(attribute.key, item.attributes[attribute.key], attribute.unit)}</dd>
                 </div>
               ))}
             </dl>

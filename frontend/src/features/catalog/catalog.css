@@ -33,7 +33,7 @@
 .catalog-landing-header__copy {
   position: relative;
   z-index: 1;
-  margin: 38px 0 20px;
+  margin: 30px 0 18px;
 }
 
 .catalog-landing-header__copy .section-kicker,
@@ -426,6 +426,36 @@
 .stock-strip .stock-strip__available { background: var(--color-success-soft); }
 .stock-strip .stock-strip__zero { background: var(--color-danger-soft); }
 
+.equipment-card .stock-strip {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.equipment-card .stock-strip > div {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+}
+
+.equipment-card .stock-strip dt {
+  color: var(--color-ink);
+  font-size: 11px;
+  font-weight: 740;
+}
+
+.equipment-card .stock-strip dd {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 790;
+}
+
+.equipment-card .stock-strip__zero dt,
+.equipment-card .stock-strip__zero dd {
+  color: var(--color-wine);
+}
+
 .catalog-state {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
@@ -467,8 +497,19 @@
   gap: 12px;
 }
 
-.category-header__title { position: relative; z-index: 1; margin: 28px 0 18px; }
-.category-header__title > p { max-width: 560px; margin: 10px 0 0; color: rgb(255 255 255 / 62%); font-size: 12px; line-height: 1.4; }
+.category-header__title {
+  position: relative;
+  z-index: 1;
+  margin: 30px 0 18px;
+}
+
+.category-header__title > p {
+  max-width: 620px;
+  margin: 10px 0 0;
+  color: rgb(255 255 255 / 82%);
+  font-size: 14px;
+  line-height: 1.45;
+}
 .category-title-skeleton { height: 44px; margin-bottom: 14px; border-radius: 12px; }
 .result-toolbar { align-items: flex-start; }
 
@@ -829,8 +870,14 @@
     padding-left: 34px;
   }
 
-  .catalog-landing-header__copy {
-    margin: 48px 0 26px;
+  .catalog-landing-header__copy,
+  .category-header__title {
+    margin: 38px 0 22px;
+  }
+
+  .category-header__title > p {
+    max-width: 680px;
+    font-size: 15px;
   }
 
   .catalog-page__body {
@@ -1132,5 +1179,134 @@
 
   .detail-header__row--title h1 {
     font-size: clamp(30px, 9vw, 42px);
+  }
+}
+
+/* UX consistency: compact filters and one-click sort controls. */
+
+.quick-sort {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.quick-sort__button {
+  background: var(--color-surface);
+}
+
+.quick-sort__button--active {
+  border-color: var(--color-ink);
+  background: var(--color-ink);
+  color: #fff;
+}
+
+.quick-sort__button > span,
+.quick-sort__more > span {
+  display: inline;
+  min-width: auto;
+  height: auto;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 11px;
+}
+
+.quick-sort__more {
+  padding-inline: 10px;
+}
+
+.filter-sheet {
+  max-height: min(
+    calc(86dvh - var(--safe-area-top)),
+    760px
+  );
+}
+
+.filter-sheet .sheet__header {
+  padding-top: 14px;
+  padding-bottom: 11px;
+}
+
+.filter-sheet .sheet__header h2 {
+  font-size: 24px;
+}
+
+.filter-sheet .sheet__body {
+  padding-top: 0;
+  padding-bottom: 12px;
+}
+
+.filter-sheet .filter-group {
+  padding: 12px 0;
+}
+
+.filter-sheet .filter-group legend {
+  margin-bottom: 7px;
+}
+
+.filter-sheet .filter-options {
+  gap: 2px;
+}
+
+.filter-sheet .filter-option {
+  min-height: 42px;
+  gap: 8px;
+  padding: 4px 7px;
+}
+
+.filter-sheet .filter-option__check {
+  width: 18px;
+  height: 18px;
+}
+
+.filter-sheet .filter-option__label {
+  font-size: 11px;
+}
+
+.filter-sheet .filter-option__count {
+  min-width: 23px;
+  height: 21px;
+}
+
+.filter-sheet .range-filter input {
+  height: 43px;
+}
+
+.filter-sheet .sheet__footer {
+  padding-top: 10px;
+}
+
+@media (max-width: 679px) {
+  .result-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .result-toolbar__actions {
+    width: 100%;
+    max-width: none;
+    justify-content: flex-start;
+  }
+
+  .quick-sort {
+    flex: 1 1 100%;
+  }
+}
+
+@media (min-width: 680px) {
+  .filter-sheet {
+    width: min(calc(100% - 32px), 620px);
+  }
+}
+
+/* Fine-pointer compaction only; touch keeps larger targets. */
+@media (pointer: fine) {
+  .filter-sheet .filter-option {
+    min-height: 36px;
+  }
+
+  .filter-sheet .range-filter input {
+    height: 40px;
   }
 }

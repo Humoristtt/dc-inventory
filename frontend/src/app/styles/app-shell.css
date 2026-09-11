@@ -37,7 +37,7 @@
   display: grid;
   width: min(100%, 660px);
   min-height: var(--bottom-nav-height);
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: 0 auto;
   overflow: hidden;
   border: 1px solid rgb(255 255 255 / 9%);

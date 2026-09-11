@@ -31,6 +31,18 @@ Preparation reads category metadata once; facets reuse it without global caching
 Availability filters/facets use indexed stock existence checks (nonnegative
 quantities), while item list quantities retain the stock aggregate.
 
+Frontend catalog URL state uses category-aware implicit sort defaults.
+Transceiver scopes (`transceivers`, `transceiver_ethernet`,
+`transceiver_fc`) default to `available desc`; ordinary categories default to
+`name asc`. URL parsing and serialization receive the same contextual default:
+absence of `sort`/`order` means that default, while an explicit non-default
+selection remains round-trip stable. Quick-sort controls modify this same
+server-side catalog query state; no separate client-side sorting model exists.
+
+Compound `reach` formatting is presentation-only: card/detail rendering may
+replace human-readable `/` or `;` separators with middle dots, while the stored
+attribute value and backend catalog contract remain unchanged.
+
 ## Frontend startup
 
 React renders the access shell immediately. SDK loading runs independently of

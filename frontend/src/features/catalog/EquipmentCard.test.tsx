@@ -1,6 +1,14 @@
-import { render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { expect, it } from "vitest";
+import {
+  afterEach,
+  expect,
+  it,
+} from "vitest";
 
 import type {
   CatalogItemListEntry,
@@ -30,6 +38,10 @@ const item: CatalogItemListEntry = {
     total_count: 4,
   },
 };
+
+afterEach(() => {
+  cleanup();
+});
 
 const attributes: CategoryAttribute[] = [
   {
@@ -106,4 +118,70 @@ it("устойчиво показывает nullable производителя,
 
   const available = screen.getByText("В наличии").closest("div");
   expect(available).toHaveTextContent("4");
+});
+
+it("явно показывает отсутствие складского остатка", () => {
+  render(
+    <MemoryRouter>
+      <EquipmentCard
+        attributes={attributes}
+        item={{
+          ...item,
+          inventory: {
+            available_count: 0,
+            total_count: 0,
+          },
+        }}
+        returnTo="/catalog/optics"
+      />
+    </MemoryRouter>,
+  );
+
+  const unavailable =
+    screen.getByText("Нет в наличии").closest("div");
+
+  expect(unavailable).not.toBeNull();
+  expect(unavailable).toHaveTextContent("0");
+  expect(
+    screen.queryByText("В наличии"),
+  ).not.toBeInTheDocument();
+});
+
+it("сложную дальность в карточке разделяет средней точкой", () => {
+  const reachItem: CatalogItemListEntry = {
+    ...item,
+    attributes: {
+      ...item.attributes,
+      reach:
+        "OM1: до 33 м / OM2: до 82 м; OM3: до 300 м",
+    },
+  };
+
+  const reachAttribute: CategoryAttribute = {
+    ...attributes[0],
+    id: "attribute-reach",
+    key: "reach",
+    label: "Дальность",
+    unit: null,
+    sort_order: 1,
+  };
+
+  render(
+    <MemoryRouter>
+      <EquipmentCard
+        attributes={[
+          reachAttribute,
+          ...attributes,
+        ]}
+        item={reachItem}
+        returnTo="/catalog/sfp"
+      />
+    </MemoryRouter>,
+  );
+
+  expect(
+    screen.getByText(
+      "OM1: до 33 м · OM2: до 82 м · OM3: до 300 м",
+    ),
+  ).toBeInTheDocument();
 });

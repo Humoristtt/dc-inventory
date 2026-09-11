@@ -52,7 +52,7 @@ export function CatalogLandingPage() {
           committedValue={viewState.q}
           label="Поиск по каталогу"
           onCommit={updateSearch}
-          placeholder="Найдёт всё, что нужно"
+          placeholder="Найдёт всё, что только есть"
         />
       </header>
 

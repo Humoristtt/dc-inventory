@@ -1,50 +1,498 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import {
+  useEffect,
+  useState,
+} from "react";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { Link } from "react-router-dom";
+
 import { useAuthState } from "../../features/auth/useAuthState";
-import { getLocations, inventoryError, inventoryRequest, type StorageLocation } from "../../shared/api/inventory";
+import {
+  getLocations,
+  inventoryError,
+  inventoryRequest,
+  type StorageLocation,
+} from "../../shared/api/inventory";
+import { refreshAfterLocationEdit } from "../../shared/api/inventoryCache";
 import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
 import { TelegramFullscreenButton } from "../../shared/telegram/TelegramFullscreenButton";
 import "../../features/inventory/inventory.css";
-import { refreshAfterLocationEdit } from "../../shared/api/inventoryCache";
 
-const blank = {code:"",name:"",location_type:"WAREHOUSE" as "WAREHOUSE" | "DATACENTER",address:""};
+type LocationDraft = {
+  code: string;
+  name: string;
+  location_type: "WAREHOUSE" | "DATACENTER";
+  address: string;
+};
+
+const blank: LocationDraft = {
+  code: "",
+  name: "",
+  location_type: "WAREHOUSE",
+  address: "",
+};
+
 export function LocationsPage() {
-  const auth = useAuthState(); const client = useQueryClient();
-  const locations = useQuery({queryKey:["inventory","locations"],queryFn:({signal}) => getLocations(signal)});
-  const [editing,setEditing] = useState<string | null>(null); const [open,setOpen] = useState(false); const [draft,setDraft] = useState(blank);
-  const mutation = useMutation({mutationFn:({id,body,action}:{id?:string;body?:unknown;action?:string}) => inventoryRequest<StorageLocation>(`/api/admin/inventory/locations${id ? `/${id}` : ""}${action ? `/${action}` : ""}`,body ?? {}, id && !action ? "PATCH" : "POST"),onSuccess:async()=>{setOpen(false);await refreshAfterLocationEdit(client);}});
-  const admin = auth.data?.user.role === "ADMIN";
-  return <main className="catalog-page"><header className="category-header warehouse-page-header">
-    <div className="page-toolbar page-toolbar--brand">
-     <SpikatelBrand inverse title="Инвентаризация ЦОД" />
-     <TelegramFullscreenButton />
-   </div>
-    <div className="warehouse-page-header__title">
-      <span className="section-kicker">Склад</span>
-      <h1>Места хранения</h1>
-    </div>
-  </header><div className="catalog-page__body">
-    {admin ? <div className="warehouse-actions"><button className="button button--dark" onClick={()=>{setEditing(null);setDraft(blank);setOpen(true);mutation.reset();}}>Добавить место хранения</button><Link className="button" to="/catalog/new">Добавить оборудование</Link></div>:null}
-    {locations.isError ? <p role="alert">Не удалось загрузить места хранения. <button onClick={()=>void locations.refetch()}>Повторить</button></p>:null}
-    {locations.data?.map(row => <section className="detail-panel" key={row.id}><h2>{row.name}</h2><p>{row.location_type === "WAREHOUSE" ? "Склад" : "ЦОД"} · {row.code}{row.status === "ARCHIVED" ? " · Архив" : ""}</p>{row.address ? <p>{row.address}</p>:null}{admin ? <div className="warehouse-actions"><button className="button" disabled={mutation.isPending} onClick={()=>{setEditing(row.id);setDraft({code:row.code,name:row.name,location_type:row.location_type,address:row.address ?? ""});setOpen(true);mutation.reset();}}>Редактировать</button><button className="button" disabled={mutation.isPending} onClick={()=>mutation.mutate({id:row.id,action:row.status === "ACTIVE" ? "archive" : "unarchive"})}>{row.status === "ACTIVE" ? "Архивировать" : "Вернуть из архива"}</button></div>:null}</section>)}
-    {mutation.isError ? <p role="alert">{inventoryError(mutation.error)}</p>:null}
-    {open && admin ? <form className="detail-panel warehouse-form" onSubmit={event=>{event.preventDefault();const {code,...fields}=draft;mutation.mutate({id:editing ?? undefined,body:editing ? fields : {...fields,code}});}}><h2>{editing ? "Редактировать место" : "Новое место хранения"}</h2><fieldset disabled={mutation.isPending}>
-      {!editing ? <div className="warehouse-form__field">
-      <label htmlFor="location-code">Код</label>
-      <input
-        id="location-code"
-        autoComplete="off"
-        required
-        maxLength={64}
-        value={draft.code}
-        onChange={e=>setDraft({...draft,code:e.target.value})}
-      />
-    </div>:null}
-      <label>Название<input autoComplete="off" required maxLength={255} value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})}/></label>
-      <label>Тип<select value={draft.location_type} onChange={e=>setDraft({...draft,location_type:e.target.value as "WAREHOUSE" | "DATACENTER"})}><option value="WAREHOUSE">Склад</option><option value="DATACENTER">ЦОД</option></select></label>
-      <label>Адрес<textarea autoComplete="off" maxLength={2000} value={draft.address} onChange={e=>setDraft({...draft,address:e.target.value})}/></label>
-      <div className="warehouse-actions"><button className="button button--dark" type="submit">Сохранить</button><button className="button" type="button" onClick={()=>setOpen(false)}>Отмена</button></div></fieldset>
-    </form>:null}
-  </div></main>;
+  const auth = useAuthState();
+  const client = useQueryClient();
+
+  const locations = useQuery({
+    queryKey: ["inventory", "locations"],
+    queryFn: ({ signal }) =>
+      getLocations(signal),
+  });
+
+  const [editing, setEditing] =
+    useState<string | null>(null);
+  const [open, setOpen] =
+    useState(false);
+  const [draft, setDraft] =
+    useState<LocationDraft>(blank);
+
+  const mutation = useMutation({
+    mutationFn: ({
+      id,
+      body,
+      action,
+    }: {
+      id?: string;
+      body?: unknown;
+      action?: string;
+    }) =>
+      inventoryRequest<StorageLocation>(
+        `/api/admin/inventory/locations${
+          id ? `/${id}` : ""
+        }${action ? `/${action}` : ""}`,
+        body ?? {},
+        id && !action
+          ? "PATCH"
+          : "POST",
+      ),
+
+    onSuccess: async () => {
+      setOpen(false);
+      setEditing(null);
+      setDraft(blank);
+
+      await refreshAfterLocationEdit(
+        client,
+      );
+    },
+  });
+
+  const admin =
+    auth.data?.user.role === "ADMIN";
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    if (!admin) {
+      const closeTimer =
+        window.setTimeout(() => {
+          setOpen(false);
+        }, 0);
+
+      return () => {
+        window.clearTimeout(closeTimer);
+      };
+    }
+
+    const previousOverflow =
+      document.body.style.overflow;
+
+    document.body.style.overflow =
+      "hidden";
+
+    return () => {
+      document.body.style.overflow =
+        previousOverflow;
+    };
+  }, [admin, open]);
+
+  const closeEditor = () => {
+    if (mutation.isPending) {
+      return;
+    }
+
+    setOpen(false);
+    setEditing(null);
+    mutation.reset();
+  };
+
+  const openCreate = () => {
+    setEditing(null);
+    setDraft(blank);
+    mutation.reset();
+    setOpen(true);
+  };
+
+  const openEdit = (
+    location: StorageLocation,
+  ) => {
+    setEditing(location.id);
+    setDraft({
+      code: location.code,
+      name: location.name,
+      location_type:
+        location.location_type,
+      address:
+        location.address ?? "",
+    });
+    mutation.reset();
+    setOpen(true);
+  };
+
+  return (
+    <main className="catalog-page">
+      <header className="category-header warehouse-page-header">
+        <div className="page-toolbar page-toolbar--brand">
+          <SpikatelBrand
+            inverse
+            title="Инвентаризация ЦОД"
+          />
+          <TelegramFullscreenButton />
+        </div>
+
+        <div className="warehouse-page-header__title">
+          <span className="section-kicker">
+            Склад
+          </span>
+          <h1>Места хранения</h1>
+        </div>
+      </header>
+
+      <div className="catalog-page__body">
+        {admin ? (
+          <div className="warehouse-actions">
+            <button
+              className="button button--dark"
+              onClick={openCreate}
+              type="button"
+            >
+              Добавить место хранения
+            </button>
+
+            <Link
+              className="button"
+              to="/catalog/new"
+            >
+              Добавить оборудование
+            </Link>
+          </div>
+        ) : null}
+
+        {locations.isError ? (
+          <p role="alert">
+            Не удалось загрузить места
+            хранения.{" "}
+            <button
+              onClick={() =>
+                void locations.refetch()
+              }
+              type="button"
+            >
+              Повторить
+            </button>
+          </p>
+        ) : null}
+
+        {locations.data?.map(
+          (row) => (
+            <section
+              className="detail-panel"
+              key={row.id}
+            >
+              <h2>{row.name}</h2>
+
+              <p>
+                {row.location_type ===
+                "WAREHOUSE"
+                  ? "Склад"
+                  : "ЦОД"}{" "}
+                · {row.code}
+                {row.status ===
+                "ARCHIVED"
+                  ? " · Архив"
+                  : ""}
+              </p>
+
+              {row.address ? (
+                <p>{row.address}</p>
+              ) : null}
+
+              {admin ? (
+                <div className="warehouse-actions">
+                  <button
+                    className="button"
+                    disabled={
+                      mutation.isPending
+                    }
+                    onClick={() =>
+                      openEdit(row)
+                    }
+                    type="button"
+                  >
+                    Редактировать
+                  </button>
+
+                  <button
+                    className="button"
+                    disabled={
+                      mutation.isPending
+                    }
+                    onClick={() => {
+                      mutation.reset();
+
+                      mutation.mutate({
+                        id: row.id,
+                        action:
+                          row.status ===
+                          "ACTIVE"
+                            ? "archive"
+                            : "unarchive",
+                      });
+                    }}
+                    type="button"
+                  >
+                    {row.status ===
+                    "ACTIVE"
+                      ? "Архивировать"
+                      : "Вернуть из архива"}
+                  </button>
+                </div>
+              ) : null}
+            </section>
+          ),
+        )}
+
+        {mutation.isError &&
+        !open ? (
+          <p role="alert">
+            {inventoryError(
+              mutation.error,
+            )}
+          </p>
+        ) : null}
+      </div>
+
+      {open && admin ? (
+        <div
+          className="location-editor-backdrop"
+          onMouseDown={(event) => {
+            if (
+              event.target ===
+              event.currentTarget
+            ) {
+              closeEditor();
+            }
+          }}
+        >
+          <section
+            aria-labelledby="location-editor-title"
+            aria-modal="true"
+            className="location-editor"
+            role="dialog"
+          >
+            <header className="location-editor__header">
+              <div>
+                <span className="section-kicker">
+                  {editing
+                    ? "Редактирование"
+                    : "Новое место"}
+                </span>
+
+                <h2 id="location-editor-title">
+                  {editing
+                    ? "Редактировать место"
+                    : "Новое место хранения"}
+                </h2>
+              </div>
+
+              <button
+                aria-label="Закрыть редактор места хранения"
+                autoFocus
+                className="icon-button"
+                data-escape-dismiss=""
+                disabled={
+                  mutation.isPending
+                }
+                onClick={closeEditor}
+                type="button"
+              >
+                ×
+              </button>
+            </header>
+
+            <form
+              className="warehouse-form location-editor__form"
+              onSubmit={(event) => {
+                event.preventDefault();
+
+                const {
+                  code,
+                  ...fields
+                } = draft;
+
+                mutation.mutate({
+                  id:
+                    editing ??
+                    undefined,
+                  body: editing
+                    ? fields
+                    : {
+                        ...fields,
+                        code,
+                      },
+                });
+              }}
+            >
+              <div className="location-editor__body">
+                <fieldset
+                  disabled={
+                    mutation.isPending
+                  }
+                >
+                  {!editing ? (
+                    <label>
+                      <span>Код</span>
+                      <input
+                        autoComplete="off"
+                        maxLength={64}
+                        onChange={(
+                          event,
+                        ) =>
+                          setDraft({
+                            ...draft,
+                            code:
+                              event
+                                .target
+                                .value,
+                          })
+                        }
+                        required
+                        value={draft.code}
+                      />
+                    </label>
+                  ) : null}
+
+                  <label>
+                    <span>Название</span>
+                    <input
+                      autoComplete="off"
+                      maxLength={255}
+                      onChange={(
+                        event,
+                      ) =>
+                        setDraft({
+                          ...draft,
+                          name:
+                            event
+                              .target
+                              .value,
+                        })
+                      }
+                      required
+                      value={draft.name}
+                    />
+                  </label>
+
+                  <label>
+                    <span>Тип</span>
+                    <select
+                      onChange={(
+                        event,
+                      ) =>
+                        setDraft({
+                          ...draft,
+                          location_type:
+                            event
+                              .target
+                              .value as LocationDraft["location_type"],
+                        })
+                      }
+                      value={
+                        draft.location_type
+                      }
+                    >
+                      <option value="WAREHOUSE">
+                        Склад
+                      </option>
+                      <option value="DATACENTER">
+                        ЦОД
+                      </option>
+                    </select>
+                  </label>
+
+                  <label className="location-editor__wide">
+                    <span>Адрес</span>
+                    <textarea
+                      autoComplete="off"
+                      maxLength={2000}
+                      onChange={(
+                        event,
+                      ) =>
+                        setDraft({
+                          ...draft,
+                          address:
+                            event
+                              .target
+                              .value,
+                        })
+                      }
+                      value={
+                        draft.address
+                      }
+                    />
+                  </label>
+                </fieldset>
+
+                {mutation.isError ? (
+                  <p
+                    className="location-editor__error"
+                    role="alert"
+                  >
+                    {inventoryError(
+                      mutation.error,
+                    )}
+                  </p>
+                ) : null}
+              </div>
+
+              <footer className="location-editor__footer">
+                <button
+                  className="button button--ghost"
+                  disabled={
+                    mutation.isPending
+                  }
+                  onClick={
+                    closeEditor
+                  }
+                  type="button"
+                >
+                  Отмена
+                </button>
+
+                <button
+                  className="button button--accent"
+                  disabled={
+                    mutation.isPending
+                  }
+                  type="submit"
+                >
+                  {mutation.isPending
+                    ? "Сохраняем…"
+                    : "Сохранить"}
+                </button>
+              </footer>
+            </form>
+          </section>
+        </div>
+      ) : null}
+    </main>
+  );
 }

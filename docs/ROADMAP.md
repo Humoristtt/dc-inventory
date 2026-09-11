@@ -8,7 +8,7 @@
 - [~] текущая приёмка;
 - [ ] будущая работа.
 
-Последнее обновление: 2026-09-10.
+Последнее обновление: 2026-09-11.
 
 ## 1. Базовая платформа
 
@@ -185,7 +185,7 @@ feature cycle.
   - [x] добавить deterministic slow/pending-network browser regressions;
   - [x] пройти final full frontend/CI acceptance;
   - [x] пройти real Telegram acceptance после deployment.
-- [ ] После performance acceptance продолжить minor UX remediation.
+- [~] После performance acceptance выполняется UX consistency pass: implementation и local acceptance завершены; PR/CI/deployment acceptance ещё не выполнены.
 
 - [x] Canonical documentation reconciled with accepted production state.
 - [x] Очистить merged Git branches; после closeout оставить только `main`.
@@ -204,9 +204,23 @@ feature cycle.
 - [x] Мигрировать production до `f8a9b0c1d2e3` и подтвердить zero-drift reconciliation.
 - [x] Выполнить post-deploy verified backup, external smoke и real Telegram visual acceptance.
 - [x] Завершить production VM / Git / local hygiene после audit deployment.
-- [ ] Зафиксировать пользовательский список minor UX corrections.
-- [ ] Выполнить minor UX remediation отдельной веткой.
-- [ ] Повторить final affected/full acceptance после UX fixes.
+- [x] Зафиксировать пользовательский список minor UX corrections.
+- [x] Выполнить minor UX remediation отдельной веткой:
+  - [x] унифицировать header/kicker rhythm и bottom navigation;
+  - [x] сделать stock availability strip однозначным и полноширинным;
+  - [x] улучшить category description/readability;
+  - [x] добавить one-click quick sort с category-aware default для трансиверов;
+  - [x] сохранить полный sort fallback и URL round-trip semantics;
+  - [x] сделать filter sheet компактным без уменьшения touch targets;
+  - [x] привести compound reach presentation к middle-dot separators;
+  - [x] сделать Locations editor responsive bottom-sheet/modal;
+  - [x] закрыть role-loss lifecycle и удалить dead/duplicate CSS.
+- [~] Повторить final affected/full acceptance после UX fixes:
+  - [x] local unit/typecheck/lint/build acceptance;
+  - [x] canonical frontend Playwright acceptance;
+  - [ ] GitHub PR/CI acceptance;
+  - [ ] production deploy/provenance/health acceptance;
+  - [ ] real Telegram visual acceptance.
 - [ ] Принять explicit operational decision по normal warehouse mutations.
 
 До последнего пункта regular mutation gate остаётся:

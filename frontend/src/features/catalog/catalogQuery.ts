@@ -29,6 +29,11 @@ export type CatalogFilterState = Pick<
 
 export type CatalogSortState = Pick<CatalogViewState, "sort" | "order">;
 
+export const defaultCatalogSort: CatalogSortState = {
+  sort: "name",
+  order: "asc",
+};
+
 export const defaultCatalogViewState: CatalogViewState = {
   q: "",
   status: "ACTIVE",
@@ -36,8 +41,8 @@ export const defaultCatalogViewState: CatalogViewState = {
   availability: "ANY",
   locationIds: [],
   filters: [],
-  sort: "name",
-  order: "asc",
+  sort: defaultCatalogSort.sort,
+  order: defaultCatalogSort.order,
 };
 
 export const defaultCatalogFilterState: CatalogFilterState = {
@@ -83,6 +88,7 @@ export function parseAttributeFilter(
 
 export function readCatalogViewState(
   params: URLSearchParams,
+  defaultSort: CatalogSortState = defaultCatalogSort,
 ): CatalogViewState {
   const availabilityValue = params.get("availability");
   const availability: Availability =
@@ -92,6 +98,19 @@ export function readCatalogViewState(
   const sortValue = params.get("sort") as ItemSort | null;
   const orderValue = params.get("order");
   const statusValue = params.get("status");
+  const explicitSort =
+    sortValue !== null && itemSorts.has(sortValue);
+
+  const sort = explicitSort
+    ? sortValue
+    : defaultSort.sort;
+
+  const order: SortOrder =
+    orderValue === "asc" || orderValue === "desc"
+      ? orderValue
+      : explicitSort
+        ? "asc"
+        : defaultSort.order;
 
   return {
     q: params.get("q")?.trim() ?? "",
@@ -108,13 +127,14 @@ export function readCatalogViewState(
           `${right.key}:${right.operator}:${right.value}`,
         ),
       ),
-    sort: sortValue !== null && itemSorts.has(sortValue) ? sortValue : "name",
-    order: orderValue === "desc" ? "desc" : "asc",
+    sort,
+    order,
   };
 }
 
 export function catalogViewStateToSearchParams(
   state: CatalogViewState,
+  defaultSort: CatalogSortState = defaultCatalogSort,
 ): URLSearchParams {
   const params = new URLSearchParams();
   const q = state.q.trim();
@@ -140,10 +160,16 @@ export function catalogViewStateToSearchParams(
   )) {
     params.append("filter", `${filter.key}:${filter.operator}:${filter.value}`);
   }
-  if (state.sort !== "name") {
+  if (state.sort !== defaultSort.sort) {
     params.set("sort", state.sort);
   }
-  if (state.order !== "asc") {
+
+  const implicitOrder =
+    state.sort === defaultSort.sort
+      ? defaultSort.order
+      : "asc";
+
+  if (state.order !== implicitOrder) {
     params.set("order", state.order);
   }
   return params;

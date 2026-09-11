@@ -320,5 +320,6 @@ migration regression tests.
   `1.5000000000` → `1,5`) без изменения данных;
 - [x] page-local search/filter/sort state не создаёт history steps для Back;
 - [x] server-side search relevance: strongest match first;
-- [ ] canonical E2E + PR/CI;
+- [x] canonical production-shaped E2E acceptance;
+- [ ] PR/required CI;
 - [ ] production deploy + повторная real Telegram acceptance.

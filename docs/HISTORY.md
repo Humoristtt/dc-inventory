@@ -1141,3 +1141,17 @@ query ordering contract.
 - Более новая ручная сортировка (`Наличие`, `Скорость`, manufacturer и т.д.)
   не перетирается delayed search commit.
 - При очистке поиска implicit relevance возвращается к category default sort.
+
+### Post-PR60 local acceptance closeout
+
+Local acceptance объединённого post-PR60 change set завершён:
+
+- frontend unit suite: 108/108 PASS;
+- typecheck/lint/design-system/build: PASS;
+- PostgreSQL 18 catalog integration: 16/16 PASS;
+- targeted search relevance regression: PASS;
+- canonical production-shaped Playwright:
+  79 passed / 12 skipped / 0 failed;
+- worktree после acceptance clean.
+
+Production остаётся на PR #60 revision до merge/required CI нового PR.

@@ -24,6 +24,24 @@ Regular production warehouse mutations дополнительно защищен
 `REAL_INVENTORY_MUTATIONS_ENABLED`. Initial one-shot bootstrap и normal
 operational mutations являются разными safety boundaries.
 
+## Current feature-cycle requirements — RBAC / Procurement
+
+Accepted production baseline перед feature cycle:
+
+`1242f56c131d0f8c470e05cbaf209c48a37e85a4`
+
+Текущая двухролевая реализация USER/ADMIN мигрирует на:
+
+ENGINEER / SENIOR_ENGINEER / MANAGER / ADMIN / OWNER.
+
+Canonical role matrix, procurement lifecycle, immutable revision rules,
+manager collaboration, discrepancy handling и atomic warehouse acceptance:
+
+`docs/RBAC_PROCUREMENT.md`
+
+Для текущего feature cycle этот документ имеет приоритет над историческими
+USER/ADMIN role labels ниже до завершения их migration.
+
 ## Каталог
 
 Фиксированная иерархия:

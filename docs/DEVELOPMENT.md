@@ -55,6 +55,33 @@ Feature CSS отвечает за layout и предметное presentation, �
 Нельзя исправлять shared component page-local cascade override, если проблема
 относится к общему component contract.
 
+## RBAC / Procurement feature development
+
+Перед изменением ролей, authorization, procurement, warehouse acceptance или
+procurement notifications разработчик обязан прочитать:
+
+    docs/RBAC_PROCUREMENT.md
+
+Для этого feature cycle нельзя:
+
+- кодировать authorization только через frontend visibility;
+- считать MANAGER уровнем role hierarchy;
+- связывать assigned Manager с ACL;
+- менять stock по manager procurement status;
+- создавать catalog Item автоматически из proposed procurement line;
+- перезаписывать submitted procurement revision;
+- обходить immutable warehouse movement journal.
+
+Development implementation выполняется по стадиям:
+
+    RBAC migration/policy
+      -> role-aware existing domain authorization
+      -> frontend role UX
+      -> procurement persistence/state machine
+      -> procurement UI
+      -> Telegram notifications
+      -> email delivery отдельным последующим этапом
+
 ## Конфигурация
 
 Пример конфигурации находится в `.env.example`.

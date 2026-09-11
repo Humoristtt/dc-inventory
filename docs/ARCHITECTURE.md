@@ -199,27 +199,69 @@ Git checkout на production VM и revision реально запущенног�
 являются разными operational facts. Runtime provenance проверяется по metadata
 образа, а не выводится только из состояния checkout.
 
-## Authorization
+## Authorization / RBAC target
 
-Approved USER:
+Current feature-cycle contract:
 
-- catalog;
-- stock;
-- own actor movement history;
-- ISSUE;
-- RETURN.
+`docs/RBAC_PROCUREMENT.md`
 
-ADMIN дополнительно:
+Target roles:
 
-- общий journal;
-- employee filter;
-- Item/Location administration;
-- RECEIPT;
-- TRANSFER;
-- WRITE_OFF;
-- CORRECTION/REVERSAL.
+- ENGINEER;
+- SENIOR_ENGINEER;
+- MANAGER;
+- ADMIN;
+- OWNER.
 
-Frontend authorization не является security boundary.
+Role хранится на User.
+
+Capabilities вычисляются backend policy и являются authorization boundary.
+Frontend visibility не заменяет backend authorization.
+
+Role hierarchy не моделируется простым числовым `role >= ...`, потому что
+MANAGER является отдельной бизнес-веткой, а не уровнем складской иерархии.
+
+OWNER является singleton recovery role, привязанной к configured recovery
+Telegram identity.
+
+ADMIN может назначать ENGINEER / SENIOR_ENGINEER / MANAGER, но не ADMIN/OWNER.
+OWNER может назначать ADMIN. OWNER нельзя изменять обычным role/access API.
+
+До завершения migration фактический production baseline всё ещё использует
+исторические USER/ADMIN значения.
+
+## Procurement architecture target
+
+Procurement реализуется отдельным modular-monolith module и не встраивается в
+catalog/inventory models.
+
+Главный invariant:
+
+procurement status не является warehouse stock mutation.
+
+Procurement использует immutable revisions и immutable event trail.
+
+Assigned Manager является business responsibility, а не authorization ACL.
+Любой MANAGER может выполнять допустимые actions, при этом event хранит
+фактического actor.
+
+Final acceptance выполняется атомарно:
+
+Procurement row lock
+-> validate active revision
+-> validate catalog bindings/location
+-> create immutable Warehouse RECEIPT
+-> link movement
+-> complete procurement
+-> enqueue notifications
+-> commit.
+
+Discrepancy path не создаёт movement и не меняет stock.
+
+Первый procurement implementation не поддерживает partial acceptance.
+
+Подробный state machine, role matrix и acceptance criteria находятся в
+`docs/RBAC_PROCUREMENT.md`.
 
 ## Safety gate
 

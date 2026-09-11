@@ -12,6 +12,8 @@ Architecture decisions are documented in `docs/ARCHITECTURE.md`.
 Development workflow is documented in `docs/DEVELOPMENT.md`.
 Frontend startup/navigation performance decisions are documented in
 `docs/FRONTEND_PERFORMANCE.md`.
+Current RBAC/procurement product and architecture contract is documented in
+`docs/RBAC_PROCUREMENT.md`.
 
 Before implementing a new stage, read only the relevant sections of those documents
 and the directly related source files. Do not repeatedly reread the whole repository.

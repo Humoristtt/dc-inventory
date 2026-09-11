@@ -8,7 +8,7 @@
 - [~] текущая приёмка;
 - [ ] будущая работа.
 
-Последнее обновление: 2026-09-11.
+Последнее обновление: 2026-09-12.
 
 ## 1. Базовая платформа
 
@@ -168,158 +168,127 @@ ADMIN:
 - [x] Fresh verified post-import off-VM backup.
 - [x] Real Telegram visual acceptance.
 
-## 10. Current stabilization / closeout
+## 10. Accepted clean baseline
 
-Текущая фаза не добавляет новый product domain. Цель — получить чистый,
-документированный и независимо проверенный production baseline перед следующим
-feature cycle.
+Предыдущий Warehouse/UX/design-system cycle завершён.
 
-- [x] Frontend startup/navigation performance pass:
-  - [x] определить фактический startup/catalog critical path;
-  - [x] сохранить backend authorization как security boundary;
-  - [x] добавить current-route preload параллельно startup auth;
-  - [x] сохранить lazy-route и initial-bundle contract;
-  - [x] убрать category-detail -> items serial frontend waterfall;
-  - [x] добавить family child-metadata prefetch;
-  - [x] добавить immediate item-detail preview с server revalidation;
-  - [x] добавить deterministic slow/pending-network browser regressions;
-  - [x] пройти final full frontend/CI acceptance;
-  - [x] пройти real Telegram acceptance после deployment.
-- [x] UX consistency pass после performance acceptance завершён:
-  implementation/local acceptance, PR #58, required CI и production cutover
-  выполнены; production baseline переведён на
-  `ffe099000b78b775c5a04e48c3170d57fb2884ed`.
-  Последующий real Telegram desktop review выявил отдельные follow-up findings
-  по typography/form consistency, вынесенные в новый change set.
+Accepted production/runtime golden baseline перед новым feature cycle:
 
-- [x] Canonical documentation reconciled with accepted production state.
-- [x] Очистить merged Git branches; после closeout оставить только `main`.
-- [x] Очистить production VM от временных bootstrap/build/test artifacts,
-      сохранив operational state и намеренные rollback/recovery artifacts.
-- [x] Очистить Mac development environment от obsolete branches/worktrees,
-      temporary archives, caches и disposable Docker resources.
-- [x] Выполнить independent full source/security/runtime/data audit на clean baseline.
-- [x] Исправить findings текущего audit до технически чистого baseline.
-- [x] Синхронизировать custody/access lifecycle и запретить BLOCKED при outstanding custody.
-- [x] Сделать restore reconciliation schema-version-safe через exact backend image.
-- [x] Сделать movement feed snapshot commit-stable при concurrent journal writers.
-- [x] Добавить narrow safe HTTP mapping известных custody DB-trigger violations.
-- [x] Выкатить accepted audit baseline
-      `c32df46426125d16cf8a1dc490a36706eaa9a50b` в production.
-- [x] Мигрировать production до `f8a9b0c1d2e3` и подтвердить zero-drift reconciliation.
-- [x] Выполнить post-deploy verified backup, external smoke и real Telegram visual acceptance.
-- [x] Завершить production VM / Git / local hygiene после audit deployment.
-- [x] Зафиксировать пользовательский список minor UX corrections.
-- [x] Выполнить minor UX remediation отдельной веткой:
-  - [x] унифицировать header/kicker rhythm и bottom navigation;
-  - [x] сделать stock availability strip однозначным и полноширинным;
-  - [x] улучшить category description/readability;
-  - [x] добавить one-click quick sort с category-aware default для трансиверов;
-  - [x] сохранить полный sort fallback и URL round-trip semantics;
-  - [x] сделать filter sheet компактным без уменьшения touch targets;
-  - [x] привести compound reach presentation к middle-dot separators;
-  - [x] сделать Locations editor responsive bottom-sheet/modal;
-  - [x] закрыть role-loss lifecycle и удалить dead/duplicate CSS.
-- [x] Завершить delivery предыдущего UX consistency pass:
-  - [x] local unit/typecheck/lint/build acceptance;
-  - [x] canonical frontend Playwright acceptance;
-  - [x] GitHub PR #58 / required CI acceptance;
-  - [x] production deploy/provenance/health acceptance;
-  - [x] real Telegram visual review.
-- [~] Follow-up typography/form consistency pass после real Telegram review:
-  - [x] ввести shared typography scale в design tokens;
-  - [x] ввести shared responsive form-control geometry;
-  - [x] сохранить desktop как текущий visual acceptance target,
-        не ломая tablet/mobile responsive contract;
-  - [x] увеличить readability equipment cards;
-  - [x] перебалансировать detail-page typography;
-  - [x] унифицировать detail/create/edit page header pattern;
-  - [x] выровнять input/select geometry в Locations editor;
-  - [x] привести Add/Edit equipment controls к общей высоте;
-  - [x] добавить browser regression contracts для typography/form geometry;
-  - [x] local unit/typecheck/lint/build acceptance;
-  - [x] canonical Warehouse Playwright acceptance;
-  - [x] GitHub PR/CI acceptance;
-  - [x] production deploy/provenance/health acceptance;
-  - [~] real Telegram visual acceptance выявил follow-up design-system findings.
-- [~] Frontend design-system architecture refactor перед следующим production cutover:
-  - [x] провести source audit текущего visual ownership;
-  - [x] зафиксировать canonical design-system contract;
-  - [x] создать `frontend/src/shared/ui` как единственный shared visual layer;
-  - [x] заменить независимые page headers единым `PageHeader`;
-  - [ ] унифицировать Button / form-field / single-line control contracts;
-  - [x] удалить shared toolbar/header/control rules из feature CSS;
-  - [ ] удалить obsolete cascade refinements и duplicate geometry;
-  - [x] добавить `npm run check:design-system`;
-  - [ ] добавить browser regressions общей header/control geometry;
-  - [ ] пройти unit/typecheck/lint/build/E2E;
-  - [ ] провести финальный source audit на отсутствие второго design-system layer;
-  - [ ] GitHub PR / required CI acceptance;
-  - [ ] production deploy/provenance/health acceptance;
-  - [ ] real Telegram desktop acceptance.
+`1242f56c131d0f8c470e05cbaf209c48a37e85a4`
 
-- [ ] Принять explicit operational decision по normal warehouse mutations.
+Подтверждено:
 
-До последнего пункта regular mutation gate остаётся:
+- [x] Warehouse Domain V2 production acceptance;
+- [x] frontend performance pass;
+- [x] typography/form consistency;
+- [x] shared frontend design-system refactor;
+- [x] catalog speed sorting / strict long-range scope;
+- [x] post-PR60 Telegram UX remediation;
+- [x] required CI;
+- [x] production cutover;
+- [x] real Telegram desktop acceptance;
+- [x] fresh verified production backup;
+- [x] production Docker/release cleanup;
+- [x] Mac project Docker cleanup;
+- [x] GitHub cleanup до единственной `main`;
+- [x] local/source/runtime golden-state verification.
 
-    REAL_INVENTORY_MUTATIONS_ENABLED=false
+Новый feature branch начинается от этого exact baseline.
 
-Initial bootstrap уже выполнен и повторно не запускается.
+Документационные и feature commits после baseline не являются production state
+до отдельного merge/deploy/provenance acceptance.
 
-## 11. Future procurement workflow
+Regular warehouse mutation gate на accepted production baseline:
 
-Этот блок является следующим подтверждённым product-направлением после
-стабилизации текущего warehouse baseline.
+`REAL_INVENTORY_MUTATIONS_ENABLED=false`
 
-- [ ] Purchasing manager role/capability.
-- [ ] Формирование списка «что необходимо купить».
-- [ ] Requested quantity.
-- [ ] Обоснование / комментарий.
-- [ ] Экспорт / отправка списка закупщику.
-- [ ] Procurement request statuses.
-- [ ] Заказано.
-- [ ] Частично доставлено.
-- [ ] Доставлено.
-- [ ] Отменено.
-- [ ] Связь поступления товара с procurement request.
-- [ ] Уведомления о смене procurement status.
-- [ ] Дополнительные approval roles/workflow при необходимости.
+Initial bootstrap завершён и повторно не запускается.
 
-Новые feature-направления сверх этого блока добавляются в roadmap только после
-закрытия current stabilization/audit phase.
+## 11. RBAC foundation — CURRENT
 
-## 12. Изменённые решения
+Canonical contract:
 
-Ранее проект содержал модель индивидуальных physical units и персонального
-владения оборудованием.
+`docs/RBAC_PROCUREMENT.md`
 
-Она признана избыточной для фактического складского процесса и удалена из active
-schema/API/UI.
+- [~] RBAC feature cycle открыт от golden baseline.
+- [x] Product role model согласована.
+- [x] Capability model согласована.
+- [x] Existing-role migration contract согласован.
+- [x] OWNER singleton/recovery invariant согласован.
+- [ ] Добавить ENGINEER / SENIOR_ENGINEER / MANAGER / ADMIN / OWNER.
+- [ ] Мигрировать USER -> ENGINEER.
+- [ ] Мигрировать configured recovery identity -> OWNER.
+- [ ] Оставшихся ADMIN сохранить как ADMIN.
+- [ ] Добавить backend capability policy.
+- [ ] Добавить audited role transitions.
+- [ ] Запретить ADMIN назначать ADMIN/OWNER.
+- [ ] Разрешить OWNER назначать ADMIN.
+- [ ] Запретить role/access mutation OWNER.
+- [ ] Синхронизировать warehouse authorization.
+- [ ] Синхронизировать catalog authorization.
+- [ ] Добавить role-aware frontend navigation/actions.
+- [ ] PostgreSQL integration acceptance.
+- [ ] Frontend unit/browser acceptance.
+- [ ] Full CI acceptance.
 
-Историческое развитие сохраняется в docs/HISTORY.md, старых migrations и
-migration regression tests.
+## 12. Procurement domain
 
-## Catalog functional follow-up — 2026-09-11
+После устойчивого RBAC foundation:
 
-- [x] server-side сортировка каталога по `speed`;
-- [x] быстрые sort chips `Наличие / Скорость` для трансиверов;
-- [x] strict separation: ordinary Ethernet/FC `< 2000 м`,
-  `Дальние >= 2000 м`;
-- [x] catalog и inventory equipment scopes используют одинаковую границу;
-- [x] backend/frontend regression coverage;
-- [x] PostgreSQL integration acceptance;
-- [x] canonical browser E2E acceptance;
-- [ ] PR/required CI;
-- [ ] production deploy + real Telegram acceptance.
+- [ ] Отдельный backend module `procurement`.
+- [ ] ProcurementRequest.
+- [ ] Immutable ProcurementRevision.
+- [ ] Existing-item и proposed-item lines.
+- [ ] Assigned Manager как responsibility, не ACL.
+- [ ] Любой MANAGER может работать с любой активной закупкой.
+- [ ] `Взять на себя`.
+- [ ] `Передать менеджеру`.
+- [ ] `Ожидает менеджера`.
+- [ ] `Требует корректировки`.
+- [ ] Mandatory correction comment.
+- [ ] Structured manager alternative proposal.
+- [ ] New revision после корректировки.
+- [ ] `В закупке`.
+- [ ] `На приёмке`.
+- [ ] `Есть расхождения` без stock mutation.
+- [ ] Создание catalog Item из proposed line только технической ролью.
+- [ ] Receiving location selection.
+- [ ] Double confirmation final acceptance.
+- [ ] Atomic Warehouse RECEIPT.
+- [ ] Exactly-one procurement -> receipt linkage.
+- [ ] `Выполнена`.
+- [ ] Immutable event/audit trail.
+- [ ] Concurrency/state-transition protection.
+- [ ] Telegram notifications + Mini App deep links.
+- [ ] PostgreSQL integration acceptance.
+- [ ] Role-specific browser E2E.
+- [ ] Full CI acceptance.
+- [ ] Real Telegram acceptance.
 
-## Post-PR60 Telegram acceptance — 2026-09-11
+## 13. Procurement email delivery
 
-- [x] убрать native англоязычную browser validation из catalog form;
-- [x] вернуть More/category secondary copy в shared typography role;
-- [x] нормализовать DECIMAL presentation (`10.0000` → `10`,
-  `1.5000000000` → `1,5`) без изменения данных;
-- [x] page-local search/filter/sort state не создаёт history steps для Back;
-- [x] server-side search relevance: strongest match first;
-- [x] canonical production-shaped E2E acceptance;
-- [ ] PR/required CI;
-- [ ] production deploy + повторная real Telegram acceptance.
+После acceptance core procurement workflow:
+
+- [ ] Microsoft Graph application integration.
+- [ ] OAuth credentials через secret boundary.
+- [ ] To / CC policy.
+- [ ] HTML/text procurement message.
+- [ ] Async delivery через outbox/worker semantics.
+- [ ] Retry/dead-letter behavior.
+- [ ] Email failure не откатывает business transaction.
+- [ ] Production secret/runbook documentation.
+
+## 14. Future product work
+
+Не входит в текущий feature cycle без отдельного решения:
+
+- partial procurement acceptance;
+- supplier directory;
+- invoices / OCR;
+- ERP/accounting integration;
+- dynamic custom roles;
+- attachment storage;
+- procurement price analytics.
+
+Исторические решения и завершённые промежуточные изменения хранятся в
+`docs/HISTORY.md`, а не размножаются как незакрытые текущие пункты roadmap.

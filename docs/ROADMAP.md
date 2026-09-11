@@ -239,9 +239,25 @@ feature cycle.
   - [x] добавить browser regression contracts для typography/form geometry;
   - [x] local unit/typecheck/lint/build acceptance;
   - [x] canonical Warehouse Playwright acceptance;
-  - [ ] GitHub PR/CI acceptance;
+  - [x] GitHub PR/CI acceptance;
   - [ ] production deploy/provenance/health acceptance;
   - [ ] real Telegram visual acceptance.
+- [~] Frontend design-system architecture refactor перед следующим production cutover:
+  - [x] провести source audit текущего visual ownership;
+  - [x] зафиксировать canonical design-system contract;
+  - [ ] создать `frontend/src/shared/ui` как единственный shared visual layer;
+  - [ ] заменить независимые page headers единым `PageHeader`;
+  - [ ] унифицировать Button / form-field / single-line control contracts;
+  - [ ] удалить shared toolbar/header/control rules из feature CSS;
+  - [ ] удалить obsolete cascade refinements и duplicate geometry;
+  - [ ] добавить `npm run check:design-system`;
+  - [ ] добавить browser regressions общей header/control geometry;
+  - [ ] пройти unit/typecheck/lint/build/E2E;
+  - [ ] провести финальный source audit на отсутствие второго design-system layer;
+  - [ ] GitHub PR / required CI acceptance;
+  - [ ] production deploy/provenance/health acceptance;
+  - [ ] real Telegram desktop acceptance.
+
 - [ ] Принять explicit operational decision по normal warehouse mutations.
 
 До последнего пункта regular mutation gate остаётся:

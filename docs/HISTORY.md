@@ -949,3 +949,29 @@ follow-up change set не изменяются.
 Статус на момент этой записи: implementation и local technical acceptance
 завершены. GitHub PR/CI, production deployment и final real Telegram visual
 acceptance ещё не заявлены выполненными.
+
+## 2026-09-11 — Frontend design-system architecture audit
+
+- Source baseline `1a34aa407696163ad81e913d346bb8d334feafc6` прошёл PR/required CI,
+  но production deployment отложен до завершения design-system architecture refactor.
+- Production runtime на момент начала refactor остаётся на
+  `ffe099000b78b775c5a04e48c3170d57fb2884ed`.
+- Source audit подтвердил архитектурную фрагментацию общего UI:
+  catalog/category, detail/form, warehouse и admin/more pages используют
+  несколько независимых header implementations.
+- Общая `page-toolbar` и часть shared header/fullscreen presentation исторически
+  находятся внутри `features/catalog/catalog.css`, из-за чего feature stylesheet
+  фактически выполняет роль скрытой design system.
+- Form/button geometry распределена между `global.css`, `catalog.css`,
+  `admin-catalog.css`, `inventory.css` и `access-admin.css`; существуют
+  параллельные hardcoded heights/radii/font sizes и поздние cascade refinements.
+- Принято решение прекратить page-local UX patching и выполнить отдельный
+  architecture refactor в ветке `refactor/frontend-design-system`.
+- Канонический visual contract вынесен в `docs/FRONTEND_DESIGN_SYSTEM.md`.
+- Целевая архитектура: tokens -> shared/ui -> feature layout -> page composition.
+- После migration основные page headers обязаны использовать единый `PageHeader`;
+  base buttons/form controls/dialog surfaces принадлежат shared UI layer.
+- Будет добавлен static `check:design-system` gate и browser geometry regressions,
+  чтобы документированный contract нельзя было незаметно нарушить следующим UX change.
+- Backend domain/schema, production safety gates и warehouse mutation semantics
+  этим refactor не изменяются.

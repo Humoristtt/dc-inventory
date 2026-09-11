@@ -997,7 +997,7 @@ test(
 
     await expect(
       page.locator(
-        ".detail-header__title .section-kicker",
+        "[data-ui=\"page-header\"] .section-kicker",
       ),
     ).toHaveText("Каталог");
 
@@ -1005,7 +1005,7 @@ test(
       await page.evaluate(() => {
         const headerTitle =
           document.querySelector<HTMLElement>(
-            ".detail-header__title > strong",
+            "[data-ui=\"page-header\"] .ds-page-header__title h1",
           );
 
         const sectionTitle =
@@ -1432,12 +1432,12 @@ test(
 
       const toolbar =
         document.querySelector<HTMLElement>(
-          ".detail-header .page-toolbar",
+          "[data-ui=\"page-header\"] .ds-page-header__toolbar",
         );
 
       const title =
         document.querySelector<HTMLElement>(
-          ".detail-header__row--title",
+          "[data-ui=\"page-header\"] .ds-page-header__title",
         );
 
       if (
@@ -1545,7 +1545,7 @@ test(
 
     await expect(
       page.locator(
-        ".detail-header__title .section-kicker",
+        "[data-ui=\"page-header\"] .section-kicker",
       ),
     ).toHaveText("Каталог");
 

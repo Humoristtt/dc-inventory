@@ -108,7 +108,11 @@ export function CategoryPage() {
     enabled: filtersOpen && categoryKey !== "",
   });
   const filtersCount = activeFilterCount(viewState);
-  const quickSortHasSelection = quickSortOptions.some(
+  const quickSortChoices = quickSortOptions(
+    categoryKey,
+    longRange,
+  );
+  const quickSortHasSelection = quickSortChoices.some(
     (option) => option.sort === viewState.sort,
   );
   const returnTo = `${location.pathname}${location.search}`;
@@ -229,7 +233,7 @@ export function CategoryPage() {
                   className="quick-sort"
                   role="group"
                 >
-                  {quickSortOptions.map((option) => {
+                  {quickSortChoices.map((option) => {
                     const selected =
                       viewState.sort === option.sort;
                     const order = selected

@@ -1056,3 +1056,35 @@ acceptance ещё не заявлены выполненными.
   explicitly aligned to the right in the catalog form.
 - `check:design-system` now rejects the known legacy control ownership patterns
   and missing canonical form-surface boundaries.
+
+### Catalog speed sorting and strict long-range separation
+
+- Catalog API получил server-side `sort=speed`.
+- Speed sorting использует числовую часть атрибута `speed`, поэтому
+  типовые значения `1`, `10` и `25 Гбит/с` сортируются численно.
+- Для transceiver surfaces быстрые sort chips теперь:
+  `Наличие` и `Скорость`.
+- Первый click по `Скорость` использует descending order; повторный click
+  переключает направление.
+- Ordinary `transceiver_ethernet` и `transceiver_fc` теперь исключают
+  позиции с derived `reach_m >= 2000`.
+- `long_range=true` является отдельным explicit scope и включает только
+  Ethernet/FC transceivers с `reach_m >= 2000`.
+- Catalog и inventory equipment scopes используют одну и ту же границу
+  дальности.
+- Добавлены backend regressions для boundary separation и numeric speed
+  ordering, а также frontend regressions для API encoding, URL state и
+  quick-sort behavior.
+
+### Desktop E2E selector migration after PageHeader refactor
+
+- Production-shaped Playwright acceptance exposed two stale desktop
+  assertions repeated across all three desktop projects.
+- Application runtime was healthy; the failures queried removed
+  `.detail-header*` and `.page-toolbar` markup left over from the
+  pre-design-system header implementation.
+- Typography and form-geometry acceptance now target the canonical
+  `PageHeader` contract through `data-ui="page-header"`,
+  `.ds-page-header__toolbar` and `.ds-page-header__title`.
+- The old header selectors were removed from canonical E2E instead of
+  reintroducing legacy application markup.

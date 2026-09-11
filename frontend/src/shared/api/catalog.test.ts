@@ -69,3 +69,16 @@ describe("catalog query encoding", () => {
     expect(params.get("order")).toBe("desc");
   });
 });
+
+describe("catalog speed sort", () => {
+  it("кодирует серверную сортировку по скорости", () => {
+    const params = encodeCatalogQuery({
+      category: "transceiver_ethernet",
+      sort: "speed",
+      order: "desc",
+    });
+
+    expect(params.get("sort")).toBe("speed");
+    expect(params.get("order")).toBe("desc");
+  });
+});

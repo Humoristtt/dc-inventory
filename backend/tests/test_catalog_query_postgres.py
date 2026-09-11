@@ -1,10 +1,13 @@
 import uuid
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.catalog.models import Item
 from app.modules.catalog.query import (
     build_catalog_query_spec,
+    equipment_scope,
     query_catalog_facets,
     query_catalog_items,
 )
@@ -20,6 +23,7 @@ async def transceiver(
     marker: str,
     reach: str,
     category: str = "transceiver_ethernet",
+    speed: str = "10 Гбит/с",
 ) -> uuid.UUID:
     manufacturer = await create_manufacturer(db, ManufacturerCreate(name=uuid.uuid4().hex))
     return await create_item(
@@ -30,7 +34,7 @@ async def transceiver(
             manufacturer_id=manufacturer.id,
             model=uuid.uuid4().hex,
             attributes={
-                "speed": "10 Гбит/с",
+                "speed": speed,
                 "wavelength": "1310 нм",
                 "reach": reach,
                 "form_factor": "SFP+",
@@ -52,6 +56,40 @@ async def test_hierarchy_long_range_and_shared_family_facets(
     spec = await build_catalog_query_spec(db, q=marker, category_key="transceivers")
     page = await query_catalog_items(db, spec, limit=20, offset=0)
     assert {r.record.item.id for r in page.items} == {short, boundary, far}
+
+    ordinary_spec = await build_catalog_query_spec(
+        db,
+        q=marker,
+        category_key="transceiver_ethernet",
+    )
+    ordinary_page = await query_catalog_items(
+        db,
+        ordinary_spec,
+        limit=20,
+        offset=0,
+    )
+    assert {
+        record.record.item.id
+        for record in ordinary_page.items
+    } == {short}
+
+    scope = await equipment_scope(
+        db,
+        "transceiver_ethernet",
+        False,
+    )
+    scoped_ids = set(
+        (
+            await db.scalars(
+                select(Item.id).where(
+                    *scope,
+                    Item.name == marker,
+                )
+            )
+        ).all()
+    )
+    assert scoped_ids == {short}
+
     spec = await build_catalog_query_spec(
         db, q=marker, category_key="transceivers", long_range=True
     )
@@ -65,6 +103,76 @@ async def test_hierarchy_long_range_and_shared_family_facets(
         db, q=marker, category_key="transceivers", filter_expressions=["reach_m:gte:2000"]
     )
     assert (await query_catalog_items(db, spec, limit=20, offset=0)).total == 2
+
+
+async def test_transceiver_speed_sort_is_numeric(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    marker = uuid.uuid4().hex
+
+    slow = await transceiver(
+        db,
+        marker,
+        "до 300 м",
+        speed="1 Гбит/с",
+    )
+    medium = await transceiver(
+        db,
+        marker,
+        "до 300 м",
+        speed="10 Гбит/с",
+    )
+    fast = await transceiver(
+        db,
+        marker,
+        "до 300 м",
+        speed="25 Гбит/с",
+    )
+
+    ascending = await build_catalog_query_spec(
+        db,
+        q=marker,
+        category_key="transceiver_ethernet",
+        sort="speed",
+        order="asc",
+    )
+    ascending_page = await query_catalog_items(
+        db,
+        ascending,
+        limit=20,
+        offset=0,
+    )
+    assert [
+        record.record.item.id
+        for record in ascending_page.items
+    ] == [
+        slow,
+        medium,
+        fast,
+    ]
+
+    descending = await build_catalog_query_spec(
+        db,
+        q=marker,
+        category_key="transceiver_ethernet",
+        sort="speed",
+        order="desc",
+    )
+    descending_page = await query_catalog_items(
+        db,
+        descending,
+        limit=20,
+        offset=0,
+    )
+    assert [
+        record.record.item.id
+        for record in descending_page.items
+    ] == [
+        fast,
+        medium,
+        slow,
+    ]
 
 
 async def test_scoped_facets_free_text_and_pagination(

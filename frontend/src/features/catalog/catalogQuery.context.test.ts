@@ -167,3 +167,35 @@ describe("catalog attribute presentation", () => {
     );
   });
 });
+
+describe("catalog speed sort URL state", () => {
+  it("сохраняет explicit speed desc", () => {
+    const defaultSort =
+      catalogDefaultSort(
+        "transceiver_ethernet",
+      );
+
+    const state =
+      readCatalogViewState(
+        new URLSearchParams(
+          "sort=speed&order=desc",
+        ),
+        defaultSort,
+      );
+
+    expect(state.sort).toBe("speed");
+    expect(state.order).toBe("desc");
+
+    const params =
+      catalogViewStateToSearchParams(
+        state,
+        defaultSort,
+      );
+
+    expect(params.get("sort"))
+      .toBe("speed");
+
+    expect(params.get("order"))
+      .toBe("desc");
+  });
+});

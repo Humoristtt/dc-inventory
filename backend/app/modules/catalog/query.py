@@ -8,7 +8,8 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from typing import Any, cast
 
-from sqlalchemy import exists, func, literal, or_, select
+from sqlalchemy import Numeric, exists, func, literal, or_, select
+from sqlalchemy import cast as sql_cast
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from sqlalchemy.sql.elements import ColumnElement
@@ -53,6 +54,11 @@ MAX_FACET_VALUE_LIMIT = 100
 MAX_SEARCH_TOKENS = 12
 MAX_QUERY_VALUES = 50
 MAX_FILTER_EXPRESSION_LENGTH = 2048
+
+TRANSCEIVER_LEAF_KEYS = frozenset({
+    "transceiver_ethernet",
+    "transceiver_fc",
+})
 
 
 @dataclass(frozen=True, slots=True)
@@ -314,7 +320,7 @@ def long_range_predicate() -> ColumnElement[bool]:
         .join(CategoryAttribute, CategoryAttribute.id == ItemAttributeValue.category_attribute_id)
         .join(Category, Category.id == CategoryAttribute.category_id)
         .where(
-            Category.key.in_(["transceiver_ethernet", "transceiver_fc"]),
+            Category.key.in_(TRANSCEIVER_LEAF_KEYS),
             CategoryAttribute.key == "reach_m",
             ItemAttributeValue.integer_value >= 2000,
         )
@@ -335,6 +341,8 @@ async def equipment_scope(
     predicates: list[ColumnElement[bool]] = [Item.category_id.in_(ids)] if key else []
     if long_range:
         predicates.append(long_range_predicate())
+    elif key in TRANSCEIVER_LEAF_KEYS:
+        predicates.append(~long_range_predicate())
     return predicates
 
 
@@ -352,6 +360,35 @@ def _available(inventory: Subquery) -> ColumnElement[int]:
 
 def _total(inventory: Subquery) -> ColumnElement[int]:
     return _available(inventory)
+
+
+def _speed_sort_value() -> Any:
+    speed_text = (
+        select(ItemAttributeValue.text_value)
+        .join(
+            CategoryAttribute,
+            CategoryAttribute.id == ItemAttributeValue.category_attribute_id,
+        )
+        .where(
+            ItemAttributeValue.item_id == Item.id,
+            CategoryAttribute.key == "speed",
+        )
+        .limit(1)
+        .correlate(Item)
+        .scalar_subquery()
+    )
+    numeric_text = func.replace(
+        func.substring(
+            speed_text,
+            r"[0-9]+[.,]?[0-9]*",
+        ),
+        ",",
+        ".",
+    )
+    return sql_cast(
+        numeric_text,
+        Numeric(20, 6),
+    )
 
 
 def _escaped_contains_pattern(value: str) -> str:
@@ -506,6 +543,8 @@ def _item_predicates(
         predicates.append(Item.category_id.in_(spec.category_ids))
     if spec.long_range:
         predicates.append(long_range_predicate())
+    elif spec.category_key in TRANSCEIVER_LEAF_KEYS:
+        predicates.append(~long_range_predicate())
     if spec.manufacturer_ids and "manufacturer" not in exclude:
         predicates.append(Item.manufacturer_id.in_(spec.manufacturer_ids))
     if spec.availability != Availability.ANY and "availability" not in exclude:
@@ -568,6 +607,12 @@ def _ordered_statement(
     if spec.sort == ItemSort.TOTAL:
         return statement.order_by(
             direction(_total(inventory)),
+            direction(Item.normalized_name),
+            direction(Item.id),
+        )
+    if spec.sort == ItemSort.SPEED:
+        return statement.order_by(
+            direction(_speed_sort_value()).nulls_last(),
             direction(Item.normalized_name),
             direction(Item.id),
         )

@@ -298,3 +298,16 @@ schema/API/UI.
 
 Историческое развитие сохраняется в docs/HISTORY.md, старых migrations и
 migration regression tests.
+
+## Catalog functional follow-up — 2026-09-11
+
+- [x] server-side сортировка каталога по `speed`;
+- [x] быстрые sort chips `Наличие / Скорость` для трансиверов;
+- [x] strict separation: ordinary Ethernet/FC `< 2000 м`,
+  `Дальние >= 2000 м`;
+- [x] catalog и inventory equipment scopes используют одинаковую границу;
+- [x] backend/frontend regression coverage;
+- [x] PostgreSQL integration acceptance;
+- [x] canonical browser E2E acceptance;
+- [ ] PR/required CI;
+- [ ] production deploy + real Telegram acceptance.

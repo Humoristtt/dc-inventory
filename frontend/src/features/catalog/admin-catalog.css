@@ -103,37 +103,6 @@
 .catalog-form__label b { color: var(--color-red); }
 .catalog-form__label small { color: var(--color-muted); font-size: 9px; font-weight: 550; }
 
-.catalog-form__field input,
-.catalog-form__field select,
-.catalog-form__field textarea,
-.inline-manufacturer input {
-  width: 100%;
-  min-width: 0;
-  border: 1px solid var(--color-border);
-  border-radius: var(--form-control-radius);
-  background: #fff;
-  color: var(--color-ink);
-  font-size: var(--form-control-font-size);
-}
-
-.catalog-form__field input,
-.catalog-form__field select,
-.inline-manufacturer input {
-  height: var(--form-control-height);
-  min-height: var(--form-control-height);
-  padding: 0 var(--form-control-padding-inline);
-}
-
-.catalog-form__field textarea {
-  min-height: var(--form-textarea-min-height);
-  padding: 14px var(--form-control-padding-inline);
-  resize: vertical;
-  line-height: 1.4;
-}
-
-.catalog-form__field [aria-invalid="true"] { border-color: var(--color-red); }
-.catalog-form__field select:disabled { opacity: 0.7; }
-
 .catalog-form__error {
   color: var(--color-wine);
   font-size: 10px;
@@ -154,13 +123,6 @@
   gap: 7px;
 }
 
-.catalog-form__inline-button {
-  min-height: 44px;
-  padding-inline: 12px;
-  font-size: 11px;
-  white-space: nowrap;
-}
-
 .manufacturer-picker {
   display: grid;
   gap: 7px;
@@ -168,6 +130,13 @@
 
 .manufacturer-picker__more {
   justify-self: start;
+}
+
+.catalog-form__manufacturer-create {
+  display: flex;
+  width: max-content;
+  max-width: 100%;
+  margin: 10px 0 0 auto;
 }
 
 .catalog-form__inline-error {
@@ -192,7 +161,7 @@
 
 .catalog-form__boolean-row {
   display: flex;
-  min-height: 44px;
+  min-height: var(--form-control-height);
   align-items: center;
   justify-content: space-between;
   gap: 10px;
@@ -251,7 +220,6 @@
 .duplicate-card small { margin-top: 4px; color: var(--color-wine); font-size: 9px; }
 
 .admin-item-actions__buttons { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.button--danger { background: var(--color-red); color: #fff; }
 .admin-item-actions__error { margin: 10px 0 0; color: var(--color-wine); font-size: 10px; }
 
 @media (min-width: 620px) {
@@ -261,7 +229,6 @@
 @media (max-width: 370px) {
   .catalog-form__section { padding: 14px; }
   .catalog-form__inline-control { grid-template-columns: minmax(0, 1fr); }
-  .catalog-form__inline-button { width: 100%; }
   .catalog-form__actions { grid-template-columns: 1fr; }
   .admin-item-actions__buttons { grid-template-columns: 1fr; }
 }
@@ -370,21 +337,6 @@
 
   .catalog-form__empty {
     font-size: 12px;
-  }
-
-  .catalog-form__field input,
-  .catalog-form__field select,
-  .inline-manufacturer input {
-    height: var(--form-control-height);
-    min-height: var(--form-control-height);
-    padding-inline: var(--form-control-padding-inline);
-    font-size: var(--form-control-font-size);
-  }
-
-  .catalog-form__field textarea {
-    min-height: var(--form-textarea-min-height);
-    padding: 14px var(--form-control-padding-inline);
-    font-size: var(--form-control-font-size);
   }
 
   .catalog-form__submit {

@@ -171,7 +171,7 @@ export function AdminUsersPage() {
 
       <div className="admin-users-page__body">
         <form
-          className="admin-users__filters"
+          className="admin-users__filters form-surface"
           onSubmit={submitSearch}
         >
           <label>
@@ -207,7 +207,7 @@ export function AdminUsersPage() {
           </label>
 
           <button
-            className="admin-users__button"
+            className="button button--dark"
             type="submit"
           >
             Найти
@@ -273,8 +273,8 @@ export function AdminUsersPage() {
                     <button
                       className={
                         user.access_status === "APPROVED"
-                          ? "admin-users__button admin-users__button--danger"
-                          : "admin-users__button"
+                          ? "button button--danger"
+                          : "button button--dark"
                       }
                       disabled={accessMutation.isPending}
                       onClick={() => changeAccess(user)}
@@ -287,7 +287,7 @@ export function AdminUsersPage() {
                   ) : null}
 
                   <button
-                    className="admin-users__button admin-users__button--secondary"
+                    className="button button--ghost"
                     onClick={() =>
                       setHistoryUserId(
                         historyUserId === user.id

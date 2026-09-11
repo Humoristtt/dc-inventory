@@ -503,7 +503,7 @@ export function ItemFormPage() {
       <div className="catalog-page__body">
         <form
           autoComplete="off"
-          className="catalog-form"
+          className="catalog-form form-surface"
           onSubmit={(event) => {
             event.preventDefault();
 
@@ -728,7 +728,7 @@ export function ItemFormPage() {
                   </label>
 
                   <button
-                    className="button"
+                    className="button button--dark catalog-form__manufacturer-create"
                     disabled={
                       !manufacturerName.trim()
                       || makerMutation.isPending

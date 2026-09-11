@@ -1036,3 +1036,23 @@ acceptance ещё не заявлены выполненными.
   ломает build/CI.
 - Header/toolbar migration завершена; shared form-control/button migration
   остаётся следующим этапом design-system refactor.
+
+### Shared button and form-control migration
+
+- Base `.button`, `.icon-button` and `.section-kicker` ownership moved from
+  `global.css` to `shared/ui/design-system.css`.
+- Removed duplicate `--radius-control`; ordinary buttons and ordinary form
+  controls now share `--form-control-height` and `--form-control-radius`.
+- Added canonical `.form-surface` contract and migrated Catalog item form,
+  Admin users filters, inventory movement form, Locations editor and Movements
+  filters.
+- Admin users and Access Gate actions now use shared semantic button variants
+  instead of independent button geometry.
+- Removed feature-level base input/select/textarea geometry from catalog,
+  admin and inventory CSS.
+- Removed the desktop-only warehouse textarea `110px` override; textarea size
+  now follows the responsive shared token.
+- `Создать производителя` uses the normal shared button contract and is
+  explicitly aligned to the right in the catalog form.
+- `check:design-system` now rejects the known legacy control ownership patterns
+  and missing canonical form-surface boundaries.

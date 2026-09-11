@@ -251,3 +251,160 @@
 .compact-brand--compact .compact-brand__title {
   font-size: clamp(13px, 1.4vw, 17px);
 }
+
+
+/* Shared application controls. */
+
+.button {
+  display: inline-flex;
+  min-height: var(--form-control-height);
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding:
+    0
+    max(
+      18px,
+      var(--form-control-padding-inline)
+    );
+  border: 1px solid transparent;
+  border-radius: var(--form-control-radius);
+  cursor: pointer;
+  font-size: var(--font-control);
+  font-weight: 700;
+  line-height: 1.1;
+  text-align: center;
+  text-decoration: none;
+}
+
+.button:disabled {
+  cursor: wait;
+  opacity: 0.52;
+}
+
+.button--dark {
+  background: var(--color-ink);
+  color: #fff;
+}
+
+.button--accent {
+  background: var(--color-acid);
+  color: var(--color-ink);
+}
+
+.button--ghost {
+  border-color: var(--color-border);
+  background: transparent;
+  color: var(--color-ink);
+}
+
+.button--danger {
+  background: var(--color-red);
+  color: #fff;
+}
+
+.button--load-more {
+  width: 100%;
+  margin-top: 12px;
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-ink);
+}
+
+/*
+ * Compact icon controls are an explicit exception to normal
+ * form-control height.
+ */
+.icon-button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid var(--color-border);
+  border-radius: 50%;
+  background: var(--color-surface);
+  color: var(--color-ink);
+  cursor: pointer;
+  font-size: 22px;
+  line-height: 1;
+  text-decoration: none;
+}
+
+.icon-button--light {
+  border-color: rgb(255 255 255 / 35%);
+  background: rgb(255 255 255 / 12%);
+  color: #fff;
+}
+
+.section-kicker {
+  display: block;
+  color: inherit;
+  font-size: var(--font-kicker);
+  font-weight: 750;
+  letter-spacing: 0.09em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+/*
+ * Canonical form surface.
+ *
+ * Forms opt in once at their container boundary. Individual feature
+ * styles own layout only; they do not own normal input/select/textarea
+ * geometry.
+ */
+.form-surface label {
+  font-size: var(--form-label-font-size);
+}
+
+.form-surface :where(
+  input:not([type="checkbox"]):not([type="radio"]),
+  select,
+  textarea
+) {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--form-control-radius);
+  background: #fff;
+  color: var(--color-ink);
+  font-size: var(--form-control-font-size);
+}
+
+.form-surface :where(
+  input:not([type="checkbox"]):not([type="radio"]),
+  select
+) {
+  height: var(--form-control-height);
+  min-height: var(--form-control-height);
+  padding:
+    0
+    var(--form-control-padding-inline);
+}
+
+.form-surface textarea {
+  min-height: var(--form-textarea-min-height);
+  padding:
+    14px
+    var(--form-control-padding-inline);
+  resize: vertical;
+  line-height: 1.4;
+}
+
+.form-surface :where(
+  input,
+  select,
+  textarea
+)[aria-invalid="true"] {
+  border-color: var(--color-red);
+}
+
+.form-surface :where(
+  input,
+  select,
+  textarea
+):disabled {
+  opacity: 0.7;
+}

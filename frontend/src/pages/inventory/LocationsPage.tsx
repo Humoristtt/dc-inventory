@@ -316,7 +316,7 @@ export function LocationsPage() {
             </header>
 
             <form
-              className="warehouse-form location-editor__form"
+              className="warehouse-form location-editor__form form-surface"
               onSubmit={(event) => {
                 event.preventDefault();
 

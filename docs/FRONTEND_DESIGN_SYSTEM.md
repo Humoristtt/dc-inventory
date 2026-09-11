@@ -469,3 +469,23 @@ Static gate не заменяет visual/browser acceptance.
 общий contract, этот файл менять не требуется.
 
 Новые общие primitives нельзя вводить только кодом без документации.
+
+### Implemented control ownership
+
+Normal application buttons and ordinary form controls now have one visual
+owner: `frontend/src/shared/ui/design-system.css`.
+
+The implementation contract is:
+
+- `.button` uses the same responsive height/radius/font scale as ordinary form
+  controls;
+- semantic button variants are `dark`, `accent`, `ghost` and `danger`;
+- `.form-surface` is the opt-in boundary for ordinary `input`, `select` and
+  `textarea` geometry;
+- feature CSS owns layout around controls, not their base height, radius,
+  border, padding or font size;
+- icon buttons, toolbar controls, search controls, switches and filter-specific
+  range controls remain explicit semantic exceptions rather than silently
+  redefining the ordinary form-control contract;
+- `--form-control-radius` is the only ordinary control-radius token;
+  the duplicate `--radius-control` token is removed.

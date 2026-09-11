@@ -126,6 +126,89 @@ for (const path of pageFiles) {
   }
 }
 
+const tokenStyles = readFileSync(
+  join(src, "app/styles/tokens.css"),
+  "utf8",
+);
+
+if (tokenStyles.includes("--radius-control")) {
+  violations.push(
+    "src/app/styles/tokens.css: duplicate --radius-control semantic token",
+  );
+}
+
+const globalStyles = readFileSync(
+  join(src, "app/styles/global.css"),
+  "utf8",
+);
+
+for (const selector of [
+  ".button {",
+  ".icon-button {",
+  ".section-kicker {",
+]) {
+  if (globalStyles.includes(selector)) {
+    violations.push(
+      `src/app/styles/global.css: shared UI selector ${selector} outside shared/ui`,
+    );
+  }
+}
+
+const forbiddenFeatureControlTokens = [
+  ".catalog-form__field input",
+  ".admin-users__filters input",
+  ".admin-users__button",
+  ".warehouse-form input",
+  ".location-editor__form input",
+];
+
+for (const path of files) {
+  if (!path.endsWith(".css")) {
+    continue;
+  }
+
+  if (resolve(path) === canonicalCss) {
+    continue;
+  }
+
+  const content = readFileSync(
+    path,
+    "utf8",
+  );
+
+  for (
+    const token
+    of forbiddenFeatureControlTokens
+  ) {
+    if (content.includes(token)) {
+      violations.push(
+        `${relative(root, path)}: base control geometry ${token} outside shared/ui`,
+      );
+    }
+  }
+}
+
+const requiredFormSurfaces = [
+  "pages/catalog/ItemFormPage.tsx",
+  "pages/admin/AdminUsersPage.tsx",
+  "pages/inventory/LocationsPage.tsx",
+  "pages/inventory/MovementsPage.tsx",
+  "features/inventory/ItemInventoryPanel.tsx",
+];
+
+for (const relativePath of requiredFormSurfaces) {
+  const content = readFileSync(
+    join(src, relativePath),
+    "utf8",
+  );
+
+  if (!content.includes("form-surface")) {
+    violations.push(
+      `src/${relativePath}: canonical form-surface contract missing`,
+    );
+  }
+}
+
 const main = readFileSync(
   join(src, "main.tsx"),
   "utf8",

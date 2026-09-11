@@ -41,7 +41,6 @@
     sans-serif;
 
   --radius-card: 22px;
-  --radius-control: 14px;
   --page-inline: clamp(14px, 3.8vw, 28px);
   --page-block: clamp(16px, 3vh, 28px);
   --app-shell-width: 1920px;

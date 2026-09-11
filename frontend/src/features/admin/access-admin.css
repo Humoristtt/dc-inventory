@@ -50,46 +50,9 @@
 
 .admin-users__filters label {
   display: grid;
-  gap: 6px;
-  font-size: 12px;
-  font-weight: 650;
-}
-
-.admin-users__filters input,
-.admin-users__filters select {
-  width: 100%;
-  min-height: 44px;
-  padding: 10px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: var(--color-surface);
-  color: var(--color-ink);
-  font: inherit;
-}
-
-.admin-users__button {
-  min-height: 42px;
-  padding: 9px 13px;
-  border: 1px solid var(--color-border);
-  border-radius: 10px;
-  background: var(--color-ink);
-  color: #fff;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.admin-users__button--secondary {
-  background: var(--color-surface);
-  color: var(--color-ink);
-}
-
-.admin-users__button--danger {
-  background: #8f2020;
-}
-
-.admin-users__button:disabled {
-  opacity: 0.55;
+  gap: 7px;
+  font-size: var(--form-label-font-size);
+  font-weight: 680;
 }
 
 .admin-users__list {

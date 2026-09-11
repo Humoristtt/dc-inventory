@@ -45,7 +45,7 @@ export function ItemInventoryPanel({itemId, archived = false}: {itemId: string; 
     {locations.isError ? <p role="alert">Не удалось загрузить места хранения. <button onClick={() => void locations.refetch()}>Повторить</button></p> : null}
     <div className="warehouse-actions">{(Object.keys(actionNames) as Action[]).filter(key => auth.data?.user.role === "ADMIN" || key === "ISSUE" || key === "RETURN").filter(key => !archived || key !== "ISSUE" && key !== "RECEIPT").map(key => <button type="button" className="button button--dark" key={key} disabled={summary.isPending || summary.isError || locations.isError || locations.isPending || mutation.isPending} onClick={() => {setAction(key); setSource(""); setDestination(""); setQuantity("1"); setNotice(""); changed();}}>{actionNames[key]}</button>)}</div>
     {notice ? <p role="status">{notice} <Link to="/movements">Движения</Link></p> : null}
-    {action ? <form className="warehouse-form" onSubmit={event => {event.preventDefault(); if(valid && !mutation.isPending) mutation.mutate();}}>
+    {action ? <form className="warehouse-form form-surface" onSubmit={event => {event.preventDefault(); if(valid && !mutation.isPending) mutation.mutate();}}>
       <h3>{actionNames[action]}</h3>
       <fieldset disabled={mutation.isPending}>
       {needsSource ? <label>Откуда<select required value={sourceId} onChange={event => {setSource(event.target.value); setDestination(""); changed();}}><option value="">Выберите место хранения</option>{stocked.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select><small>Доступно: {available}</small></label> : null}

@@ -156,7 +156,7 @@ export function MovementsPage() {
       />
 
       <div className="catalog-page__body">
-        <div className="history-filters">
+        <div className="history-filters form-surface">
           <label>
             Период
             <select

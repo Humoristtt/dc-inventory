@@ -179,7 +179,7 @@ function RequestAccessScreen({
       support={support}
       action={
         <button
-          className="access-gate__button"
+          className="button button--dark access-gate__button"
           disabled={pending}
           onClick={onRequest}
           type="button"
@@ -223,7 +223,7 @@ function RejectedAccessScreen({
       support={support}
       action={
         <button
-          className="access-gate__button"
+          className="button button--dark access-gate__button"
           disabled={pending}
           onClick={onRequest}
           type="button"
@@ -284,7 +284,7 @@ function ErrorScreen({
         title="Не удалось загрузить Telegram"
         action={
           <button
-            className="access-gate__button"
+            className="button button--dark access-gate__button"
             onClick={retry}
             type="button"
           >
@@ -319,7 +319,7 @@ function ErrorScreen({
       eyebrow="Spikatel Inventory"
       title="Не удалось проверить доступ"
       action={
-        <button className="access-gate__button" onClick={retry} type="button">
+        <button className="button button--dark access-gate__button" onClick={retry} type="button">
           Повторить
         </button>
       }

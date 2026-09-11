@@ -114,8 +114,14 @@
 .warehouse-actions { display: flex; flex-wrap: wrap; gap: 0.6rem; margin-block: 1rem; }
 .warehouse-form { margin-top: 1rem; }
 .warehouse-form fieldset { border: 0; padding: 0; margin: 0; }
-.warehouse-form label, .history-filters label { display: grid; gap: 0.4rem; margin-block: 0.8rem; font-size: 0.9rem; }
-.warehouse-form input, .warehouse-form select, .warehouse-form textarea, .history-filters select { width: 100%; min-height: 44px; padding: 0.75rem; border: 1px solid #ccd2d8; border-radius: 10px; background: #fff; color: #15202b; font: inherit; }
+.warehouse-form label,
+.history-filters label {
+  display: grid;
+  gap: 7px;
+  margin-block: 0.8rem;
+  font-size: var(--form-label-font-size);
+  font-weight: 680;
+}
 .history-filters { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 0 0.75rem; }
 .movement-entry { padding: 1rem 0; border-bottom: 1px solid #e3e6e8; }
 .movement-entry header { display: flex; flex-wrap: wrap; gap: 0.5rem; justify-content: space-between; font-size: 0.8rem; color: #52616d; }
@@ -148,30 +154,8 @@
 
   .warehouse-form label,
   .history-filters label {
-    gap: 0.55rem;
+    gap: 7px;
     margin-block: 1rem;
-    font-size: 1.05rem;
-  }
-
-  .warehouse-form input,
-  .warehouse-form select,
-  .history-filters select {
-    height: var(--form-control-height);
-    min-height: var(--form-control-height);
-    padding: 0 var(--form-control-padding-inline);
-    border-radius: var(--form-control-radius);
-    font-size: var(--form-control-font-size);
-  }
-
-  .warehouse-form textarea {
-    min-height: var(--form-textarea-min-height);
-    padding: 14px var(--form-control-padding-inline);
-    border-radius: var(--form-control-radius);
-    font-size: var(--form-control-font-size);
-  }
-
-  .warehouse-form textarea {
-    min-height: 110px;
   }
 
   .history-filters {
@@ -310,33 +294,6 @@
   font-weight: 680;
 }
 
-.location-editor__form input,
-.location-editor__form select,
-.location-editor__form textarea {
-  width: 100%;
-  min-width: 0;
-  border:
-    1px solid var(--color-border);
-  border-radius: var(--form-control-radius);
-  background: #fff;
-  color: var(--color-ink);
-  font-size: var(--form-control-font-size);
-}
-
-.location-editor__form input,
-.location-editor__form select {
-  height: var(--form-control-height);
-  min-height: var(--form-control-height);
-  padding: 0 var(--form-control-padding-inline);
-}
-
-.location-editor__form textarea {
-  min-height: var(--form-textarea-min-height);
-  padding: 14px var(--form-control-padding-inline);
-  resize: vertical;
-  line-height: 1.4;
-}
-
 .location-editor__error {
   margin: 14px 0 0;
   padding: 11px 12px;
@@ -412,16 +369,6 @@
 
   .location-editor__wide {
     grid-column: 1 / -1;
-  }
-
-  .location-editor__form input,
-  .location-editor__form select {
-    height: var(--form-control-height);
-    min-height: var(--form-control-height);
-  }
-
-  .location-editor__form textarea {
-    min-height: var(--form-textarea-min-height);
   }
 
   .location-editor__footer {

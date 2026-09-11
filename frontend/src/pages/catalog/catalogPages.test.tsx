@@ -815,3 +815,198 @@ it("возврат из detail восстанавливает search и filter U
   expect(await screen.findByRole("searchbox", { name: "Поиск внутри категории" })).toHaveValue("needle");
   expect(screen.getByRole("button", { name: /Фильтры/ })).toHaveTextContent("1");
 });
+
+it("catalog form отдаёт validation нашей русской форме, а не browser bubble", async () => {
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "/api/auth/me") {
+        return jsonResponse({
+          user: {
+            id: "admin-1",
+            telegram_user_id: 1001,
+            username: "admin",
+            first_name: "Admin",
+            last_name: null,
+            role: "ADMIN",
+            access_status: "APPROVED",
+          },
+          support: {
+            username: "support",
+            url: "https://t.me/support",
+          },
+        });
+      }
+
+      return catalogFetch(input);
+    },
+  );
+
+  vi.stubGlobal(
+    "fetch",
+    fetchMock,
+  );
+
+  const { container } = renderRoutes(
+    "/catalog/new",
+    <TelegramAccessGate>
+      <ApplicationRoutes />
+    </TelegramAccessGate>,
+  );
+
+  expect(
+    await screen.findByRole(
+      "heading",
+      {
+        name:
+          "Добавить оборудование",
+      },
+    ),
+  ).toBeInTheDocument();
+
+  const form =
+    container.querySelector(
+      "form.catalog-form",
+    );
+
+  expect(form).not.toBeNull();
+  expect(form).toHaveAttribute(
+    "novalidate",
+  );
+});
+
+it("filter и sort не заставляют Back разматывать действия внутри категории", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(catalogFetch),
+  );
+
+  const client = createClient();
+
+  render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter
+        initialEntries={[
+          "/catalog/transceivers",
+          "/catalog/sfp",
+        ]}
+        initialIndex={1}
+      >
+        <ApplicationRoutes />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+
+  expect(
+    await screen.findByRole(
+      "heading",
+      { name: "MFM1T02A-LR" },
+    ),
+  ).toBeInTheDocument();
+
+  fireEvent.click(
+    screen.getByRole(
+      "button",
+      { name: "Фильтры" },
+    ),
+  );
+
+  fireEvent.click(
+    await screen.findByLabelText(
+      "В наличии",
+    ),
+  );
+
+  fireEvent.click(
+    screen.getByRole(
+      "button",
+      { name: "Применить" },
+    ),
+  );
+
+  fireEvent.click(
+    screen.getByRole(
+      "button",
+      { name: "Скорость" },
+    ),
+  );
+
+  await waitFor(() => {
+    expect(
+      screen.getByRole(
+        "button",
+        { name: "Скорость" },
+      ),
+    ).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  fireEvent.click(
+    screen.getByRole(
+      "button",
+      {
+        name: "Назад в каталог",
+      },
+    ),
+  );
+
+  expect(
+    await screen.findByRole(
+      "heading",
+      { name: "Трансиверы" },
+    ),
+  ).toBeInTheDocument();
+});
+
+it("новый поиск в категории включает relevance desc", async () => {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(catalogFetch),
+  );
+
+  renderRoutes(
+    "/catalog/sfp",
+    routesWithLocationProbe(),
+  );
+
+  await screen.findByRole(
+    "heading",
+    { name: "MFM1T02A-LR" },
+  );
+
+  vi.useFakeTimers();
+
+  fireEvent.change(
+    screen.getByRole(
+      "searchbox",
+      {
+        name:
+          "Поиск внутри категории",
+      },
+    ),
+    {
+      target: {
+        value: "sfp 25",
+      },
+    },
+  );
+
+  act(() =>
+    vi.advanceTimersByTime(320),
+  );
+
+  const params =
+    currentSearchParams();
+
+  expect(params.get("q"))
+    .toBe("sfp 25");
+
+  expect(params.get("sort"))
+    .toBe("relevance");
+
+  expect(params.get("order"))
+    .toBe("desc");
+});

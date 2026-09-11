@@ -28,6 +28,7 @@ class Availability(StrEnum):
 
 class ItemSort(StrEnum):
     NAME = "name"
+    RELEVANCE = "relevance"
     MANUFACTURER = "manufacturer"
     AVAILABLE = "available"
     TOTAL = "total"

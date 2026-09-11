@@ -292,3 +292,47 @@ async def test_facets_self_exclude_and_paginate_with_stock(warehouse_db: AsyncSe
     assert length_facet.minimum == length_facet.maximum == 7
     locations = (await query_catalog_facets(db, spec, only_key="location"))[0]
     assert {v.value: v.count for v in locations.values} == {seed[2]: 1, seed[3]: 1}
+
+
+async def test_search_relevance_prefers_stronger_attribute_match(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+
+    strong = await transceiver(
+        db,
+        uuid.uuid4().hex,
+        "до 100 м",
+        speed="25 Гбит/с",
+    )
+
+    weak = await transceiver(
+        db,
+        uuid.uuid4().hex,
+        "до 125 м",
+        speed="16 Гбит/с",
+    )
+
+    spec = await build_catalog_query_spec(
+        db,
+        q="sfp 25",
+        category_key="transceiver_ethernet",
+        sort="relevance",
+        order="desc",
+    )
+
+    page = await query_catalog_items(
+        db,
+        spec,
+        limit=20,
+        offset=0,
+    )
+
+    ids = [
+        record.record.item.id
+        for record in page.items
+    ]
+
+    assert strong in ids
+    assert weak in ids
+    assert ids.index(strong) < ids.index(weak)

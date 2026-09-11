@@ -16,6 +16,12 @@ export type SortOption =
 
 export const sortOptions: SortOption[] = [
   {
+    sort: "relevance",
+    order: "desc",
+    label: "По совпадению",
+    hint: "Лучшие → ниже",
+  },
+  {
     sort: "name",
     order: "asc",
     label: "По названию",
@@ -111,13 +117,20 @@ function supportsSpeedSort(
 export function sortOptionsForContext(
   categoryKey: string,
   longRange: boolean,
+  searchActive = false,
 ): SortOption[] {
   return sortOptions.filter(
     (option) =>
-      option.sort !== "speed"
-      || supportsSpeedSort(
-        categoryKey,
-        longRange,
+      (
+        option.sort !== "speed"
+        || supportsSpeedSort(
+          categoryKey,
+          longRange,
+        )
+      )
+      && (
+        option.sort !== "relevance"
+        || searchActive
       ),
   );
 }

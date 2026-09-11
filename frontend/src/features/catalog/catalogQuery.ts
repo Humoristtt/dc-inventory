@@ -55,6 +55,7 @@ export const defaultCatalogFilterState: CatalogFilterState = {
 
 const itemSorts = new Set<ItemSort>([
   "name",
+  "relevance",
   "manufacturer",
   "available",
   "total",
@@ -91,6 +92,8 @@ export function readCatalogViewState(
   params: URLSearchParams,
   defaultSort: CatalogSortState = defaultCatalogSort,
 ): CatalogViewState {
+  const q =
+    params.get("q")?.trim() ?? "";
   const availabilityValue = params.get("availability");
   const availability: Availability =
     availabilityValue === "IN_STOCK" || availabilityValue === "OUT_OF_STOCK"
@@ -102,19 +105,27 @@ export function readCatalogViewState(
   const explicitSort =
     sortValue !== null && itemSorts.has(sortValue);
 
+  const implicitSort: CatalogSortState =
+    q !== ""
+      ? {
+          sort: "relevance",
+          order: "desc",
+        }
+      : defaultSort;
+
   const sort = explicitSort
     ? sortValue
-    : defaultSort.sort;
+    : implicitSort.sort;
 
   const order: SortOrder =
     orderValue === "asc" || orderValue === "desc"
       ? orderValue
       : explicitSort
         ? "asc"
-        : defaultSort.order;
+        : implicitSort.order;
 
   return {
-    q: params.get("q")?.trim() ?? "",
+    q,
     status: statusValue === "ARCHIVED" ? "ARCHIVED" : "ACTIVE",
     manufacturerIds: uniqueSorted(params.getAll("manufacturer_id")),
     availability,

@@ -311,3 +311,15 @@ migration regression tests.
 - [x] canonical browser E2E acceptance;
 - [ ] PR/required CI;
 - [ ] production deploy + real Telegram acceptance.
+
+## Post-PR60 Telegram acceptance — 2026-09-11
+
+- [x] убрать native англоязычную browser validation из catalog form;
+- [x] вернуть More/category secondary copy в shared typography role;
+- [x] нормализовать DECIMAL presentation (`10.0000` → `10`,
+  `1.5000000000` → `1,5`) без изменения данных;
+- [x] page-local search/filter/sort state не создаёт history steps для Back;
+- [x] server-side search relevance: strongest match first;
+- [x] canonical production-shaped E2E acceptance;
+- [ ] PR/required CI;
+- [ ] production deploy + повторная real Telegram acceptance.

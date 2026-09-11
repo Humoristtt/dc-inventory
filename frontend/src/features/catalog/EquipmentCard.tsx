@@ -69,6 +69,7 @@ export function EquipmentCard({
                     attribute.key,
                     item.attributes[attribute.key],
                     attribute.unit,
+                    attribute.data_type,
                   )}
                 </dd>
               </div>

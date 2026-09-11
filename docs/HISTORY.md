@@ -1100,3 +1100,58 @@ acceptance ещё не заявлены выполненными.
   expose speed sorting; unrelated categories do not.
 - Quick-sort behavior remains `Наличие / Скорость` for transceivers and
   `Наличие / Название` elsewhere.
+
+### Post-PR60 Telegram acceptance findings
+
+Real Telegram/Desktop acceptance после production cutover PR #60 выявил
+четыре UX regressions, не пойманные pre-merge browser acceptance:
+
+- catalog create/edit позволял native Chromium validation показывать
+  англоязычный `Fill out this field` раньше application validation;
+- More-card secondary copy оставался на feature-local `11px`, несмотря на
+  design-system typography migration;
+- DECIMAL attributes, сериализованные API как строки, отображались с
+  техническим scale (`1.5000000000`, `10.0000`);
+- filter/sort query-state создавал отдельные browser-history entries, поэтому
+  Telegram Back сначала разматывал действия внутри страницы.
+
+Исправления:
+
+- catalog form использует `noValidate` и application-owned русскую validation;
+- secondary card descriptions используют `--font-meta`;
+- DECIMAL presentation удаляет trailing zero без изменения stored value;
+- search/filter/sort state внутри одной category route изменяет URL через
+  history replace; Back снова отражает переходы между страницами.
+
+Search relevance оставлена отдельным follow-up, потому что меняет server-side
+query ordering contract.
+
+### Search relevance after PR60 acceptance
+
+- Catalog search получает отдельный server-side `sort=relevance`.
+- Relevance считается в PostgreSQL до pagination, а не на уже загруженной
+  frontend page.
+- Ranking суммирует качество совпадений по каждому search token:
+  model/name имеют наибольший вес, затем manufacturer, затем searchable
+  attributes.
+- Для каждой поверхности действует порядок exact > prefix > substring;
+  numeric searchable attributes получают сильный exact-match score.
+- Новый поиск автоматически использует `relevance desc`, если пользователь
+  ещё не выбрал другую сортировку.
+- Более новая ручная сортировка (`Наличие`, `Скорость`, manufacturer и т.д.)
+  не перетирается delayed search commit.
+- При очистке поиска implicit relevance возвращается к category default sort.
+
+### Post-PR60 local acceptance closeout
+
+Local acceptance объединённого post-PR60 change set завершён:
+
+- frontend unit suite: 108/108 PASS;
+- typecheck/lint/design-system/build: PASS;
+- PostgreSQL 18 catalog integration: 16/16 PASS;
+- targeted search relevance regression: PASS;
+- canonical production-shaped Playwright:
+  79 passed / 12 skipped / 0 failed;
+- worktree после acceptance clean.
+
+Production остаётся на PR #60 revision до merge/required CI нового PR.

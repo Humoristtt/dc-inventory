@@ -38,7 +38,7 @@
 
 .more-card span {
   color: var(--color-muted);
-  font-size: 11px;
+  font-size: var(--font-meta);
   line-height: 1.45;
 }
 

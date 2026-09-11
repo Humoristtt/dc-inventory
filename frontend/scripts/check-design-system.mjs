@@ -209,6 +209,111 @@ for (const relativePath of requiredFormSurfaces) {
   }
 }
 
+function selectorBlocks(
+  content,
+  selector,
+) {
+  const marker = `${selector} {`;
+  const blocks = [];
+  let cursor = 0;
+
+  while (true) {
+    const start =
+      content.indexOf(
+        marker,
+        cursor,
+      );
+
+    if (start === -1) {
+      break;
+    }
+
+    const end =
+      content.indexOf(
+        "}",
+        start,
+      );
+
+    if (end === -1) {
+      break;
+    }
+
+    blocks.push(
+      content.slice(
+        start,
+        end + 1,
+      ),
+    );
+
+    cursor = end + 1;
+  }
+
+  return blocks;
+}
+
+for (
+  const [
+    relativePath,
+    selector,
+  ] of [
+    [
+      "features/admin/access-admin.css",
+      ".more-card span",
+    ],
+    [
+      "features/catalog/catalog.css",
+      ".category-tile p",
+    ],
+  ]
+) {
+  const content = readFileSync(
+    join(
+      src,
+      relativePath,
+    ),
+    "utf8",
+  );
+
+  const blocks =
+    selectorBlocks(
+      content,
+      selector,
+    );
+
+  if (blocks.length === 0) {
+    violations.push(
+      `src/${relativePath}: secondary typography selector ${selector} missing`,
+    );
+    continue;
+  }
+
+  if (
+    !blocks.some(
+      (block) =>
+        block.includes(
+          "font-size: var(--font-meta);",
+        ),
+    )
+  ) {
+    violations.push(
+      `src/${relativePath}: ${selector} must use --font-meta`,
+    );
+  }
+
+  for (const block of blocks) {
+    if (
+      block.includes("font-size:")
+      && !block.includes(
+        "font-size: var(--font-meta);",
+      )
+    ) {
+      violations.push(
+        `src/${relativePath}: ${selector} overrides shared secondary typography`,
+      );
+    }
+  }
+}
+
 const main = readFileSync(
   join(src, "main.tsx"),
   "utf8",

@@ -177,7 +177,14 @@ export function ItemDetailPage() {
               {visibleAttributes.map((attribute) => (
                 <div key={attribute.key}>
                   <dt>{attribute.label}</dt>
-                  <dd>{formatCatalogAttributeValue(attribute.key, item.attributes[attribute.key], attribute.unit)}</dd>
+                  <dd>
+                    {formatCatalogAttributeValue(
+                      attribute.key,
+                      item.attributes[attribute.key],
+                      attribute.unit,
+                      attribute.data_type,
+                    )}
+                  </dd>
                 </div>
               ))}
             </dl>

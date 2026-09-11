@@ -245,7 +245,7 @@ feature cycle.
 - [~] Frontend design-system architecture refactor перед следующим production cutover:
   - [x] провести source audit текущего visual ownership;
   - [x] зафиксировать canonical design-system contract;
-  - [ ] создать `frontend/src/shared/ui` как единственный shared visual layer;
+  - [x] создать `frontend/src/shared/ui` как единственный shared visual layer;
   - [ ] заменить независимые page headers единым `PageHeader`;
   - [ ] унифицировать Button / form-field / single-line control contracts;
   - [ ] удалить shared toolbar/header/control rules из feature CSS;

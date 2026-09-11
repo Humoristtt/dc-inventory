@@ -975,3 +975,17 @@ acceptance ещё не заявлены выполненными.
   чтобы документированный contract нельзя было незаметно нарушить следующим UX change.
 - Backend domain/schema, production safety gates и warehouse mutation semantics
   этим refactor не изменяются.
+
+### Shared UI foundation
+
+- Создан `frontend/src/shared/ui` как явный ownership boundary общего UI.
+- Добавлен canonical `PageHeader`; он инкапсулирует Spikatel brand toolbar,
+  Telegram fullscreen control, kicker, page title, optional back action,
+  actions и contextual header content.
+- Shared visual implementation вынесена в
+  `frontend/src/shared/ui/design-system.css`.
+- Shared stylesheet подключён из frontend application entrypoint, а не через
+  feature stylesheet.
+- На этом checkpoint страницы ещё намеренно не мигрированы: legacy headers
+  остаются до следующего атомарного migration step, чтобы новый shared
+  foundation можно было проверить независимо до удаления старого CSS.

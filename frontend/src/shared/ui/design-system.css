@@ -1,0 +1,147 @@
+/*
+ * Canonical shared visual primitives.
+ *
+ * Normative contract:
+ * docs/FRONTEND_DESIGN_SYSTEM.md
+ *
+ * Feature CSS may position shared primitives but must not redefine their
+ * base visual geometry.
+ */
+
+.ds-page-header {
+  position: relative;
+  display: grid;
+  overflow: hidden;
+  gap: 0;
+  padding:
+    calc(var(--safe-area-top) + 18px)
+    max(var(--page-inline), var(--safe-area-right))
+    22px
+    max(var(--page-inline), var(--safe-area-left));
+  background: var(--brand-header-background);
+  color: #fff;
+}
+
+.ds-page-header::after {
+  position: absolute;
+  right: -90px;
+  bottom: -110px;
+  width: 220px;
+  height: 220px;
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+}
+
+.ds-page-header__toolbar {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.ds-page-header__toolbar .compact-brand {
+  flex: 1 1 auto;
+}
+
+.ds-page-header__heading-row {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  min-width: 0;
+  grid-template-columns:
+    auto
+    minmax(0, 1fr)
+    auto;
+  align-items: center;
+  gap: 14px;
+  margin-top: 30px;
+}
+
+.ds-page-header__title {
+  min-width: 0;
+}
+
+.ds-page-header__title .section-kicker {
+  color: var(--color-acid);
+}
+
+.ds-page-header__title h1 {
+  max-width: 100%;
+  margin: 8px 0 0;
+  font-size: var(--font-page-title);
+  font-weight: 790;
+  letter-spacing: -0.06em;
+  line-height: 0.96;
+  overflow-wrap: anywhere;
+}
+
+.ds-page-header__description {
+  max-width: 680px;
+  margin-top: 10px;
+  color: rgb(255 255 255 / 82%);
+  font-size: var(--font-secondary);
+  line-height: 1.45;
+}
+
+.ds-page-header__actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.ds-page-header__content {
+  position: relative;
+  z-index: 2;
+  min-width: 0;
+  margin-top: 22px;
+}
+
+.ds-page-header__back {
+  flex: 0 0 auto;
+}
+
+@media (max-width: 679px) {
+  .ds-page-header {
+    padding-bottom: 18px;
+  }
+
+  .ds-page-header__heading-row {
+    grid-template-columns:
+      auto
+      minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .ds-page-header__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
+  .ds-page-header__content {
+    margin-top: 18px;
+  }
+}
+
+@media (min-width: 1100px) {
+  .ds-page-header {
+    padding-right: 34px;
+    padding-bottom: 30px;
+    padding-left: 34px;
+  }
+
+  .ds-page-header__heading-row {
+    gap: 20px;
+    margin-top: 38px;
+  }
+
+  .ds-page-header__content {
+    margin-top: 22px;
+  }
+}

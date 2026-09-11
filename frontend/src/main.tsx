@@ -8,6 +8,7 @@ import { AppProviders } from "./app/providers/AppProviders";
 import { preloadRouteForPath } from "./app/routeModules";
 import "./app/styles/tokens.css";
 import "./app/styles/global.css";
+import "./shared/ui/design-system.css";
 import { TelegramAccessGate } from "./features/auth/TelegramAccessGate";
 
 const root = document.getElementById("root");

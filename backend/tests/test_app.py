@@ -13,6 +13,7 @@ def test_api_docs_are_disabled_in_production() -> None:
             database_url=DATABASE_URL,
             telegram_bot_token="123456789:test-token",
             admin_telegram_user_id=123456789,
+            notification_telegram_user_id=987654321,
             telegram_webhook_secret="webhook-secret",
             telegram_web_app_url="https://app.spik-inventory.ru",
         )
@@ -59,6 +60,7 @@ def _production_app() -> FastAPI:
             database_url=DATABASE_URL,
             telegram_bot_token="123456789:test-token",
             admin_telegram_user_id=123456789,
+            notification_telegram_user_id=987654321,
             telegram_webhook_secret="webhook-secret",
             telegram_web_app_url="https://app.spik-inventory.ru",
         )
@@ -73,6 +75,7 @@ def test_production_trusted_hosts_follow_web_app_origin() -> None:
         database_url=DATABASE_URL,
         telegram_bot_token="123456789:test-token",
         admin_telegram_user_id=123456789,
+        notification_telegram_user_id=987654321,
         telegram_webhook_secret="webhook-secret",
         telegram_web_app_url="https://APP.SPIK-INVENTORY.RU",
     )

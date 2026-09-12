@@ -177,3 +177,91 @@ async def test_rbac_downgrade_fails_closed_for_unrepresentable_roles(
             text("SELECT role FROM users WHERE id = :id"), {"id": user_id}
         ) == role
     await engine.dispose()
+
+
+async def test_rbac_downgrade_fails_closed_for_role_audit_history(
+    migration_database: str,
+) -> None:
+    url = migration_database
+    alembic(url, "upgrade", HEAD)
+
+    engine = create_async_engine(url)
+
+    async with engine.begin() as db:
+        actor_id = await db.scalar(
+            text(
+                "INSERT INTO users (id, role, access_status) "
+                "VALUES (gen_random_uuid(), 'ADMIN', 'APPROVED') "
+                "RETURNING id"
+            )
+        )
+        target_id = await db.scalar(
+            text(
+                "INSERT INTO users (id, role, access_status) "
+                "VALUES (gen_random_uuid(), 'ENGINEER', 'APPROVED') "
+                "RETURNING id"
+            )
+        )
+        event_id = await db.scalar(
+            text(
+                "INSERT INTO user_role_events "
+                "(id, actor_user_id, target_user_id, "
+                "before_role, after_role) "
+                "VALUES "
+                "(gen_random_uuid(), :actor, :target, "
+                "'ENGINEER', 'ADMIN') "
+                "RETURNING id"
+            ),
+            {
+                "actor": actor_id,
+                "target": target_id,
+            },
+        )
+
+    output = alembic(
+        url,
+        "downgrade",
+        PREVIOUS,
+        success=False,
+    )
+
+    assert (
+        "user_role_events contains immutable audit history"
+        in output
+    )
+
+    async with engine.connect() as db:
+        assert (
+            await db.scalar(
+                text(
+                    "SELECT version_num "
+                    "FROM alembic_version"
+                )
+            )
+            == HEAD
+        )
+
+        assert (
+            await db.scalar(
+                text(
+                    "SELECT count(*) "
+                    "FROM user_role_events "
+                    "WHERE id = :event_id"
+                ),
+                {"event_id": event_id},
+            )
+            == 1
+        )
+
+        assert (
+            await db.scalar(
+                text(
+                    "SELECT role FROM users "
+                    "WHERE id = :target_id"
+                ),
+                {"target_id": target_id},
+            )
+            == "ENGINEER"
+        )
+
+    await engine.dispose()

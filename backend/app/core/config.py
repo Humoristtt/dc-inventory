@@ -33,7 +33,14 @@ class Settings(BaseSettings):
 
     telegram_bot_token: SecretStr | None = None
     telegram_init_data_max_age_seconds: int = Field(default=300, ge=30, le=3600)
+    # Legacy external key retained for deployment compatibility.
+    # Semantically this identifies the singleton recovery OWNER.
     admin_telegram_user_id: int | None = Field(default=None, gt=0, le=2**52)
+    notification_telegram_user_id: int | None = Field(
+        default=None,
+        gt=0,
+        le=2**52,
+    )
     support_telegram_username: str = Field(
         default="Humoristttt",
         pattern=r"^[A-Za-z][A-Za-z0-9_]{4,31}$",
@@ -85,9 +92,13 @@ class Settings(BaseSettings):
         le=365,
     )
 
-    @field_validator("admin_telegram_user_id", mode="before")
+    @field_validator(
+        "admin_telegram_user_id",
+        "notification_telegram_user_id",
+        mode="before",
+    )
     @classmethod
-    def empty_admin_telegram_user_id_is_none(cls, value: object) -> object:
+    def empty_telegram_user_id_is_none(cls, value: object) -> object:
         return None if value == "" else value
 
     @property
@@ -123,7 +134,7 @@ class Settings(BaseSettings):
         return f"https://t.me/{self.support_telegram_username}"
 
     model_config = SettingsConfigDict(
-        extra="ignore",
+        extra="forbid",
     )
 
 

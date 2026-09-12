@@ -255,7 +255,7 @@ SELECT format(
 \gexec
 
 SELECT format(
-    'GRANT SELECT, INSERT, UPDATE ON TABLE items TO %I',
+    'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE items TO %I',
     :'runtime_user'
 )
 \gexec

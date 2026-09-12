@@ -286,7 +286,9 @@ async function installApiMock(
       return json(route,{
         items:[...movements].reverse(),
         limit:30,
-        next_before_journal_seq:null,
+        cursor:"feed-page-1",
+        next_cursor:null,
+        snapshot_at:now,
       });
     }
     if(path === "/api/inventory/movements") {

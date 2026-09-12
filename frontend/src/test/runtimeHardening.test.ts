@@ -23,6 +23,9 @@ function locationBody(signature: string): string {
 
 function expectSecurityHeaders(body: string): void {
   expect(body).toContain(
+    'add_header Strict-Transport-Security "max-age=31536000" always;',
+  );
+  expect(body).toContain(
     "add_header X-Content-Type-Options nosniff always;",
   );
   expect(body).toContain(
@@ -37,6 +40,14 @@ function expectSecurityHeaders(body: string): void {
 }
 
 describe("production web hardening", () => {
+  it("keeps HSTS on all explicit security-header scopes", () => {
+    expect(
+      nginxConfig.match(
+        /add_header Strict-Transport-Security/g,
+      ),
+    ).toHaveLength(3);
+  });
+
   it("keeps CSP and Permissions-Policy on all explicit security-header scopes", () => {
     expect(
       nginxConfig.match(

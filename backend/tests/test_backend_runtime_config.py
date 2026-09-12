@@ -16,6 +16,7 @@ def production_settings(
         "database_url": DATABASE_URL,
         "telegram_bot_token": "123456789:test-token",
         "admin_telegram_user_id": 123456789,
+        "notification_telegram_user_id": 987654321,
         "telegram_webhook_secret": "webhook-secret",
         "telegram_web_app_url": ("https://app.spik-inventory.ru"),
     }
@@ -47,6 +48,11 @@ def test_valid_production_backend_config_is_accepted() -> None:
             "ADMIN_TELEGRAM_USER_ID",
         ),
         (
+            "notification_telegram_user_id",
+            None,
+            "NOTIFICATION_TELEGRAM_USER_ID",
+        ),
+        (
             "telegram_webhook_secret",
             None,
             "TELEGRAM_WEBHOOK_SECRET",
@@ -76,6 +82,7 @@ def test_missing_fields_are_reported_together() -> None:
     settings = production_settings(
         telegram_bot_token=None,
         admin_telegram_user_id=None,
+        notification_telegram_user_id=None,
         telegram_webhook_secret=None,
     )
 
@@ -86,6 +93,7 @@ def test_missing_fields_are_reported_together() -> None:
 
     assert "TELEGRAM_BOT_TOKEN" in message
     assert "ADMIN_TELEGRAM_USER_ID" in message
+    assert "NOTIFICATION_TELEGRAM_USER_ID" in message
     assert "TELEGRAM_WEBHOOK_SECRET" in message
 
 

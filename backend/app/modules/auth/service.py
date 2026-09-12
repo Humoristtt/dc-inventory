@@ -12,6 +12,7 @@ from sqlalchemy.orm import joinedload
 from app.core.config import Settings
 from app.modules.auth.models import AuthSession
 from app.modules.auth.telegram import ValidatedTelegramInitData
+from app.modules.identity.access_lifecycle import transition_user_access
 from app.modules.identity.enums import (
     AccessRequestStatus,
     UserAccessStatus,
@@ -26,6 +27,7 @@ from app.modules.identity.models import (
 from app.modules.identity.policy import IDENTITY_MANAGEMENT_LOCK_KEY
 
 SESSION_TOKEN_BYTES = 32
+MAX_ACTIVE_SESSIONS_PER_USER = 5
 
 
 @dataclass(frozen=True, slots=True)
@@ -49,6 +51,129 @@ def hash_session_token(raw_token: str) -> bytes:
     return hashlib.sha256(raw_token.encode("utf-8")).digest()
 
 
+async def reconcile_recovery_owner(
+    db: AsyncSession,
+    *,
+    user: User,
+    identity: TelegramIdentity,
+    settings: Settings,
+    now: datetime | None = None,
+) -> bool:
+    recovery_telegram_user_id = settings.admin_telegram_user_id
+
+    if (
+        recovery_telegram_user_id is None
+        or identity.telegram_user_id != recovery_telegram_user_id
+    ):
+        return False
+
+    if (
+        user.role == UserRole.OWNER
+        and user.access_status == UserAccessStatus.APPROVED
+        and user.approved_at is not None
+        and user.approved_by_user_id is not None
+        and await db.scalar(
+            select(AccessRequest.id)
+            .where(
+                AccessRequest.user_id == user.id,
+                AccessRequest.status == AccessRequestStatus.PENDING,
+            )
+            .limit(1)
+        )
+        is None
+    ):
+        return False
+
+    current_time = now or datetime.now(UTC)
+
+    await db.execute(
+        select(
+            func.pg_advisory_xact_lock(
+                IDENTITY_MANAGEMENT_LOCK_KEY
+            )
+        )
+    )
+
+    locked_user = await db.scalar(
+        select(User)
+        .where(User.id == user.id)
+        .with_for_update()
+    )
+    if locked_user is None:
+        raise RuntimeError(
+            "configured recovery user no longer exists"
+        )
+
+    conflicting_owner_id = await db.scalar(
+        select(User.id)
+        .where(
+            User.role == UserRole.OWNER,
+            User.id != locked_user.id,
+        )
+        .limit(1)
+    )
+    if conflicting_owner_id is not None:
+        raise RecoveryOwnerConflictError(
+            "configured recovery identity conflicts with existing owner"
+        )
+
+    changed = False
+
+    if locked_user.role != UserRole.OWNER:
+        before_role = locked_user.role
+        locked_user.role = UserRole.OWNER
+        db.add(
+            UserRoleEvent(
+                actor_user_id=locked_user.id,
+                target_user_id=locked_user.id,
+                before_role=before_role,
+                after_role=UserRole.OWNER,
+                occurred_at=current_time,
+            )
+        )
+        changed = True
+
+    access_event = transition_user_access(
+        db,
+        user=locked_user,
+        actor_user_id=locked_user.id,
+        access_status=UserAccessStatus.APPROVED,
+        now=current_time,
+    )
+    if access_event is not None:
+        changed = True
+    elif (
+        locked_user.approved_at is None
+        or locked_user.approved_by_user_id is None
+    ):
+        locked_user.approved_at = current_time
+        locked_user.approved_by_user_id = locked_user.id
+        changed = True
+
+    pending_request = (
+        await db.scalars(
+            select(AccessRequest)
+            .where(
+                AccessRequest.user_id == locked_user.id,
+                AccessRequest.status == AccessRequestStatus.PENDING,
+            )
+            .with_for_update()
+        )
+    ).first()
+
+    if pending_request is not None:
+        pending_request.status = AccessRequestStatus.APPROVED
+        pending_request.decided_at = current_time
+        pending_request.decided_by_user_id = locked_user.id
+        pending_request.decision_note = "configured recovery owner"
+        changed = True
+
+    if changed:
+        await db.flush()
+
+    return changed
+
+
 async def upsert_telegram_identity(
     db: AsyncSession,
     validated: ValidatedTelegramInitData,
@@ -69,28 +194,32 @@ async def upsert_telegram_identity(
         .options(joinedload(TelegramIdentity.user))
     )
 
-    bootstrap_admin = settings.admin_telegram_user_id == telegram_user_id
-
-    if bootstrap_admin:
-        await db.execute(
-            select(func.pg_advisory_xact_lock(IDENTITY_MANAGEMENT_LOCK_KEY))
-        )
+    is_recovery_identity = settings.admin_telegram_user_id == telegram_user_id
 
     if identity is None:
-        if bootstrap_admin and await db.scalar(
+        if is_recovery_identity:
+            await db.execute(
+                select(
+                    func.pg_advisory_xact_lock(
+                        IDENTITY_MANAGEMENT_LOCK_KEY
+                    )
+                )
+            )
+
+        if is_recovery_identity and await db.scalar(
             select(User.id).where(User.role == UserRole.OWNER).limit(1)
         ) is not None:
             raise RecoveryOwnerConflictError(
                 "configured recovery identity conflicts with existing owner"
             )
         user = User(
-            role=UserRole.OWNER if bootstrap_admin else UserRole.ENGINEER,
+            role=UserRole.OWNER if is_recovery_identity else UserRole.ENGINEER,
             access_status=(
                 UserAccessStatus.APPROVED
-                if bootstrap_admin
+                if is_recovery_identity
                 else UserAccessStatus.PENDING
             ),
-            approved_at=current_time if bootstrap_admin else None,
+            approved_at=current_time if is_recovery_identity else None,
         )
         identity = TelegramIdentity(
             user=user,
@@ -113,52 +242,14 @@ async def upsert_telegram_identity(
     identity.language_code = validated.user.language_code
     identity.last_auth_at = current_time
 
-    # ADMIN_TELEGRAM_USER_ID remains the permanent recovery/OWNER identity.
-    if bootstrap_admin:
-        conflicting_owner_id = await db.scalar(
-            select(User.id)
-            .where(
-                User.role == UserRole.OWNER,
-                User.id != user.id,
-            )
-            .limit(1)
+    if is_recovery_identity:
+        await reconcile_recovery_owner(
+            db,
+            user=user,
+            identity=identity,
+            settings=settings,
+            now=current_time,
         )
-        if conflicting_owner_id is not None:
-            raise RecoveryOwnerConflictError(
-                "configured recovery identity conflicts with existing owner"
-            )
-
-        if user.role != UserRole.OWNER:
-            before_role = user.role
-            user.role = UserRole.OWNER
-            db.add(
-                UserRoleEvent(
-                    actor_user_id=user.id,
-                    target_user_id=user.id,
-                    before_role=before_role,
-                    after_role=UserRole.OWNER,
-                    occurred_at=current_time,
-                )
-            )
-        user.access_status = UserAccessStatus.APPROVED
-        if user.approved_at is None:
-            user.approved_at = current_time
-
-        pending_statement = (
-            select(AccessRequest)
-            .where(
-                AccessRequest.user_id == user.id,
-                AccessRequest.status == AccessRequestStatus.PENDING,
-            )
-            .with_for_update()
-        )
-        pending_result = await db.scalars(pending_statement)
-        pending_request = pending_result.first()
-        if pending_request is not None:
-            pending_request.status = AccessRequestStatus.APPROVED
-            pending_request.decided_at = current_time
-            pending_request.decided_by_user_id = user.id
-            pending_request.decision_note = "configured recovery owner"
 
     await db.flush()
     return user, identity
@@ -172,16 +263,75 @@ async def issue_auth_session(
     now: datetime | None = None,
 ) -> IssuedAuthSession:
     current_time = now or datetime.now(UTC)
-    raw_token = secrets.token_urlsafe(SESSION_TOKEN_BYTES)
+
+    locked_user_id = await db.scalar(
+        select(User.id)
+        .where(User.id == user.id)
+        .with_for_update()
+    )
+
+    if locked_user_id is None:
+        raise RuntimeError(
+            "cannot issue session for missing user"
+        )
+
+    active_filter = (
+        AuthSession.user_id == user.id,
+        AuthSession.revoked_at.is_(None),
+        AuthSession.expires_at > current_time,
+    )
+
+    active_count = await db.scalar(
+        select(func.count(AuthSession.id)).where(
+            *active_filter
+        )
+    )
+
+    revoke_count = max(
+        0,
+        int(active_count or 0)
+        - MAX_ACTIVE_SESSIONS_PER_USER
+        + 1,
+    )
+
+    if revoke_count:
+        oldest_sessions = (
+            await db.scalars(
+                select(AuthSession)
+                .where(*active_filter)
+                .order_by(
+                    AuthSession.created_at.asc(),
+                    AuthSession.id.asc(),
+                )
+                .limit(revoke_count)
+                .with_for_update()
+            )
+        ).all()
+
+        for existing_session in oldest_sessions:
+            existing_session.revoked_at = current_time
+
+    raw_token = secrets.token_urlsafe(
+        SESSION_TOKEN_BYTES
+    )
+
     session = AuthSession(
         user_id=user.id,
         token_hash=hash_session_token(raw_token),
         created_at=current_time,
-        expires_at=current_time + timedelta(seconds=ttl_seconds),
+        expires_at=(
+            current_time
+            + timedelta(seconds=ttl_seconds)
+        ),
     )
+
     db.add(session)
     await db.flush()
-    return IssuedAuthSession(session=session, raw_token=raw_token)
+
+    return IssuedAuthSession(
+        session=session,
+        raw_token=raw_token,
+    )
 
 
 async def load_auth_context(

@@ -7,7 +7,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.db.session import get_db_session
-from app.modules.auth.service import AuthenticatedContext, load_auth_context
+from app.modules.auth.service import (
+    AuthenticatedContext,
+    RecoveryOwnerConflictError,
+    load_auth_context,
+    reconcile_recovery_owner,
+)
 from app.modules.identity.enums import UserAccessStatus
 from app.modules.identity.policy import Capability, has_capability
 
@@ -80,6 +85,25 @@ async def get_authenticated_context(
             detail="invalid or expired session",
         )
 
+    try:
+        recovery_changed = await reconcile_recovery_owner(
+            db,
+            user=context.user,
+            identity=context.identity,
+            settings=settings,
+        )
+        if recovery_changed:
+            await db.commit()
+    except RecoveryOwnerConflictError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "configured recovery identity conflicts "
+                "with existing owner"
+            ),
+        ) from exc
+
     return context
 
 
@@ -99,7 +123,7 @@ async def get_approved_context(
 Approved = Annotated[AuthenticatedContext, Depends(get_approved_context)]
 
 
-async def get_admin_context(
+async def get_manage_users_context(
     approved: Approved,
 ) -> AuthenticatedContext:
     if not has_capability(
@@ -113,7 +137,6 @@ async def get_admin_context(
     return approved
 
 
-Admin = Annotated[AuthenticatedContext, Depends(get_admin_context)]
 
 
 def require_capability(
@@ -161,6 +184,10 @@ CatalogArchive = Annotated[
     AuthenticatedContext,
     Depends(require_capability(Capability.CATALOG_ARCHIVE)),
 ]
+CatalogDeleteUnused = Annotated[
+    AuthenticatedContext,
+    Depends(require_capability(Capability.CATALOG_DELETE_UNUSED)),
+]
 InventoryRead = Annotated[
     AuthenticatedContext,
     Depends(require_capability(Capability.INVENTORY_READ)),
@@ -184,5 +211,5 @@ MovementRead = Annotated[
 ]
 ManageUsers = Annotated[
     AuthenticatedContext,
-    Depends(require_capability(Capability.ACCESS_MANAGE_USERS)),
+    Depends(get_manage_users_context),
 ]

@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Navigate } from "react-router-dom";
 
 import { useAuthState } from "../../features/auth/useAuthState";
+import { MovementAdminActions } from "../../features/inventory/MovementAdminActions";
 import {
   hasAnyCapability,
   hasCapability,
@@ -45,8 +46,8 @@ export function MovementsPage() {
   const [location, setLocation] = useState("");
   const [movementType, setMovementType] = useState("");
   const [cursorStack, setCursorStack] = useState<
-    Array<{ before: number | null; snapshot?: string }>
-  >([{ before: null }]);
+    Array<string | null>
+  >([null]);
 
   const cursor = cursorStack[cursorStack.length - 1];
 
@@ -84,15 +85,8 @@ export function MovementsPage() {
     limit: String(PAGE_SIZE),
   });
 
-  if (cursor.before !== null) {
-    params.set(
-      "before_journal_seq",
-      String(cursor.before),
-    );
-  }
-
-  if (cursor.snapshot) {
-    params.set("snapshot_at", cursor.snapshot);
+  if (cursor !== null) {
+    params.set("cursor", cursor);
   }
 
   if (canReadAll && actor) {
@@ -147,7 +141,7 @@ export function MovementsPage() {
     value: string,
   ) => {
     setter(value);
-    setCursorStack([{ before: null }]);
+    setCursorStack([null]);
   };
 
   const goBack = () => {
@@ -159,18 +153,17 @@ export function MovementsPage() {
   };
 
   const goNext = () => {
-    const next =
-      history.data?.next_before_journal_seq;
+    const next = history.data?.next_cursor;
+    const currentPage = history.data?.cursor;
 
-    if (next === null || next === undefined) {
+    if (!next || !currentPage) {
       return;
     }
 
     setCursorStack((current) => [
-      ...current.map((entry) => ({
-        ...entry, snapshot: entry.snapshot ?? history.data?.snapshot_at,
-      })),
-      { before: next, snapshot: history.data?.snapshot_at },
+      ...current.slice(0, -1),
+      currentPage,
+      next,
     ]);
   };
 
@@ -462,6 +455,10 @@ export function MovementsPage() {
                   ? `В: ${movement.destination_location_name_snapshot}`
                   : ""}
               </p>
+
+              <MovementAdminActions
+                movement={movement}
+              />
             </article>
           ),
         )}
@@ -476,12 +473,7 @@ export function MovementsPage() {
             </button>
           ) : null}
 
-          {history.data
-            ?.next_before_journal_seq
-          !== null
-          && history.data
-            ?.next_before_journal_seq
-          !== undefined ? (
+          {history.data?.next_cursor ? (
             <button
               className="button"
               onClick={goNext}

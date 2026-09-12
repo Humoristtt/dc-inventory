@@ -26,6 +26,11 @@ from app.modules.catalog.schemas import (
     ItemPatch,
     ManufacturerCreate,
 )
+from app.modules.inventory.models import (
+    MovementLine,
+    StockBalance,
+    UserItemCustodyBalance,
+)
 
 MAX_DECIMAL_PRECISION = 30
 MAX_DECIMAL_SCALE = 10
@@ -50,6 +55,10 @@ class CatalogNotFoundError(CatalogError):
 
 class CatalogConflictError(CatalogError):
     code = "catalog_conflict"
+
+
+class CatalogItemInUseError(CatalogConflictError):
+    code = "catalog_item_in_use"
 
 
 class CatalogSchemaError(CatalogError):
@@ -697,6 +706,52 @@ async def set_item_archived(
     item.updated_at = current_time
     await db.flush()
     return item.id
+
+
+async def delete_unused_item(
+    db: AsyncSession,
+    item_id: uuid.UUID,
+) -> None:
+    item = await db.scalar(
+        select(Item)
+        .where(Item.id == item_id)
+        .with_for_update()
+    )
+    if item is None:
+        raise CatalogNotFoundError("item not found")
+
+    movement_line_id = await db.scalar(
+        select(MovementLine.id)
+        .where(MovementLine.item_id == item_id)
+        .limit(1)
+    )
+    if movement_line_id is not None:
+        raise CatalogItemInUseError(
+            "item has warehouse history and cannot be deleted"
+        )
+
+    stock_balance_id = await db.scalar(
+        select(StockBalance.id)
+        .where(StockBalance.item_id == item_id)
+        .limit(1)
+    )
+    if stock_balance_id is not None:
+        raise CatalogItemInUseError(
+            "item has warehouse stock state and cannot be deleted"
+        )
+
+    custody_balance_id = await db.scalar(
+        select(UserItemCustodyBalance.id)
+        .where(UserItemCustodyBalance.item_id == item_id)
+        .limit(1)
+    )
+    if custody_balance_id is not None:
+        raise CatalogItemInUseError(
+            "item has custody state and cannot be deleted"
+        )
+
+    await db.delete(item)
+    await db.flush()
 
 
 def _stored_attribute_value(

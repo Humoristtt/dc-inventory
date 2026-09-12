@@ -700,7 +700,12 @@ it("Движения по умолчанию показывают 3 месяца
           },
         ],
         limit: 30,
-        next_before_journal_seq: url.includes("before_journal_seq") ? null : 1,
+        cursor: url.includes("cursor=")
+          ? "feed-page-2"
+          : "feed-page-1",
+        next_cursor: url.includes("cursor=")
+          ? null
+          : "feed-cursor-2",
         snapshot_at: "2026-09-09T07:00:00Z",
       });
     }
@@ -725,7 +730,7 @@ it("Движения по умолчанию показывают 3 месяца
         return params.get("period") === "3m"
           && params.get("limit") === "30"
           && params.get("offset") === null
-          && params.get("before_journal_seq") === null;
+          && params.get("cursor") === null;
       }),
     ).toBe(true);
   });
@@ -734,8 +739,9 @@ it("Движения по умолчанию показывают 3 месяца
   await waitFor(() => {
     expect(movementRequests.some((url) => {
       const params = new URL(url, "http://test").searchParams;
-      return params.get("before_journal_seq") === "1"
-        && params.get("snapshot_at") === "2026-09-09T07:00:00Z";
+      return params.get("cursor") === "feed-cursor-2"
+        && params.get("snapshot_at") === null
+        && params.get("before_journal_seq") === null;
     })).toBe(true);
   });
 

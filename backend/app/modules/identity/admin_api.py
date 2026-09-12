@@ -11,6 +11,7 @@ from fastapi import (
 
 from app.modules.auth.dependencies import DbSession, ManageUsers
 from app.modules.identity.admin_schemas import (
+    AdminUserAccessRequestDecision,
     AdminUserOut,
     AdminUserPageOut,
     AdminUserPatch,
@@ -26,21 +27,80 @@ from app.modules.identity.admin_service import (
     InvalidAccessTransitionError,
     InvalidRoleTransitionError,
     OutstandingCustodyInvariantError,
+    PendingAccessRequestNotFoundError,
     RecoveryAdminInvariantError,
+    decide_pending_access_request,
     get_admin_user,
+    get_user_display_names,
     list_admin_users,
     list_user_access_events,
     list_user_role_events,
     update_user_access,
     update_user_role,
 )
-from app.modules.identity.enums import UserAccessStatus, UserRole
+from app.modules.identity.enums import (
+    AccessRequestStatus,
+    UserAccessStatus,
+    UserRole,
+)
 from app.modules.identity.models import User, UserAccessEvent, UserRoleEvent
+from app.modules.telegram_bot.service import (
+    enqueue_access_decision_user_notification,
+)
 
 router = APIRouter(
     prefix="/api/admin/users",
     tags=["admin-users"],
 )
+
+
+def _admin_error_detail(
+    error: Exception,
+) -> dict[str, str]:
+    if isinstance(
+        error,
+        OutstandingCustodyInvariantError,
+    ):
+        code = "admin_user_outstanding_custody"
+    elif isinstance(
+        error,
+        RecoveryAdminInvariantError,
+    ):
+        code = "admin_user_recovery_invariant"
+    elif isinstance(
+        error,
+        InvalidAccessTransitionError,
+    ):
+        code = "admin_user_invalid_access_transition"
+    elif isinstance(
+        error,
+        InvalidRoleTransitionError,
+    ):
+        code = "admin_user_invalid_role_transition"
+    elif isinstance(
+        error,
+        PendingAccessRequestNotFoundError,
+    ):
+        code = "admin_user_pending_access_request_not_found"
+    elif isinstance(
+        error,
+        AdminUserForbiddenError,
+    ):
+        code = "admin_user_forbidden"
+    elif isinstance(
+        error,
+        AdminUserNotFoundError,
+    ):
+        code = "admin_user_not_found"
+    else:
+        code = "admin_user_error"
+
+    message = str(error).strip() or code
+
+    return {
+        "code": code,
+        "message": message,
+    }
 
 
 def _user_out(
@@ -71,10 +131,12 @@ def _user_out(
 
 def _event_out(
     event: UserAccessEvent,
+    actor_display_name: str,
 ) -> UserAccessEventOut:
     return UserAccessEventOut(
         id=event.id,
         actor_user_id=event.actor_user_id,
+        actor_display_name=actor_display_name,
         target_user_id=event.target_user_id,
         before_access_status=event.before_access_status,
         after_access_status=event.after_access_status,
@@ -82,10 +144,14 @@ def _event_out(
     )
 
 
-def _role_event_out(event: UserRoleEvent) -> UserRoleEventOut:
+def _role_event_out(
+    event: UserRoleEvent,
+    actor_display_name: str,
+) -> UserRoleEventOut:
     return UserRoleEventOut(
         id=event.id,
         actor_user_id=event.actor_user_id,
+        actor_display_name=actor_display_name,
         target_user_id=event.target_user_id,
         before_role=event.before_role,
         after_role=event.after_role,
@@ -158,10 +224,27 @@ async def get_user_events(
         offset=offset,
     )
 
+    actor_names = await get_user_display_names(
+        db,
+        {
+            event.actor_user_id
+            for event in page.items
+        },
+    )
+
     response.headers["Cache-Control"] = "no-store"
 
     return UserAccessEventPageOut(
-        items=[_event_out(event) for event in page.items],
+        items=[
+            _event_out(
+                event,
+                actor_names.get(
+                    event.actor_user_id,
+                    str(event.actor_user_id),
+                ),
+            )
+            for event in page.items
+        ],
         total=page.total,
     )
 
@@ -191,9 +274,26 @@ async def get_user_role_events(
         limit=limit,
         offset=offset,
     )
+    actor_names = await get_user_display_names(
+        db,
+        {
+            event.actor_user_id
+            for event in page.items
+        },
+    )
+
     response.headers["Cache-Control"] = "no-store"
     return UserRoleEventPageOut(
-        items=[_role_event_out(event) for event in page.items],
+        items=[
+            _role_event_out(
+                event,
+                actor_names.get(
+                    event.actor_user_id,
+                    str(event.actor_user_id),
+                ),
+            )
+            for event in page.items
+        ],
         total=page.total,
     )
 
@@ -233,7 +333,7 @@ async def patch_user(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(exc),
+            detail=_admin_error_detail(exc),
         ) from exc
 
     except (
@@ -244,7 +344,7 @@ async def patch_user(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
+            detail=_admin_error_detail(exc),
         ) from exc
 
     user = await get_admin_user(db, user_id)
@@ -256,6 +356,89 @@ async def patch_user(
     response.headers["Cache-Control"] = "no-store"
     return _user_out(
         user,
+        request.app.state.settings.admin_telegram_user_id,
+    )
+
+
+@router.post(
+    "/{user_id}/access-request-decision",
+    response_model=AdminUserOut,
+)
+async def post_access_request_decision(
+    user_id: UUID,
+    payload: AdminUserAccessRequestDecision,
+    request: Request,
+    response: Response,
+    db: DbSession,
+    admin: ManageUsers,
+) -> AdminUserOut:
+    decision = (
+        AccessRequestStatus.APPROVED
+        if payload.decision == "APPROVE"
+        else AccessRequestStatus.REJECTED
+    )
+
+    try:
+        _, access_request, _ = await decide_pending_access_request(
+            db,
+            actor_user_id=admin.user.id,
+            target_user_id=user_id,
+            decision=decision,
+            recovery_telegram_user_id=(
+                request.app.state.settings.admin_telegram_user_id
+            ),
+        )
+
+        managed_user = await get_admin_user(db, user_id)
+        if managed_user is None:
+            raise RuntimeError(
+                "managed user disappeared during access decision"
+            )
+
+        identity = managed_user.telegram_identity
+        if identity is None:
+            raise RuntimeError(
+                "managed user has no Telegram identity"
+            )
+
+        await enqueue_access_decision_user_notification(
+            db,
+            access_request_id=access_request.id,
+            target_identity=identity,
+            status=access_request.status,
+            settings=request.app.state.settings,
+        )
+
+        await db.commit()
+
+    except AdminUserNotFoundError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="user not found",
+        ) from exc
+
+    except AdminUserForbiddenError as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=_admin_error_detail(exc),
+        ) from exc
+
+    except (
+        InvalidAccessTransitionError,
+        PendingAccessRequestNotFoundError,
+        RecoveryAdminInvariantError,
+    ) as exc:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_admin_error_detail(exc),
+        ) from exc
+
+    response.headers["Cache-Control"] = "no-store"
+    return _user_out(
+        managed_user,
         request.app.state.settings.admin_telegram_user_id,
     )
 
@@ -293,7 +476,7 @@ async def patch_user_role(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=str(exc),
+            detail=_admin_error_detail(exc),
         ) from exc
     except (
         InvalidRoleTransitionError,
@@ -303,7 +486,7 @@ async def patch_user_role(
         await db.rollback()
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
+            detail=_admin_error_detail(exc),
         ) from exc
 
     user = await get_admin_user(db, user_id)

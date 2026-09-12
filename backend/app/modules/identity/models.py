@@ -113,6 +113,30 @@ class TelegramIdentity(Base):
             "telegram_user_id > 0",
             name="telegram_user_id_positive",
         ),
+        Index(
+            "ix_telegram_identities_username_trgm",
+            "username",
+            postgresql_using="gin",
+            postgresql_ops={
+                "username": "gin_trgm_ops",
+            },
+        ),
+        Index(
+            "ix_telegram_identities_first_name_trgm",
+            "first_name",
+            postgresql_using="gin",
+            postgresql_ops={
+                "first_name": "gin_trgm_ops",
+            },
+        ),
+        Index(
+            "ix_telegram_identities_last_name_trgm",
+            "last_name",
+            postgresql_using="gin",
+            postgresql_ops={
+                "last_name": "gin_trgm_ops",
+            },
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

@@ -9,7 +9,11 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.core.config import Settings
 from app.modules.identity.enums import AccessRequestStatus, UserAccessStatus, UserRole
-from app.modules.identity.models import AccessRequest, TelegramIdentity, User
+from app.modules.identity.models import (
+    AccessRequest,
+    TelegramIdentity,
+    User,
+)
 from app.modules.notifications.models import NotificationOutbox
 from app.modules.notifications.service import (
     claim_notification_batch,
@@ -18,7 +22,7 @@ from app.modules.notifications.service import (
 )
 from app.modules.telegram_bot.models import AccessDecisionCallback, TelegramUpdate
 from app.modules.telegram_bot.service import (
-    TelegramAdminAuthorizationError,
+    TelegramAccessManagerAuthorizationError,
     access_callback_data,
     apply_access_decision,
     create_access_decision_callbacks,
@@ -39,21 +43,39 @@ SETTINGS = Settings(
 )
 
 
-async def cleanup_users(db: AsyncSession, user_ids: list[uuid.UUID]) -> None:
+async def cleanup_mutable_test_rows(
+    db: AsyncSession,
+    user_ids: list[uuid.UUID],
+) -> None:
     request_ids = list(
         (
-            await db.scalars(select(AccessRequest.id).where(AccessRequest.user_id.in_(user_ids)))
+            await db.scalars(
+                select(AccessRequest.id).where(
+                    AccessRequest.user_id.in_(user_ids)
+                )
+            )
         ).all()
     )
+
     if request_ids:
         await db.execute(
             delete(AccessDecisionCallback).where(
-                AccessDecisionCallback.access_request_id.in_(request_ids)
+                AccessDecisionCallback.access_request_id.in_(
+                    request_ids
+                )
             )
         )
-        await db.execute(delete(AccessRequest).where(AccessRequest.id.in_(request_ids)))
-    await db.execute(delete(TelegramIdentity).where(TelegramIdentity.user_id.in_(user_ids)))
-    await db.execute(delete(User).where(User.id.in_(user_ids)))
+        await db.execute(
+            delete(AccessRequest).where(
+                AccessRequest.id.in_(request_ids)
+            )
+        )
+
+    await db.execute(
+        delete(TelegramIdentity).where(
+            TelegramIdentity.user_id.in_(user_ids)
+        )
+    )
     await db.commit()
 
 
@@ -149,7 +171,7 @@ async def test_approve_callback_is_authorized_atomic_and_idempotent() -> None:
             assert count == 3
 
         async with AsyncSession(engine) as db:
-            await cleanup_users(db, [admin_id, target_id])
+            await cleanup_mutable_test_rows(db, [admin_id, target_id])
     finally:
         await engine.dispose()
 
@@ -199,7 +221,7 @@ async def test_unapproved_admin_cannot_decide_access() -> None:
             callback_data = access_callback_data(approve.token)
             await db.commit()
 
-            with pytest.raises(TelegramAdminAuthorizationError):
+            with pytest.raises(TelegramAccessManagerAuthorizationError):
                 await apply_access_decision(
                     db,
                     callback_data=callback_data,
@@ -216,7 +238,7 @@ async def test_unapproved_admin_cannot_decide_access() -> None:
             assert saved.status == AccessRequestStatus.PENDING
 
         async with AsyncSession(engine) as db:
-            await cleanup_users(db, [admin_id, target_id])
+            await cleanup_mutable_test_rows(db, [admin_id, target_id])
     finally:
         await engine.dispose()
 
@@ -360,6 +382,6 @@ async def test_pending_callback_cannot_override_blocked_user() -> None:
             assert saved_target.access_status == UserAccessStatus.BLOCKED
 
         async with AsyncSession(engine) as db:
-            await cleanup_users(db, [admin_id, target_id])
+            await cleanup_mutable_test_rows(db, [admin_id, target_id])
     finally:
         await engine.dispose()

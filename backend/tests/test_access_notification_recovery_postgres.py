@@ -45,6 +45,7 @@ pytestmark = pytest.mark.skipif(
 SETTINGS = Settings(
     database_url=DATABASE_URL,
     admin_telegram_user_id=700000099,
+    notification_telegram_user_id=700000077,
 )
 
 
@@ -117,6 +118,11 @@ async def test_dead_access_admin_notification_is_requeued() -> None:
             )
 
             assert row is not None
+            assert row.payload["chat_id"] == 700000077
+            assert (
+                row.payload["chat_id"]
+                != SETTINGS.admin_telegram_user_id
+            )
 
             original_outbox_id = row.id
 

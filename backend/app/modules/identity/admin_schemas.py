@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
@@ -29,6 +30,10 @@ class AdminUserPatch(BaseModel):
     access_status: UserAccessStatus
 
 
+class AdminUserAccessRequestDecision(BaseModel):
+    decision: Literal["APPROVE", "REJECT"]
+
+
 class AdminUserRolePatch(BaseModel):
     role: UserRole
 
@@ -36,6 +41,7 @@ class AdminUserRolePatch(BaseModel):
 class UserAccessEventOut(BaseModel):
     id: UUID
     actor_user_id: UUID
+    actor_display_name: str
     target_user_id: UUID
     before_access_status: UserAccessStatus
     after_access_status: UserAccessStatus
@@ -50,6 +56,7 @@ class UserAccessEventPageOut(BaseModel):
 class UserRoleEventOut(BaseModel):
     id: UUID
     actor_user_id: UUID
+    actor_display_name: str
     target_user_id: UUID
     before_role: UserRole
     after_role: UserRole

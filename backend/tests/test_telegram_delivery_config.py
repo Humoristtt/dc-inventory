@@ -12,7 +12,18 @@ from app.modules.telegram_bot.service import (
 DATABASE_URL = "postgresql+asyncpg://dc_inventory:test@postgres:5432/dc_inventory"
 
 
-def test_telegram_delivery_defaults() -> None:
+def test_telegram_delivery_defaults(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    for name in (
+        "TELEGRAM_WEBHOOK_SECRET",
+        "TELEGRAM_GATEWAY_URL",
+        "TELEGRAM_GATEWAY_SECRET",
+        "TELEGRAM_WEB_APP_URL",
+        "NOTIFICATION_WORKER_CLAIM_TTL_SECONDS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
     settings = Settings(database_url=DATABASE_URL)
 
     assert settings.telegram_webhook_secret_value is None

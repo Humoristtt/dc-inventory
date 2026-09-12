@@ -42,6 +42,14 @@ def test_runtime_database_permission_source_is_least_privilege() -> None:
     )
     assert "UPDATE ON TABLE user_role_events" not in permissions
     assert "DELETE ON TABLE user_role_events" not in permissions
+    assert (
+        "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE items TO %I"
+        in permissions
+    )
+    assert (
+        "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE movements, movement_lines"
+        not in permissions
+    )
 
 
 def test_runtime_outbox_recovery_update_is_column_scoped() -> None:

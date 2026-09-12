@@ -444,6 +444,7 @@ async def test_issue_enqueues_one_admin_notification_and_replay_does_not_duplica
 
     app, users = await api_context(db)
     app.state.settings.admin_telegram_user_id = 700000001
+    app.state.settings.notification_telegram_user_id = 700000777
 
     issue_payload = {
         "movement_type": "ISSUE",
@@ -494,7 +495,11 @@ async def test_issue_enqueues_one_admin_notification_and_replay_does_not_duplica
         )
         assert row is not None
         assert row.method == "sendMessage"
-        assert row.payload["chat_id"] == 700000001
+        assert row.payload["chat_id"] == 700000777
+        assert (
+            row.payload["chat_id"]
+            != app.state.settings.admin_telegram_user_id
+        )
         message_text = row.payload["text"]
         assert isinstance(message_text, str)
         assert "Выдача оборудования" in message_text
@@ -598,9 +603,11 @@ async def test_movement_feed_uses_stable_journal_cursor(
             for movement in expected[:2]
         ]
 
-        cursor = body1["next_before_journal_seq"]
+        cursor = body1["next_cursor"]
 
-        assert cursor == expected[1].journal_seq
+        assert isinstance(cursor, str)
+        assert cursor
+        assert isinstance(body1["cursor"], str)
 
         page2 = await client.get(
             "/api/inventory/movements/feed",
@@ -608,8 +615,7 @@ async def test_movement_feed_uses_stable_journal_cursor(
                 "period": "all",
                 "limit": 2,
                 "actor_user_id": str(s[0]),
-                "before_journal_seq": cursor,
-                "snapshot_at": body1["snapshot_at"],
+                "cursor": cursor,
             },
             headers=users["admin"][1],
         )
@@ -619,6 +625,7 @@ async def test_movement_feed_uses_stable_journal_cursor(
         body2 = page2.json()
 
         assert body2["snapshot_at"] == body1["snapshot_at"]
+        assert body2["cursor"] == cursor
 
         assert [
             row["journal_seq"]
@@ -628,7 +635,7 @@ async def test_movement_feed_uses_stable_journal_cursor(
             for movement in expected[2:]
         ]
 
-        assert body2["next_before_journal_seq"] is None
+        assert body2["next_cursor"] is None
 
         user_page = await client.get(
             "/api/inventory/movements/feed"
@@ -678,53 +685,131 @@ async def test_actor_names_use_latest_journal_snapshot(warehouse_db: AsyncSessio
     assert response.json() == [{"id": str(users["user"][0]), "name": "Alpha latest"}]
 
 
-async def test_feed_period_uses_supplied_snapshot(warehouse_db: AsyncSession) -> None:
-    from unittest.mock import patch
-
-    from app.modules.inventory import service
-
+async def test_feed_cursor_is_server_issued_bound_and_tamper_evident(
+    warehouse_db: AsyncSession,
+) -> None:
     db = warehouse_db
     s = await scenario(db)
     app, users = await api_context(db)
-    anchor = datetime(2026, 9, 9, 12, tzinfo=UTC)
-    await move(db, s, "RECEIPT", 1, destination=s[2])
 
-    supplied_timestamp = (
-        anchor
-        - timedelta(days=7)
-        + timedelta(seconds=1)
+    await move(
+        db,
+        s,
+        "RECEIPT",
+        1,
+        destination=s[2],
+    )
+    await move(
+        db,
+        s,
+        "RECEIPT",
+        1,
+        destination=s[2],
     )
 
-    async def supplied_movement_timestamp(
-        _db: AsyncSession,
-    ) -> datetime:
-        return supplied_timestamp
-
-    with patch.object(
-        service,
-        "_movement_timestamp",
-        supplied_movement_timestamp,
-    ):
-        record = await move(
-            db,
-            (users["user"][0], *s[1:]),
-            "ISSUE",
-            1,
-            source=s[2],
-            custody_user_id=users["user"][0],
-        )
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
         path = "/api/inventory/movements/feed"
-        response = await client.get(path, headers=users["user"][1], params={
-            "period": "7d", "snapshot_at": anchor.isoformat(),
-        })
-        assert response.status_code == 200
-        assert [row["id"] for row in response.json()["items"]] == [str(record.record.movement.id)]
-        later = await client.get(path, headers=users["user"][1], params={
-            "period": "7d", "snapshot_at": (anchor + timedelta(seconds=2)).isoformat(),
-        })
-        assert later.json()["items"] == []
-        invalid = await client.get(path, headers=users["user"][1], params={
-            "snapshot_at": "2026-09-09T12:00:00",
-        })
-        assert invalid.status_code == 422
+
+        raw_snapshot = await client.get(
+            path,
+            headers=users["admin"][1],
+            params={
+                "period": "all",
+                "snapshot_at": (
+                    datetime.now(UTC).isoformat()
+                ),
+            },
+        )
+
+        assert raw_snapshot.status_code == 422
+
+        raw_before = await client.get(
+            path,
+            headers=users["admin"][1],
+            params={
+                "period": "all",
+                "before_journal_seq": 1,
+            },
+        )
+
+        assert raw_before.status_code == 422
+
+        first = await client.get(
+            path,
+            headers=users["admin"][1],
+            params={
+                "period": "all",
+                "limit": 1,
+                "actor_user_id": str(s[0]),
+            },
+        )
+
+        assert first.status_code == 200
+        first_body = first.json()
+
+        cursor = first_body["next_cursor"]
+
+        assert isinstance(cursor, str)
+        assert cursor
+
+        second = await client.get(
+            path,
+            headers=users["admin"][1],
+            params={
+                "period": "all",
+                "limit": 1,
+                "actor_user_id": str(s[0]),
+                "cursor": cursor,
+            },
+        )
+
+        assert second.status_code == 200
+
+        payload, signature = cursor.split(".", 1)
+        replacement_char = (
+            "A"
+            if signature[0] != "A"
+            else "B"
+        )
+        tampered = (
+            f"{payload}."
+            f"{replacement_char}"
+            f"{signature[1:]}"
+        )
+
+        tampered_response = await client.get(
+            path,
+            headers=users["admin"][1],
+            params={
+                "period": "all",
+                "limit": 1,
+                "actor_user_id": str(s[0]),
+                "cursor": tampered,
+            },
+        )
+
+        assert tampered_response.status_code == 422
+        assert (
+            tampered_response.json()["detail"]["code"]
+            == "movement_cursor_invalid"
+        )
+
+        rebound = await client.get(
+            path,
+            headers=users["admin"][1],
+            params={
+                "period": "30d",
+                "limit": 1,
+                "actor_user_id": str(s[0]),
+                "cursor": cursor,
+            },
+        )
+
+        assert rebound.status_code == 422
+        assert (
+            rebound.json()["detail"]["code"]
+            == "movement_cursor_invalid"
+        )

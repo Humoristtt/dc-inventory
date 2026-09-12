@@ -5,15 +5,24 @@ from datetime import UTC, datetime
 from typing import cast
 from uuid import UUID
 
-from sqlalchemy import String, func, or_, select, update
-from sqlalchemy import cast as sql_cast
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 from sqlalchemy.sql.elements import ColumnElement
 
 from app.modules.auth.models import AuthSession
-from app.modules.identity.enums import UserAccessStatus, UserRole
+from app.modules.identity.access_lifecycle import transition_user_access
+from app.modules.identity.enums import (
+    AccessRequestStatus,
+    UserAccessStatus,
+    UserRole,
+)
+from app.modules.identity.locking import (
+    acquire_identity_management_shared_barrier,
+    lock_identity_actor_and_target,
+)
 from app.modules.identity.models import (
+    AccessRequest,
     TelegramIdentity,
     User,
     UserAccessEvent,
@@ -21,7 +30,6 @@ from app.modules.identity.models import (
 )
 from app.modules.identity.policy import (
     CUSTODY_ROLES,
-    IDENTITY_MANAGEMENT_LOCK_KEY,
     STANDARD_ASSIGNABLE_ROLES,
     Capability,
     has_capability,
@@ -39,6 +47,10 @@ class AdminUserNotFoundError(AdminUserError):
 
 class InvalidAccessTransitionError(AdminUserError):
     """Requested access transition is not allowed."""
+
+
+class PendingAccessRequestNotFoundError(AdminUserError):
+    """Pending access request is missing for a pending user."""
 
 
 class AdminUserForbiddenError(AdminUserError):
@@ -89,6 +101,78 @@ async def get_admin_user(
     )
 
 
+async def get_user_display_names(
+    db: AsyncSession,
+    user_ids: set[UUID],
+) -> dict[UUID, str]:
+    if not user_ids:
+        return {}
+
+    rows = (
+        await db.execute(
+            select(
+                User.id,
+                TelegramIdentity.first_name,
+                TelegramIdentity.last_name,
+                TelegramIdentity.username,
+            )
+            .outerjoin(
+                TelegramIdentity,
+                TelegramIdentity.user_id == User.id,
+            )
+            .where(User.id.in_(user_ids))
+        )
+    ).all()
+
+    result: dict[UUID, str] = {}
+
+    for user_id, first_name, last_name, username in rows:
+        full_name = " ".join(
+            part
+            for part in (first_name, last_name)
+            if part
+        ).strip()
+
+        if username:
+            result[user_id] = (
+                f"{full_name} · @{username}"
+                if full_name
+                else f"@{username}"
+            )
+        else:
+            result[user_id] = full_name or str(user_id)
+
+    return result
+
+
+def _escaped_contains_pattern(
+    value: str,
+) -> str:
+    escaped = (
+        value.replace("\\", "\\\\")
+        .replace("%", "\\%")
+        .replace("_", "\\_")
+    )
+    return f"%{escaped}%"
+
+
+def _telegram_user_id_candidate(
+    value: str,
+) -> int | None:
+    if (
+        not value.isascii()
+        or not value.isdigit()
+    ):
+        return None
+
+    candidate = int(value)
+
+    if not 0 < candidate <= 9_223_372_036_854_775_807:
+        return None
+
+    return candidate
+
+
 def _search_filters(
     *,
     query: str | None,
@@ -101,22 +185,49 @@ def _search_filters(
         filters.append(User.role == role)
 
     if access_status is not None:
-        filters.append(User.access_status == access_status)
+        filters.append(
+            User.access_status == access_status
+        )
 
     if query:
         value = query.strip()
+
         if value:
-            pattern = f"%{value}%"
-            filters.append(
-                or_(
-                    TelegramIdentity.username.ilike(pattern),
-                    TelegramIdentity.first_name.ilike(pattern),
-                    TelegramIdentity.last_name.ilike(pattern),
-                    sql_cast(
-                        TelegramIdentity.telegram_user_id,
-                        String,
-                    ).ilike(pattern),
+            pattern = _escaped_contains_pattern(
+                value
+            )
+
+            identity_matches: list[
+                ColumnElement[bool]
+            ] = [
+                TelegramIdentity.username.ilike(
+                    pattern,
+                    escape="\\",
+                ),
+                TelegramIdentity.first_name.ilike(
+                    pattern,
+                    escape="\\",
+                ),
+                TelegramIdentity.last_name.ilike(
+                    pattern,
+                    escape="\\",
+                ),
+            ]
+
+            telegram_user_id = (
+                _telegram_user_id_candidate(
+                    value
                 )
+            )
+
+            if telegram_user_id is not None:
+                identity_matches.append(
+                    TelegramIdentity.telegram_user_id
+                    == telegram_user_id
+                )
+
+            filters.append(
+                or_(*identity_matches)
             )
 
     return filters
@@ -235,32 +346,32 @@ async def _lock_actor_and_target(
     actor_user_id: UUID,
     target_user_id: UUID,
 ) -> tuple[User, User]:
-    await db.execute(
-        select(func.pg_advisory_xact_lock(IDENTITY_MANAGEMENT_LOCK_KEY))
+    await acquire_identity_management_shared_barrier(
+        db
     )
-    actor = cast(
-        User | None,
-        await db.scalar(
-            select(User).where(User.id == actor_user_id).with_for_update()
-        ),
+
+    actor, target = await lock_identity_actor_and_target(
+        db,
+        actor_user_id=actor_user_id,
+        target_user_id=target_user_id,
     )
+
     if (
         actor is None
-        or actor.access_status != UserAccessStatus.APPROVED
-        or not has_capability(actor.role, Capability.ACCESS_MANAGE_USERS)
+        or actor.access_status
+        != UserAccessStatus.APPROVED
+        or not has_capability(
+            actor.role,
+            Capability.ACCESS_MANAGE_USERS,
+        )
     ):
         raise AdminUserForbiddenError(
             "approved user-management capability required"
         )
 
-    target = cast(
-        User | None,
-        await db.scalar(
-            select(User).where(User.id == target_user_id).with_for_update()
-        ),
-    )
     if target is None:
         raise AdminUserNotFoundError
+
     return actor, target
 
 
@@ -359,16 +470,15 @@ async def update_user_access(
             "user with outstanding equipment custody cannot be blocked"
         )
 
-    target.access_status = access_status
+    event = transition_user_access(
+        db,
+        user=target,
+        actor_user_id=actor_user_id,
+        access_status=access_status,
+        now=current_time,
+    )
 
-    if access_status == UserAccessStatus.APPROVED:
-        target.approved_at = current_time
-        target.approved_by_user_id = actor_user_id
-
-    else:
-        target.approved_at = None
-        target.approved_by_user_id = None
-
+    if access_status == UserAccessStatus.BLOCKED:
         await db.execute(
             update(AuthSession)
             .where(
@@ -378,17 +488,108 @@ async def update_user_access(
             .values(revoked_at=current_time)
         )
 
-    event = UserAccessEvent(
-        actor_user_id=actor_user_id,
-        target_user_id=target.id,
-        before_access_status=before_access,
-        after_access_status=access_status,
-        occurred_at=current_time,
-    )
-    db.add(event)
-
     await db.flush()
     return target, event
+
+
+async def decide_pending_access_request(
+    db: AsyncSession,
+    *,
+    actor_user_id: UUID,
+    target_user_id: UUID,
+    decision: AccessRequestStatus,
+    recovery_telegram_user_id: int | None,
+    now: datetime | None = None,
+) -> tuple[User, AccessRequest, UserAccessEvent]:
+    if decision not in {
+        AccessRequestStatus.APPROVED,
+        AccessRequestStatus.REJECTED,
+    }:
+        raise InvalidAccessTransitionError(
+            "access request decision must be APPROVED or REJECTED"
+        )
+
+    current_time = now or datetime.now(UTC)
+
+    actor, target = await _lock_actor_and_target(
+        db,
+        actor_user_id=actor_user_id,
+        target_user_id=target_user_id,
+    )
+
+    if actor.id == target.id:
+        raise AdminUserForbiddenError(
+            "self access mutation is forbidden"
+        )
+
+    if (
+        target.role == UserRole.OWNER
+        or await _is_recovery_identity(
+            db,
+            user_id=target.id,
+            recovery_telegram_user_id=recovery_telegram_user_id,
+        )
+    ):
+        raise RecoveryAdminInvariantError(
+            "owner/recovery identity cannot be changed"
+        )
+
+    if (
+        target.role == UserRole.ADMIN
+        and not has_capability(
+            actor.role,
+            Capability.ACCESS_ASSIGN_ADMIN,
+        )
+    ):
+        raise AdminUserForbiddenError(
+            "only owner may manage administrator access"
+        )
+
+    if target.access_status != UserAccessStatus.PENDING:
+        raise InvalidAccessTransitionError(
+            "only a pending user access request can be decided"
+        )
+
+    access_request = await db.scalar(
+        select(AccessRequest)
+        .where(
+            AccessRequest.user_id == target.id,
+            AccessRequest.status == AccessRequestStatus.PENDING,
+        )
+        .order_by(AccessRequest.requested_at.desc())
+        .with_for_update()
+    )
+
+    if access_request is None:
+        raise PendingAccessRequestNotFoundError(
+            "pending access request not found"
+        )
+
+    target_status = (
+        UserAccessStatus.APPROVED
+        if decision == AccessRequestStatus.APPROVED
+        else UserAccessStatus.REJECTED
+    )
+
+    event = transition_user_access(
+        db,
+        user=target,
+        actor_user_id=actor.id,
+        access_status=target_status,
+        now=current_time,
+    )
+    if event is None:
+        raise RuntimeError(
+            "pending access decision did not change user state"
+        )
+
+    access_request.status = decision
+    access_request.decided_at = current_time
+    access_request.decided_by_user_id = actor.id
+    access_request.decision_note = "Access management web console"
+
+    await db.flush()
+    return target, access_request, event
 
 
 async def update_user_role(

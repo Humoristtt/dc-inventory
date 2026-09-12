@@ -7,8 +7,9 @@ import uuid
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import cast
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
@@ -190,12 +191,6 @@ async def _create_movement(
     )
     if existing:
         return existing
-
-    # Every transaction capable of appending to the immutable journal holds a
-    # shared barrier lock until commit/rollback. A first-page feed snapshot
-    # takes the matching exclusive lock, which drains already-running journal
-    # writers before fixing its timestamp.
-    await _lock_journal_mutation(db)
 
     movement_occurred_at = await _movement_timestamp(db)
 
@@ -667,6 +662,7 @@ async def list_movements_cursor(
     since: datetime | None = None,
     until: datetime | None = None,
     before_journal_seq: int | None = None,
+    database_snapshot: str | None = None,
     limit: int = 50,
 ) -> MovementCursorPage:
     filters = await _movement_filters(
@@ -680,6 +676,29 @@ async def list_movements_cursor(
         since=since,
         until=until,
     )
+
+    if database_snapshot is not None:
+        filters.append(
+            cast(
+                ColumnElement[bool],
+                text(
+                    "("
+                    "pg_visible_in_snapshot("
+                    "movements.xmin::text::xid8, "
+                    "CAST(CAST(:movement_feed_snapshot AS text) "
+                    "AS pg_snapshot)"
+                    ") OR "
+                    "pg_xact_status("
+                    "movements.xmin::text::xid8"
+                    ") = 'in progress'"
+                    ")"
+                ).bindparams(
+                    movement_feed_snapshot=(
+                        database_snapshot
+                    )
+                ),
+            )
+        )
 
     if before_journal_seq is not None:
         filters.append(
@@ -775,6 +794,12 @@ class MovementCursorPage:
 
 
 @dataclass(frozen=True, slots=True)
+class MovementFeedSnapshot:
+    snapshot_at: datetime
+    database_snapshot: str
+
+
+@dataclass(frozen=True, slots=True)
 class MovementResult:
     record: MovementRecord
     replayed: bool
@@ -825,52 +850,42 @@ def _advisory_lock_key(namespace: str, *parts: object) -> int:
     return int.from_bytes(digest[:8], byteorder="big", signed=True)
 
 
-_JOURNAL_SNAPSHOT_LOCK_KEY = _advisory_lock_key(
-    "warehouse-journal-snapshot"
-)
-
-
-async def _lock_journal_mutation(
-    db: AsyncSession,
-) -> None:
-    await db.execute(
-        select(
-            func.pg_advisory_xact_lock_shared(
-                _JOURNAL_SNAPSHOT_LOCK_KEY
-            )
-        )
-    )
-
-
 async def acquire_movement_feed_snapshot(
     db: AsyncSession,
-) -> datetime:
-    """Create a commit-stable journal timestamp boundary.
-
-    The exclusive transaction-scoped advisory lock waits for every movement
-    transaction that already holds the shared journal lock. New journal
-    writers cannot cross the boundary until this read transaction finishes.
-    clock_timestamp() is intentional: transaction_timestamp()/now() could
-    predate the wait itself.
-    """
-    await db.execute(
-        select(
-            func.pg_advisory_xact_lock(
-                _JOURNAL_SNAPSHOT_LOCK_KEY
+) -> MovementFeedSnapshot:
+    row = (
+        await db.execute(
+            text(
+                "SELECT "
+                "clock_timestamp() AS snapshot_at, "
+                "pg_current_snapshot()::text "
+                "AS database_snapshot"
             )
         )
-    )
+    ).one()
 
-    snapshot = await db.scalar(
-        select(func.clock_timestamp())
-    )
+    snapshot_at = row.snapshot_at
+    database_snapshot = row.database_snapshot
 
-    if not isinstance(snapshot, datetime):
+    if not isinstance(snapshot_at, datetime):
         raise RuntimeError(
-            "database did not return a movement feed snapshot timestamp"
+            "database did not return a movement "
+            "feed snapshot timestamp"
         )
 
-    return snapshot
+    if (
+        not isinstance(database_snapshot, str)
+        or not database_snapshot
+    ):
+        raise RuntimeError(
+            "database did not return a movement "
+            "feed MVCC snapshot"
+        )
+
+    return MovementFeedSnapshot(
+        snapshot_at=snapshot_at,
+        database_snapshot=database_snapshot,
+    )
 
 
 async def _lock_idempotency_key(

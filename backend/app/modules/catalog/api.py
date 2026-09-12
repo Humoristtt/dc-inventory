@@ -1,7 +1,7 @@
 from typing import Annotated, NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from sqlalchemy.exc import IntegrityError
 
 from app.core.safety import require_real_inventory_mutations_enabled
@@ -11,6 +11,7 @@ from app.db.errors import (
 )
 from app.modules.auth.dependencies import (
     CatalogArchive,
+    CatalogDeleteUnused,
     CatalogManage,
     CatalogRead,
     DbSession,
@@ -56,6 +57,7 @@ from app.modules.catalog.service import (
     check_duplicate_candidates,
     create_item,
     create_manufacturer,
+    delete_unused_item,
     get_category_record,
     get_item_record,
     list_categories,
@@ -535,3 +537,26 @@ async def unarchive_item(
         await db.rollback()
         _raise_catalog_error(error)
     return await _load_item_out(db, item_id)
+
+@admin_router.delete(
+    "/items/{item_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_item(
+    item_id: UUID,
+    request: Request,
+    db: DbSession,
+    _deleter: CatalogDeleteUnused,
+) -> Response:
+    require_real_inventory_mutations_enabled(request)
+    try:
+        await delete_unused_item(db, item_id)
+        await db.commit()
+    except CatalogError as error:
+        await db.rollback()
+        _raise_catalog_error(error)
+    except IntegrityError as error:
+        await db.rollback()
+        _raise_integrity_conflict(error)
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

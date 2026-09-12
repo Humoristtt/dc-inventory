@@ -110,6 +110,7 @@ CURRENT_DOCS = (
     "docs/DEVELOPMENT.md",
     "docs/OPERATIONS.md",
     "docs/PRODUCT_REQUIREMENTS.md",
+    "docs/RBAC_PROCUREMENT.md",
     "docs/RECOVERY_RUNBOOK.md",
     "docs/ROADMAP.md",
     "docs/WAREHOUSE_DOMAIN.md",
@@ -218,7 +219,7 @@ require(
 
 require(
     "docs/ROADMAP.md",
-    "Initial bootstrap уже выполнен и повторно не запускается.",
+    "Initial bootstrap завершён и повторно не запускается.",
 )
 
 require(
@@ -439,6 +440,27 @@ for assertion in (
     )
 
 require(
+    "README.md",
+    "private/runtime-only production identifiers",
+)
+require(
+    "README.md",
+    "Публичные service identifiers",
+)
+require(
+    "docs/OPERATIONS.md",
+    "REPOSITORY_VISIBILITY_CURRENT=public",
+)
+require(
+    "docs/OPERATIONS.md",
+    "Public service identifiers",
+)
+require(
+    "docs/OPERATIONS.md",
+    "https://app.spik-inventory.ru",
+)
+
+require(
     "docs/OPERATIONS.md",
     "merged topic branches удаляются после acceptance",
 )
@@ -458,19 +480,19 @@ for stale_value in (
 
 require(
     "docs/ROADMAP.md",
-    "## 10. Current stabilization / closeout",
+    "## 10. Accepted clean baseline",
 )
 require(
     "docs/ROADMAP.md",
-    "- [x] Canonical documentation reconciled with accepted production state.",
+    "Accepted production/runtime golden baseline перед новым feature cycle:",
 )
 require(
     "docs/ROADMAP.md",
-    "- [x] Выполнить independent full source/security/runtime/data audit на clean baseline.",
+    "- [x] required CI;",
 )
 require(
     "docs/ROADMAP.md",
-    "- [x] Исправить findings текущего audit до технически чистого baseline.",
+    "- [x] local/source/runtime golden-state verification.",
 )
 
 
@@ -488,6 +510,59 @@ for assertion in (
         "docs/RECOVERY_RUNBOOK.md",
         assertion,
     )
+
+
+# RBAC_SOURCE_FRESHNESS_CONTRACT_V1
+
+require(
+    "docs/DEPLOYMENT.md",
+    SOURCE_ALEMBIC_HEAD,
+)
+
+require(
+    "README.md",
+    "ENGINEER`, `SENIOR_ENGINEER`, `MANAGER`, `ADMIN`",
+)
+
+require(
+    "docs/ARCHITECTURE.md",
+    "Source roles:",
+)
+
+require(
+    "docs/PRODUCT_REQUIREMENTS.md",
+    "ENGINEER / SENIOR_ENGINEER / MANAGER / ADMIN / OWNER",
+)
+
+require(
+    "docs/RBAC_PROCUREMENT.md",
+    "RBAC FOUNDATION IMPLEMENTED / PROCUREMENT PENDING",
+)
+
+require(
+    "docs/ROADMAP.md",
+    f"Source migration head `{SOURCE_ALEMBIC_HEAD}`",
+)
+
+for name, stale_value in (
+    (
+        "README.md",
+        "Базовые роли: `ADMIN` и `USER`",
+    ),
+    (
+        "docs/PRODUCT_REQUIREMENTS.md",
+        "Текущая двухролевая реализация USER/ADMIN",
+    ),
+    (
+        "docs/ROADMAP.md",
+        "- [ ] Добавить ENGINEER / SENIOR_ENGINEER / MANAGER / ADMIN / OWNER.",
+    ),
+    (
+        "docs/RBAC_PROCUREMENT.md",
+        "APPROVED PRODUCT CONTRACT / IMPLEMENTATION PENDING",
+    ),
+):
+    forbid(name, stale_value)
 
 
 print("DOCS_FRESHNESS_CONTRACT=PASS")

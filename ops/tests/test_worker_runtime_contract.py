@@ -38,10 +38,46 @@ expected_pids = {
     "web": 256,
 }
 
+expected_resources = {
+    "postgres": (
+        "${POSTGRES_CPUS_LIMIT:-2.0}",
+        "${POSTGRES_MEMORY_LIMIT:-3g}",
+    ),
+    "migrate": (
+        "${MIGRATE_CPUS_LIMIT:-1.0}",
+        "${MIGRATE_MEMORY_LIMIT:-512m}",
+    ),
+    "db-permissions": (
+        "${DB_PERMISSIONS_CPUS_LIMIT:-0.5}",
+        "${DB_PERMISSIONS_MEMORY_LIMIT:-256m}",
+    ),
+    "backend": (
+        "${BACKEND_CPUS_LIMIT:-1.5}",
+        "${BACKEND_MEMORY_LIMIT:-1g}",
+    ),
+    "telegram-worker": (
+        "${TELEGRAM_WORKER_CPUS_LIMIT:-0.5}",
+        "${TELEGRAM_WORKER_MEMORY_LIMIT:-512m}",
+    ),
+    "maintenance-worker": (
+        "${MAINTENANCE_WORKER_CPUS_LIMIT:-0.5}",
+        "${MAINTENANCE_WORKER_MEMORY_LIMIT:-512m}",
+    ),
+    "web": (
+        "${WEB_CPUS_LIMIT:-0.5}",
+        "${WEB_MEMORY_LIMIT:-256m}",
+    ),
+}
+
 for service, limit in expected_pids.items():
     block = service_block(service)
     assert "logging: *runtime-logging" in block, service
     assert f"pids_limit: {limit}" in block, service
+
+for service, (cpus, memory) in expected_resources.items():
+    block = service_block(service)
+    assert f"cpus: {cpus}" in block, service
+    assert f"mem_limit: {memory}" in block, service
 
 for service in (
     "telegram-worker",

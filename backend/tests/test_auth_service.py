@@ -110,7 +110,7 @@ async def test_existing_identity_profile_is_refreshed() -> None:
 
 
 @pytest.mark.asyncio
-async def test_bootstrap_admin_recovery_resolves_existing_pending_request() -> None:
+async def test_recovery_identity_resolves_existing_pending_request() -> None:
     user = User(
         id=uuid.uuid4(),
         role=UserRole.ADMIN,
@@ -129,7 +129,7 @@ async def test_bootstrap_admin_recovery_resolves_existing_pending_request() -> N
         status=AccessRequestStatus.PENDING,
     )
     db = AsyncMock(spec=AsyncSession)
-    db.scalar.side_effect = [identity, None]
+    db.scalar.side_effect = [identity, user, None]
     pending_result = MagicMock()
     pending_result.first.return_value = pending
     db.scalars.return_value = pending_result
@@ -163,7 +163,9 @@ async def test_existing_configured_owner_login_is_idempotent() -> None:
         id=uuid.uuid4(),
         role=UserRole.OWNER,
         access_status=UserAccessStatus.APPROVED,
+        approved_at=NOW,
     )
+    user.approved_by_user_id = user.id
     identity = TelegramIdentity(
         id=uuid.uuid4(),
         user=user,

@@ -1,6 +1,6 @@
 # RBAC и Procurement — канонический контракт
 
-Статус документа: APPROVED PRODUCT CONTRACT / IMPLEMENTATION PENDING.
+Статус документа: APPROVED PRODUCT CONTRACT / RBAC FOUNDATION IMPLEMENTED / PROCUREMENT PENDING.
 
 Дата фиксации: 2026-09-12.
 
@@ -11,9 +11,10 @@ Accepted production/runtime baseline перед началом feature cycle:
 Этот документ является каноническим источником требований для текущего
 RBAC + Procurement feature cycle.
 
-До завершения RBAC migration существующий код всё ещё содержит исторические
-роли `USER` и `ADMIN`. Для текущего feature cycle требования этого документа
-имеют приоритет над старыми двухролевыми описаниями в других документах.
+Source RBAC foundation уже реализует пять ролей и capability policy,
+описанные этим документом. Accepted production baseline продолжает использовать
+historical `USER / ADMIN` до отдельного maintenance cutover. Procurement domain
+остаётся implementation pending.
 
 ## 1. Основные принципы
 
@@ -165,7 +166,9 @@ OWNER:
 OWNER не назначается через обычный role-management API.
 
 Configured recovery identity `ADMIN_TELEGRAM_USER_ID` является bootstrap /
-recovery identity OWNER.
+recovery identity OWNER и не используется как implicit recipient рабочих
+уведомлений. Operational notifications используют отдельный
+`NOTIFICATION_TELEGRAM_USER_ID`.
 
 Нельзя:
 
@@ -173,6 +176,11 @@ recovery identity OWNER.
 - заблокировать OWNER;
 - удалить OWNER;
 - назначить второго OWNER обычным UI/API.
+
+Смена recovery OWNER допускается только guarded maintenance-only rotation:
+атомарная передача OWNER между существующими Telegram identities под
+PostgreSQL lock с immutable role/access audit. После commit конфигурационный
+`ADMIN_TELEGRAM_USER_ID` меняется на нового OWNER до запуска runtime.
 
 ## 3. Capability model
 
@@ -206,7 +214,7 @@ recovery identity OWNER.
 При переходе со старой role model:
 
 - `USER` -> `ENGINEER`;
-- configured recovery/admin identity -> `OWNER`;
+- configured recovery identity -> `OWNER`;
 - остальные `ADMIN` -> `ADMIN`.
 
 Запрещено:

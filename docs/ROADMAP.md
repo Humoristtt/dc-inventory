@@ -19,7 +19,7 @@
 - [x] Cloudflare / HTTPS production path.
 - [x] Telegram initData server-side validation.
 - [x] HttpOnly server session.
-- [x] ADMIN / USER access model.
+- [x] Historical ADMIN / USER access model на accepted production baseline; source RBAC уже five-role capability-based.
 - [x] Access request approve/reject через Telegram.
 - [x] Transactional notification outbox.
 - [x] Fail-closed mutation gate.
@@ -31,7 +31,7 @@
 - [x] Удалена legacy physical-unit holder model.
 - [x] Actor операции отделён от custody пользователя.
 - [x] UserItemCustodyBalance = User × Item × positive quantity.
-- [x] USER RETURN ограничен фактическим custody balance.
+- [x] ENGINEER / SENIOR_ENGINEER RETURN ограничен фактическим custody balance.
 - [x] StockBalance = Item × Location × quantity.
 - [x] Zero balances не хранятся.
 - [x] Negative stock запрещён.
@@ -52,24 +52,32 @@
 
 ## 3. Permissions
 
-USER:
+ENGINEER:
 
 - [x] Browse/search/filter catalog.
-- [x] Read stock.
+- [x] Read stock / locations.
 - [x] Read own actor history.
-- [x] ISSUE.
-- [x] RETURN.
+- [x] ISSUE / RETURN / RECEIPT / TRANSFER.
 
-ADMIN:
+SENIOR_ENGINEER:
 
-- [x] Common movement journal.
-- [x] Employee history filter.
-- [x] Location CRUD/archive.
-- [x] Item CRUD/archive.
-- [x] RECEIPT.
-- [x] TRANSFER.
-- [x] WRITE_OFF.
-- [x] Correction/reversal workflow.
+- [x] ENGINEER warehouse operations.
+- [x] Common movement journal / employee filter.
+- [x] Catalog create/edit/archive.
+
+MANAGER:
+
+- [x] Catalog / stock / locations read-only.
+- [x] Warehouse mutations denied.
+- [x] Movement journal denied.
+
+ADMIN / OWNER:
+
+- [x] Common movement journal / employee filter.
+- [x] Location administration.
+- [x] Catalog administration.
+- [x] RECEIPT / ISSUE / RETURN / TRANSFER.
+- [x] WRITE_OFF / CORRECTION / REVERSAL.
 
 ## 4. Catalog V2
 
@@ -101,13 +109,11 @@ ADMIN:
 - [x] Item detail.
 - [x] Total stock.
 - [x] Stock breakdown по location.
-- [x] USER Взять.
-- [x] USER Вернуть.
-- [x] ADMIN Переместить.
-- [x] ADMIN Приход.
-- [x] ADMIN Списать.
-- [x] Movement journal.
-- [x] Employee filter для ADMIN.
+- [x] ENGINEER / SENIOR_ENGINEER Взять / Вернуть.
+- [x] ENGINEER / SENIOR_ENGINEER Переместить / Приход.
+- [x] ADMIN / OWNER Списать.
+- [x] Movement journal capability-aware.
+- [x] Employee filter только для movement.read_all.
 - [x] Category/location/type filters.
 - [x] Period presets 7d / 30d / 3m / year / all.
 - [x] 3 месяца default.
@@ -136,7 +142,7 @@ ADMIN:
 
 ## 8. Telegram inventory notifications
 
-- [x] ADMIN получает notification на ISSUE.
+- [x] Configured notification recipient получает notification на ISSUE.
 - [x] Notification создаётся transactional с movement.
 - [x] Idempotent replay не создаёт duplicate notification.
 - [x] RETURN не создаёт ISSUE notification.
@@ -157,7 +163,7 @@ ADMIN:
 - [x] Responsive/mobile/desktop warehouse UI acceptance.
 - [x] Header/fullscreen/Escape remediation.
 - [x] Desktop form consistency and smart suggestions.
-- [x] Current migration head `f8a9b0c1d2e3`.
+- [x] Accepted production migration head `f8a9b0c1d2e3`.
 - [x] External authoritative workbook contract.
 - [x] Fail-closed production one-shot bootstrap path.
 - [x] Empty-domain production preflight.
@@ -210,26 +216,28 @@ Canonical contract:
 
 `docs/RBAC_PROCUREMENT.md`
 
-- [~] RBAC feature cycle открыт от golden baseline.
+- [~] RBAC foundation реализован в source и проходит pre-production audit/remediation.
 - [x] Product role model согласована.
 - [x] Capability model согласована.
-- [x] Existing-role migration contract согласован.
-- [x] OWNER singleton/recovery invariant согласован.
-- [ ] Добавить ENGINEER / SENIOR_ENGINEER / MANAGER / ADMIN / OWNER.
-- [ ] Мигрировать USER -> ENGINEER.
-- [ ] Мигрировать configured recovery identity -> OWNER.
-- [ ] Оставшихся ADMIN сохранить как ADMIN.
-- [ ] Добавить backend capability policy.
-- [ ] Добавить audited role transitions.
-- [ ] Запретить ADMIN назначать ADMIN/OWNER.
-- [ ] Разрешить OWNER назначать ADMIN.
-- [ ] Запретить role/access mutation OWNER.
-- [ ] Синхронизировать warehouse authorization.
-- [ ] Синхронизировать catalog authorization.
-- [ ] Добавить role-aware frontend navigation/actions.
-- [ ] PostgreSQL integration acceptance.
-- [ ] Frontend unit/browser acceptance.
-- [ ] Full CI acceptance.
+- [x] Existing-role migration contract реализован.
+- [x] OWNER singleton/recovery invariant реализован.
+- [x] Добавлены ENGINEER / SENIOR_ENGINEER / MANAGER / ADMIN / OWNER.
+- [x] Migration USER -> ENGINEER.
+- [x] Runtime reconciliation configured recovery identity -> OWNER.
+- [x] Оставшиеся ADMIN сохраняются как ADMIN.
+- [x] Backend capability policy.
+- [x] Audited role transitions.
+- [x] ADMIN не может назначать ADMIN/OWNER.
+- [x] OWNER может назначать ADMIN.
+- [x] OWNER защищён от normal role/access mutation.
+- [x] Warehouse authorization синхронизирован.
+- [x] Catalog authorization синхронизирован.
+- [x] Role-aware frontend navigation/actions.
+- [x] PostgreSQL integration acceptance.
+- [x] Frontend unit/browser acceptance.
+- [~] Full CI acceptance повторяется после audit remediation.
+- [x] Source migration head `b2c3d4e5f6a7`.
+- [ ] Production RBAC maintenance cutover.
 
 ## 12. Procurement domain
 

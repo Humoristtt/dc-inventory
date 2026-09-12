@@ -38,3 +38,12 @@ def test_database_runtime_defaults() -> None:
 def test_invalid_database_runtime_settings_are_rejected(field: str, value: int) -> None:
     with pytest.raises(ValidationError):
         Settings.model_validate({"database_url": DATABASE_URL, field: value})
+
+def test_unknown_settings_field_is_rejected() -> None:
+    with pytest.raises(ValidationError):
+        Settings.model_validate(
+            {
+                "database_url": DATABASE_URL,
+                "database_pool_sze": 10,
+            }
+        )

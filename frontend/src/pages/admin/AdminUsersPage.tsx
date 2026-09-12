@@ -13,11 +13,13 @@ import "../../features/admin/access-admin.css";
 import { useAuthState } from "../../features/auth/useAuthState";
 import {
   adminUserError,
+  decideAdminUserAccessRequest,
   getAdminUsers,
   getUserAccessEvents,
   getUserRoleEvents,
   setAdminUserAccess,
   setAdminUserRole,
+  type AdminAccessRequestDecision,
   type AdminUser,
 } from "../../shared/api/adminUsers";
 import {
@@ -40,6 +42,69 @@ const standardAssignableRoles: readonly UserRole[] = [
   "SENIOR_ENGINEER",
   "MANAGER",
 ];
+
+const USERS_PAGE_SIZE = 50;
+const HISTORY_PAGE_SIZE = 20;
+
+type PaginationControlsProps = {
+  label: string;
+  offset: number;
+  limit: number;
+  total: number;
+  previousLabel: string;
+  nextLabel: string;
+  onPrevious: () => void;
+  onNext: () => void;
+};
+
+function PaginationControls({
+  label,
+  offset,
+  limit,
+  total,
+  previousLabel,
+  nextLabel,
+  onPrevious,
+  onNext,
+}: PaginationControlsProps) {
+  const hasPrevious = offset > 0;
+  const hasNext = offset + limit < total;
+
+  if (!hasPrevious && !hasNext) {
+    return null;
+  }
+
+  const start = total === 0 ? 0 : offset + 1;
+  const end = Math.min(offset + limit, total);
+
+  return (
+    <div className="admin-pagination">
+      <span>
+        {label}: {start}–{end} из {total}
+      </span>
+
+      <div className="admin-pagination__actions">
+        <button
+          className="button button--ghost"
+          disabled={!hasPrevious}
+          onClick={onPrevious}
+          type="button"
+        >
+          {previousLabel}
+        </button>
+
+        <button
+          className="button button--ghost"
+          disabled={!hasNext}
+          onClick={onNext}
+          type="button"
+        >
+          {nextLabel}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function displayName(user: AdminUser): string {
   const fullName = [
@@ -68,6 +133,9 @@ export function AdminUsersPage() {
   const [historyUserId, setHistoryUserId] = useState<string | null>(
     null,
   );
+  const [usersOffset, setUsersOffset] = useState(0);
+  const [accessHistoryOffset, setAccessHistoryOffset] = useState(0);
+  const [roleHistoryOffset, setRoleHistoryOffset] = useState(0);
 
   const currentUser = auth.data?.user;
 
@@ -96,6 +164,7 @@ export function AdminUsersPage() {
       "users",
       search,
       accessFilter,
+      usersOffset,
     ],
     queryFn: ({ signal }) =>
       getAdminUsers(
@@ -105,6 +174,8 @@ export function AdminUsersPage() {
             accessFilter === "ALL"
               ? undefined
               : accessFilter,
+          limit: USERS_PAGE_SIZE,
+          offset: usersOffset,
         },
         signal,
       ),
@@ -116,13 +187,21 @@ export function AdminUsersPage() {
       "admin",
       "user-access-events",
       historyUserId,
+      accessHistoryOffset,
     ],
     queryFn: ({ signal }) => {
       if (historyUserId === null) {
         throw new Error("history user is not selected");
       }
 
-      return getUserAccessEvents(historyUserId, signal);
+      return getUserAccessEvents(
+        historyUserId,
+        {
+          limit: HISTORY_PAGE_SIZE,
+          offset: accessHistoryOffset,
+        },
+        signal,
+      );
     },
     enabled: canManageUsers && historyUserId !== null,
   });
@@ -132,13 +211,21 @@ export function AdminUsersPage() {
       "admin",
       "user-role-events",
       historyUserId,
+      roleHistoryOffset,
     ],
     queryFn: ({ signal }) => {
       if (historyUserId === null) {
         throw new Error("history user is not selected");
       }
 
-      return getUserRoleEvents(historyUserId, signal);
+      return getUserRoleEvents(
+        historyUserId,
+        {
+          limit: HISTORY_PAGE_SIZE,
+          offset: roleHistoryOffset,
+        },
+        signal,
+      );
     },
     enabled: canManageUsers && historyUserId !== null,
   });
@@ -151,6 +238,34 @@ export function AdminUsersPage() {
       userId: string;
       accessStatus: UserAccessStatus;
     }) => setAdminUserAccess(userId, accessStatus),
+
+    onSuccess: async (_, variables) => {
+      await queryClient.invalidateQueries({
+        queryKey: ["admin", "users"],
+      });
+
+      await queryClient.invalidateQueries({
+        queryKey: [
+          "admin",
+          "user-access-events",
+          variables.userId,
+        ],
+      });
+    },
+  });
+
+  const accessDecisionMutation = useMutation({
+    mutationFn: ({
+      userId,
+      decision,
+    }: {
+      userId: string;
+      decision: AdminAccessRequestDecision;
+    }) =>
+      decideAdminUserAccessRequest(
+        userId,
+        decision,
+      ),
 
     onSuccess: async (_, variables) => {
       await queryClient.invalidateQueries({
@@ -199,9 +314,51 @@ export function AdminUsersPage() {
     return <Navigate replace to="/more" />;
   }
 
+  const resetHistory = () => {
+    setHistoryUserId(null);
+    setAccessHistoryOffset(0);
+    setRoleHistoryOffset(0);
+  };
+
   const submitSearch = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSearch(searchDraft.trim());
+    setUsersOffset(0);
+    resetHistory();
+  };
+
+  const changeUsersPage = (nextOffset: number) => {
+    setUsersOffset(Math.max(0, nextOffset));
+    resetHistory();
+  };
+
+  const toggleHistory = (userId: string) => {
+    setAccessHistoryOffset(0);
+    setRoleHistoryOffset(0);
+    setHistoryUserId((current) =>
+      current === userId ? null : userId
+    );
+  };
+
+  const canDecidePendingAccess = (
+    user: AdminUser,
+  ): boolean => {
+    if (
+      user.access_status !== "PENDING"
+      || user.id === currentUser?.id
+      || user.role === "OWNER"
+    ) {
+      return false;
+    }
+
+    if (
+      user.role === "ADMIN"
+      && !canAssignAdmin
+    ) {
+      return false;
+    }
+
+    return true;
   };
 
   const canManageTargetAccess = (user: AdminUser): boolean => {
@@ -233,6 +390,29 @@ export function AdminUsersPage() {
     }
 
     return true;
+  };
+
+  const decidePendingAccess = (
+    user: AdminUser,
+    decision: AdminAccessRequestDecision,
+  ) => {
+    if (!canDecidePendingAccess(user)) {
+      return;
+    }
+
+    if (
+      decision === "REJECT"
+      && !window.confirm(
+        `Отклонить запрос доступа для ${displayName(user)}?`,
+      )
+    ) {
+      return;
+    }
+
+    accessDecisionMutation.mutate({
+      userId: user.id,
+      decision,
+    });
   };
 
   const changeAccess = (user: AdminUser) => {
@@ -272,6 +452,14 @@ export function AdminUsersPage() {
       return;
     }
 
+    if (
+      !window.confirm(
+        `Изменить роль для ${displayName(user)}: ${ROLE_LABELS[user.role]} → ${ROLE_LABELS[nextRole]}?`,
+      )
+    ) {
+      return;
+    }
+
     roleMutation.mutate({
       userId: user.id,
       role: nextRole,
@@ -306,13 +494,15 @@ export function AdminUsersPage() {
             Статус
             <select
               value={accessFilter}
-              onChange={(event) =>
+              onChange={(event) => {
                 setAccessFilter(
                   event.target.value as
                     | UserAccessStatus
                     | "ALL",
-                )
-              }
+                );
+                setUsersOffset(0);
+                resetHistory();
+              }}
             >
               <option value="ALL">Все</option>
               <option value="APPROVED">Доступ разрешён</option>
@@ -354,6 +544,8 @@ export function AdminUsersPage() {
               canManageTargetRole(user);
             const accessMutable =
               canManageTargetAccess(user);
+            const pendingDecisionMutable =
+              canDecidePendingAccess(user);
 
             return (
               <section
@@ -375,6 +567,9 @@ export function AdminUsersPage() {
 
                 <p className="admin-user-card__meta">
                   Роль: {ROLE_LABELS[user.role]}
+                  {user.is_recovery_identity
+                    ? " · Recovery OWNER"
+                    : ""}
                   {isCurrentUser
                     ? " · Текущая учётная запись"
                     : ""}
@@ -406,6 +601,42 @@ export function AdminUsersPage() {
                 ) : null}
 
                 <div className="admin-user-card__actions">
+                  {pendingDecisionMutable ? (
+                    <>
+                      <button
+                        className="button button--dark"
+                        disabled={
+                          accessDecisionMutation.isPending
+                        }
+                        onClick={() =>
+                          decidePendingAccess(
+                            user,
+                            "APPROVE",
+                          )
+                        }
+                        type="button"
+                      >
+                        Разрешить
+                      </button>
+
+                      <button
+                        className="button button--danger"
+                        disabled={
+                          accessDecisionMutation.isPending
+                        }
+                        onClick={() =>
+                          decidePendingAccess(
+                            user,
+                            "REJECT",
+                          )
+                        }
+                        type="button"
+                      >
+                        Отклонить
+                      </button>
+                    </>
+                  ) : null}
+
                   {accessMutable ? (
                     <button
                       className={
@@ -426,11 +657,7 @@ export function AdminUsersPage() {
                   <button
                     className="button button--ghost"
                     onClick={() =>
-                      setHistoryUserId(
-                        historyUserId === user.id
-                          ? null
-                          : user.id,
-                      )
+                      toggleHistory(user.id)
                     }
                     type="button"
                   >
@@ -463,6 +690,28 @@ export function AdminUsersPage() {
 
                     <h3>Роли</h3>
 
+                    <PaginationControls
+                      label="Роли"
+                      limit={HISTORY_PAGE_SIZE}
+                      nextLabel="Следующая страница ролей"
+                      offset={roleHistoryOffset}
+                      onNext={() =>
+                        setRoleHistoryOffset(
+                          roleHistoryOffset + HISTORY_PAGE_SIZE,
+                        )
+                      }
+                      onPrevious={() =>
+                        setRoleHistoryOffset(
+                          Math.max(
+                            0,
+                            roleHistoryOffset - HISTORY_PAGE_SIZE,
+                          ),
+                        )
+                      }
+                      previousLabel="Предыдущая страница ролей"
+                      total={roleHistoryQuery.data?.total ?? 0}
+                    />
+
                     {roleHistoryQuery.data?.items.length === 0 ? (
                       <p>Изменений роли пока нет.</p>
                     ) : null}
@@ -478,7 +727,7 @@ export function AdminUsersPage() {
                           {ROLE_LABELS[event.after_role]}
                         </strong>
                         <span>
-                          Кем: {event.actor_user_id}
+                          Кем: {event.actor_display_name}
                         </span>
                         <span>
                           {new Date(
@@ -489,6 +738,28 @@ export function AdminUsersPage() {
                     ))}
 
                     <h3>Доступ</h3>
+
+                    <PaginationControls
+                      label="Доступ"
+                      limit={HISTORY_PAGE_SIZE}
+                      nextLabel="Следующая страница доступа"
+                      offset={accessHistoryOffset}
+                      onNext={() =>
+                        setAccessHistoryOffset(
+                          accessHistoryOffset + HISTORY_PAGE_SIZE,
+                        )
+                      }
+                      onPrevious={() =>
+                        setAccessHistoryOffset(
+                          Math.max(
+                            0,
+                            accessHistoryOffset - HISTORY_PAGE_SIZE,
+                          ),
+                        )
+                      }
+                      previousLabel="Предыдущая страница доступа"
+                      total={accessHistoryQuery.data?.total ?? 0}
+                    />
 
                     {accessHistoryQuery.data?.items.length === 0 ? (
                       <p>Изменений доступа пока нет.</p>
@@ -505,7 +776,7 @@ export function AdminUsersPage() {
                           {accessLabels[event.after_access_status]}
                         </strong>
                         <span>
-                          Кем: {event.actor_user_id}
+                          Кем: {event.actor_display_name}
                         </span>
                         <span>
                           {new Date(
@@ -521,9 +792,36 @@ export function AdminUsersPage() {
           })}
         </div>
 
+        <PaginationControls
+          label="Пользователи"
+          limit={USERS_PAGE_SIZE}
+          nextLabel="Следующая страница"
+          offset={usersOffset}
+          onNext={() =>
+            changeUsersPage(
+              usersOffset + USERS_PAGE_SIZE,
+            )
+          }
+          onPrevious={() =>
+            changeUsersPage(
+              usersOffset - USERS_PAGE_SIZE,
+            )
+          }
+          previousLabel="Предыдущая страница"
+          total={usersQuery.data?.total ?? 0}
+        />
+
         {accessMutation.isError ? (
           <p role="alert">
             {adminUserError(accessMutation.error)}
+          </p>
+        ) : null}
+
+        {accessDecisionMutation.isError ? (
+          <p role="alert">
+            {adminUserError(
+              accessDecisionMutation.error,
+            )}
           </p>
         ) : null}
 

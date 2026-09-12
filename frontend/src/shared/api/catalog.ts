@@ -461,3 +461,21 @@ export function setCatalogItemArchived(
     signal,
   );
 }
+
+export async function deleteCatalogItem(
+  itemId: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const response = await fetch(
+    `/api/admin/catalog/items/${encodeURIComponent(itemId)}`,
+    {
+      method: "DELETE",
+      credentials: "same-origin",
+      signal,
+    },
+  );
+
+  if (!response.ok) {
+    await readJson<unknown>(response);
+  }
+}

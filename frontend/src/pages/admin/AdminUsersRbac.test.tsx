@@ -130,6 +130,7 @@ function makeUser(
     last_name: null,
     role,
     access_status: accessStatus,
+    is_recovery_identity: role === "OWNER",
     created_at: "2026-09-01T10:00:00Z",
     updated_at: "2026-09-01T10:00:00Z",
     approved_at:
@@ -332,6 +333,10 @@ it.each([
 it(
   "ADMIN меняет стандартную роль и не может назначить ADMIN",
   async () => {
+    const confirm = vi
+      .spyOn(window, "confirm")
+      .mockReturnValue(true);
+
     const api = installUsersApi([
       makeUser("engineer-2001", "ENGINEER"),
     ]);
@@ -392,6 +397,8 @@ it(
         },
       ]);
     });
+
+    expect(confirm).toHaveBeenCalledTimes(1);
   },
 );
 
@@ -506,7 +513,7 @@ it(
       ]);
     });
 
-    expect(confirm).toHaveBeenCalledTimes(1);
+    expect(confirm).toHaveBeenCalledTimes(2);
   },
 );
 
@@ -529,6 +536,10 @@ it(
     const card = userCard(/actor-owner/);
 
     expect(
+      card.getByText(/Recovery OWNER/),
+    ).toBeInTheDocument();
+
+    expect(
       card.queryByRole(
         "combobox",
         { name: "Роль пользователя" },
@@ -548,5 +559,45 @@ it(
         { name: "Разблокировать" },
       ),
     ).not.toBeInTheDocument();
+  },
+);
+
+it(
+  "отмена подтверждения не меняет роль",
+  async () => {
+    const confirm = vi
+      .spyOn(window, "confirm")
+      .mockReturnValue(false);
+
+    const api = installUsersApi([
+      makeUser("engineer-cancel", "ENGINEER"),
+    ]);
+
+    renderRoute("/more/users", "ADMIN");
+
+    expect(
+      await screen.findByRole(
+        "heading",
+        { name: /engineer-cancel/ },
+      ),
+    ).toBeInTheDocument();
+
+    const card = userCard(/engineer-cancel/);
+    const select = card.getByRole(
+      "combobox",
+      { name: "Роль пользователя" },
+    );
+
+    fireEvent.change(select, {
+      target: {
+        value: "MANAGER",
+      },
+    });
+
+    await waitFor(() => {
+      expect(confirm).toHaveBeenCalledTimes(1);
+    });
+
+    expect(api.roleBodies).toEqual([]);
   },
 );

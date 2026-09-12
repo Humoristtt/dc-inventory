@@ -122,8 +122,9 @@ stock_balances(Item, Location, quantity)
 user_item_custody_balances(User, Item, quantity)
 
 `actor_user_id` фиксирует исполнителя операции, а `custody_user_id` — пользователя,
-физически ответственного за оборудование. USER ISSUE/RETURN изменяют custody;
-ADMIN ISSUE/RETURN остаются административными движениями склада без custody.
+физически ответственного за оборудование. ENGINEER / SENIOR_ENGINEER
+ISSUE/RETURN изменяют custody; ADMIN / OWNER ISSUE/RETURN остаются
+административными движениями склада без custody.
 
 Movement types:
 
@@ -199,13 +200,13 @@ Git checkout на production VM и revision реально запущенног�
 являются разными operational facts. Runtime provenance проверяется по metadata
 образа, а не выводится только из состояния checkout.
 
-## Authorization / RBAC target
+## Authorization / RBAC
 
 Current feature-cycle contract:
 
 `docs/RBAC_PROCUREMENT.md`
 
-Target roles:
+Source roles:
 
 - ENGINEER;
 - SENIOR_ENGINEER;
@@ -227,8 +228,10 @@ Telegram identity.
 ADMIN может назначать ENGINEER / SENIOR_ENGINEER / MANAGER, но не ADMIN/OWNER.
 OWNER может назначать ADMIN. OWNER нельзя изменять обычным role/access API.
 
-До завершения migration фактический production baseline всё ещё использует
-исторические USER/ADMIN значения.
+Source migration `a1b2c3d4e5f6` уже реализует five-role RBAC. Accepted production
+baseline до отдельного maintenance cutover всё ещё использует historical
+USER / ADMIN значения; source state и production state здесь намеренно
+различаются.
 
 ## Procurement architecture target
 

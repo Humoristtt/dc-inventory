@@ -94,7 +94,8 @@ CUSTODY_ROLES = frozenset(
     {UserRole.ENGINEER, UserRole.SENIOR_ENGINEER}
 )
 
-# Serializes role/access mutation and configured OWNER recovery reconciliation.
+# Ordinary identity mutations hold this barrier in shared mode.
+# Recovery OWNER rotation holds it exclusively.
 IDENTITY_MANAGEMENT_LOCK_KEY = 4937638921054812071
 
 

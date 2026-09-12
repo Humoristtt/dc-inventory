@@ -123,15 +123,15 @@ Baseline Alembic:
 
 Текущий source migration head:
 
-    f8a9b0c1d2e3
+    b2c3d4e5f6a7
 
 Production migration head на текущем принятом production baseline:
 
     f8a9b0c1d2e3
 
-На текущем accepted baseline source и production head совпадают. При появлении
-новой source migration её нельзя считать production state до отдельного
-deploy/migration acceptance.
+Source и accepted production head сейчас намеренно различаются. Migration
+`b2c3d4e5f6a7` является source state и не считается production state до
+отдельного maintenance cutover и migration acceptance.
 
 ## Локальный backend
 
@@ -250,6 +250,23 @@ frontend.
 
 `POSTGRES_DEV_PORT` позволяет поднять изолированную test DB на другом
 loopback-порту, например `55433`.
+
+### Local full-stack browser gate
+
+Локальный full-stack browser acceptance запускается только через:
+
+    cd frontend
+    npm run test:e2e:fullstack:local
+
+Runner работает в отдельном child process и не экспортирует test variables
+обратно в interactive shell. Каждый запуск создаёт уникальную PostgreSQL
+database, применяет Alembic head, запускает временные backend/Vite процессы,
+выполняет signed Telegram browser scenario, проверяет database side effects и
+через cleanup trap удаляет временную database и процессы.
+
+Запрещено для full-stack acceptance вручную `source`-ить `.env.fullstack` или
+направлять scenario на общую development database. Telegram test credentials
+являются локальными synthetic values и существуют только внутри runner process.
 
 ## PostgreSQL integration tests
 

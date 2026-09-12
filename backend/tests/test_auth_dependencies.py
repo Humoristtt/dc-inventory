@@ -8,8 +8,8 @@ from starlette.requests import Request
 from app.core.config import Settings
 from app.modules.auth.dependencies import (
     _enforce_cookie_mutation_origin,
-    get_admin_context,
     get_approved_context,
+    get_manage_users_context,
     require_capability,
 )
 from app.modules.auth.models import AuthSession
@@ -103,19 +103,19 @@ async def test_admin_dependency_rejects_regular_approved_user() -> None:
     context = _context(access_status=UserAccessStatus.APPROVED)
 
     with pytest.raises(HTTPException) as exc_info:
-        await get_admin_context(context)
+        await get_manage_users_context(context)
 
     assert exc_info.value.status_code == 403
     assert exc_info.value.detail == "required capability missing"
 
 
 @pytest.mark.asyncio
-async def test_admin_dependency_accepts_approved_admin() -> None:
+async def test_manage_users_dependency_accepts_capable_user() -> None:
     context = _context(
         access_status=UserAccessStatus.APPROVED,
         role=UserRole.ADMIN,
     )
-    assert await get_admin_context(context) is context
+    assert await get_manage_users_context(context) is context
 
 
 @pytest.mark.asyncio

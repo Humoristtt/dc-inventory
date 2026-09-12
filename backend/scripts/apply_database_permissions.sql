@@ -296,6 +296,36 @@ SELECT format(
 )
 \gexec
 
+
+-- Procurement workflow: mutable request header plus append-only history.
+SELECT format(
+    'GRANT SELECT, INSERT ON TABLE procurement_requests TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT UPDATE (status, assigned_manager_user_id, current_revision_id, '
+    'final_movement_id, state_version, updated_at, completed_at) '
+    'ON TABLE procurement_requests TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT SELECT, INSERT ON TABLE procurement_revisions, '
+    'procurement_revision_lines, procurement_line_catalog_bindings, '
+    'procurement_events, email_outbox TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT USAGE, SELECT ON SEQUENCE procurement_request_number_seq TO %I',
+    :'runtime_user'
+)
+\gexec
+
 -- Exact identity sequence used by Movement.journal_seq.
 -- Runtime does not receive blanket access to every sequence in public.
 SELECT format(
@@ -321,6 +351,19 @@ SELECT format(
 \gexec
 
 SELECT format(
+    'GRANT SELECT ON TABLE email_outbox TO %I',
+    :'worker_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT UPDATE (status, attempts, available_at, claimed_at, claim_token, '
+    'sent_at, last_error, updated_at) ON TABLE email_outbox TO %I',
+    :'worker_user'
+)
+\gexec
+
+SELECT format(
     'GRANT SELECT ON TABLE telegram_chat_states TO %I',
     :'worker_user'
 )
@@ -341,7 +384,7 @@ SELECT format(
 -- read-only because callback retention must inspect terminal decision state.
 -- It intentionally has no access to the warehouse journal or projections.
 SELECT format(
-    'GRANT SELECT, DELETE ON TABLE auth_sessions, telegram_updates, notification_outbox, access_decision_callbacks TO %I',
+    'GRANT SELECT, DELETE ON TABLE auth_sessions, telegram_updates, notification_outbox, email_outbox, access_decision_callbacks TO %I',
     :'maintenance_user'
 )
 \gexec

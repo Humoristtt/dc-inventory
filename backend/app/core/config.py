@@ -61,6 +61,16 @@ class Settings(BaseSettings):
     notification_worker_batch_size: int = Field(default=10, ge=1, le=100)
     notification_worker_max_attempts: int = Field(default=8, ge=1, le=20)
 
+    microsoft_graph_tenant_id: str | None = None
+    microsoft_graph_client_id: str | None = None
+    microsoft_graph_client_secret: SecretStr | None = None
+    microsoft_graph_sender: str | None = None
+    microsoft_graph_timeout_seconds: int = Field(default=15, ge=1, le=60)
+    email_worker_poll_seconds: int = Field(default=5, ge=1, le=60)
+    email_worker_claim_ttl_seconds: int = Field(default=60, ge=10, le=600)
+    email_worker_batch_size: int = Field(default=10, ge=1, le=100)
+    email_worker_max_attempts: int = Field(default=8, ge=1, le=20)
+
     maintenance_worker_poll_seconds: int = Field(
         default=3600,
         ge=60,
@@ -82,6 +92,11 @@ class Settings(BaseSettings):
         le=365,
     )
     notification_outbox_retention_days: int = Field(
+        default=90,
+        ge=1,
+        le=730,
+    )
+    email_outbox_retention_days: int = Field(
         default=90,
         ge=1,
         le=730,
@@ -128,6 +143,28 @@ class Settings(BaseSettings):
             return None
         value = self.telegram_gateway_secret.get_secret_value().strip()
         return value or None
+
+    @property
+    def microsoft_graph_tenant_id_value(self) -> str | None:
+        value = self.microsoft_graph_tenant_id
+        return value.strip() if value and value.strip() else None
+
+    @property
+    def microsoft_graph_client_id_value(self) -> str | None:
+        value = self.microsoft_graph_client_id
+        return value.strip() if value and value.strip() else None
+
+    @property
+    def microsoft_graph_client_secret_value(self) -> str | None:
+        if self.microsoft_graph_client_secret is None:
+            return None
+        value = self.microsoft_graph_client_secret.get_secret_value().strip()
+        return value or None
+
+    @property
+    def microsoft_graph_sender_value(self) -> str | None:
+        value = self.microsoft_graph_sender
+        return value.strip().casefold() if value and value.strip() else None
 
     @property
     def support_telegram_url(self) -> str:

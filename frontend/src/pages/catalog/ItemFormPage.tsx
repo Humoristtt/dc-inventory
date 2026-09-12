@@ -31,6 +31,11 @@ import { useInternalBackNavigation } from "../../features/navigation/useTelegram
 import { ApiRequestError } from "../../shared/api/auth";
 import { PageHeader } from "../../shared/ui";
 import {
+  expectedState,
+  getProcurementRequest,
+  mutateProcurement,
+} from "../../shared/api/procurement";
+import {
   createCatalogItem,
   createCatalogManufacturer,
   getCatalogCategories,
@@ -232,6 +237,7 @@ export function ItemFormPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [manufacturerName, setManufacturerName] = useState("");
   const [manufacturerInput, setManufacturerInput] = useState("");
+  const [procurementBindingError, setProcurementBindingError] = useState(false);
 
   const manufacturerInitialized = useRef(false);
 
@@ -240,6 +246,41 @@ export function ItemFormPage() {
     queryFn: ({ signal }) => getCatalogItem(itemId ?? "", signal),
     enabled: Boolean(itemId),
   });
+
+  const procurementRequestId = params.get("procurementRequestId");
+  const procurementLineId = params.get("procurementLineId");
+  const procurement = useQuery({
+    queryKey: ["procurement", "request", procurementRequestId],
+    queryFn: ({ signal }) =>
+      getProcurementRequest(procurementRequestId ?? "", signal),
+    enabled: Boolean(procurementRequestId && procurementLineId && !itemId),
+  });
+  const procurementLine = procurement.data?.current_revision.lines.find(
+    (line) => line.id === procurementLineId,
+  );
+  const procurementSnapshot = procurementLine?.display_snapshot;
+  const procurementDraft: Draft | null = procurementSnapshot
+    ? {
+        category: String(procurementSnapshot.category_key ?? ""),
+        manufacturer:
+          typeof procurementSnapshot.manufacturer_id === "string"
+            ? procurementSnapshot.manufacturer_id
+            : "",
+        model:
+          typeof procurementSnapshot.model === "string"
+            ? procurementSnapshot.model
+            : "",
+        name: String(procurementSnapshot.name ?? ""),
+        attributes: Object.fromEntries(
+          Object.entries(
+            (procurementSnapshot.attributes ?? {}) as Record<string, unknown>,
+          ).map(([key, value]) => [
+            key,
+            typeof value === "boolean" ? value : String(value),
+          ]),
+        ),
+      }
+    : null;
 
   const categories = useQuery({
     staleTime: 5 * 60_000,
@@ -251,6 +292,8 @@ export function ItemFormPage() {
     ?? (
       item.data
         ? itemDraft(item.data)
+        : procurementDraft
+          ? procurementDraft
         : {
             ...empty,
             category: params.get("category") ?? "",
@@ -284,14 +327,19 @@ export function ItemFormPage() {
   useEffect(() => {
     if (
       manufacturerInitialized.current
-      || !item.data
+      || (!item.data && !procurementSnapshot)
     ) {
       return;
     }
 
     manufacturerInitialized.current = true;
-    setManufacturerInput(item.data.manufacturer?.name ?? "");
-  }, [item.data]);
+    setManufacturerInput(
+      item.data?.manufacturer?.name
+        ?? (typeof procurementSnapshot?.manufacturer_name === "string"
+          ? procurementSnapshot.manufacturer_name
+          : ""),
+    );
+  }, [item.data, procurementSnapshot]);
 
   const debouncedManufacturer = useDebouncedValue(
     manufacturerInput.trim(),
@@ -421,7 +469,7 @@ export function ItemFormPage() {
 
       return createCatalogItem(payload);
     },
-    onSuccess: (saved) => {
+    onSuccess: async (saved) => {
       client.setQueryData(
         ["catalog", "item", saved.id],
         saved,
@@ -447,10 +495,28 @@ export function ItemFormPage() {
         queryKey: ["catalog", "form-attribute-suggestions"],
       });
 
-      navigate(
-        `/catalog/items/${saved.id}`,
-        { replace: true },
-      );
+      if (procurement.data && procurementLineId && procurementRequestId) {
+        try {
+          const linked = await mutateProcurement(
+            procurementRequestId,
+            "bind-line",
+            {
+              ...expectedState(procurement.data),
+              line_id: procurementLineId,
+              item_id: saved.id,
+            },
+          );
+          client.setQueryData(
+            ["procurement", "request", procurementRequestId],
+            linked,
+          );
+          navigate(`/procurement/${procurementRequestId}`, { replace: true });
+        } catch {
+          setProcurementBindingError(true);
+        }
+      } else {
+        navigate(`/catalog/items/${saved.id}`, { replace: true });
+      }
     },
   });
 
@@ -463,7 +529,11 @@ export function ItemFormPage() {
     mutation.reset();
   };
 
-  if (auth.isPending || (itemId && item.isPending)) {
+  if (
+    auth.isPending
+    || (itemId && item.isPending)
+    || (procurementRequestId && procurement.isPending)
+  ) {
     return <p role="status">Загрузка…</p>;
   }
 
@@ -480,6 +550,10 @@ export function ItemFormPage() {
         </button>
       </p>
     );
+  }
+
+  if (procurementRequestId && (procurement.isError || !procurementLine)) {
+    return <p role="alert">Не удалось загрузить позицию закупки.</p>;
   }
 
   const telegramOwnsBack =
@@ -836,6 +910,13 @@ export function ItemFormPage() {
                     && mutation.error.status === 423
                   ? "Изменения каталога пока отключены администратором."
                   : "Не удалось сохранить. Проверьте обязательные поля и дальность."}
+            </p>
+          ) : null}
+
+          {procurementBindingError ? (
+            <p role="alert">
+              Карточка создана, но заявка успела измениться. Вернитесь в закупку
+              и свяжите позицию с созданной карточкой.
             </p>
           ) : null}
 

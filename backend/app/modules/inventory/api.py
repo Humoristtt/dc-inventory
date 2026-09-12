@@ -82,20 +82,13 @@ admin_router = APIRouter(prefix="/api/admin/inventory", tags=["admin-inventory"]
 
 
 _CUSTODY_TRIGGER_CONFLICT_CODES = {
-    "custody is only valid for issue, return, or reversal":
-        "custody_movement_type_invalid",
-    "user issue/return custody must match movement actor":
-        "custody_actor_mismatch",
-    "admin issue/return must not carry custody":
-        "custody_admin_invalid",
-    "correction of custody movement is forbidden":
-        "custody_correction_forbidden",
-    "reversal original movement not found":
-        "reversal_original_not_found",
-    "reversal custody must match original movement":
-        "reversal_custody_mismatch",
-    "custody reversal requires issue or return original":
-        "reversal_custody_original_invalid",
+    "custody is only valid for issue, return, or reversal": "custody_movement_type_invalid",
+    "user issue/return custody must match movement actor": "custody_actor_mismatch",
+    "admin issue/return must not carry custody": "custody_admin_invalid",
+    "correction of custody movement is forbidden": "custody_correction_forbidden",
+    "reversal original movement not found": "reversal_original_not_found",
+    "reversal custody must match original movement": "reversal_custody_mismatch",
+    "custody reversal requires issue or return original": "reversal_custody_original_invalid",
 }
 
 
@@ -179,10 +172,7 @@ def _raise_integrity_conflict(error: IntegrityError) -> NoReturn:
                 status_code=status.HTTP_409_CONFLICT,
                 detail={
                     "code": trigger_code,
-                    "message": (
-                        "inventory custody constraint "
-                        "rejected the operation"
-                    ),
+                    "message": ("inventory custody constraint rejected the operation"),
                 },
             ) from error
 
@@ -214,15 +204,19 @@ def _location_out(location: Location) -> LocationOut:
     return LocationOut.model_validate(location)
 
 
-def _movement_out(record: MovementRecord) -> MovementOut:
+def _movement_out(
+    record: MovementRecord,
+    procurement_request_id: UUID | None = None,
+) -> MovementOut:
     return MovementOut.model_validate(
         {
             **{
                 key: getattr(record.movement, key)
                 for key in MovementOut.model_fields
-                if key != "lines"
+                if key not in {"lines", "procurement_request_id"}
             },
             "lines": record.lines,
+            "procurement_request_id": procurement_request_id,
         }
     )
 
@@ -429,18 +423,12 @@ async def get_movement_feed(
         Query(include_in_schema=False),
     ] = None,
 ) -> MovementCursorListOut:
-    if (
-        before_journal_seq is not None
-        or snapshot_at is not None
-    ):
+    if before_journal_seq is not None or snapshot_at is not None:
         raise HTTPException(
             status_code=422,
             detail={
                 "code": "movement_cursor_legacy_parameters",
-                "message": (
-                    "raw movement snapshot parameters "
-                    "are not accepted"
-                ),
+                "message": ("raw movement snapshot parameters are not accepted"),
             },
         )
 
@@ -448,38 +436,20 @@ async def get_movement_feed(
         approved.user.role,
         Capability.MOVEMENT_READ_ALL,
     ):
-        if (
-            actor_user_id is not None
-            and actor_user_id != approved.user.id
-        ):
+        if actor_user_id is not None and actor_user_id != approved.user.id:
             raise HTTPException(
                 status_code=403,
-                detail=(
-                    "all movement history "
-                    "capability required"
-                ),
+                detail=("all movement history capability required"),
             )
         actor_user_id = approved.user.id
 
     scope: dict[str, object] = {
         "requester_user_id": str(approved.user.id),
-        "movement_type": (
-            movement_type.value
-            if movement_type is not None
-            else None
-        ),
-        "actor_user_id": (
-            str(actor_user_id)
-            if actor_user_id is not None
-            else None
-        ),
+        "movement_type": (movement_type.value if movement_type is not None else None),
+        "actor_user_id": (str(actor_user_id) if actor_user_id is not None else None),
         "category": category,
         "long_range": long_range,
-        "location_id": (
-            str(location_id)
-            if location_id is not None
-            else None
-        ),
+        "location_id": (str(location_id) if location_id is not None else None),
         "period": period,
         "limit": limit,
     }
@@ -487,13 +457,9 @@ async def get_movement_feed(
     settings: Settings = request.app.state.settings
 
     if cursor is None:
-        snapshot = await acquire_movement_feed_snapshot(
-            db
-        )
+        snapshot = await acquire_movement_feed_snapshot(db)
         effective_snapshot_at = snapshot.snapshot_at
-        database_snapshot = (
-            snapshot.database_snapshot
-        )
+        database_snapshot = snapshot.database_snapshot
         effective_before = None
 
         current_cursor = encode_movement_feed_cursor(
@@ -505,12 +471,10 @@ async def get_movement_feed(
         )
     else:
         try:
-            cursor_state = (
-                decode_movement_feed_cursor(
-                    settings,
-                    cursor,
-                    scope=scope,
-                )
+            cursor_state = decode_movement_feed_cursor(
+                settings,
+                cursor,
+                scope=scope,
             )
         except MovementFeedCursorError as error:
             raise HTTPException(
@@ -521,15 +485,9 @@ async def get_movement_feed(
                 },
             ) from error
 
-        effective_snapshot_at = (
-            cursor_state.snapshot_at
-        )
-        database_snapshot = (
-            cursor_state.database_snapshot
-        )
-        effective_before = (
-            cursor_state.before_journal_seq
-        )
+        effective_snapshot_at = cursor_state.snapshot_at
+        database_snapshot = cursor_state.database_snapshot
+        effective_before = cursor_state.before_journal_seq
         current_cursor = cursor
 
     since: datetime | None = None
@@ -538,25 +496,10 @@ async def get_movement_feed(
         now = effective_snapshot_at
 
         if period in {"7d", "30d"}:
-            since = now - timedelta(
-                days=(
-                    7
-                    if period == "7d"
-                    else 30
-                )
-            )
+            since = now - timedelta(days=(7 if period == "7d" else 30))
         else:
-            months = (
-                3
-                if period == "3m"
-                else 12
-            )
-            month_index = (
-                now.year * 12
-                + now.month
-                - 1
-                - months
-            )
+            months = 3 if period == "3m" else 12
+            month_index = now.year * 12 + now.month - 1 - months
             year, month = divmod(
                 month_index,
                 12,
@@ -598,17 +541,12 @@ async def get_movement_feed(
             settings,
             snapshot_at=effective_snapshot_at,
             database_snapshot=database_snapshot,
-            before_journal_seq=(
-                page.next_before_journal_seq
-            ),
+            before_journal_seq=(page.next_before_journal_seq),
             scope=scope,
         )
 
     return MovementCursorListOut(
-        items=[
-            _movement_out(record)
-            for record in page.items
-        ],
+        items=[_movement_out(record) for record in page.items],
         limit=limit,
         snapshot_at=effective_snapshot_at,
         cursor=current_cursor,
@@ -628,7 +566,12 @@ async def get_movement(movement_id: UUID, db: DbSession, approved: MovementRead)
             and record.movement.actor_user_id != approved.user.id
         ):
             raise HTTPException(status_code=403, detail="all movement history capability required")
-        return _movement_out(record)
+        from app.modules.procurement.models import ProcurementRequest
+
+        procurement_request_id = await db.scalar(
+            select(ProcurementRequest.id).where(ProcurementRequest.final_movement_id == movement_id)
+        )
+        return _movement_out(record, procurement_request_id)
     except InventoryError as error:
         _raise_inventory_error(error)
 
@@ -732,15 +675,14 @@ async def post_movement(
     db: DbSession,
     approved: InventoryOperate,
 ) -> MovementOut:
-    if (
-        not has_capability(approved.user.role, Capability.INVENTORY_ADMIN)
-        and payload.movement_type not in {
-            MovementType.RECEIPT,
-            MovementType.ISSUE,
-            MovementType.RETURN,
-            MovementType.TRANSFER,
-        }
-    ):
+    if not has_capability(
+        approved.user.role, Capability.INVENTORY_ADMIN
+    ) and payload.movement_type not in {
+        MovementType.RECEIPT,
+        MovementType.ISSUE,
+        MovementType.RETURN,
+        MovementType.TRANSFER,
+    }:
         raise HTTPException(status_code=403, detail="inventory admin capability required")
     require_real_inventory_mutations_enabled(request)
     try:

@@ -123,7 +123,7 @@ Baseline Alembic:
 
 Текущий source migration head:
 
-    b2c3d4e5f6a7
+    c3d4e5f6a7b8
 
 Production migration head на текущем принятом production baseline:
 

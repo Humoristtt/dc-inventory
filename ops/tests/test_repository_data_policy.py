@@ -110,11 +110,11 @@ bot_token_pattern = re.compile(
     r"\b\d{6,12}:[A-Za-z0-9_-]{30,}\b"
 )
 
-private_key_markers = (
-    "-----BEGIN PRIVATE KEY-----",
-    "-----BEGIN RSA PRIVATE KEY-----",
-    "-----BEGIN EC PRIVATE KEY-----",
-    "-----BEGIN OPENSSH PRIVATE KEY-----",
+private_key_types = (
+    "PRIVATE KEY",
+    "RSA PRIVATE KEY",
+    "EC PRIVATE KEY",
+    "OPENSSH PRIVATE KEY",
 )
 
 for name in tracked:
@@ -130,7 +130,8 @@ for name in tracked:
             f"possible real Telegram bot token in tracked file: {name}"
         )
 
-    for marker in private_key_markers:
+    for key_type in private_key_types:
+        marker = "-----BEGIN " + key_type + "-----"
         if marker in content:
             raise RuntimeError(
                 f"private key material in tracked file: {name}"

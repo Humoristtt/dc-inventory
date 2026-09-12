@@ -237,6 +237,54 @@ services:
     pids_limit: 256
     restart: unless-stopped
 
+  email-worker:
+    <<: *backend-image
+    profiles: ["email"]
+    command: ["python", "-m", "app.modules.procurement.email"]
+    environment:
+      <<: *backend-environment
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_WORKER_USER}:${POSTGRES_WORKER_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      TELEGRAM_WEB_APP_URL: ${TELEGRAM_WEB_APP_URL:-https://app.spik-inventory.ru}
+      MICROSOFT_GRAPH_TENANT_ID: ${MICROSOFT_GRAPH_TENANT_ID:-}
+      MICROSOFT_GRAPH_CLIENT_ID: ${MICROSOFT_GRAPH_CLIENT_ID:-}
+      MICROSOFT_GRAPH_CLIENT_SECRET: ${MICROSOFT_GRAPH_CLIENT_SECRET:-}
+      MICROSOFT_GRAPH_SENDER: ${MICROSOFT_GRAPH_SENDER:-}
+      MICROSOFT_GRAPH_TIMEOUT_SECONDS: ${MICROSOFT_GRAPH_TIMEOUT_SECONDS:-15}
+      EMAIL_WORKER_POLL_SECONDS: ${EMAIL_WORKER_POLL_SECONDS:-5}
+      EMAIL_WORKER_CLAIM_TTL_SECONDS: ${EMAIL_WORKER_CLAIM_TTL_SECONDS:-60}
+      EMAIL_WORKER_BATCH_SIZE: ${EMAIL_WORKER_BATCH_SIZE:-10}
+      EMAIL_WORKER_MAX_ATTEMPTS: ${EMAIL_WORKER_MAX_ATTEMPTS:-8}
+      WORKER_HEARTBEAT_FILE: /tmp/dc-inventory-email-worker-heartbeat
+      WORKER_HEARTBEAT_INTERVAL_SECONDS: "10"
+      WORKER_HEARTBEAT_MAX_AGE_SECONDS: "60"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      db-permissions:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-m", "app.core.worker_health"]
+      interval: 15s
+      timeout: 3s
+      retries: 3
+      start_period: 20s
+    networks:
+      - db_net
+      - egress_net
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    init: true
+    stop_grace_period: 20s
+    logging: *runtime-logging
+    cpus: ${EMAIL_WORKER_CPUS_LIMIT:-0.5}
+    mem_limit: ${EMAIL_WORKER_MEMORY_LIMIT:-512m}
+    pids_limit: 256
+    restart: unless-stopped
+
   maintenance-worker:
     <<: *backend-image
     command: ["python", "-m", "app.maintenance.worker"]
@@ -250,6 +298,7 @@ services:
       AUTH_SESSION_RETENTION_DAYS: ${AUTH_SESSION_RETENTION_DAYS:-7}
       TELEGRAM_UPDATE_RETENTION_DAYS: ${TELEGRAM_UPDATE_RETENTION_DAYS:-30}
       NOTIFICATION_OUTBOX_RETENTION_DAYS: ${NOTIFICATION_OUTBOX_RETENTION_DAYS:-90}
+      EMAIL_OUTBOX_RETENTION_DAYS: ${EMAIL_OUTBOX_RETENTION_DAYS:-90}
       ACCESS_CALLBACK_RETENTION_DAYS: ${ACCESS_CALLBACK_RETENTION_DAYS:-30}
       WORKER_HEARTBEAT_INTERVAL_SECONDS: "10"
       WORKER_HEARTBEAT_MAX_AGE_SECONDS: "60"

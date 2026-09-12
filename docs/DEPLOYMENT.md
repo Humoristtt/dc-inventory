@@ -24,7 +24,7 @@ Current accepted production Alembic head после RBAC cutover:
 
 Текущий source Alembic head:
 
-    b2c3d4e5f6a7
+    c3d4e5f6a7b8
 
 Stage15A automated off-VM backup, Stage15B real isolated restore и Stage15
 technical hardening — `PASS`.

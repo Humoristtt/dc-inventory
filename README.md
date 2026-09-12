@@ -30,7 +30,7 @@ Warehouse Domain V2 развёрнут и принят в production.
 
 Текущий source migration head:
 
-    SOURCE_ALEMBIC_HEAD=b2c3d4e5f6a7
+    SOURCE_ALEMBIC_HEAD=c3d4e5f6a7b8
 
 Accepted production migration state и source migration head после RBAC
 maintenance cutover совпадают на `b2c3d4e5f6a7`. Five-role RBAC активен в

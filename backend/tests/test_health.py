@@ -97,6 +97,13 @@ async def test_readiness_checks_schema_even_when_tables_are_empty() -> None:
     assert "ur.before_role" in query
     assert "ur.after_role" in query
     assert "ur.occurred_at" in query
+    assert "public.procurement_requests pr" in query
+    assert "pr.state_version" in query
+    assert "pr.current_revision_id" in query
+    assert "public.procurement_events pe" in query
+    assert "pe.event_type" in query
+    assert "public.email_outbox eo" in query
+    assert "eo.status" in query
     connection.execute.side_effect = ProgrammingError("sql", {}, Exception("missing column"))
     with pytest.raises(DatabaseUnavailableError):
         await ensure_database_ready(engine)
@@ -108,8 +115,11 @@ async def test_database_application_names_are_distinct() -> None:
     from app.db.migration_settings import migration_server_settings
 
     settings = Settings(app_env="test")
-    for name in ("dc-inventory-backend", "dc-inventory-telegram-worker",
-                 "dc-inventory-maintenance-worker"):
+    for name in (
+        "dc-inventory-backend",
+        "dc-inventory-telegram-worker",
+        "dc-inventory-maintenance-worker",
+    ):
         with patch("app.db.engine.create_async_engine") as factory:
             create_engine(settings, application_name=name)
         server = factory.call_args.kwargs["connect_args"]["server_settings"]

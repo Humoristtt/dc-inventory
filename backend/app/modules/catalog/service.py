@@ -108,6 +108,15 @@ class DuplicateCandidate:
     reason: str
 
 
+@dataclass(frozen=True, slots=True)
+class ValidatedItemDraft:
+    category: Category
+    manufacturer: Manufacturer | None
+    name: str
+    model: str | None
+    attributes: dict[str, str | int | Decimal | bool]
+
+
 def normalize_inline_text(value: str, *, field: str, max_length: int) -> str:
     normalized = " ".join(value.split())
     if not normalized:
@@ -624,6 +633,41 @@ async def _prepare_identity(
     return category, values, signature
 
 
+async def validate_item_create_payload(
+    db: AsyncSession,
+    payload: ItemCreate,
+) -> ValidatedItemDraft:
+    """Validate a catalog-shaped draft without creating an Item.
+
+    Procurement proposed lines use this public boundary so their snapshots
+    obey exactly the same leaf/category/identity/attribute rules as normal
+    catalog creation.
+    """
+    category, values, _signature = await _prepare_identity(db, payload)
+    manufacturer = await _get_manufacturer(db, payload.manufacturer_id)
+    attributes: dict[str, str | int | Decimal | bool] = {}
+    for value in values:
+        prepared = next(
+            candidate
+            for candidate in (
+                value.text_value,
+                value.integer_value,
+                value.decimal_value,
+                value.boolean_value,
+                value.enum_value,
+            )
+            if candidate is not None
+        )
+        attributes[value.attribute.key] = prepared
+    return ValidatedItemDraft(
+        category=category,
+        manufacturer=manufacturer,
+        name=normalize_inline_text(payload.name, field="name", max_length=255),
+        model=normalize_optional_inline_text(payload.model, field="model", max_length=255),
+        attributes=attributes,
+    )
+
+
 async def create_item(db: AsyncSession, payload: ItemCreate) -> uuid.UUID:
     category, values, signature = await _prepare_identity(db, payload)
     item = Item(
@@ -753,6 +797,28 @@ async def delete_unused_item(
     if custody_balance_id is not None:
         raise CatalogItemInUseError(
             "item has custody state and cannot be deleted"
+        )
+
+    # Import locally to keep the catalog model independent from the
+    # Procurement bounded module while still enforcing delete safety.
+    from app.modules.procurement.models import (
+        ProcurementLineCatalogBinding,
+        ProcurementRevisionLine,
+    )
+
+    procurement_line_id = await db.scalar(
+        select(ProcurementRevisionLine.id)
+        .where(ProcurementRevisionLine.catalog_item_id == item_id)
+        .limit(1)
+    )
+    procurement_binding_id = await db.scalar(
+        select(ProcurementLineCatalogBinding.revision_line_id)
+        .where(ProcurementLineCatalogBinding.item_id == item_id)
+        .limit(1)
+    )
+    if procurement_line_id is not None or procurement_binding_id is not None:
+        raise CatalogItemInUseError(
+            "item has procurement history and cannot be deleted"
         )
 
     await db.delete(item)

@@ -163,7 +163,7 @@ ADMIN / OWNER:
 - [x] Responsive/mobile/desktop warehouse UI acceptance.
 - [x] Header/fullscreen/Escape remediation.
 - [x] Desktop form consistency and smart suggestions.
-- [x] Accepted production migration head `f8a9b0c1d2e3`.
+- [x] Accepted production migration head `b2c3d4e5f6a7`.
 - [x] External authoritative workbook contract.
 - [x] Fail-closed production one-shot bootstrap path.
 - [x] Empty-domain production preflight.
@@ -235,42 +235,42 @@ Canonical contract:
 - [x] Role-aware frontend navigation/actions.
 - [x] PostgreSQL integration acceptance.
 - [x] Frontend unit/browser acceptance.
-- [~] Full CI acceptance повторяется после audit remediation.
-- [x] Source migration head `b2c3d4e5f6a7`.
+- [x] Full CI acceptance.
+- [x] Source migration head `c3d4e5f6a7b8`.
 - [x] Production RBAC maintenance cutover.
 
 ## 12. Procurement domain
 
 После устойчивого RBAC foundation:
 
-- [ ] Отдельный backend module `procurement`.
-- [ ] ProcurementRequest.
-- [ ] Immutable ProcurementRevision.
-- [ ] Existing-item и proposed-item lines.
-- [ ] Assigned Manager как responsibility, не ACL.
-- [ ] Любой MANAGER может работать с любой активной закупкой.
-- [ ] `Взять на себя`.
-- [ ] `Передать менеджеру`.
-- [ ] `Ожидает менеджера`.
-- [ ] `Требует корректировки`.
-- [ ] Mandatory correction comment.
-- [ ] Structured manager alternative proposal.
-- [ ] New revision после корректировки.
-- [ ] `В закупке`.
-- [ ] `На приёмке`.
-- [ ] `Есть расхождения` без stock mutation.
-- [ ] Создание catalog Item из proposed line только технической ролью.
-- [ ] Receiving location selection.
-- [ ] Double confirmation final acceptance.
-- [ ] Atomic Warehouse RECEIPT.
-- [ ] Exactly-one procurement -> receipt linkage.
-- [ ] `Выполнена`.
-- [ ] Immutable event/audit trail.
-- [ ] Concurrency/state-transition protection.
-- [ ] Telegram notifications + Mini App deep links.
-- [ ] PostgreSQL integration acceptance.
-- [ ] Role-specific browser E2E.
-- [ ] Full CI acceptance.
+- [x] Отдельный backend module `procurement`.
+- [x] ProcurementRequest.
+- [x] Immutable ProcurementRevision.
+- [x] Existing-item и proposed-item lines.
+- [x] Assigned Manager как responsibility, не ACL.
+- [x] Любой MANAGER может работать с любой активной закупкой.
+- [x] `Взять на себя`.
+- [x] `Передать менеджеру`.
+- [x] `Ожидает менеджера`.
+- [x] `Требует корректировки`.
+- [x] Mandatory correction comment.
+- [x] Structured manager alternative proposal.
+- [x] New revision после корректировки.
+- [x] `В закупке`.
+- [x] `На приёмке`.
+- [x] `Есть расхождения` без stock mutation.
+- [x] Создание catalog Item из proposed line только технической ролью.
+- [x] Receiving location selection.
+- [x] Double confirmation final acceptance.
+- [x] Atomic Warehouse RECEIPT.
+- [x] Exactly-one procurement -> receipt linkage.
+- [x] `Выполнена`.
+- [x] Immutable event/audit trail.
+- [x] Concurrency/state-transition protection.
+- [x] Telegram notifications + Mini App deep links.
+- [x] PostgreSQL integration acceptance.
+- [x] Role-specific browser E2E.
+- [~] Full CI acceptance.
 - [ ] Real Telegram acceptance.
 
 ## 13. Procurement email delivery

@@ -14,7 +14,7 @@ post-import reconciliation + verified backup + Telegram visual acceptance.
 2. Сколько оборудования есть сейчас?
 3. На каких складских локациях оно находится?
 4. Кто и когда выполнил приход, выдачу, возврат, перемещение или списание?
-5. Сколько оборудования сейчас числится в custody каждого USER?
+5. Сколько оборудования сейчас числится в custody каждого custody-capable сотрудника?
 
 Персональная ответственность ведётся агрегированно как User × Item × quantity.
 Это не serial/current-holder модель физических экземпляров и пока не требует
@@ -23,6 +23,28 @@ post-import reconciliation + verified backup + Telegram visual acceptance.
 Regular production warehouse mutations дополнительно защищены
 `REAL_INVENTORY_MUTATIONS_ENABLED`. Initial one-shot bootstrap и normal
 operational mutations являются разными safety boundaries.
+
+## Current feature-cycle requirements — RBAC / Procurement
+
+Accepted production baseline перед feature cycle:
+
+`1242f56c131d0f8c470e05cbaf209c48a37e85a4`
+
+Source RBAC foundation уже реализует:
+
+ENGINEER / SENIOR_ENGINEER / MANAGER / ADMIN / OWNER.
+
+Accepted production baseline остаётся на historical USER / ADMIN до отдельного
+maintenance cutover `f8a9b0c1d2e3 -> a1b2c3d4e5f6`.
+
+Canonical role matrix, procurement lifecycle, immutable revision rules,
+manager collaboration, discrepancy handling и atomic warehouse acceptance:
+
+`docs/RBAC_PROCUREMENT.md`
+
+Для текущего feature cycle каноническая role/capability matrix находится в
+`docs/RBAC_PROCUREMENT.md`. Historical USER / ADMIN terminology относится только
+к ещё не обновлённому accepted production baseline, а не к source RBAC model.
 
 ## Каталог
 
@@ -82,14 +104,16 @@ Item detail показывает:
 
 ## Custody
 
-USER ISSUE увеличивает его `UserItemCustodyBalance`.
+ENGINEER / SENIOR_ENGINEER ISSUE увеличивает их
+`UserItemCustodyBalance`.
 
-USER RETURN уменьшает его `UserItemCustodyBalance` и не может превысить
-фактическое количество, числящееся за пользователем.
+ENGINEER / SENIOR_ENGINEER RETURN уменьшает `UserItemCustodyBalance` и не
+может превысить фактическое количество, числящееся за пользователем.
 
-ADMIN ISSUE/RETURN не создают персональную custody.
+ADMIN / OWNER ISSUE/RETURN не создают персональную custody.
 
-APPROVED USER нельзя перевести в BLOCKED, пока за ним числится оборудование.
+APPROVED пользователя с ненулевой custody нельзя перевести в BLOCKED или в
+роль, которая не поддерживает custody.
 
 Custody projection должна транзакционно согласовываться с immutable movement
 journal и участвует в canonical reconciliation.
@@ -108,8 +132,10 @@ journal и участвует в canonical reconciliation.
 
 Journal immutable.
 
-USER видит только движения, где он actor.
-ADMIN видит общий journal и может фильтровать по employee.
+ENGINEER видит только движения, где он actor.
+SENIOR_ENGINEER / ADMIN / OWNER видят общий journal и могут фильтровать по
+employee.
+MANAGER movement journal не видит.
 
 Периоды:
 
@@ -127,16 +153,20 @@ ADMIN видит общий journal и может фильтровать по em
 
 ## UI операций
 
-USER:
+ENGINEER / SENIOR_ENGINEER:
 
 - Взять;
-- Вернуть.
-
-ADMIN дополнительно:
-
+- Вернуть;
 - Переместить;
-- Приход;
-- Списать.
+- Приход существующей номенклатуры.
+
+ADMIN / OWNER дополнительно:
+
+- Списать;
+- administrative correction;
+- reversal.
+
+MANAGER warehouse mutations не выполняет.
 
 ## Архивирование
 
@@ -149,7 +179,7 @@ Location с остатком архивировать нельзя.
 
 ## Telegram
 
-ADMIN получает Telegram notification на каждый новый ISSUE.
+Текущий configured notification recipient получает Telegram notification на каждый новый ISSUE.
 
 Movement и notification outbox record фиксируются одной транзакцией.
 

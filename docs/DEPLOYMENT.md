@@ -18,9 +18,13 @@ Production VM имеет read-only GitHub Deploy Key. Deploy выполняет�
 проверяются отдельно; один SHA не используется как смешанная checkout/runtime
 истина.
 
-Текущий Alembic head:
+Accepted production Alembic head до RBAC cutover:
 
     f8a9b0c1d2e3
+
+Текущий source Alembic head:
+
+    b2c3d4e5f6a7
 
 Stage15A automated off-VM backup, Stage15B real isolated restore и Stage15
 technical hardening — `PASS`.
@@ -85,9 +89,19 @@ Cloudflare передаёт исходную схему запроса в `X-For
 
 Nginx нормализует эти значения и передаёт backend `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Real-IP` и `X-Forwarded-For`.
 
+Nginx также выставляет `Strict-Transport-Security: max-age=31536000` на всех public response scopes. Публичный клиент получает этот header через Cloudflare HTTPS. `includeSubDomains` и `preload` намеренно не включены без отдельного доменного инварианта.
+
 Uvicorn доверяет proxy headers, потому что production backend не публикуется на host и доступен только через внутреннюю application-сеть.
 
 Nginx применяет rate limiting после нормализации `CF-Connecting-IP`: общий API ограничен до 30 запросов/с на клиента с burst 60; `POST /api/auth/telegram` и `POST /api/access-requests` дополнительно ограничены до 10 запросов/мин с burst 5. Telegram webhook вынесен в отдельный лимит 50 запросов/с с burst 100, чтобы Telegram delivery burst не конкурировал с пользовательским API. Превышение ingress-лимита возвращает HTTP `429`.
+
+## Runtime resource limits
+
+Production Compose ограничивает CPU и RAM каждого container service через `cpus` и `mem_limit`.
+
+Defaults рассчитаны для текущей production VM с 4 vCPU и примерно 8 GiB RAM. Основные постоянные сервисы ограничены так, чтобы Docker workloads не могли вытеснить host OS и runtime overhead из памяти.
+
+Значения можно переопределять через соответствующие `*_CPUS_LIMIT` и `*_MEMORY_LIMIT` variables без изменения Compose-файла.
 
 ## Supply-chain pinning
 
@@ -133,6 +147,7 @@ Backend Telegram/auth boundary использует:
     TELEGRAM_BOT_TOKEN
     TELEGRAM_INIT_DATA_MAX_AGE_SECONDS
     ADMIN_TELEGRAM_USER_ID
+    NOTIFICATION_TELEGRAM_USER_ID
     SUPPORT_TELEGRAM_USERNAME
     AUTH_SESSION_TTL_SECONDS
     AUTH_COOKIE_NAME
@@ -143,6 +158,56 @@ Backend Telegram/auth boundary использует:
 `initData`. Это тот же Telegram-issued credential, который Cloudflare Worker
 хранит независимо как secret `BOT_TOKEN` для Bot API. Frontend его никогда не
 получает.
+
+`ADMIN_TELEGRAM_USER_ID` используется только как bootstrap/recovery OWNER
+identity. `NOTIFICATION_TELEGRAM_USER_ID` — отдельный получатель operational
+Telegram-уведомлений о запросах доступа и выдаче оборудования. Для обработки
+inline access-decision кнопок этот Telegram user должен соответствовать
+APPROVED ADMIN или OWNER в приложении.
+
+### Guarded recovery OWNER rotation
+
+Передача recovery OWNER выполняется только как maintenance-only operator
+operation. Обычный HTTP API и UI не назначают OWNER.
+
+Prerequisites:
+
+- новый владелец уже хотя бы один раз прошёл Telegram authentication и имеет
+  существующие `User` / `TelegramIdentity`;
+- у target отсутствует outstanding equipment custody;
+- получен fresh verified off-VM PostgreSQL backup;
+- `web`, `backend`, `telegram-worker` и `maintenance-worker` остановлены;
+- PostgreSQL остаётся healthy;
+- production `.env` всё ещё содержит Telegram ID текущего OWNER.
+
+Команда выполняется из target release image:
+
+    docker compose --env-file .env -f compose.yaml run --rm --no-deps backend \
+      python -m app.bootstrap.recovery_owner_rotation \
+      --current-telegram-user-id CURRENT_TELEGRAM_ID \
+      --target-telegram-user-id TARGET_TELEGRAM_ID \
+      --target-user-id TARGET_USER_UUID \
+      --confirm ROTATE_RECOVERY_OWNER
+
+Одна PostgreSQL transaction под identity-management advisory lock:
+
+1. проверяет, что configured recovery identity является единственным OWNER;
+2. блокирует current/target user rows;
+3. fail-closed проверяет target identity и custody;
+4. переводит старого OWNER в ADMIN с `UserRoleEvent`;
+5. переводит target в APPROVED при необходимости с `UserAccessEvent`;
+6. завершает pending access request target при его наличии;
+7. переводит target в OWNER с `UserRoleEvent`;
+8. отзывает активные auth sessions обоих пользователей;
+9. проверяет, что OWNER снова ровно один и это target.
+
+После успешного commit runtime запускать ещё нельзя. Сначала production `.env`
+обязательно изменяется на новый `ADMIN_TELEGRAM_USER_ID`, затем запускается
+только новый runtime и выполняется auth/RBAC smoke.
+
+Если transaction успешна, но `.env` ещё не обновлён, backend запускать
+запрещено: старый configured recovery ID конфликтует с новым OWNER и recovery
+reconciliation fail-closed.
 
 В production `TELEGRAM_WEB_APP_URL` задаёт ровно публичный HTTPS origin Mini
 App: без credentials, path, query, fragment и surrounding whitespace. Допустим
@@ -234,11 +299,47 @@ deny-by-default для методов вне allowlist.
 HTTP-клиент использует явный service `User-Agent`, чтобы Cloudflare edge
 не блокировал стандартный Python urllib client кодом `1010`.
 
-На чистой БД bootstrap ADMIN должен хотя бы один раз открыть Mini App и пройти
-Telegram authentication до первого approve/reject callback: auth flow создаёт
-`TelegramIdentity`, по которой callback подтверждает ADMIN identity.
+На чистой БД configured recovery identity должен хотя бы один раз открыть
+Mini App и пройти Telegram authentication: auth flow создаёт `TelegramIdentity`
+и bootstrap OWNER. До RBAC production cutover accepted production продолжает
+использовать historical ADMIN semantics.
 
 ## Миграции
+
+### RBAC maintenance cutover `f8a9b0c1d2e3 -> a1b2c3d4e5f6`
+
+Migration `a1b2c3d4e5f6` не является backward-compatible со старым runtime:
+она атомарно переводит persisted role `USER` в `ENGINEER`, тогда как
+pre-RBAC backend понимает только historical `USER / ADMIN`.
+
+Поэтому deploy, пересекающий этот migration boundary, выполняется только как
+planned maintenance cutover. Запрещено оставлять старый backend работающим
+параллельно с применением `a1b2c3d4e5f6`.
+
+Обязательный порядок:
+
+1. подтвердить exact target SHA и успешный CI;
+2. получить свежий verified off-VM PostgreSQL backup;
+3. подготовить новые immutable release artifacts;
+4. остановить `web`, `backend`, `telegram-worker` и `maintenance-worker`;
+5. убедиться, что старый application runtime больше не обращается к БД;
+6. оставить PostgreSQL healthy и выполнить `alembic upgrade head`;
+7. выполнить idempotent `db-permissions`;
+8. запустить только новый runtime из target SHA;
+9. дождаться health и выполнить auth/RBAC smoke;
+10. убедиться, что configured recovery identity возвращается как `OWNER`.
+
+После применения `a1b2c3d4e5f6` запрещено запускать pre-RBAC backend против
+этой БД. Rollback выполняется forward-fix либо восстановлением verified
+pre-cutover backup; запуск старого application image поверх migrated schema
+не является допустимым rollback path.
+
+Schema downgrade этой migration допускается только до появления RBAC state,
+которое historical `USER / ADMIN` model не может представить. Downgrade
+fail-closed запрещён, если существует `SENIOR_ENGINEER`, `MANAGER`, `OWNER`
+или хотя бы один immutable `user_role_events` record. В таком состоянии
+поддерживаемый rollback path — forward-fix либо restore verified pre-cutover
+backup; audit history не удаляется ради downgrade.
 
 Перед backend запускается одноразовый контейнер:
 

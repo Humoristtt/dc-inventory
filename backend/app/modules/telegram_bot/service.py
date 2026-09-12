@@ -14,12 +14,17 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.modules.identity.access_lifecycle import transition_user_access
 from app.modules.identity.enums import (
     AccessRequestStatus,
     UserAccessStatus,
-    UserRole,
+)
+from app.modules.identity.locking import (
+    acquire_identity_management_shared_barrier,
+    lock_identity_actor_and_target,
 )
 from app.modules.identity.models import AccessRequest, TelegramIdentity, User
+from app.modules.identity.policy import Capability, has_capability
 from app.modules.notifications.service import (
     enqueue_telegram_call,
     notification_dedupe_key,
@@ -43,7 +48,7 @@ class InvalidAccessCallbackError(ValueError):
     """Callback data is malformed or unknown."""
 
 
-class TelegramAdminAuthorizationError(PermissionError):
+class TelegramAccessManagerAuthorizationError(PermissionError):
     """Callback actor is not an approved administrator."""
 
 
@@ -173,9 +178,11 @@ async def enqueue_access_request_admin_notification(
     identity: TelegramIdentity,
     settings: Settings,
 ) -> None:
-    admin_id = settings.admin_telegram_user_id
-    if admin_id is None:
-        raise TelegramDeliveryConfigurationError("ADMIN_TELEGRAM_USER_ID is not configured")
+    notification_id = settings.notification_telegram_user_id
+    if notification_id is None:
+        raise TelegramDeliveryConfigurationError(
+            "NOTIFICATION_TELEGRAM_USER_ID is not configured"
+        )
 
     approve, reject = await get_or_create_access_decision_callbacks(
         db,
@@ -185,7 +192,7 @@ async def enqueue_access_request_admin_notification(
         db,
         method="sendMessage",
         payload={
-            "chat_id": admin_id,
+            "chat_id": notification_id,
             "text": (f"🔐 Новый запрос доступа к Spik Inventory\n\n{_display_identity(identity)}"),
             "reply_markup": {
                 "inline_keyboard": [
@@ -350,23 +357,37 @@ async def enqueue_start_message(
     )
 
 
-async def _load_approved_admin(
+async def _resolve_actor_user_id(
     db: AsyncSession,
     telegram_user_id: int,
-) -> User:
-    identity = await db.scalar(
-        select(TelegramIdentity).where(TelegramIdentity.telegram_user_id == telegram_user_id)
+) -> uuid.UUID:
+    user_id = await db.scalar(
+        select(TelegramIdentity.user_id).where(
+            TelegramIdentity.telegram_user_id
+            == telegram_user_id
+        )
     )
-    if identity is None:
-        raise TelegramAdminAuthorizationError
 
-    user = await db.scalar(select(User).where(User.id == identity.user_id).with_for_update())
+    if user_id is None:
+        raise TelegramAccessManagerAuthorizationError
+
+    return user_id
+
+
+def _require_approved_access_manager(
+    user: User | None,
+) -> User:
     if (
         user is None
-        or user.role != UserRole.ADMIN
-        or user.access_status != UserAccessStatus.APPROVED
+        or not has_capability(
+            user.role,
+            Capability.ACCESS_MANAGE_USERS,
+        )
+        or user.access_status
+        != UserAccessStatus.APPROVED
     ):
-        raise TelegramAdminAuthorizationError
+        raise TelegramAccessManagerAuthorizationError
+
     return user
 
 
@@ -401,7 +422,7 @@ async def enqueue_rejected_callback_answer(
     )
 
 
-async def _enqueue_admin_buttons_clear(
+async def _enqueue_access_buttons_clear(
     db: AsyncSession,
     *,
     callback_query_id: str,
@@ -426,7 +447,7 @@ async def _enqueue_admin_buttons_clear(
     )
 
 
-async def _enqueue_user_decision(
+async def enqueue_access_decision_user_notification(
     db: AsyncSession,
     *,
     access_request_id: uuid.UUID,
@@ -490,36 +511,71 @@ async def apply_access_decision(
     now: datetime | None = None,
 ) -> AccessDecisionResult:
     current_time = now or datetime.now(UTC)
-    admin = await _load_approved_admin(db, actor_telegram_user_id)
-    token = parse_access_callback_data(callback_data)
+
+    await acquire_identity_management_shared_barrier(
+        db
+    )
+
+    actor_user_id = await _resolve_actor_user_id(
+        db,
+        actor_telegram_user_id,
+    )
+    token = parse_access_callback_data(
+        callback_data
+    )
 
     callback = await db.scalar(
         select(AccessDecisionCallback)
-        .where(AccessDecisionCallback.token == token)
+        .where(
+            AccessDecisionCallback.token
+            == token
+        )
         .with_for_update()
     )
     if callback is None:
-        raise InvalidAccessCallbackError("unknown callback")
+        raise InvalidAccessCallbackError(
+            "unknown callback"
+        )
 
     access_request = await db.scalar(
         select(AccessRequest)
-        .where(AccessRequest.id == callback.access_request_id)
+        .where(
+            AccessRequest.id
+            == callback.access_request_id
+        )
         .with_for_update()
     )
     if access_request is None:
-        raise InvalidAccessCallbackError("access request no longer exists")
+        raise InvalidAccessCallbackError(
+            "access request no longer exists"
+        )
 
-    target_user = await db.scalar(
-        select(User).where(User.id == access_request.user_id).with_for_update()
+    locked_actor, target_user = (
+        await lock_identity_actor_and_target(
+            db,
+            actor_user_id=actor_user_id,
+            target_user_id=access_request.user_id,
+        )
     )
+
+    access_manager = _require_approved_access_manager(
+        locked_actor
+    )
+
     if target_user is None:
-        raise RuntimeError("access request user no longer exists")
+        raise RuntimeError(
+            "access request user no longer exists"
+        )
 
     if (
-        access_request.status == AccessRequestStatus.PENDING
-        and target_user.access_status != UserAccessStatus.PENDING
+        access_request.status
+        == AccessRequestStatus.PENDING
+        and target_user.access_status
+        != UserAccessStatus.PENDING
     ):
-        raise InvalidAccessCallbackError("user access state is already terminal")
+        raise InvalidAccessCallbackError(
+            "user access state is already terminal"
+        )
 
     target_identity = await db.scalar(
         select(TelegramIdentity).where(TelegramIdentity.user_id == target_user.id)
@@ -531,20 +587,24 @@ async def apply_access_decision(
     if changed:
         if callback.action == "APPROVE":
             access_request.status = AccessRequestStatus.APPROVED
-            target_user.access_status = UserAccessStatus.APPROVED
-            target_user.approved_at = current_time
-            target_user.approved_by_user_id = admin.id
+            target_access_status = UserAccessStatus.APPROVED
         else:
             access_request.status = AccessRequestStatus.REJECTED
-            target_user.access_status = UserAccessStatus.REJECTED
-            target_user.approved_at = None
-            target_user.approved_by_user_id = None
+            target_access_status = UserAccessStatus.REJECTED
+
+        transition_user_access(
+            db,
+            user=target_user,
+            actor_user_id=access_manager.id,
+            access_status=target_access_status,
+            now=current_time,
+        )
 
         access_request.decided_at = current_time
-        access_request.decided_by_user_id = admin.id
+        access_request.decided_by_user_id = access_manager.id
         access_request.decision_note = "Telegram inline callback"
 
-        await _enqueue_user_decision(
+        await enqueue_access_decision_user_notification(
             db,
             access_request_id=access_request.id,
             target_identity=target_identity,
@@ -552,7 +612,7 @@ async def apply_access_decision(
             settings=settings,
         )
 
-    await _enqueue_admin_buttons_clear(
+    await _enqueue_access_buttons_clear(
         db,
         callback_query_id=callback_query_id,
         message_chat_id=message_chat_id,
@@ -660,7 +720,7 @@ async def process_telegram_update(
             message_id=message_id,
             settings=settings,
         )
-    except TelegramAdminAuthorizationError:
+    except TelegramAccessManagerAuthorizationError:
         await enqueue_rejected_callback_answer(
             db,
             callback_query_id=callback_query_id,

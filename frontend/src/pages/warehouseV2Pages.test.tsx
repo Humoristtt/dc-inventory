@@ -19,6 +19,8 @@ import { ApplicationRoutes } from "../app/App";
 import {
   AUTH_QUERY_KEY,
   type AuthState,
+  type Capability,
+  type UserRole,
 } from "../shared/api/auth";
 import type {
   CatalogItem,
@@ -98,7 +100,73 @@ const warehouse = {
   status: "ACTIVE" as const,
 };
 
-function authState(role: "USER" | "ADMIN"): AuthState {
+
+function testCapabilities(role: UserRole): Capability[] {
+  switch (role) {
+    case "ENGINEER":
+      return [
+        "catalog.read",
+        "inventory.read",
+        "inventory.operate",
+        "movement.read_own",
+      ];
+    case "SENIOR_ENGINEER":
+      return [
+        "catalog.read",
+        "catalog.manage",
+        "catalog.archive",
+        "catalog.delete_unused",
+        "inventory.read",
+        "inventory.operate",
+        "movement.read_own",
+        "movement.read_all",
+        "procurement.read",
+        "procurement.accept",
+      ];
+    case "MANAGER":
+      return [
+        "catalog.read",
+        "inventory.read",
+        "procurement.read",
+        "procurement.manage",
+      ];
+    case "ADMIN":
+      return [
+        "catalog.read",
+        "catalog.manage",
+        "catalog.archive",
+        "catalog.delete_unused",
+        "inventory.read",
+        "inventory.operate",
+        "inventory.admin",
+        "movement.read_all",
+        "procurement.read",
+        "procurement.create",
+        "procurement.accept",
+        "access.manage_users",
+        "access.assign_standard_roles",
+      ];
+    case "OWNER":
+      return [
+        "catalog.read",
+        "catalog.manage",
+        "catalog.archive",
+        "catalog.delete_unused",
+        "inventory.read",
+        "inventory.operate",
+        "inventory.admin",
+        "movement.read_all",
+        "procurement.read",
+        "procurement.create",
+        "procurement.accept",
+        "access.manage_users",
+        "access.assign_standard_roles",
+        "access.assign_admin",
+      ];
+  }
+}
+
+function authState(role: UserRole): AuthState {
   return {
     user: {
       id: role === "ADMIN" ? "user-admin" : "user-vasya",
@@ -107,6 +175,7 @@ function authState(role: "USER" | "ADMIN"): AuthState {
       first_name: role === "ADMIN" ? "Администратор" : "Вася",
       last_name: null,
       role,
+      capabilities: testCapabilities(role),
       access_status: "APPROVED",
     },
     support: {
@@ -123,7 +192,7 @@ function jsonResponse(body: unknown, status = 200) {
   });
 }
 
-function renderRoute(path: string, role: "USER" | "ADMIN") {
+function renderRoute(path: string, role: UserRole) {
   const client = new QueryClient({
     defaultOptions: {
       queries: {
@@ -153,7 +222,7 @@ afterEach(() => {
 });
 
 
-it("USER видит физический остаток и может взять оборудование со склада", async () => {
+it("ENGINEER видит остаток и доступные складские операции", async () => {
   let movementBody: Record<string, unknown> | null = null;
 
   vi.stubGlobal("fetch", vi.fn(async (
@@ -225,7 +294,7 @@ it("USER видит физический остаток и может взять
     throw new Error(`unexpected fetch ${url}`);
   }));
 
-  renderRoute("/catalog/items/item-1", "USER");
+  renderRoute("/catalog/items/item-1", "ENGINEER");
 
   expect(
     await screen.findByRole("heading", { name: "SFP-25G-SR" }),
@@ -246,8 +315,8 @@ it("USER видит физический остаток и может взять
   ).not.toBeInTheDocument();
 
   expect(
-    screen.queryByRole("button", { name: "Переместить" }),
-  ).not.toBeInTheDocument();
+    screen.getByRole("button", { name: "Переместить" }),
+  ).toBeInTheDocument();
 
   fireEvent.click(
     screen.getByRole("button", { name: "Взять" }),
@@ -328,7 +397,7 @@ it("RETURN показывает понятную ошибку при недос�
     throw new Error(`unexpected fetch ${url}`);
   }));
 
-  renderRoute("/catalog/items/item-1", "USER");
+  renderRoute("/catalog/items/item-1", "ENGINEER");
 
   await screen.findByRole(
     "heading",
@@ -536,7 +605,7 @@ it("Locations снимает scroll lock при потере роли ADMIN", as
   act(() => {
     client.setQueryData(
       AUTH_QUERY_KEY,
-      authState("USER"),
+      authState("ENGINEER"),
     );
   });
 
@@ -631,7 +700,12 @@ it("Движения по умолчанию показывают 3 месяца
           },
         ],
         limit: 30,
-        next_before_journal_seq: url.includes("before_journal_seq") ? null : 1,
+        cursor: url.includes("cursor=")
+          ? "feed-page-2"
+          : "feed-page-1",
+        next_cursor: url.includes("cursor=")
+          ? null
+          : "feed-cursor-2",
         snapshot_at: "2026-09-09T07:00:00Z",
       });
     }
@@ -656,7 +730,7 @@ it("Движения по умолчанию показывают 3 месяца
         return params.get("period") === "3m"
           && params.get("limit") === "30"
           && params.get("offset") === null
-          && params.get("before_journal_seq") === null;
+          && params.get("cursor") === null;
       }),
     ).toBe(true);
   });
@@ -665,8 +739,9 @@ it("Движения по умолчанию показывают 3 месяца
   await waitFor(() => {
     expect(movementRequests.some((url) => {
       const params = new URL(url, "http://test").searchParams;
-      return params.get("before_journal_seq") === "1"
-        && params.get("snapshot_at") === "2026-09-09T07:00:00Z";
+      return params.get("cursor") === "feed-cursor-2"
+        && params.get("snapshot_at") === null
+        && params.get("before_journal_seq") === null;
     })).toBe(true);
   });
 

@@ -6,6 +6,7 @@ import re
 
 ROOT = Path(__file__).resolve().parents[2]
 CI = (ROOT / ".github/workflows/ci.yml").read_text()
+BACKEND_DOCKERFILE = (ROOT / "backend/Dockerfile").read_text()
 POSTGRES_DOCKERFILE = (ROOT / "ops/postgres/Dockerfile").read_text()
 WEB_DOCKERFILE = (ROOT / "frontend/Dockerfile").read_text()
 
@@ -62,6 +63,11 @@ assert "CGO_ENABLED=0 go build" in POSTGRES_DOCKERFILE
 assert "test \"$(git rev-parse HEAD)\" = \"${GOSU_COMMIT}\"" in POSTGRES_DOCKERFILE
 assert "openssl-provider-legacy" in POSTGRES_DOCKERFILE
 assert "gosu nobody true" in POSTGRES_DOCKERFILE
+
+assert "ARG PCRE2_VERSION=10.42-1+deb12u1" in BACKEND_DOCKERFILE
+assert '"libpcre2-8-0=${PCRE2_VERSION}"' in BACKEND_DOCKERFILE
+assert "apt-get update" in BACKEND_DOCKERFILE
+assert "rm -rf /var/lib/apt/lists/*" in BACKEND_DOCKERFILE
 
 assert "apk add --no-cache --upgrade libuuid=2.42.3-r1" in WEB_DOCKERFILE
 

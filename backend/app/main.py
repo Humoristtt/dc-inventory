@@ -22,6 +22,9 @@ def validate_backend_runtime_config(settings: Settings) -> None:
     if settings.admin_telegram_user_id is None:
         missing.append("ADMIN_TELEGRAM_USER_ID")
 
+    if settings.notification_telegram_user_id is None:
+        missing.append("NOTIFICATION_TELEGRAM_USER_ID")
+
     if settings.telegram_webhook_secret_value is None:
         missing.append("TELEGRAM_WEBHOOK_SECRET")
 

@@ -55,6 +55,33 @@ Feature CSS отвечает за layout и предметное presentation, �
 Нельзя исправлять shared component page-local cascade override, если проблема
 относится к общему component contract.
 
+## RBAC / Procurement feature development
+
+Перед изменением ролей, authorization, procurement, warehouse acceptance или
+procurement notifications разработчик обязан прочитать:
+
+    docs/RBAC_PROCUREMENT.md
+
+Для этого feature cycle нельзя:
+
+- кодировать authorization только через frontend visibility;
+- считать MANAGER уровнем role hierarchy;
+- связывать assigned Manager с ACL;
+- менять stock по manager procurement status;
+- создавать catalog Item автоматически из proposed procurement line;
+- перезаписывать submitted procurement revision;
+- обходить immutable warehouse movement journal.
+
+Development implementation выполняется по стадиям:
+
+    RBAC migration/policy
+      -> role-aware existing domain authorization
+      -> frontend role UX
+      -> procurement persistence/state machine
+      -> procurement UI
+      -> Telegram notifications
+      -> email delivery отдельным последующим этапом
+
 ## Конфигурация
 
 Пример конфигурации находится в `.env.example`.
@@ -96,15 +123,15 @@ Baseline Alembic:
 
 Текущий source migration head:
 
-    f8a9b0c1d2e3
+    b2c3d4e5f6a7
 
 Production migration head на текущем принятом production baseline:
 
     f8a9b0c1d2e3
 
-На текущем accepted baseline source и production head совпадают. При появлении
-новой source migration её нельзя считать production state до отдельного
-deploy/migration acceptance.
+Source и accepted production head сейчас намеренно различаются. Migration
+`b2c3d4e5f6a7` является source state и не считается production state до
+отдельного maintenance cutover и migration acceptance.
 
 ## Локальный backend
 
@@ -223,6 +250,23 @@ frontend.
 
 `POSTGRES_DEV_PORT` позволяет поднять изолированную test DB на другом
 loopback-порту, например `55433`.
+
+### Local full-stack browser gate
+
+Локальный full-stack browser acceptance запускается только через:
+
+    cd frontend
+    npm run test:e2e:fullstack:local
+
+Runner работает в отдельном child process и не экспортирует test variables
+обратно в interactive shell. Каждый запуск создаёт уникальную PostgreSQL
+database, применяет Alembic head, запускает временные backend/Vite процессы,
+выполняет signed Telegram browser scenario, проверяет database side effects и
+через cleanup trap удаляет временную database и процессы.
+
+Запрещено для full-stack acceptance вручную `source`-ить `.env.fullstack` или
+направлять scenario на общую development database. Telegram test credentials
+являются локальными synthetic values и существуют только внутри runner process.
 
 ## PostgreSQL integration tests
 

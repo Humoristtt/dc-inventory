@@ -1,6 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { Navigate } from "react-router-dom";
 
+import { useAuthState } from "../../features/auth/useAuthState";
+import { MovementAdminActions } from "../../features/inventory/MovementAdminActions";
+import {
+  hasAnyCapability,
+  hasCapability,
+} from "../../shared/api/auth";
 import {
   getCatalogCategories,
 } from "../../shared/api/catalog";
@@ -17,14 +24,30 @@ import { PageHeader } from "../../shared/ui";
 const PAGE_SIZE = 30;
 
 export function MovementsPage() {
+  const auth = useAuthState();
+  const user = auth.data?.user;
+
+  const canReadAll = hasCapability(
+    user,
+    "movement.read_all",
+  );
+
+  const canReadMovements = hasAnyCapability(
+    user,
+    [
+      "movement.read_own",
+      "movement.read_all",
+    ],
+  );
+
   const [period, setPeriod] = useState("3m");
   const [actor, setActor] = useState("");
   const [equipment, setEquipment] = useState("");
   const [location, setLocation] = useState("");
   const [movementType, setMovementType] = useState("");
   const [cursorStack, setCursorStack] = useState<
-    Array<{ before: number | null; snapshot?: string }>
-  >([{ before: null }]);
+    Array<string | null>
+  >([null]);
 
   const cursor = cursorStack[cursorStack.length - 1];
 
@@ -33,12 +56,14 @@ export function MovementsPage() {
     queryKey: ["catalog", "categories"],
     queryFn: ({ signal }) =>
       getCatalogCategories(signal),
+    enabled: canReadMovements,
   });
 
   const locations = useQuery({
     queryKey: ["inventory", "locations"],
     queryFn: ({ signal }) =>
       getLocations(signal),
+    enabled: canReadMovements,
   });
 
   const actors = useQuery({
@@ -52,6 +77,7 @@ export function MovementsPage() {
         "GET",
         signal,
       ),
+    enabled: canReadAll,
   });
 
   const params = new URLSearchParams({
@@ -59,18 +85,11 @@ export function MovementsPage() {
     limit: String(PAGE_SIZE),
   });
 
-  if (cursor.before !== null) {
-    params.set(
-      "before_journal_seq",
-      String(cursor.before),
-    );
+  if (cursor !== null) {
+    params.set("cursor", cursor);
   }
 
-  if (cursor.snapshot) {
-    params.set("snapshot_at", cursor.snapshot);
-  }
-
-  if (actor) {
+  if (canReadAll && actor) {
     params.set("actor_user_id", actor);
   }
 
@@ -114,6 +133,7 @@ export function MovementsPage() {
         "GET",
         signal,
       ),
+    enabled: canReadMovements,
   });
 
   const changeFilter = (
@@ -121,7 +141,7 @@ export function MovementsPage() {
     value: string,
   ) => {
     setter(value);
-    setCursorStack([{ before: null }]);
+    setCursorStack([null]);
   };
 
   const goBack = () => {
@@ -133,20 +153,27 @@ export function MovementsPage() {
   };
 
   const goNext = () => {
-    const next =
-      history.data?.next_before_journal_seq;
+    const next = history.data?.next_cursor;
+    const currentPage = history.data?.cursor;
 
-    if (next === null || next === undefined) {
+    if (!next || !currentPage) {
       return;
     }
 
     setCursorStack((current) => [
-      ...current.map((entry) => ({
-        ...entry, snapshot: entry.snapshot ?? history.data?.snapshot_at,
-      })),
-      { before: next, snapshot: history.data?.snapshot_at },
+      ...current.slice(0, -1),
+      currentPage,
+      next,
     ]);
   };
+
+  if (auth.isPending) {
+    return null;
+  }
+
+  if (!canReadMovements) {
+    return <Navigate replace to="/catalog" />;
+  }
 
   return (
     <main className="catalog-page">
@@ -212,30 +239,32 @@ export function MovementsPage() {
             </select>
           </label>
 
-          <label>
-            Сотрудник
-            <select
-              value={actor}
-              onChange={(event) =>
-                changeFilter(
-                  setActor,
-                  event.target.value,
-                )
-              }
-            >
-              <option value="">
-                Все доступные
-              </option>
-              {actors.data?.map((item) => (
-                <option
-                  key={item.id}
-                  value={item.id}
-                >
-                  {item.name}
+          {canReadAll ? (
+            <label>
+              Сотрудник
+              <select
+                value={actor}
+                onChange={(event) =>
+                  changeFilter(
+                    setActor,
+                    event.target.value,
+                  )
+                }
+              >
+                <option value="">
+                  Все доступные
                 </option>
-              ))}
-            </select>
-          </label>
+                {actors.data?.map((item) => (
+                  <option
+                    key={item.id}
+                    value={item.id}
+                  >
+                    {item.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
 
           <label>
             Оборудование
@@ -426,6 +455,10 @@ export function MovementsPage() {
                   ? `В: ${movement.destination_location_name_snapshot}`
                   : ""}
               </p>
+
+              <MovementAdminActions
+                movement={movement}
+              />
             </article>
           ),
         )}
@@ -440,12 +473,7 @@ export function MovementsPage() {
             </button>
           ) : null}
 
-          {history.data
-            ?.next_before_journal_seq
-          !== null
-          && history.data
-            ?.next_before_journal_seq
-          !== undefined ? (
+          {history.data?.next_cursor ? (
             <button
               className="button"
               onClick={goNext}

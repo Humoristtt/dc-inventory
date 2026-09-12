@@ -30,8 +30,15 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         CheckConstraint(
-            "role IN ('USER', 'ADMIN')",
+            "role IN ('ENGINEER', 'SENIOR_ENGINEER', 'MANAGER', "
+            "'ADMIN', 'OWNER')",
             name="user_role",
+        ),
+        Index(
+            "ux_users_singleton_owner",
+            "role",
+            unique=True,
+            postgresql_where=text("role = 'OWNER'"),
         ),
         CheckConstraint(
             "access_status IN ('PENDING', 'APPROVED', 'REJECTED', 'BLOCKED')",
@@ -53,8 +60,8 @@ class User(Base):
             validate_strings=True,
         ),
         nullable=False,
-        default=UserRole.USER,
-        server_default=UserRole.USER.value,
+        default=UserRole.ENGINEER,
+        server_default=UserRole.ENGINEER.value,
     )
     access_status: Mapped[UserAccessStatus] = mapped_column(
         Enum(
@@ -105,6 +112,30 @@ class TelegramIdentity(Base):
         CheckConstraint(
             "telegram_user_id > 0",
             name="telegram_user_id_positive",
+        ),
+        Index(
+            "ix_telegram_identities_username_trgm",
+            "username",
+            postgresql_using="gin",
+            postgresql_ops={
+                "username": "gin_trgm_ops",
+            },
+        ),
+        Index(
+            "ix_telegram_identities_first_name_trgm",
+            "first_name",
+            postgresql_using="gin",
+            postgresql_ops={
+                "first_name": "gin_trgm_ops",
+            },
+        ),
+        Index(
+            "ix_telegram_identities_last_name_trgm",
+            "last_name",
+            postgresql_using="gin",
+            postgresql_ops={
+                "last_name": "gin_trgm_ops",
+            },
         ),
     )
 
@@ -279,6 +310,77 @@ class UserAccessEvent(Base):
         Enum(
             UserAccessStatus,
             name="user_access_status",
+            native_enum=False,
+            create_constraint=False,
+            validate_strings=True,
+        ),
+        nullable=False,
+    )
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.now(),
+    )
+
+
+class UserRoleEvent(Base):
+    __tablename__ = "user_role_events"
+    __table_args__ = (
+        CheckConstraint(
+            "before_role <> after_role",
+            name="user_role_event_changed",
+        ),
+        CheckConstraint(
+            "before_role IN ('ENGINEER', 'SENIOR_ENGINEER', 'MANAGER', "
+            "'ADMIN', 'OWNER')",
+            name="user_role_event_before_role",
+        ),
+        CheckConstraint(
+            "after_role IN ('ENGINEER', 'SENIOR_ENGINEER', 'MANAGER', "
+            "'ADMIN', 'OWNER')",
+            name="user_role_event_after_role",
+        ),
+        Index(
+            "ix_user_role_events_target_occurred",
+            "target_user_id",
+            "occurred_at",
+        ),
+        Index(
+            "ix_user_role_events_actor_occurred",
+            "actor_user_id",
+            "occurred_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    actor_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    target_user_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("users.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    before_role: Mapped[UserRole] = mapped_column(
+        Enum(
+            UserRole,
+            name="user_role",
+            native_enum=False,
+            create_constraint=False,
+            validate_strings=True,
+        ),
+        nullable=False,
+    )
+    after_role: Mapped[UserRole] = mapped_column(
+        Enum(
+            UserRole,
+            name="user_role",
             native_enum=False,
             create_constraint=False,
             validate_strings=True,

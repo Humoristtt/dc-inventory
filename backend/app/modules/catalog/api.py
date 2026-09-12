@@ -1,7 +1,7 @@
 from typing import Annotated, NoReturn
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, Request, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from sqlalchemy.exc import IntegrityError
 
 from app.core.safety import require_real_inventory_mutations_enabled
@@ -9,7 +9,13 @@ from app.db.errors import (
     POSTGRES_UNIQUE_VIOLATION_SQLSTATE,
     postgres_sqlstate,
 )
-from app.modules.auth.dependencies import Admin, Approved, DbSession
+from app.modules.auth.dependencies import (
+    CatalogArchive,
+    CatalogDeleteUnused,
+    CatalogManage,
+    CatalogRead,
+    DbSession,
+)
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Category, CategoryAttribute, Manufacturer
 from app.modules.catalog.query import (
@@ -51,6 +57,7 @@ from app.modules.catalog.service import (
     check_duplicate_candidates,
     create_item,
     create_manufacturer,
+    delete_unused_item,
     get_category_record,
     get_item_record,
     list_categories,
@@ -203,7 +210,7 @@ def _facet_out(facet: FacetRecord) -> FacetOut:
 async def _query_spec(
     db: DbSession,
     *,
-    approved: Approved,
+    approved: CatalogRead,
     q: str | None,
     category: str | None,
     long_range: bool,
@@ -240,7 +247,7 @@ async def _load_item_out(db: DbSession, item_id: UUID) -> ItemOut:
 @read_router.get("/categories", response_model=list[CategorySummaryOut])
 async def get_categories(
     db: DbSession,
-    _approved: Approved,
+    _approved: CatalogRead,
 ) -> list[CategorySummaryOut]:
     return [_category_summary(category) for category in await list_categories(db)]
 
@@ -252,7 +259,7 @@ async def get_categories(
 async def get_category(
     category_key: str,
     db: DbSession,
-    _approved: Approved,
+    _approved: CatalogRead,
 ) -> CategoryDetailOut:
     try:
         record = await get_category_record(db, category_key)
@@ -268,7 +275,7 @@ async def get_category(
 @read_router.get("/manufacturers", response_model=ManufacturerListOut)
 async def get_manufacturers(
     db: DbSession,
-    _approved: Approved,
+    _approved: CatalogRead,
     q: Annotated[str | None, Query(max_length=255)] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
@@ -290,7 +297,7 @@ async def get_manufacturers(
 @read_router.get("/items", response_model=ItemListOut)
 async def get_items(
     db: DbSession,
-    approved: Approved,
+    approved: CatalogRead,
     q: Annotated[str | None, Query(max_length=200)] = None,
     category: Annotated[str | None, Query(max_length=64)] = None,
     long_range: bool = False,
@@ -341,7 +348,7 @@ async def get_items(
 @read_router.get("/items/facets", response_model=FacetListOut)
 async def get_item_facets(
     db: DbSession,
-    approved: Approved,
+    approved: CatalogRead,
     q: Annotated[str | None, Query(max_length=200)] = None,
     category: Annotated[str | None, Query(max_length=64)] = None,
     long_range: bool = False,
@@ -389,7 +396,7 @@ async def get_item_facets(
 async def get_item(
     item_id: UUID,
     db: DbSession,
-    _approved: Approved,
+    _approved: CatalogRead,
 ) -> ItemOut:
     return await _load_item_out(db, item_id)
 
@@ -403,7 +410,7 @@ async def post_manufacturer(
     payload: ManufacturerCreate,
     request: Request,
     db: DbSession,
-    _admin: Admin,
+    _manager: CatalogManage,
 ) -> ManufacturerOut:
     require_real_inventory_mutations_enabled(request)
     try:
@@ -425,7 +432,7 @@ async def post_manufacturer(
 async def post_duplicate_check(
     payload: DuplicateCheckRequest,
     db: DbSession,
-    _admin: Admin,
+    _manager: CatalogManage,
 ) -> DuplicateCheckOut:
     try:
         candidates = await check_duplicate_candidates(db, payload)
@@ -457,7 +464,7 @@ async def post_item(
     payload: ItemCreate,
     request: Request,
     db: DbSession,
-    _admin: Admin,
+    _manager: CatalogManage,
 ) -> ItemOut:
     require_real_inventory_mutations_enabled(request)
     try:
@@ -478,7 +485,7 @@ async def patch_item(
     payload: ItemPatch,
     request: Request,
     db: DbSession,
-    _admin: Admin,
+    _manager: CatalogManage,
 ) -> ItemOut:
     require_real_inventory_mutations_enabled(request)
     try:
@@ -503,7 +510,7 @@ async def archive_item(
     item_id: UUID,
     request: Request,
     db: DbSession,
-    _admin: Admin,
+    _archiver: CatalogArchive,
 ) -> ItemOut:
     require_real_inventory_mutations_enabled(request)
     try:
@@ -520,7 +527,7 @@ async def unarchive_item(
     item_id: UUID,
     request: Request,
     db: DbSession,
-    _admin: Admin,
+    _archiver: CatalogArchive,
 ) -> ItemOut:
     require_real_inventory_mutations_enabled(request)
     try:
@@ -530,3 +537,26 @@ async def unarchive_item(
         await db.rollback()
         _raise_catalog_error(error)
     return await _load_item_out(db, item_id)
+
+@admin_router.delete(
+    "/items/{item_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def delete_item(
+    item_id: UUID,
+    request: Request,
+    db: DbSession,
+    _deleter: CatalogDeleteUnused,
+) -> Response:
+    require_real_inventory_mutations_enabled(request)
+    try:
+        await delete_unused_item(db, item_id)
+        await db.commit()
+    except CatalogError as error:
+        await db.rollback()
+        _raise_catalog_error(error)
+    except IntegrityError as error:
+        await db.rollback()
+        _raise_integrity_conflict(error)
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

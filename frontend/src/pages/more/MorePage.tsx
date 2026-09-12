@@ -1,12 +1,16 @@
 import { Link } from "react-router-dom";
 
-import { useAuthState } from "../../features/auth/useAuthState";
 import "../../features/admin/access-admin.css";
+import { useAuthState } from "../../features/auth/useAuthState";
+import { hasCapability } from "../../shared/api/auth";
 import { PageHeader } from "../../shared/ui";
 
 export function MorePage() {
   const auth = useAuthState();
-  const admin = auth.data?.user.role === "ADMIN";
+  const canManageUsers = hasCapability(
+    auth.data?.user,
+    "access.manage_users",
+  );
 
   return (
     <main className="more-page">
@@ -19,13 +23,17 @@ export function MorePage() {
         <div className="more-grid">
           <Link className="more-card" to="/more/locations">
             <strong>Места хранения</strong>
-            <span>Склады, ЦОД и адреса размещения оборудования</span>
+            <span>
+              Склады, ЦОД и адреса размещения оборудования
+            </span>
           </Link>
 
-          {admin ? (
+          {canManageUsers ? (
             <Link className="more-card" to="/more/users">
               <strong>Пользователи</strong>
-              <span>Просмотр, блокировка и восстановление доступа</span>
+              <span>
+                Роли, доступ и история изменений
+              </span>
             </Link>
           ) : null}
         </div>

@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 let client: QueryClient;
 const approved = {
-  user: { id: "synthetic", role: "USER", access_status: "APPROVED" },
+  user: { id: "synthetic", role: "ENGINEER", capabilities: ["catalog.read", "inventory.read", "inventory.operate", "movement.read_own"], access_status: "APPROVED" },
   support: { username: "support", url: "https://t.me/support" },
 };
 

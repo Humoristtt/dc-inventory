@@ -15,7 +15,12 @@ Repository visibility является отдельным operational решен
 
 Текущий repository может оставаться public только при строгой границе:
 никаких inventory datasets, workbook contents, database dumps, credentials,
-tokens, production environment files и runtime-only identifiers в Git.
+tokens, production environment files и private/runtime-only identifiers в Git.
+
+Публичные service identifiers, которые по назначению раскрываются клиентам или
+операторам, не относятся к runtime-only identifiers. К ним относятся, например,
+публичный Mini App hostname и support username. Их наличие в source и
+documentation допустимо и не ослабляет secret boundary.
 
 ## PostgreSQL identities
 
@@ -103,12 +108,38 @@ operational facts. Исторические acceptance SHA фиксируютс�
 1. подтвердить target SHA;
 2. обновить production checkout;
 3. проверить `.env`;
-4. выполнить `alembic upgrade head`;
-5. выполнить idempotent `db-permissions`;
-6. запустить runtime;
-7. дождаться health;
-8. выполнить smoke;
-9. при warehouse changes выполнить reconciliation.
+4. определить, пересекает ли deploy runtime-incompatible migration boundary;
+5. если пересекает — выполнить fresh verified off-VM backup и остановить
+   старый application runtime до миграции;
+6. выполнить `alembic upgrade head`;
+7. выполнить idempotent `db-permissions`;
+8. запустить только runtime из target SHA;
+9. дождаться health;
+10. выполнить smoke и при warehouse changes reconciliation.
+
+Для RBAC migration `f8a9b0c1d2e3 -> a1b2c3d4e5f6` шаг 5 обязателен:
+migration меняет persisted `USER` на `ENGINEER`, поэтому старый backend не
+должен работать ни во время, ни после применения новой schema. После cutover
+rollback означает forward-fix либо restore verified pre-cutover backup, а не
+повторный запуск старого image против migrated database.
+
+## Recovery OWNER rotation
+
+Recovery OWNER нельзя передавать обычным admin API. Передача выполняется только
+в maintenance window через:
+
+    python -m app.bootstrap.recovery_owner_rotation
+
+До операции runtime останавливается и создаётся fresh verified off-VM backup.
+Target должен иметь существующую Telegram identity и не иметь outstanding
+custody. Команда требует current Telegram ID, target Telegram ID, подтверждённый
+target User UUID и explicit token `ROTATE_RECOVERY_OWNER`.
+
+После успешной transaction необходимо, не запуская backend, изменить
+`ADMIN_TELEGRAM_USER_ID` в production `.env` на Telegram ID нового OWNER.
+Rotation отзывает активные sessions старого и нового владельца, поэтому после
+старта оба проходят новую authentication; новый identity должен вернуться как
+OWNER, старый — как ADMIN.
 
 ## Runtime acceptance
 
@@ -383,6 +414,21 @@ Warehouse DB transaction остаётся достоверной.
 Outbox выполняет bounded retries.
 После max attempts row становится `DEAD`.
 
+Notification delivery contract намеренно является `at-least-once`.
+`NotificationOutbox.dedupe_key` предотвращает duplicate enqueue одной и той же
+логической notification, но не является exactly-once гарантией внешнего Telegram
+side effect.
+
+Если Telegram уже принял запрос, а worker завершился либо потерял ответ до
+фиксации `SENT` в PostgreSQL, lease retry может повторно отправить notification.
+Это допустимый failure mode только для notification side effects: warehouse,
+access и custody state остаются каноническими в PostgreSQL и повторное сообщение
+не выполняет business mutation.
+
+Exactly-once Telegram delivery не заявляется. Для такой гарантии потребуется
+отдельный durable idempotency/reconciliation contract на внешней gateway
+boundary; обычный transactional outbox сам по себе этой гарантии не даёт.
+
 Access ADMIN notification может быть controlled-requeued повторным explicit
 access request.
 
@@ -496,7 +542,11 @@ identifiers и database contents остаются вне repository.
 - backup artifacts;
 - `.env` production;
 - credentials/tokens/private keys;
-- runtime-only secrets/identifiers без необходимости.
+- private/runtime-only secrets/identifiers без необходимости.
+
+Public service identifiers, включая `https://app.spik-inventory.ru` и
+публичный support username, являются intentionally public routing/support
+metadata. К repository-forbidden данным они не относятся.
 
 Repository visibility сама по себе не является warehouse database mutation
 механизмом. Regular inventory operations регулируются backend authorization,

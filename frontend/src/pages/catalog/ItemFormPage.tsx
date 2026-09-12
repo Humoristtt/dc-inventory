@@ -16,6 +16,7 @@ import {
 } from "react-router-dom";
 
 import { useAuthState } from "../../features/auth/useAuthState";
+import { hasCapability } from "../../shared/api/auth";
 import { AttributeControl } from "../../features/catalog/AttributeControl";
 import {
   SuggestionInput,
@@ -466,7 +467,7 @@ export function ItemFormPage() {
     return <p role="status">Загрузка…</p>;
   }
 
-  if (auth.data?.user.role !== "ADMIN") {
+  if (!hasCapability(auth.data?.user, "catalog.manage")) {
     return <Navigate replace to="/catalog" />;
   }
 

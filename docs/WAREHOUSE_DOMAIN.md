@@ -44,19 +44,19 @@ Actor и custody — разные понятия.
 
 Правила:
 
-- custody существует только для USER;
-- USER ISSUE увеличивает custody;
-- USER RETURN уменьшает custody;
-- USER не может вернуть больше, чем числится в его custody;
-- ADMIN ISSUE/RETURN являются административными складскими движениями и не
-  создают персональную custody;
+- custody существует только для ENGINEER / SENIOR_ENGINEER;
+- ENGINEER / SENIOR_ENGINEER ISSUE увеличивает custody;
+- ENGINEER / SENIOR_ENGINEER RETURN уменьшает custody;
+- custody-capable пользователь не может вернуть больше, чем числится в его custody;
+- ADMIN / OWNER ISSUE/RETURN являются административными складскими движениями
+  и не создают персональную custody;
 - zero custody rows не хранятся;
 - negative custody запрещён;
 - correction custody-bearing movement запрещён;
 - reversal наследует custody исходного movement;
 - reversal RETURN, который снова увеличивает custody, допустим только для
-  APPROVED USER;
-- блокировка USER с ненулевым custody запрещена fail-closed;
+  APPROVED custody-capable пользователя;
+- блокировка пользователя с ненулевым custody запрещена fail-closed;
 - изменение access-state и custody-changing movement сериализуются по row lock
   пользователя.
 
@@ -101,16 +101,21 @@ outbox effects фиксируются одной PostgreSQL transaction.
 Locking используется для:
 
 - idempotency key;
-- custody USER access boundary;
+- custody user access boundary;
 - original movement context;
 - locations;
 - Items;
 - stock balances;
 - custody balances.
 
-Journal feed использует commit-stable snapshot barrier: уже начатые journal
-writers завершаются до фиксации первого `snapshot_at`, а следующие страницы
-повторно используют тот же snapshot.
+Journal feed не блокирует warehouse writers глобальным snapshot lock.
+Первая страница фиксирует PostgreSQL MVCC snapshot через
+`pg_current_snapshot()` и server timestamp. Последующие страницы используют
+HMAC-signed opaque cursor, привязанный к requester, фильтрам и исходному
+snapshot. `pg_visible_in_snapshot(...)` не допускает в feed transaction,
+которая была невидима при фиксации первой страницы, даже если она commit-нулась
+между страницами. Raw client-controlled `snapshot_at` и `before_journal_seq`
+не являются публичным pagination contract.
 
 ## Idempotency
 
@@ -138,34 +143,46 @@ Fingerprint включает custody context.
 
 ## Роли
 
-USER:
+ENGINEER:
 
 - browse/search/filter catalog;
-- просмотр stock;
+- просмотр stock и locations;
 - просмотр собственной actor-history;
 - ISSUE;
-- RETURN.
+- RETURN;
+- RECEIPT существующей номенклатуры;
+- TRANSFER.
 
-USER ISSUE/RETURN используют custody самого USER.
+ENGINEER ISSUE/RETURN используют custody самого ENGINEER.
 
-ADMIN:
+SENIOR_ENGINEER:
 
-- всё доступное USER;
-- общий movement journal;
-- фильтр по employee;
-- Location CRUD/archive;
-- Item CRUD/archive;
-- RECEIPT;
-- TRANSFER;
+- все обычные warehouse operations ENGINEER;
+- общий movement journal и employee filter;
+- catalog create/edit/archive;
+- без `inventory.admin`.
+
+MANAGER:
+
+- read-only catalog / stock / locations;
+- warehouse mutations запрещены;
+- movement journal недоступен.
+
+ADMIN / OWNER:
+
+- общий movement journal и employee filter;
+- Location administration;
+- catalog administration;
+- RECEIPT / ISSUE / RETURN / TRANSFER;
 - WRITE_OFF;
 - CORRECTION;
 - REVERSAL.
 
-ADMIN warehouse movement не назначает custody автоматически.
+ADMIN / OWNER warehouse movement не назначает custody автоматически.
 
 ## Access lifecycle
 
-APPROVED USER может выполнять разрешённые warehouse mutations.
+APPROVED пользователь может выполнять только warehouse mutations, разрешённые его capabilities.
 
 Переход APPROVED → BLOCKED запрещён, пока у пользователя существует ненулевой
 `UserItemCustodyBalance`.

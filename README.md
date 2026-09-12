@@ -11,11 +11,11 @@
 - История операций сохраняется и не переписывается задним числом.
 - Warehouse Domain V2 использует количественный учёт без physical-unit/serial lifecycle.
 - Текущие транзакционные проекции: `StockBalance` = Item × Location и `UserItemCustodyBalance` = User × Item.
-- USER ISSUE/RETURN изменяют персональную custody-проекцию; ADMIN warehouse movements не создают custody.
+- ENGINEER / SENIOR_ENGINEER ISSUE/RETURN изменяют персональную custody-проекцию; административные warehouse movements ADMIN / OWNER не создают custody.
 - Поддерживается несколько складов и локаций.
 - Каталог Warehouse V2 использует versioned fixed hierarchy и leaf schemas; изменения схем выполняются через код и миграции, а не runtime-конструктор.
 - Доступ пользователей осуществляется через Telegram.
-- Базовые роли: `ADMIN` и `USER`.
+- Source RBAC использует фиксированные роли `ENGINEER`, `SENIOR_ENGINEER`, `MANAGER`, `ADMIN` и singleton `OWNER` с backend-derived capabilities.
 - Transactional Telegram notification infrastructure реализована; ISSUE создаёт deduplicated admin Telegram notification через outbox.
 - Production разворачивается только из зафиксированного Git commit.
 - Production VM имеет только read-only доступ к GitHub-репозиторию.
@@ -30,12 +30,12 @@ Warehouse Domain V2 развёрнут и принят в production.
 
 Текущий source migration head:
 
-    SOURCE_ALEMBIC_HEAD=f8a9b0c1d2e3
+    SOURCE_ALEMBIC_HEAD=b2c3d4e5f6a7
 
-На текущем accepted production baseline production migration state и source
-migration head совпадают. При появлении новой source migration они снова
-считаются отдельными operational facts до отдельного deploy/migration
-acceptance.
+Accepted production migration state и source migration head сейчас
+намеренно различаются: production остаётся на `f8a9b0c1d2e3`, а feature source
+уже содержит `b2c3d4e5f6a7`. Новая migration не является production state до
+отдельного maintenance cutover и migration acceptance.
 
 Stage 15 technical hardening завершён. Automated off-VM PostgreSQL backup,
 isolated restore rehearsal, runtime provenance, least-privilege DB identities,
@@ -52,8 +52,11 @@ security/runtime CI и recovery procedure приняты.
 - fresh verified off-VM backup после bootstrap — PASS;
 - Telegram Mini App visual acceptance после загрузки данных — PASS.
 
-Реальные inventory datasets, workbook contents, production identifiers и
-операционные source artifacts в repository не помещаются.
+Реальные inventory datasets, workbook contents, credentials,
+private/runtime-only production identifiers и операционные source artifacts
+в repository не помещаются. Публичные service identifiers, необходимые для
+работы и навигации, например Mini App hostname и support username, могут
+храниться в source и documentation.
 
 Обычный warehouse mutation API по-прежнему защищён fail-closed boundary:
 
@@ -66,12 +69,13 @@ warehouse domain.
 
 Повторный initial bootstrap запрещён.
 
-Текущая operational фаза перед обычным warehouse go-live:
+Текущая source-фаза перед следующим production cutover:
 
-    minor UX corrections
-      -> minor UX remediation
-      -> final affected/full acceptance
-      -> explicit regular-mutation gate decision
+    RBAC remediation
+      -> повторный полный audit
+      -> remediation
+      -> финальный полный audit
+      -> explicit production cutover decision
 
 Independent full source/security/runtime/data audit, remediation, production
 deploy и baseline hygiene завершены и приняты 2026-09-10.
@@ -93,7 +97,7 @@ Production runtime включает:
 - `/api/health/live` и `/api/health/ready`;
 - Telegram `initData` HMAC validation;
 - server-side `HttpOnly` sessions;
-- `ADMIN` / `USER` access model;
+- accepted production baseline пока использует historical `ADMIN` / `USER`; feature source уже использует capability-based five-role RBAC;
 - Telegram webhook с persistent `update_id` dedupe;
 - transactional notification outbox;
 - отдельный `telegram-worker`;
@@ -109,7 +113,7 @@ Production runtime включает:
 - immutable warehouse movement journal;
 - quantity-only `StockBalance`;
 - quantity-only `UserItemCustodyBalance`;
-- custody-aware USER ISSUE/RETURN;
+- accepted production — custody-aware historical USER ISSUE/RETURN; source RBAC — custody-aware ENGINEER / SENIOR_ENGINEER ISSUE/RETURN;
 - read-only stock + custody projection reconciliation;
 - responsive Telegram/mobile/desktop Warehouse UI;
 - guarded external-workbook initial bootstrap.
@@ -119,8 +123,9 @@ PostgreSQL доступны только внутри Docker-сетей.
 
 Item является номенклатурной позицией, а не физическим экземпляром.
 Warehouse V2 не содержит active serial/WWN physical-unit lifecycle.
-Персональная ответственность за выданное USER оборудование хранится отдельно
-как агрегированная количественная custody-проекция User × Item; это не модель
+Персональная ответственность за выданное custody-capable сотруднику
+оборудование хранится отдельно как агрегированная количественная
+custody-проекция User × Item; это не модель
 индивидуальных physical units.
 
 ## Номенклатура

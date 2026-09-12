@@ -2,6 +2,33 @@
 
 Здесь фиксируются ключевые этапы развития проекта, инфраструктурные изменения и архитектурные решения.
 
+## 2026-09-12 — Новый golden baseline и RBAC/Procurement planning
+
+- Accepted production/runtime baseline: `1242f56c131d0f8c470e05cbaf209c48a37e85a4`.
+- Production, local project Docker state и GitHub branches очищены перед новым
+  feature cycle.
+- Следующий feature cycle начинается отдельной веткой
+  `feat/rbac-procurement-foundation`.
+- Согласованы роли ENGINEER / SENIOR_ENGINEER / MANAGER / ADMIN / OWNER.
+- OWNER определён как singleton recovery/application-owner role.
+- Согласован capability-based backend authorization вместо разрастания
+  `role == ...` checks.
+- Согласован отдельный Procurement domain.
+- Procurement revisions должны быть immutable.
+- Assigned Manager является ответственным, но не ACL.
+- Любой MANAGER может продолжить активную закупку; actor каждого действия
+  фиксируется отдельно.
+- Согласован correction loop с manager comment и optional alternative proposal.
+- Согласован status flow: ожидает менеджера / требует корректировки /
+  в закупке / на приёмке / выполнена.
+- Manager status не изменяет warehouse stock.
+- Согласована отдельная technical acceptance ролью SENIOR_ENGINEER+.
+- Согласована кнопка `Есть расхождения`, которая не меняет stock.
+- Финальная acceptance должна атомарно создать Warehouse RECEIPT и завершить
+  procurement.
+- Email delivery через Microsoft Graph вынесена в отдельную последующую фазу.
+- Канонический контракт создан в `docs/RBAC_PROCUREMENT.md`.
+
 ## 2026-08-31 — Инициализация проекта
 
 - Создан private-репозиторий `Humoristtt/dc-inventory`.

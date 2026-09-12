@@ -12,7 +12,11 @@ from app.core.config import Settings
 from app.db.session import get_db_session
 from app.main import create_app
 from app.modules.identity.enums import UserAccessStatus, UserRole
-from app.modules.identity.models import TelegramIdentity
+from app.modules.identity.models import (
+    AccessRequest,
+    TelegramIdentity,
+    UserAccessEvent,
+)
 from tests.warehouse_helpers import actor
 
 pytestmark = pytest.mark.asyncio
@@ -32,7 +36,7 @@ async def _api_context(
     )
     user, user_token = await actor(
         db,
-        UserRole.USER,
+        UserRole.ENGINEER,
         UserAccessStatus.APPROVED,
     )
 
@@ -126,6 +130,20 @@ async def test_admin_user_access_api_security(
         assert admin_id in ids
         assert user_id in ids
 
+        users_by_id = {
+            row["id"]: row
+            for row in body["items"]
+        }
+
+        assert (
+            users_by_id[admin_id]["is_recovery_identity"]
+            is True
+        )
+        assert (
+            users_by_id[user_id]["is_recovery_identity"]
+            is False
+        )
+
         bad_origin_headers = dict(admin_headers)
         bad_origin_headers["Origin"] = "https://evil.example"
 
@@ -148,7 +166,7 @@ async def test_admin_user_access_api_security(
         assert block_user.status_code == 200, block_user.text
         assert block_user.headers["cache-control"] == "no-store"
         assert block_user.json()["access_status"] == "BLOCKED"
-        assert block_user.json()["role"] == "USER"
+        assert block_user.json()["role"] == "ENGINEER"
 
         old_user_session = await client.get(
             "/api/admin/users",
@@ -174,6 +192,14 @@ async def test_admin_user_access_api_security(
             event_body["items"][0]["after_access_status"]
             == "BLOCKED"
         )
+        assert (
+            event_body["items"][0]["actor_user_id"]
+            == admin_id
+        )
+        assert (
+            event_body["items"][0]["actor_display_name"]
+            == "Synthetic actor"
+        )
 
         recovery_block = await client.patch(
             f"/api/admin/users/{admin_id}",
@@ -183,7 +209,17 @@ async def test_admin_user_access_api_security(
             },
         )
         assert recovery_block.status_code == 409
-        assert "recovery administrator" in recovery_block.json()["detail"]
+
+        recovery_detail = recovery_block.json()["detail"]
+
+        assert (
+            recovery_detail["code"]
+            == "admin_user_recovery_invariant"
+        )
+        assert (
+            "owner/recovery identity"
+            in recovery_detail["message"]
+        )
 
 
 async def test_admin_can_unblock_user_via_api(
@@ -250,7 +286,7 @@ async def test_admin_user_access_rejects_workflow_bypass(
 
     pending, _ = await actor(
         warehouse_db,
-        UserRole.USER,
+        UserRole.ENGINEER,
         UserAccessStatus.PENDING,
     )
 
@@ -267,4 +303,106 @@ async def test_admin_user_access_rejects_workflow_bypass(
         )
 
     assert response.status_code == 409
-    assert "access-request workflow" in response.json()["detail"]
+
+    detail = response.json()["detail"]
+
+    assert (
+        detail["code"]
+        == "admin_user_invalid_access_transition"
+    )
+    assert (
+        "access-request workflow"
+        in detail["message"]
+    )
+
+async def test_admin_can_decide_pending_access_request_via_api(
+    warehouse_db: AsyncSession,
+) -> None:
+    app, users, _ = await _api_context(warehouse_db)
+
+    admin_id, admin_headers = users["admin"]
+
+    pending, _ = await actor(
+        warehouse_db,
+        UserRole.ENGINEER,
+        UserAccessStatus.PENDING,
+    )
+    access_request = AccessRequest(
+        user_id=pending.id,
+        status="PENDING",
+    )
+    warehouse_db.add(access_request)
+    await warehouse_db.flush()
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            f"/api/admin/users/{pending.id}/access-request-decision",
+            headers=admin_headers,
+            json={"decision": "APPROVE"},
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.headers["cache-control"] == "no-store"
+    assert response.json()["access_status"] == "APPROVED"
+
+    await warehouse_db.refresh(access_request)
+    assert access_request.status == "APPROVED"
+    assert access_request.decided_by_user_id is not None
+
+    event = await warehouse_db.scalar(
+        select(UserAccessEvent).where(
+            UserAccessEvent.target_user_id == pending.id,
+            UserAccessEvent.before_access_status
+            == UserAccessStatus.PENDING,
+            UserAccessEvent.after_access_status
+            == UserAccessStatus.APPROVED,
+        )
+    )
+
+    assert event is not None
+    assert str(event.actor_user_id) == admin_id
+
+async def test_admin_role_event_has_actor_display_name(
+    warehouse_db: AsyncSession,
+) -> None:
+    app, users, _ = await _api_context(warehouse_db)
+
+    admin_id, admin_headers = users["admin"]
+    user_id, _ = users["user"]
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        changed = await client.patch(
+            f"/api/admin/users/{user_id}/role",
+            headers=admin_headers,
+            json={
+                "role": "MANAGER",
+            },
+        )
+
+        assert changed.status_code == 200, changed.text
+        assert changed.json()["role"] == "MANAGER"
+
+        events = await client.get(
+            f"/api/admin/users/{user_id}/role-events",
+            headers=admin_headers,
+        )
+
+        assert events.status_code == 200, events.text
+
+        body = events.json()
+
+        assert body["total"] == 1
+        assert len(body["items"]) == 1
+
+        event = body["items"][0]
+
+        assert event["actor_user_id"] == admin_id
+        assert event["actor_display_name"] == "Synthetic actor"
+        assert event["before_role"] == "ENGINEER"
+        assert event["after_role"] == "MANAGER"

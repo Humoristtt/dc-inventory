@@ -78,7 +78,7 @@ def test_exactly_one_typed_value_check_uses_postgresql_num_nonnulls() -> None:
     assert "num_nonnulls" in str(constraint.sqltext)
 
 
-def test_catalog_routes_are_registered_without_item_delete() -> None:
+def test_catalog_routes_are_registered_with_item_delete() -> None:
     operations = application.openapi()["paths"]
     assert "/api/catalog/categories" in operations
     assert "/api/catalog/categories/{category_key}" in operations
@@ -91,4 +91,4 @@ def test_catalog_routes_are_registered_without_item_delete() -> None:
     assert "/api/admin/catalog/items/{item_id}" in operations
     assert "/api/admin/catalog/items/{item_id}/archive" in operations
     assert "/api/admin/catalog/items/{item_id}/unarchive" in operations
-    assert "delete" not in operations["/api/admin/catalog/items/{item_id}"]
+    assert "delete" in operations["/api/admin/catalog/items/{item_id}"]

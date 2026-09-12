@@ -9,12 +9,14 @@ from app.modules.auth.schemas import (
     TelegramAuthRequest,
 )
 from app.modules.auth.service import (
+    RecoveryOwnerConflictError,
     issue_auth_session,
     revoke_auth_session,
     upsert_telegram_identity,
 )
 from app.modules.auth.telegram import TelegramInitDataError, validate_telegram_init_data
 from app.modules.identity.models import TelegramIdentity, User
+from app.modules.identity.policy import serialized_capabilities
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -32,6 +34,7 @@ def _state_response(
             first_name=identity.first_name,
             last_name=identity.last_name,
             role=user.role,
+            capabilities=serialized_capabilities(user.role),
             access_status=user.access_status,
         ),
         support=SupportContactOut(
@@ -68,13 +71,19 @@ async def authenticate_with_telegram(
             detail="invalid Telegram init data",
         ) from exc
 
-    async with db.begin():
-        user, identity = await upsert_telegram_identity(db, validated, settings)
-        issued = await issue_auth_session(
-            db,
-            user,
-            ttl_seconds=settings.auth_session_ttl_seconds,
-        )
+    try:
+        async with db.begin():
+            user, identity = await upsert_telegram_identity(db, validated, settings)
+            issued = await issue_auth_session(
+                db,
+                user,
+                ttl_seconds=settings.auth_session_ttl_seconds,
+            )
+    except RecoveryOwnerConflictError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="configured recovery identity conflicts with existing owner",
+        ) from exc
 
     response.set_cookie(
         key=settings.auth_cookie_name,

@@ -18,6 +18,10 @@ workflow = (
     ROOT / ".github/workflows/ci.yml"
 ).read_text()
 
+local_runner = (
+    ROOT / "ops/tests/run_fullstack_local.sh"
+).read_text()
+
 
 assert package["scripts"]["test:e2e"] == (
     "playwright test e2e/warehouse-v2.spec.ts"
@@ -28,6 +32,27 @@ assert package["scripts"]["test:e2e:fullstack"] == (
     "e2e/fullstack.spec.ts "
     "--project=desktop-admin"
 )
+
+assert package["scripts"]["test:e2e:fullstack:local"] == (
+    "bash ../ops/tests/run_fullstack_local.sh"
+)
+
+for required in (
+    'TEST_DB="dc_inventory_fullstack_',
+    "mktemp -d",
+    "trap cleanup EXIT INT TERM",
+    "createdb",
+    "dropdb",
+    "DATABASE_URL=",
+    'FULLSTACK_TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN"',
+    'FULLSTACK_TELEGRAM_USER_ID="42424242"',
+    "unset TELEGRAM_GATEWAY_URL",
+    "npm run test:e2e:fullstack",
+    "FULLSTACK_LOCAL_ISOLATION=PASS",
+):
+    assert required in local_runner, required
+
+assert ".env.fullstack" not in local_runner
 
 assert "createHmac" in spec
 assert "/api/auth/telegram" in spec

@@ -24,15 +24,22 @@ async def transceiver(
     reach: str,
     category: str = "transceiver_ethernet",
     speed: str = "10 Гбит/с",
+    manufacturer_name: str | None = None,
+    model: str | None = None,
 ) -> uuid.UUID:
-    manufacturer = await create_manufacturer(db, ManufacturerCreate(name=uuid.uuid4().hex))
+    manufacturer = await create_manufacturer(
+        db,
+        ManufacturerCreate(
+            name=manufacturer_name or uuid.uuid4().hex,
+        ),
+    )
     return await create_item(
         db,
         ItemCreate(
             category_key=category,
             name=marker,
             manufacturer_id=manufacturer.id,
-            model=uuid.uuid4().hex,
+            model=model or uuid.uuid4().hex,
             attributes={
                 "speed": speed,
                 "wavelength": "1310 нм",
@@ -301,16 +308,20 @@ async def test_search_relevance_prefers_stronger_attribute_match(
 
     strong = await transceiver(
         db,
-        uuid.uuid4().hex,
+        "relevance-strong-item",
         "до 100 м",
         speed="25 Гбит/с",
+        manufacturer_name="relevance-strong-maker",
+        model="relevance-strong-model",
     )
 
     weak = await transceiver(
         db,
-        uuid.uuid4().hex,
+        "relevance-weak-item",
         "до 125 м",
         speed="16 Гбит/с",
+        manufacturer_name="relevance-weak-maker",
+        model="relevance-weak-model",
     )
 
     spec = await build_catalog_query_spec(

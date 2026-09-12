@@ -15,11 +15,22 @@ def _constraint_names(table_name: str) -> set[str]:
 
 
 def test_identity_tables_are_registered_in_shared_metadata() -> None:
-    assert {"users", "telegram_identities", "access_requests"} <= set(metadata.tables)
+    assert {
+        "users",
+        "telegram_identities",
+        "access_requests",
+        "user_role_events",
+    } <= set(metadata.tables)
 
 
 def test_identity_enum_values_are_stable() -> None:
-    assert [role.value for role in UserRole] == ["USER", "ADMIN"]
+    assert [role.value for role in UserRole] == [
+        "ENGINEER",
+        "SENIOR_ENGINEER",
+        "MANAGER",
+        "ADMIN",
+        "OWNER",
+    ]
     assert [status.value for status in UserAccessStatus] == [
         "PENDING",
         "APPROVED",

@@ -6,6 +6,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.modules.identity.access_lifecycle import transition_user_access
 from app.modules.identity.enums import AccessRequestStatus, UserAccessStatus
 from app.modules.identity.models import AccessRequest, User
 
@@ -63,9 +64,12 @@ async def create_or_get_access_request(
     if user.access_status == UserAccessStatus.BLOCKED:
         raise AccessBlockedError
     if user.access_status == UserAccessStatus.REJECTED:
-        user.access_status = UserAccessStatus.PENDING
-        user.approved_at = None
-        user.approved_by_user_id = None
+        transition_user_access(
+            db,
+            user=user,
+            actor_user_id=user.id,
+            access_status=UserAccessStatus.PENDING,
+        )
 
     existing = await get_pending_access_request(db, user.id)
     if existing is not None:

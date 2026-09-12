@@ -51,6 +51,8 @@ services:
     networks:
       - db_net
     logging: *runtime-logging
+    cpus: ${POSTGRES_CPUS_LIMIT:-2.0}
+    mem_limit: ${POSTGRES_MEMORY_LIMIT:-3g}
     pids_limit: 512
     restart: unless-stopped
 
@@ -73,6 +75,8 @@ services:
     security_opt:
       - no-new-privileges:true
     logging: *runtime-logging
+    cpus: ${MIGRATE_CPUS_LIMIT:-1.0}
+    mem_limit: ${MIGRATE_MEMORY_LIMIT:-512m}
     pids_limit: 256
     restart: "no"
 
@@ -128,6 +132,8 @@ services:
     security_opt:
       - no-new-privileges:true
     logging: *runtime-logging
+    cpus: ${DB_PERMISSIONS_CPUS_LIMIT:-0.5}
+    mem_limit: ${DB_PERMISSIONS_MEMORY_LIMIT:-256m}
     pids_limit: 256
     restart: "no"
 
@@ -140,6 +146,7 @@ services:
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_INIT_DATA_MAX_AGE_SECONDS: ${TELEGRAM_INIT_DATA_MAX_AGE_SECONDS:-300}
       ADMIN_TELEGRAM_USER_ID: ${ADMIN_TELEGRAM_USER_ID:-}
+      NOTIFICATION_TELEGRAM_USER_ID: ${NOTIFICATION_TELEGRAM_USER_ID:-}
       SUPPORT_TELEGRAM_USERNAME: ${SUPPORT_TELEGRAM_USERNAME:-Humoristttt}
       AUTH_SESSION_TTL_SECONDS: ${AUTH_SESSION_TTL_SECONDS:-43200}
       AUTH_COOKIE_NAME: ${AUTH_COOKIE_NAME:-dc_inventory_session}
@@ -175,6 +182,8 @@ services:
     init: true
     stop_grace_period: 20s
     logging: *runtime-logging
+    cpus: ${BACKEND_CPUS_LIMIT:-1.5}
+    mem_limit: ${BACKEND_MEMORY_LIMIT:-1g}
     pids_limit: 256
     restart: unless-stopped
 
@@ -223,6 +232,8 @@ services:
     init: true
     stop_grace_period: 20s
     logging: *runtime-logging
+    cpus: ${TELEGRAM_WORKER_CPUS_LIMIT:-0.5}
+    mem_limit: ${TELEGRAM_WORKER_MEMORY_LIMIT:-512m}
     pids_limit: 256
     restart: unless-stopped
 
@@ -271,6 +282,8 @@ services:
     init: true
     stop_grace_period: 20s
     logging: *runtime-logging
+    cpus: ${MAINTENANCE_WORKER_CPUS_LIMIT:-0.5}
+    mem_limit: ${MAINTENANCE_WORKER_MEMORY_LIMIT:-512m}
     pids_limit: 256
     restart: unless-stopped
 
@@ -305,6 +318,8 @@ services:
       - no-new-privileges:true
     init: true
     logging: *runtime-logging
+    cpus: ${WEB_CPUS_LIMIT:-0.5}
+    mem_limit: ${WEB_MEMORY_LIMIT:-256m}
     pids_limit: 256
     restart: unless-stopped
 

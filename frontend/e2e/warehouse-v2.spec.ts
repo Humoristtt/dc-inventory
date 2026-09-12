@@ -130,9 +130,81 @@ async function assertBottomNavigationClearance(page: Page) {
   expect(hasClearance).toBe(true);
 }
 
+type MockRole =
+  | "ENGINEER"
+  | "SENIOR_ENGINEER"
+  | "MANAGER"
+  | "ADMIN"
+  | "OWNER";
+
+function mockCapabilities(role: MockRole): string[] {
+  switch (role) {
+    case "ENGINEER":
+      return [
+        "catalog.read",
+        "inventory.read",
+        "inventory.operate",
+        "movement.read_own",
+      ];
+    case "SENIOR_ENGINEER":
+      return [
+        "catalog.read",
+        "catalog.manage",
+        "catalog.archive",
+        "catalog.delete_unused",
+        "inventory.read",
+        "inventory.operate",
+        "movement.read_own",
+        "movement.read_all",
+        "procurement.read",
+        "procurement.accept",
+      ];
+    case "MANAGER":
+      return [
+        "catalog.read",
+        "inventory.read",
+        "procurement.read",
+        "procurement.manage",
+      ];
+    case "ADMIN":
+      return [
+        "catalog.read",
+        "catalog.manage",
+        "catalog.archive",
+        "catalog.delete_unused",
+        "inventory.read",
+        "inventory.operate",
+        "inventory.admin",
+        "movement.read_all",
+        "procurement.read",
+        "procurement.create",
+        "procurement.accept",
+        "access.manage_users",
+        "access.assign_standard_roles",
+      ];
+    case "OWNER":
+      return [
+        "catalog.read",
+        "catalog.manage",
+        "catalog.archive",
+        "catalog.delete_unused",
+        "inventory.read",
+        "inventory.operate",
+        "inventory.admin",
+        "movement.read_all",
+        "procurement.read",
+        "procurement.create",
+        "procurement.accept",
+        "access.manage_users",
+        "access.assign_standard_roles",
+        "access.assign_admin",
+      ];
+  }
+}
+
 async function installApiMock(
   page: Page,
-  role: "USER" | "ADMIN",
+  role: MockRole,
   failures = 0,
   delays: ApiMockDelays = {},
 ) {
@@ -148,7 +220,7 @@ async function installApiMock(
       if (delays.authGate !== undefined) {
         await delays.authGate;
       }
-      return json(route,{user:{id:userId,telegram_user_id:1001,first_name:"Иван",last_name:null,username:"synthetic",role,access_status:"APPROVED"},support:{username:"support",url:"https://t.me/support"}});
+      return json(route,{user:{id:userId,telegram_user_id:1001,first_name:"Иван",last_name:null,username:"synthetic",role,capabilities:mockCapabilities(role),access_status:"APPROVED"},support:{username:"support",url:"https://t.me/support"}});
     }
     if(path === "/api/catalog/categories") {
       if(failures-- > 0) return json(route,{detail:"synthetic failure"},500);
@@ -214,7 +286,9 @@ async function installApiMock(
       return json(route,{
         items:[...movements].reverse(),
         limit:30,
-        next_before_journal_seq:null,
+        cursor:"feed-page-1",
+        next_cursor:null,
+        snapshot_at:now,
       });
     }
     if(path === "/api/inventory/movements") {
@@ -245,7 +319,7 @@ test(
   "catalog deep route keeps styles and first activation after hard reload",
   async ({ page }, testInfo) => {
     await installTelegramMock(page);
-    await installApiMock(page, "USER");
+    await installApiMock(page, "ENGINEER");
 
     const touchProject =
       testInfo.project.name === "android-like"
@@ -303,7 +377,7 @@ test(
   "category opens on first physical activation after scroll",
   async ({ page }, testInfo) => {
     await installTelegramMock(page);
-    await installApiMock(page, "USER");
+    await installApiMock(page, "ENGINEER");
 
     const touchProject =
       testInfo.project.name === "android-like"
@@ -370,7 +444,7 @@ test(
 
     await installApiMock(
       page,
-      "USER",
+      "ENGINEER",
       0,
       { authGate },
     );
@@ -434,7 +508,7 @@ test(
 
     const api = await installApiMock(
       page,
-      "USER",
+      "ENGINEER",
       0,
       {
         categoryDetailGate,
@@ -536,8 +610,8 @@ test(
 );
 
 
-test("USER browses hierarchy, retains server filters, and uses Telegram back", async ({page})=>{
-  await installTelegramMock(page); const api=await installApiMock(page,"USER");
+test("ENGINEER browses hierarchy, retains server filters, and uses Telegram back", async ({page})=>{
+  await installTelegramMock(page); const api=await installApiMock(page,"ENGINEER");
   await page.goto("/catalog/new?category=transceiver_ethernet");
   await expect(page).toHaveURL(/\/catalog$/);
   await page.getByRole("link",{name:/Трансиверы/}).click();
@@ -555,14 +629,14 @@ test("USER browses hierarchy, retains server filters, and uses Telegram back", a
   await page.getByRole("heading",{name:/TEST-10G/}).click();
   await expect(page.getByText("В наличии: 10")).toBeVisible();
   await expect(page.getByText(location.name,{exact:true})).toBeVisible();
-  await expect(page.getByRole("button",{name:"Переместить"})).toHaveCount(0);
+  await expect(page.getByRole("button",{name:"Переместить"})).toBeVisible();
   await page.evaluate(()=>{(window as unknown as {__stage8Telegram:{callback:(()=>void)|null}}).__stage8Telegram.callback?.();});
   await expect(page).toHaveURL(/\/catalog\/transceiver_ethernet\?.*availability=IN_STOCK/);
   await assertNoHorizontalOverflow(page);await assertBottomNavigationClearance(page);
 });
 
-test("USER issues and returns quantities, then reads movement history",async({page})=>{
-  await installTelegramMock(page);const api=await installApiMock(page,"USER");
+test("ENGINEER issues and returns quantities, then reads own movement history",async({page})=>{
+  await installTelegramMock(page);const api=await installApiMock(page,"ENGINEER");
   await page.goto("/catalog/items/item-1");
   for(const [label,amount,kind] of [["Взять","4","ISSUE"],["Вернуть","16","RETURN"]]) {
     await page.getByRole("button",{name:label,exact:true}).click();
@@ -578,10 +652,9 @@ test("USER issues and returns quantities, then reads movement history",async({pa
   await expect(page.getByLabel("Период")).toHaveValue("3m");
   await expect(page.locator(".movement-entry")).toHaveCount(2);
   await page.getByLabel("Период").selectOption("30d");
-  await page.getByLabel("Сотрудник").selectOption(userId);
   await page.getByLabel("Оборудование").selectOption("long-range");
   await page.getByLabel("Место хранения").selectOption(location.id);
-  await expect.poll(()=>api.requests.some(url=>url.includes("period=30d") && url.includes("actor_user_id="+userId) && url.includes("long_range=true") && url.includes("location_id="+location.id))).toBe(true);
+  await expect.poll(()=>api.requests.some(url=>url.includes("period=30d") && url.includes("long_range=true") && url.includes("location_id="+location.id))).toBe(true);
   await assertNoHorizontalOverflow(page);await assertBottomNavigationClearance(page);
 });
 
@@ -614,7 +687,7 @@ test("ADMIN creates metadata-driven equipment, edits and archives",async({page})
 });
 
 test("catalog failure supports retry",async({page})=>{
-  await installTelegramMock(page);await installApiMock(page,"USER",3);
+  await installTelegramMock(page);await installApiMock(page,"ENGINEER",3);
   await page.goto("/catalog");
   await expect(page.getByText("Не удалось загрузить категории")).toBeVisible();
   await page.getByRole("button",{name:"Повторить"}).click();
@@ -1630,5 +1703,201 @@ test(
     ).toMatch(/^repeat\(2,/);
 
     await assertNoHorizontalOverflow(page);
+  },
+);
+
+const rbacShellCases: Array<{
+  role: MockRole;
+  catalogManage: boolean;
+  movements: boolean;
+  users: boolean;
+  locationAdmin: boolean;
+}> = [
+  {
+    role: "SENIOR_ENGINEER",
+    catalogManage: true,
+    movements: true,
+    users: false,
+    locationAdmin: false,
+  },
+  {
+    role: "MANAGER",
+    catalogManage: false,
+    movements: false,
+    users: false,
+    locationAdmin: false,
+  },
+  {
+    role: "ADMIN",
+    catalogManage: true,
+    movements: true,
+    users: true,
+    locationAdmin: true,
+  },
+  {
+    role: "OWNER",
+    catalogManage: true,
+    movements: true,
+    users: true,
+    locationAdmin: true,
+  },
+];
+
+for (const scenario of rbacShellCases) {
+  test(`RBAC shell exposes only allowed controls for ${scenario.role}`, async ({
+    page,
+  }) => {
+    await installTelegramMock(page);
+    await installApiMock(page, scenario.role);
+
+    await page.goto("/catalog");
+
+    await expect(
+      page.getByRole("heading", {
+        name: "Найти оборудование",
+      }),
+    ).toBeVisible();
+
+    const addEquipment = page.getByRole("link", {
+      name: /Добавить оборудование/,
+    });
+
+    if (scenario.catalogManage) {
+      await expect(addEquipment).toBeVisible();
+    } else {
+      await expect(addEquipment).toHaveCount(0);
+    }
+
+    const movements = page.getByRole("link", {
+      name: "Движения",
+    });
+
+    if (scenario.movements) {
+      await expect(movements).toBeVisible();
+    } else {
+      await expect(movements).toHaveCount(0);
+    }
+
+    await page.goto("/more");
+
+    await expect(
+      page.getByRole("heading", {
+        name: "Ещё",
+      }),
+    ).toBeVisible();
+
+    const users = page.getByRole("link", {
+      name: /Пользователи/,
+    });
+
+    if (scenario.users) {
+      await expect(users).toBeVisible();
+    } else {
+      await expect(users).toHaveCount(0);
+    }
+
+    await page.goto("/more/locations");
+
+    await expect(
+      page.getByRole("heading", {
+        name: "Места хранения",
+      }),
+    ).toBeVisible();
+
+    const addLocation = page.getByRole("button", {
+      name: "Добавить место хранения",
+    });
+
+    if (scenario.locationAdmin) {
+      await expect(addLocation).toBeVisible();
+    } else {
+      await expect(addLocation).toHaveCount(0);
+    }
+
+    const addEquipmentFromLocations = page.getByRole("link", {
+      name: "Добавить оборудование",
+    });
+
+    if (scenario.catalogManage) {
+      await expect(addEquipmentFromLocations).toBeVisible();
+    } else {
+      await expect(addEquipmentFromLocations).toHaveCount(0);
+    }
+  });
+}
+
+test(
+  "ENGINEER reads own movement journal without employee directory",
+  async ({ page }) => {
+    await installTelegramMock(page);
+    const api = await installApiMock(
+      page,
+      "ENGINEER",
+    );
+
+    await page.goto("/movements");
+
+    await expect(
+      page.getByRole("heading", {
+        name: "Движения",
+      }),
+    ).toBeVisible();
+
+    await expect(
+      page.getByLabel("Сотрудник"),
+    ).toHaveCount(0);
+
+    await expect.poll(
+      () => api.requests.some(
+        (url) =>
+          url.includes(
+            "/api/inventory/movements/feed",
+          ),
+      ),
+    ).toBe(true);
+
+    expect(
+      api.requests.some(
+        (url) =>
+          url.includes(
+            "/api/inventory/movement-actors",
+          ),
+      ),
+    ).toBe(false);
+  },
+);
+
+test(
+  "MANAGER cannot open movement journal directly",
+  async ({ page }) => {
+    await installTelegramMock(page);
+    const api = await installApiMock(
+      page,
+      "MANAGER",
+    );
+
+    await page.goto("/movements");
+
+    await expect(page).toHaveURL(
+      /\/catalog$/,
+    );
+
+    await expect(
+      page.getByRole("heading", {
+        name: "Найти оборудование",
+      }),
+    ).toBeVisible();
+
+    expect(
+      api.requests.some(
+        (url) =>
+          url.includes(
+            "/api/inventory/movements/",
+          )
+          || url.includes(
+            "/api/inventory/movement-actors",
+          ),
+      ),
+    ).toBe(false);
   },
 );

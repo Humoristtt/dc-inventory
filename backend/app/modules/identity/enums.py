@@ -2,8 +2,11 @@ from enum import StrEnum
 
 
 class UserRole(StrEnum):
-    USER = "USER"
+    ENGINEER = "ENGINEER"
+    SENIOR_ENGINEER = "SENIOR_ENGINEER"
+    MANAGER = "MANAGER"
     ADMIN = "ADMIN"
+    OWNER = "OWNER"
 
 
 class UserAccessStatus(StrEnum):

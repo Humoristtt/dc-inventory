@@ -444,6 +444,7 @@ docker run -d \
   -e APP_ENV=production \
   -e TELEGRAM_BOT_TOKEN=restore-rehearsal-placeholder \
   -e ADMIN_TELEGRAM_USER_ID=1 \
+  -e NOTIFICATION_TELEGRAM_USER_ID=2 \
   -e TELEGRAM_WEBHOOK_SECRET=restore-rehearsal-placeholder \
   -e TELEGRAM_WEB_APP_URL=https://app.spik-inventory.ru \
   -e DATABASE_URL="postgresql+asyncpg://dc_inventory_restore:${RESTORE_PASSWORD}@${RESTORE_PG}:5432/dc_inventory_restore" \

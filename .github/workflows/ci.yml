@@ -166,6 +166,18 @@ jobs:
         shell: bash
         run: python3 ops/tests/test_docs_freshness.py
 
+      - name: Notification delivery contract
+        shell: bash
+        run: python3 ops/tests/test_notification_delivery_contract.py
+
+      - name: Environment file contract
+        shell: bash
+        run: python3 ops/tests/test_env_file_contract.py
+
+      - name: Naming contract
+        shell: bash
+        run: python3 ops/tests/test_naming_contract.py
+
       - name: Full-stack E2E contract
         shell: bash
         run: python3 ops/tests/test_fullstack_e2e_contract.py
@@ -369,6 +381,7 @@ jobs:
           DATABASE_LOCK_TIMEOUT_SECONDS=5
           TELEGRAM_BOT_TOKEN=ci-runtime-only-token
           ADMIN_TELEGRAM_USER_ID=42424242
+          NOTIFICATION_TELEGRAM_USER_ID=43434343
           SUPPORT_TELEGRAM_USERNAME=Humoristttt
           TELEGRAM_WEBHOOK_SECRET=ci-runtime-webhook-secret
           TELEGRAM_WEB_APP_URL=https://app.spik-inventory.ru
@@ -422,9 +435,9 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1:8080/api/health/ready | grep -q '"status":"ready"'
           docker compose --env-file .env.ci -f compose.yaml exec -T backend id | grep -q 'uid=10001(app)'
           docker compose --env-file .env.ci -f compose.yaml exec -T web id | grep -q 'uid=101(nginx)'
-          docker compose --env-file .env.ci -f compose.yaml exec -T backend sh -c 'test "$TELEGRAM_BOT_TOKEN" = "ci-runtime-only-token" && test "$TELEGRAM_WEBHOOK_SECRET" = "ci-runtime-webhook-secret" && test -z "${TELEGRAM_GATEWAY_SECRET:-}"'
+          docker compose --env-file .env.ci -f compose.yaml exec -T backend sh -c 'test "$TELEGRAM_BOT_TOKEN" = "ci-runtime-only-token" && test "$TELEGRAM_WEBHOOK_SECRET" = "ci-runtime-webhook-secret" && test "$NOTIFICATION_TELEGRAM_USER_ID" = "43434343" && test -z "${TELEGRAM_GATEWAY_SECRET:-}"'
           docker compose --env-file .env.ci -f compose.yaml exec -T telegram-worker sh -c 'test "$TELEGRAM_GATEWAY_SECRET" = "ci-runtime-gateway-secret" && test -z "${TELEGRAM_BOT_TOKEN:-}" && test -z "${TELEGRAM_WEBHOOK_SECRET:-}"'
-          docker compose --env-file .env.ci -f compose.yaml run --rm --no-deps migrate sh -c 'test -z "${TELEGRAM_BOT_TOKEN:-}" && test -z "${ADMIN_TELEGRAM_USER_ID:-}" && test -z "${TELEGRAM_WEBHOOK_SECRET:-}" && test -z "${TELEGRAM_GATEWAY_SECRET:-}"'
+          docker compose --env-file .env.ci -f compose.yaml run --rm --no-deps migrate sh -c 'test -z "${TELEGRAM_BOT_TOKEN:-}" && test -z "${ADMIN_TELEGRAM_USER_ID:-}" && test -z "${NOTIFICATION_TELEGRAM_USER_ID:-}" && test -z "${TELEGRAM_WEBHOOK_SECRET:-}" && test -z "${TELEGRAM_GATEWAY_SECRET:-}"'
 
           backend_cid="$(docker compose --env-file .env.ci -f compose.yaml ps -q backend)"
           postgres_cid="$(docker compose --env-file .env.ci -f compose.yaml ps -q postgres)"
@@ -507,7 +520,7 @@ jobs:
                 FROM telegram_identities ti
                 JOIN users u ON u.id = ti.user_id
                 WHERE ti.telegram_user_id = 42424242
-                  AND u.role = 'ADMIN'
+                  AND u.role = 'OWNER'
                   AND u.access_status = 'APPROVED';
               "
           )"

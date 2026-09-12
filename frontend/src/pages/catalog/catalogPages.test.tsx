@@ -244,7 +244,7 @@ it("после approved access gate показывает рабочий shell и
           username: "approved",
           first_name: "Approved",
           last_name: null,
-          role: "USER",
+          role: "ENGINEER", capabilities: ["catalog.read", "inventory.read", "inventory.operate", "movement.read_own"],
           access_status: "APPROVED",
         },
         support: { username: "support", url: "https://t.me/support" },
@@ -829,7 +829,7 @@ it("catalog form отдаёт validation нашей русской форме, �
             username: "admin",
             first_name: "Admin",
             last_name: null,
-            role: "ADMIN",
+            role: "ADMIN", capabilities: ["catalog.read", "catalog.manage", "catalog.archive", "catalog.delete_unused", "inventory.read", "inventory.operate", "inventory.admin", "movement.read_all", "procurement.read", "procurement.create", "procurement.accept", "access.manage_users", "access.assign_standard_roles"],
             access_status: "APPROVED",
           },
           support: {

@@ -1,7 +1,6 @@
 import asyncio
 import os
 import uuid
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -22,12 +21,15 @@ from app.modules.inventory.models import (
     StockBalance,
     UserItemCustodyBalance,
 )
-from app.modules.inventory.schemas import MovementReversalCreate
+from app.modules.inventory.schemas import (
+    MovementCreate,
+    MovementLineCreate,
+    MovementReversalCreate,
+)
 from app.modules.inventory.service import (
     InventoryConflictError,
     InventoryValidationError,
-    acquire_movement_feed_snapshot,
-    list_movements_cursor,
+    create_movement,
     reverse_movement,
     set_location_archived,
 )
@@ -89,11 +91,109 @@ async def test_lifecycle_idempotency_and_reconciliation(warehouse_db: AsyncSessi
     assert drift[0]["projected_quantity"] == 3
 
 
+async def test_movement_retry_is_actor_scoped_and_preserves_actor_snapshot(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    first_scenario = await scenario(
+        db,
+        UserRole.ADMIN,
+    )
+
+    request_id = (
+        f"actor-retry-{uuid.uuid4().hex}"
+    )
+
+    payload = MovementCreate(
+        movement_type="RECEIPT",
+        destination_location_id=(
+            first_scenario[2]
+        ),
+        client_request_id=request_id,
+        lines=[
+            MovementLineCreate(
+                item_id=first_scenario[1],
+                quantity=1,
+            )
+        ],
+    )
+
+    first = await create_movement(
+        db,
+        payload,
+        actor_user_id=first_scenario[0],
+        actor_display_name="Original actor",
+    )
+
+    replay = await create_movement(
+        db,
+        payload,
+        actor_user_id=first_scenario[0],
+        actor_display_name="Renamed actor",
+    )
+
+    assert replay.replayed
+    assert (
+        replay.record.movement.id
+        == first.record.movement.id
+    )
+    assert (
+        replay.record.movement.actor_user_id
+        == first_scenario[0]
+    )
+    assert (
+        replay.record.movement.actor_display_name_snapshot
+        == "Original actor"
+    )
+    assert (
+        await quantity(
+            db,
+            first_scenario[1],
+            first_scenario[2],
+        )
+        == 1
+    )
+
+    second_actor, _ = await actor(
+        db,
+        UserRole.ADMIN,
+    )
+
+    second = await create_movement(
+        db,
+        payload,
+        actor_user_id=second_actor.id,
+        actor_display_name="Second actor",
+    )
+
+    assert not second.replayed
+    assert (
+        second.record.movement.id
+        != first.record.movement.id
+    )
+    assert (
+        second.record.movement.actor_user_id
+        == second_actor.id
+    )
+    assert (
+        second.record.movement.actor_display_name_snapshot
+        == "Second actor"
+    )
+    assert (
+        await quantity(
+            db,
+            first_scenario[1],
+            first_scenario[2],
+        )
+        == 2
+    )
+
+
 async def test_user_custody_lifecycle_idempotency_failure_and_reconciliation(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
-    s = await scenario(db, UserRole.USER)
+    s = await scenario(db, UserRole.ENGINEER)
     await move(db, s, "RECEIPT", 10, destination=s[2])
 
     issue = await move(
@@ -221,7 +321,7 @@ async def test_outstanding_custody_blocks_access_transition(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
-    s = await scenario(db, UserRole.USER)
+    s = await scenario(db, UserRole.ENGINEER)
     admin, _ = await actor(db, UserRole.ADMIN)
 
     admin_scenario = (
@@ -376,7 +476,7 @@ async def test_custody_reversals_and_correction_fail_closed(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
-    s = await scenario(db, UserRole.USER)
+    s = await scenario(db, UserRole.ENGINEER)
     receipt = await move(db, s, "RECEIPT", 10, destination=s[2])
     issue = await move(
         db,
@@ -447,14 +547,19 @@ async def test_admin_issue_and_return_do_not_mutate_custody(
     returned = await move(db, s, "RETURN", 2, destination=s[2])
     assert issue.record.movement.custody_user_id is None
     assert returned.record.movement.custody_user_id is None
-    assert not await db.scalar(select(UserItemCustodyBalance.id))
+    assert not await db.scalar(
+        select(UserItemCustodyBalance.id).where(
+            UserItemCustodyBalance.user_id == s[0],
+            UserItemCustodyBalance.item_id == s[1],
+        )
+    )
 
 
 async def test_custody_reversal_failure_is_atomic(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
-    s = await scenario(db, UserRole.USER)
+    s = await scenario(db, UserRole.ENGINEER)
     await move(db, s, "RECEIPT", 1, destination=s[2])
     issue = await move(
         db,
@@ -496,7 +601,7 @@ async def test_database_rejects_invalid_custody_relationships(
     from tests.warehouse_helpers import actor
 
     db = warehouse_db
-    s = await scenario(db, UserRole.USER)
+    s = await scenario(db, UserRole.ENGINEER)
     other, _ = await actor(db)
     receipt = await move(db, s, "RECEIPT", 5, destination=s[2])
 
@@ -816,7 +921,7 @@ async def test_concurrent_last_unit_returns_exactly_once() -> None:
     engine = create_async_engine(os.environ["DATABASE_URL"])
     try:
         async with AsyncSession(engine, expire_on_commit=False) as db:
-            s = await scenario(db, UserRole.USER)
+            s = await scenario(db, UserRole.ENGINEER)
             await move(db, s, "RECEIPT", 1, destination=s[2])
             await move(
                 db,
@@ -881,7 +986,7 @@ async def test_concurrent_issue_serializes_with_user_block() -> None:
             engine,
             expire_on_commit=False,
         ) as db:
-            s = await scenario(db, UserRole.USER)
+            s = await scenario(db, UserRole.ENGINEER)
             admin, _ = await actor(db, UserRole.ADMIN)
 
             admin_scenario = (
@@ -974,182 +1079,6 @@ async def test_concurrent_issue_serializes_with_user_block() -> None:
 
     finally:
         allow_issue_commit.set()
-        await engine.dispose()
-
-
-async def test_journal_snapshot_barrier_orders_concurrent_commits() -> None:
-    if os.getenv("RUN_POSTGRES_INTEGRATION") != "1":
-        pytest.skip("requires disposable PostgreSQL")
-
-    engine = create_async_engine(os.environ["DATABASE_URL"])
-    writer_ready = asyncio.Event()
-    allow_writer_commit = asyncio.Event()
-
-    try:
-        async with AsyncSession(
-            engine,
-            expire_on_commit=False,
-        ) as db:
-            s = await scenario(db)
-            await move(
-                db,
-                s,
-                "RECEIPT",
-                1,
-                destination=s[2],
-            )
-            await db.commit()
-
-        async def existing_writer() -> uuid.UUID:
-            async with AsyncSession(
-                engine,
-                expire_on_commit=False,
-            ) as db:
-                result = await move(
-                    db,
-                    s,
-                    "RECEIPT",
-                    1,
-                    destination=s[2],
-                    key="snapshot-existing-writer",
-                )
-
-                # create_movement() already holds the shared journal lock.
-                writer_ready.set()
-                await allow_writer_commit.wait()
-                await db.commit()
-
-                return result.record.movement.id
-
-        writer_task = asyncio.create_task(
-            existing_writer()
-        )
-
-        await asyncio.wait_for(
-            writer_ready.wait(),
-            timeout=5,
-        )
-
-        async def first_page_snapshot() -> tuple[
-            datetime,
-            set[uuid.UUID],
-        ]:
-            async with AsyncSession(
-                engine,
-                expire_on_commit=False,
-            ) as db:
-                snapshot = (
-                    await acquire_movement_feed_snapshot(db)
-                )
-
-                page = await list_movements_cursor(
-                    db,
-                    actor_user_id=s[0],
-                    until=snapshot,
-                    limit=100,
-                )
-
-                ids = {
-                    record.movement.id
-                    for record in page.items
-                }
-
-                await db.commit()
-                return snapshot, ids
-
-        snapshot_task = asyncio.create_task(
-            first_page_snapshot()
-        )
-
-        # Snapshot must wait for the transaction that was already writing
-        # the journal when the first-page request started.
-        await asyncio.sleep(0.1)
-        assert not snapshot_task.done()
-
-        allow_writer_commit.set()
-
-        existing_id = await asyncio.wait_for(
-            writer_task,
-            timeout=5,
-        )
-        snapshot, snapshot_ids = await asyncio.wait_for(
-            snapshot_task,
-            timeout=5,
-        )
-
-        # The writer that existed before the snapshot barrier is part of the
-        # snapshot rather than appearing unexpectedly on a later page.
-        assert existing_id in snapshot_ids
-
-        async with AsyncSession(
-            engine,
-            expire_on_commit=False,
-        ) as snapshot_db:
-            second_snapshot = (
-                await acquire_movement_feed_snapshot(
-                    snapshot_db
-                )
-            )
-
-            async def new_writer() -> uuid.UUID:
-                async with AsyncSession(
-                    engine,
-                    expire_on_commit=False,
-                ) as db:
-                    result = await move(
-                        db,
-                        s,
-                        "RECEIPT",
-                        1,
-                        destination=s[2],
-                        key="snapshot-new-writer",
-                    )
-                    await db.commit()
-                    return result.record.movement.id
-
-            new_writer_task = asyncio.create_task(
-                new_writer()
-            )
-
-            # New journal writers cannot enter while the exclusive snapshot
-            # barrier is held.
-            await asyncio.sleep(0.1)
-            assert not new_writer_task.done()
-
-            await snapshot_db.commit()
-
-        new_id = await asyncio.wait_for(
-            new_writer_task,
-            timeout=5,
-        )
-
-        async with AsyncSession(engine) as db:
-            new_movement = await db.get(
-                Movement,
-                new_id,
-            )
-            assert new_movement is not None
-            assert (
-                new_movement.occurred_at
-                > second_snapshot
-            )
-
-            old_snapshot_page = (
-                await list_movements_cursor(
-                    db,
-                    actor_user_id=s[0],
-                    until=second_snapshot,
-                    limit=100,
-                )
-            )
-
-            assert new_id not in {
-                record.movement.id
-                for record in old_snapshot_page.items
-            }
-
-    finally:
-        allow_writer_commit.set()
         await engine.dispose()
 
 

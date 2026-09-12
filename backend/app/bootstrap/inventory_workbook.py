@@ -31,8 +31,9 @@ from app.modules.catalog.normalization import (
 )
 from app.modules.catalog.schemas import ItemCreate, ManufacturerCreate
 from app.modules.catalog.service import create_item, create_manufacturer
-from app.modules.identity.enums import UserAccessStatus, UserRole
+from app.modules.identity.enums import UserAccessStatus
 from app.modules.identity.models import User
+from app.modules.identity.policy import Capability, has_capability
 from app.modules.inventory.enums import LocationStatus, MovementType
 from app.modules.inventory.models import Location, Movement
 from app.modules.inventory.schemas import MovementCreate, MovementLineCreate
@@ -453,7 +454,7 @@ async def import_inventory(
     actor = await db.get(User, actor_user_id)
     if (
         actor is None
-        or actor.role != UserRole.ADMIN
+        or not has_capability(actor.role, Capability.INVENTORY_ADMIN)
         or actor.access_status != UserAccessStatus.APPROVED
     ):
         raise ValueError("existing approved administrator required")

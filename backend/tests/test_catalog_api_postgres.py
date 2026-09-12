@@ -15,10 +15,32 @@ async def test_catalog_api_read_admin_and_gate_boundaries(warehouse_db: AsyncSes
             assert (await client.get(path)).status_code == 401
             for name in ("pending", "blocked", "rejected"):
                 assert (await client.get(path, headers=users[name][1])).status_code == 403
-            assert (await client.get(path, headers=users["user"][1])).status_code == 200
+            for name in ("user", "senior", "manager", "admin", "owner"):
+                assert (await client.get(path, headers=users[name][1])).status_code == 200
         payload = cable_payload().model_dump(mode="json")
         path = "/api/admin/catalog/items"
         assert (await client.post(path, headers=users["user"][1], json=payload)).status_code == 403
+        assert (
+            await client.post(
+                path,
+                headers=users["manager"][1],
+                json=payload,
+            )
+        ).status_code == 403
+
+        senior_response = await client.post(
+            path,
+            headers=users["senior"][1],
+            json=cable_payload().model_dump(mode="json"),
+        )
+        assert senior_response.status_code == 201, senior_response.text
+        senior_item_id = senior_response.json()["id"]
+        assert (
+            await client.post(
+                f"{path}/{senior_item_id}/archive",
+                headers=users["senior"][1],
+            )
+        ).status_code == 200
         assert (
             await client.post(
                 path, headers={**users["admin"][1], "Origin": "https://evil.example"}, json=payload
@@ -37,5 +59,11 @@ async def test_catalog_api_read_admin_and_gate_boundaries(warehouse_db: AsyncSes
         for action, expected in [("archive", "ARCHIVED"), ("unarchive", "ACTIVE")]:
             response = await client.post(f"{path}/{item_id}/{action}", headers=users["admin"][1])
             assert response.status_code == 200 and response.json()["status"] == expected
+        owner_response = await client.post(
+            path,
+            headers=users["owner"][1],
+            json=cable_payload().model_dump(mode="json"),
+        )
+        assert owner_response.status_code == 201, owner_response.text
         app.state.settings.real_inventory_mutations_enabled = False
         assert (await client.post(path, headers=users["admin"][1], json=payload)).status_code == 423

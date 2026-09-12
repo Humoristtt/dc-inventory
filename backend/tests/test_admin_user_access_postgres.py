@@ -10,24 +10,29 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.auth.models import AuthSession
 from app.modules.identity.admin_service import (
+    AdminUserForbiddenError,
     InvalidAccessTransitionError,
-    LastApprovedAdminInvariantError,
+    OutstandingCustodyInvariantError,
     RecoveryAdminInvariantError,
     update_user_access,
+    update_user_role,
 )
 from app.modules.identity.enums import UserAccessStatus, UserRole
 from app.modules.identity.models import (
     TelegramIdentity,
     User,
     UserAccessEvent,
+    UserRoleEvent,
 )
+from app.modules.inventory.models import UserItemCustodyBalance
+from tests.warehouse_helpers import scenario
 
 
 async def _create_user(
     warehouse_db: AsyncSession,
     *,
     telegram_user_id: int,
-    role: UserRole = UserRole.USER,
+    role: UserRole = UserRole.ENGINEER,
     access_status: UserAccessStatus = UserAccessStatus.APPROVED,
 ) -> tuple[User, TelegramIdentity]:
     now = datetime.now(UTC)
@@ -218,52 +223,38 @@ async def test_recovery_admin_cannot_be_blocked(
 
 
 @pytest.mark.asyncio
-async def test_last_approved_admin_cannot_be_blocked(
+async def test_admin_cannot_block_another_admin(
     warehouse_db: AsyncSession,
 ) -> None:
-    # The disposable integration database may contain synthetic users
-    # created outside this fixture. Make the invariant state explicit
-    # inside this test transaction.
-    await warehouse_db.execute(
-        update(User)
-        .where(
-            User.role == UserRole.ADMIN,
-            User.access_status == UserAccessStatus.APPROVED,
-        )
-        .values(
-            access_status=UserAccessStatus.BLOCKED,
-            approved_at=None,
-            approved_by_user_id=None,
-        )
-    )
-
-    admin, _ = await _create_user(
+    actor, _ = await _create_user(
         warehouse_db,
         telegram_user_id=900035,
         role=UserRole.ADMIN,
     )
+    target, _ = await _create_user(
+        warehouse_db,
+        telegram_user_id=900034,
+        role=UserRole.ADMIN,
+    )
 
-    with pytest.raises(
-        LastApprovedAdminInvariantError,
-        match="last approved administrator cannot be blocked",
-    ):
+    with pytest.raises(AdminUserForbiddenError):
         await update_user_access(
             warehouse_db,
-            actor_user_id=admin.id,
-            target_user_id=admin.id,
+            actor_user_id=actor.id,
+            target_user_id=target.id,
             access_status=UserAccessStatus.BLOCKED,
             recovery_telegram_user_id=None,
         )
 
 
 @pytest.mark.asyncio
-async def test_one_of_two_approved_admins_can_be_blocked(
+async def test_owner_can_block_admin(
     warehouse_db: AsyncSession,
 ) -> None:
     actor, _ = await _create_user(
         warehouse_db,
         telegram_user_id=900036,
-        role=UserRole.ADMIN,
+        role=UserRole.OWNER,
     )
     target, _ = await _create_user(
         warehouse_db,
@@ -432,3 +423,236 @@ async def test_access_event_is_database_append_only(
         )
 
     await nested.rollback()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "role",
+    [
+        UserRole.ENGINEER,
+        UserRole.SENIOR_ENGINEER,
+        UserRole.MANAGER,
+    ],
+)
+async def test_admin_can_assign_standard_roles(
+    warehouse_db: AsyncSession,
+    role: UserRole,
+) -> None:
+    admin, _ = await _create_user(
+        warehouse_db,
+        telegram_user_id=901001,
+        role=UserRole.ADMIN,
+    )
+    target, _ = await _create_user(
+        warehouse_db,
+        telegram_user_id=901002,
+        role=(
+            UserRole.SENIOR_ENGINEER
+            if role == UserRole.ENGINEER
+            else UserRole.ENGINEER
+        ),
+    )
+
+    changed, event = await update_user_role(
+        warehouse_db,
+        actor_user_id=admin.id,
+        target_user_id=target.id,
+        role=role,
+        recovery_telegram_user_id=None,
+    )
+
+    assert changed.role == role
+    assert event is not None
+    assert event.before_role != event.after_role
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", [UserRole.ADMIN, UserRole.OWNER])
+async def test_admin_cannot_assign_privileged_roles(
+    warehouse_db: AsyncSession,
+    role: UserRole,
+) -> None:
+    admin, _ = await _create_user(
+        warehouse_db,
+        telegram_user_id=901011,
+        role=UserRole.ADMIN,
+    )
+    target, _ = await _create_user(
+        warehouse_db,
+        telegram_user_id=901012,
+    )
+
+    with pytest.raises(AdminUserForbiddenError):
+        await update_user_role(
+            warehouse_db,
+            actor_user_id=admin.id,
+            target_user_id=target.id,
+            role=role,
+            recovery_telegram_user_id=None,
+        )
+
+
+@pytest.mark.asyncio
+async def test_admin_cannot_change_admin_or_owner_role(
+    warehouse_db: AsyncSession,
+) -> None:
+    admin, _ = await _create_user(
+        warehouse_db,
+        telegram_user_id=901021,
+        role=UserRole.ADMIN,
+    )
+    other_admin, _ = await _create_user(
+        warehouse_db,
+        telegram_user_id=901022,
+        role=UserRole.ADMIN,
+    )
+    owner, _ = await _create_user(
+        warehouse_db,
+        telegram_user_id=901023,
+        role=UserRole.OWNER,
+    )
+
+    for target in (other_admin, owner):
+        with pytest.raises((AdminUserForbiddenError, RecoveryAdminInvariantError)):
+            await update_user_role(
+                warehouse_db,
+                actor_user_id=admin.id,
+                target_user_id=target.id,
+                role=UserRole.ENGINEER,
+                recovery_telegram_user_id=None,
+            )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", [UserRole.ENGINEER, UserRole.MANAGER, UserRole.ADMIN])
+async def test_owner_can_assign_non_owner_roles(
+    warehouse_db: AsyncSession,
+    role: UserRole,
+) -> None:
+    owner, _ = await _create_user(
+        warehouse_db,
+        telegram_user_id=901031,
+        role=UserRole.OWNER,
+    )
+    target, _ = await _create_user(
+        warehouse_db,
+        telegram_user_id=901032,
+        role=UserRole.SENIOR_ENGINEER,
+    )
+
+    changed, event = await update_user_role(
+        warehouse_db,
+        actor_user_id=owner.id,
+        target_user_id=target.id,
+        role=role,
+        recovery_telegram_user_id=901031,
+    )
+
+    assert changed.role == role
+    assert event is not None
+
+
+@pytest.mark.asyncio
+async def test_self_role_mutation_and_recovery_identity_are_immutable(
+    warehouse_db: AsyncSession,
+) -> None:
+    owner, _ = await _create_user(
+        warehouse_db,
+        telegram_user_id=901041,
+        role=UserRole.OWNER,
+    )
+    historical_recovery_admin, _ = await _create_user(
+        warehouse_db,
+        telegram_user_id=901042,
+        role=UserRole.ADMIN,
+    )
+
+    with pytest.raises(AdminUserForbiddenError, match="self role"):
+        await update_user_role(
+            warehouse_db,
+            actor_user_id=owner.id,
+            target_user_id=owner.id,
+            role=UserRole.ADMIN,
+            recovery_telegram_user_id=901041,
+        )
+
+    with pytest.raises(RecoveryAdminInvariantError):
+        await update_user_role(
+            warehouse_db,
+            actor_user_id=owner.id,
+            target_user_id=historical_recovery_admin.id,
+            role=UserRole.ENGINEER,
+            recovery_telegram_user_id=901042,
+        )
+
+
+@pytest.mark.asyncio
+async def test_role_noop_creates_no_event_and_change_creates_exactly_one(
+    warehouse_db: AsyncSession,
+) -> None:
+    owner, _ = await _create_user(
+        warehouse_db,
+        telegram_user_id=901051,
+        role=UserRole.OWNER,
+    )
+    target, _ = await _create_user(
+        warehouse_db,
+        telegram_user_id=901052,
+    )
+
+    _, no_event = await update_user_role(
+        warehouse_db,
+        actor_user_id=owner.id,
+        target_user_id=target.id,
+        role=UserRole.ENGINEER,
+        recovery_telegram_user_id=901051,
+    )
+    assert no_event is None
+
+    _, event = await update_user_role(
+        warehouse_db,
+        actor_user_id=owner.id,
+        target_user_id=target.id,
+        role=UserRole.SENIOR_ENGINEER,
+        recovery_telegram_user_id=901051,
+    )
+    assert event is not None
+    assert await warehouse_db.scalar(
+        select(text("count(*)"))
+        .select_from(UserRoleEvent)
+        .where(UserRoleEvent.target_user_id == target.id)
+    ) == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("role", [UserRole.MANAGER, UserRole.ADMIN])
+async def test_outstanding_custody_blocks_non_custody_role_transition(
+    warehouse_db: AsyncSession,
+    role: UserRole,
+) -> None:
+    target_id, item_id, _source, _destination = await scenario(
+        warehouse_db,
+        UserRole.ENGINEER,
+    )
+    owner, _ = await _create_user(
+        warehouse_db,
+        telegram_user_id=901061,
+        role=UserRole.OWNER,
+    )
+    warehouse_db.add(
+        UserItemCustodyBalance(
+            user_id=target_id,
+            item_id=item_id,
+            quantity=1,
+        )
+    )
+    await warehouse_db.flush()
+
+    with pytest.raises(OutstandingCustodyInvariantError):
+        await update_user_role(
+            warehouse_db,
+            actor_user_id=owner.id,
+            target_user_id=target_id,
+            role=role,
+            recovery_telegram_user_id=901061,
+        )

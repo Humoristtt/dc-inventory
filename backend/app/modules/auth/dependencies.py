@@ -213,3 +213,19 @@ ManageUsers = Annotated[
     AuthenticatedContext,
     Depends(get_manage_users_context),
 ]
+ProcurementRead = Annotated[
+    AuthenticatedContext,
+    Depends(require_capability(Capability.PROCUREMENT_READ)),
+]
+ProcurementCreate = Annotated[
+    AuthenticatedContext,
+    Depends(require_capability(Capability.PROCUREMENT_CREATE)),
+]
+ProcurementManage = Annotated[
+    AuthenticatedContext,
+    Depends(require_capability(Capability.PROCUREMENT_MANAGE)),
+]
+ProcurementAccept = Annotated[
+    AuthenticatedContext,
+    Depends(require_capability(Capability.PROCUREMENT_ACCEPT)),
+]

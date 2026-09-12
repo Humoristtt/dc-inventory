@@ -789,7 +789,7 @@ jobs:
             "
           )"
 
-          test "$sequence_count" = "1"
+          test "$sequence_count" = "2"
 
           update_id=900000000000000001
 

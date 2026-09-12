@@ -26,16 +26,16 @@ Warehouse Domain V2 развёрнут и принят в production.
 
 Текущий production schema baseline:
 
-    ALEMBIC_HEAD=f8a9b0c1d2e3
+    ALEMBIC_HEAD=b2c3d4e5f6a7
 
 Текущий source migration head:
 
-    SOURCE_ALEMBIC_HEAD=b2c3d4e5f6a7
+    SOURCE_ALEMBIC_HEAD=c3d4e5f6a7b8
 
-Accepted production migration state и source migration head сейчас
-намеренно различаются: production остаётся на `f8a9b0c1d2e3`, а feature source
-уже содержит `b2c3d4e5f6a7`. Новая migration не является production state до
-отдельного maintenance cutover и migration acceptance.
+Accepted production migration state и source migration head после RBAC
+maintenance cutover совпадают на `b2c3d4e5f6a7`. Five-role RBAC активен в
+production. Последующие source changes не являются production state до
+отдельного deploy/runtime-provenance acceptance.
 
 Stage 15 technical hardening завершён. Automated off-VM PostgreSQL backup,
 isolated restore rehearsal, runtime provenance, least-privilege DB identities,
@@ -69,13 +69,13 @@ warehouse domain.
 
 Повторный initial bootstrap запрещён.
 
-Текущая source-фаза перед следующим production cutover:
+Текущая post-cutover source-фаза:
 
-    RBAC remediation
-      -> повторный полный audit
-      -> remediation
+    post-RBAC audit/remediation
+      -> повторный полный source/runtime/data audit
+      -> remediation всех найденных defects
       -> финальный полный audit
-      -> explicit production cutover decision
+      -> explicit subsequent production update decision
 
 Independent full source/security/runtime/data audit, remediation, production
 deploy и baseline hygiene завершены и приняты 2026-09-10.
@@ -97,7 +97,7 @@ Production runtime включает:
 - `/api/health/live` и `/api/health/ready`;
 - Telegram `initData` HMAC validation;
 - server-side `HttpOnly` sessions;
-- accepted production baseline пока использует historical `ADMIN` / `USER`; feature source уже использует capability-based five-role RBAC;
+- production и source используют capability-based five-role RBAC `ENGINEER` / `SENIOR_ENGINEER` / `MANAGER` / `ADMIN` / `OWNER`;
 - Telegram webhook с persistent `update_id` dedupe;
 - transactional notification outbox;
 - отдельный `telegram-worker`;
@@ -113,7 +113,7 @@ Production runtime включает:
 - immutable warehouse movement journal;
 - quantity-only `StockBalance`;
 - quantity-only `UserItemCustodyBalance`;
-- accepted production — custody-aware historical USER ISSUE/RETURN; source RBAC — custody-aware ENGINEER / SENIOR_ENGINEER ISSUE/RETURN;
+- production и source используют custody-aware ENGINEER / SENIOR_ENGINEER ISSUE/RETURN;
 - read-only stock + custody projection reconciliation;
 - responsive Telegram/mobile/desktop Warehouse UI;
 - guarded external-workbook initial bootstrap.

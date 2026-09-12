@@ -118,6 +118,7 @@ class MovementOut(BaseModel):
     destination_location_code_snapshot: str | None
     destination_location_name_snapshot: str | None
     original_movement_id: UUID | None
+    procurement_request_id: UUID | None = None
     client_request_id: str
     occurred_at: datetime
     lines: list[MovementLineOut]

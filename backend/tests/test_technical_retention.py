@@ -16,6 +16,7 @@ def test_technical_retention_targets_are_explicit_and_non_warehouse() -> None:
                 "auth_sessions",
                 "telegram_updates",
                 "notification_outbox",
+                "email_outbox",
                 "access_decision_callbacks",
             }
         )
@@ -36,6 +37,7 @@ def test_retention_defaults_are_bounded() -> None:
     assert settings.auth_session_retention_days == 7
     assert settings.telegram_update_retention_days == 30
     assert settings.notification_outbox_retention_days == 90
+    assert settings.email_outbox_retention_days == 90
     assert settings.access_callback_retention_days == 30
 
 
@@ -48,6 +50,7 @@ def test_retention_defaults_are_bounded() -> None:
         ("auth_session_retention_days", 0),
         ("telegram_update_retention_days", 0),
         ("notification_outbox_retention_days", 0),
+        ("email_outbox_retention_days", 0),
         ("access_callback_retention_days", 0),
     ],
 )

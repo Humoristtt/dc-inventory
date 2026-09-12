@@ -228,10 +228,10 @@ Telegram identity.
 ADMIN может назначать ENGINEER / SENIOR_ENGINEER / MANAGER, но не ADMIN/OWNER.
 OWNER может назначать ADMIN. OWNER нельзя изменять обычным role/access API.
 
-Source migration `a1b2c3d4e5f6` уже реализует five-role RBAC. Accepted production
-baseline до отдельного maintenance cutover всё ещё использует historical
-USER / ADMIN значения; source state и production state здесь намеренно
-различаются.
+Migration `a1b2c3d4e5f6` реализует five-role RBAC, а production RBAC
+maintenance cutover уже принят. Current production и source schema находятся
+на `b2c3d4e5f6a7`; runtime использует ENGINEER / SENIOR_ENGINEER / MANAGER /
+ADMIN / OWNER.
 
 ## Procurement architecture target
 

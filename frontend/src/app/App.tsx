@@ -20,6 +20,9 @@ import {
   loadLocationsPage,
   loadMorePage,
   loadMovementsPage,
+  loadProcurementCreatePage,
+  loadProcurementDetailPage,
+  loadProcurementListPage,
   preloadApplicationRoutes,
 } from "./routeModules";
 import "../features/catalog/catalog.css";
@@ -32,6 +35,9 @@ const MovementsPage = lazy(loadMovementsPage);
 const LocationsPage = lazy(loadLocationsPage);
 const MorePage = lazy(loadMorePage);
 const AdminUsersPage = lazy(loadAdminUsersPage);
+const ProcurementListPage = lazy(loadProcurementListPage);
+const ProcurementDetailPage = lazy(loadProcurementDetailPage);
+const ProcurementCreatePage = lazy(loadProcurementCreatePage);
 
 export function ApplicationRoutes() {
   return (
@@ -44,6 +50,9 @@ export function ApplicationRoutes() {
         <Route path="catalog/items/:itemId" element={<ItemDetailPage />} />
         <Route path="catalog/:categoryKey" element={<CategoryPage />} />
         <Route path="movements" element={<MovementsPage />} />
+        <Route path="procurement" element={<ProcurementListPage />} />
+        <Route path="procurement/new" element={<ProcurementCreatePage />} />
+        <Route path="procurement/:requestId" element={<ProcurementDetailPage />} />
         <Route path="more" element={<MorePage />} />
         <Route path="more/locations" element={<LocationsPage />} />
         <Route path="more/users" element={<AdminUsersPage />} />

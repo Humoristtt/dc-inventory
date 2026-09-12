@@ -23,6 +23,14 @@ from app.modules.inventory.models import (
     UserItemCustodyBalance,
 )
 from app.modules.notifications.models import NotificationOutbox
+from app.modules.procurement.models import (
+    EmailOutbox,
+    ProcurementEvent,
+    ProcurementLineCatalogBinding,
+    ProcurementRequest,
+    ProcurementRevision,
+    ProcurementRevisionLine,
+)
 from app.modules.telegram_bot.models import (
     AccessDecisionCallback,
     TelegramChatState,
@@ -42,6 +50,12 @@ __all__ = [
     "Movement",
     "MovementLine",
     "NotificationOutbox",
+    "EmailOutbox",
+    "ProcurementEvent",
+    "ProcurementLineCatalogBinding",
+    "ProcurementRequest",
+    "ProcurementRevision",
+    "ProcurementRevisionLine",
     "StockBalance",
     "UserItemCustodyBalance",
     "TelegramChatState",

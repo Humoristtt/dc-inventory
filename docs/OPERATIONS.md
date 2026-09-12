@@ -63,7 +63,8 @@ Warehouse Domain V2 принят в production.
 
 Current schema:
 
-    ALEMBIC_HEAD=f8a9b0c1d2e3
+    ALEMBIC_HEAD=b2c3d4e5f6a7
+    RBAC_CUTOVER=PASS
 
 Stage15:
 

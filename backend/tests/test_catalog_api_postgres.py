@@ -56,6 +56,14 @@ async def test_catalog_api_read_admin_and_gate_boundaries(warehouse_db: AsyncSes
             f"{path}/{item_id}", headers=users["admin"][1], json={"name": "Updated"}
         )
         assert patch.status_code == 200 and patch.json()["name"] == "Updated"
+
+        null_name = await client.patch(
+            f"{path}/{item_id}",
+            headers=users["admin"][1],
+            json={"name": None},
+        )
+        assert null_name.status_code == 422
+        assert null_name.json()["detail"]["code"] == "name_required"
         for action, expected in [("archive", "ARCHIVED"), ("unarchive", "ACTIVE")]:
             response = await client.post(f"{path}/{item_id}/{action}", headers=users["admin"][1])
             assert response.status_code == 200 and response.json()["status"] == expected

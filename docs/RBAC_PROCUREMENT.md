@@ -1,20 +1,20 @@
 # RBAC и Procurement — канонический контракт
 
-Статус документа: APPROVED PRODUCT CONTRACT / RBAC FOUNDATION IMPLEMENTED / PROCUREMENT PENDING.
+Статус документа: APPROVED PRODUCT CONTRACT / RBAC + PROCUREMENT SOURCE IMPLEMENTED / PRODUCTION PENDING.
 
 Дата фиксации: 2026-09-12.
 
-Accepted production/runtime baseline перед началом feature cycle:
+Historical accepted production/runtime baseline перед началом feature cycle:
 
 `1242f56c131d0f8c470e05cbaf209c48a37e85a4`
 
 Этот документ является каноническим источником требований для текущего
 RBAC + Procurement feature cycle.
 
-Source RBAC foundation уже реализует пять ролей и capability policy,
-описанные этим документом. Accepted production baseline продолжает использовать
-historical `USER / ADMIN` до отдельного maintenance cutover. Procurement domain
-остаётся implementation pending.
+RBAC foundation реализован и развёрнут в production с пятью ролями и
+capability policy, описанными этим документом. Production и source используют
+текущую five-role RBAC model. Procurement domain остаётся implementation
+pending.
 
 ## 1. Основные принципы
 

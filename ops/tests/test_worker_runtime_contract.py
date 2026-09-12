@@ -34,6 +34,7 @@ expected_pids = {
     "db-permissions": 256,
     "backend": 256,
     "telegram-worker": 256,
+    "email-worker": 256,
     "maintenance-worker": 256,
     "web": 256,
 }
@@ -59,6 +60,10 @@ expected_resources = {
         "${TELEGRAM_WORKER_CPUS_LIMIT:-0.5}",
         "${TELEGRAM_WORKER_MEMORY_LIMIT:-512m}",
     ),
+    "email-worker": (
+        "${EMAIL_WORKER_CPUS_LIMIT:-0.5}",
+        "${EMAIL_WORKER_MEMORY_LIMIT:-512m}",
+    ),
     "maintenance-worker": (
         "${MAINTENANCE_WORKER_CPUS_LIMIT:-0.5}",
         "${MAINTENANCE_WORKER_MEMORY_LIMIT:-512m}",
@@ -81,6 +86,7 @@ for service, (cpus, memory) in expected_resources.items():
 
 for service in (
     "telegram-worker",
+    "email-worker",
     "maintenance-worker",
 ):
     block = service_block(service)
@@ -101,6 +107,14 @@ notification_source = (
 assert "write_worker_heartbeat" in notification_source
 assert "heartbeat_forever" not in notification_source
 assert "Notification worker iteration failed" in notification_source
+
+email_source = (
+    ROOT / "backend/app/modules/procurement/email.py"
+).read_text()
+
+assert "write_worker_heartbeat" in email_source
+assert "heartbeat_forever" not in email_source
+assert "Email worker iteration failed" in email_source
 
 maintenance_source = (
     ROOT / "backend/app/maintenance/worker.py"
@@ -132,7 +146,13 @@ assert "  app_net:\n    internal: true" in text
 assert "  db_net:\n    internal: true" in text
 assert "- ingress_net" in service_block("web")
 assert "- egress_net" in service_block("telegram-worker")
-for service in ("backend", "postgres", "maintenance-worker", "migrate"):
+assert "- egress_net" in service_block("email-worker")
+for service in (
+    "backend",
+    "postgres",
+    "maintenance-worker",
+    "migrate",
+):
     assert "- ingress_net" not in service_block(service)
     assert "- egress_net" not in service_block(service)
 assert '- "127.0.0.1:${WEB_PORT:-8080}:8080"' in service_block("web")

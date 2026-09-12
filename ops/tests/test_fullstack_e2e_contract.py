@@ -24,7 +24,9 @@ local_runner = (
 
 
 assert package["scripts"]["test:e2e"] == (
-    "playwright test e2e/warehouse-v2.spec.ts"
+    "playwright test "
+    "e2e/warehouse-v2.spec.ts "
+    "e2e/procurement.spec.ts"
 )
 
 assert package["scripts"]["test:e2e:fullstack"] == (

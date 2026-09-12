@@ -38,6 +38,21 @@ export const loadAdminUsersPage = () =>
     (module) => ({ default: module.AdminUsersPage }),
   );
 
+export const loadProcurementListPage = () =>
+  import("../pages/procurement/ProcurementListPage").then(
+    (module) => ({ default: module.ProcurementListPage }),
+  );
+
+export const loadProcurementDetailPage = () =>
+  import("../pages/procurement/ProcurementDetailPage").then(
+    (module) => ({ default: module.ProcurementDetailPage }),
+  );
+
+export const loadProcurementCreatePage = () =>
+  import("../pages/procurement/ProcurementCreatePage").then(
+    (module) => ({ default: module.ProcurementCreatePage }),
+  );
+
 type RouteLoader = () => Promise<unknown>;
 
 function routeLoaderForPath(pathname: string): RouteLoader | undefined {
@@ -62,6 +77,18 @@ function routeLoaderForPath(pathname: string): RouteLoader | undefined {
 
   if (pathname === "/movements") {
     return loadMovementsPage;
+  }
+
+  if (pathname === "/procurement/new") {
+    return loadProcurementCreatePage;
+  }
+
+  if (/^\/procurement\/[^/]+$/.test(pathname)) {
+    return loadProcurementDetailPage;
+  }
+
+  if (pathname === "/procurement") {
+    return loadProcurementListPage;
   }
 
   if (pathname === "/more/locations") {
@@ -103,5 +130,8 @@ export async function preloadApplicationRoutes(): Promise<void> {
     loadLocationsPage(),
     loadMorePage(),
     loadAdminUsersPage(),
+    loadProcurementListPage(),
+    loadProcurementDetailPage(),
+    loadProcurementCreatePage(),
   ]);
 }

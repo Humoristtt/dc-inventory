@@ -1,12 +1,16 @@
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.modules.identity.enums import UserAccessStatus, UserRole
 from app.modules.identity.policy import Capability
 
 
-class TelegramAuthRequest(BaseModel):
+class StrictRequestModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class TelegramAuthRequest(StrictRequestModel):
     init_data: str = Field(min_length=1, max_length=16_384)
 
 

@@ -9,6 +9,7 @@ import { RouteContent } from "./RouteContent";
 const navigationItems = [
   { to: "/catalog", label: "Каталог", icon: "▦" },
   { to: "/movements", label: "Движения", icon: "↔" },
+  { to: "/procurement", label: "Закупки", icon: "◫" },
   { to: "/more", label: "Ещё", icon: "•••" },
 ] as const;
 
@@ -19,6 +20,10 @@ function isActive(pathname: string, target: string): boolean {
 
   if (target === "/more") {
     return pathname === "/more" || pathname.startsWith("/more/");
+  }
+
+  if (target === "/procurement") {
+    return pathname === target || pathname.startsWith("/procurement/");
   }
 
   return pathname === target;
@@ -33,9 +38,15 @@ export function ApplicationShell() {
     auth.data?.user,
     ["movement.read_own", "movement.read_all"],
   );
+  const canReadProcurement = hasAnyCapability(
+    auth.data?.user,
+    ["procurement.read"],
+  );
 
   const visibleNavigationItems = navigationItems.filter(
-    (item) => item.to !== "/movements" || canReadMovements,
+    (item) =>
+      (item.to !== "/movements" || canReadMovements)
+      && (item.to !== "/procurement" || canReadProcurement),
   );
 
   return (

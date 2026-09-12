@@ -143,7 +143,7 @@ for name in CURRENT_DOCS + HISTORICAL_STAGE15_DOCS:
 # Accepted production head remains an explicit operational fact in
 # production-facing documentation. Source head is derived from the migration
 # graph independently.
-ACCEPTED_PRODUCTION_ALEMBIC_HEAD = "f8a9b0c1d2e3"
+ACCEPTED_PRODUCTION_ALEMBIC_HEAD = "b2c3d4e5f6a7"
 
 for name in (
     "README.md",
@@ -220,6 +220,30 @@ require(
 require(
     "docs/ROADMAP.md",
     "Initial bootstrap завершён и повторно не запускается.",
+)
+require(
+    "docs/ROADMAP.md",
+    "- [x] Production RBAC maintenance cutover.",
+)
+require(
+    "README.md",
+    "production и source используют capability-based five-role RBAC",
+)
+require(
+    "README.md",
+    "Текущая post-cutover source-фаза:",
+)
+require(
+    "docs/RBAC_PROCUREMENT.md",
+    "Production и source используют",
+)
+forbid(
+    "README.md",
+    "Текущая source-фаза перед следующим production cutover:",
+)
+forbid(
+    "docs/RBAC_PROCUREMENT.md",
+    "Accepted production baseline продолжает использовать",
 )
 
 require(
@@ -536,7 +560,7 @@ require(
 
 require(
     "docs/RBAC_PROCUREMENT.md",
-    "RBAC FOUNDATION IMPLEMENTED / PROCUREMENT PENDING",
+    "RBAC + PROCUREMENT SOURCE IMPLEMENTED / PRODUCTION PENDING",
 )
 
 require(

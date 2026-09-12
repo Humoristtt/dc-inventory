@@ -2,9 +2,13 @@ from datetime import datetime
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from app.modules.identity.enums import UserAccessStatus, UserRole
+
+
+class StrictRequestModel(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
 
 class AdminUserOut(BaseModel):
@@ -26,15 +30,15 @@ class AdminUserPageOut(BaseModel):
     total: int
 
 
-class AdminUserPatch(BaseModel):
+class AdminUserPatch(StrictRequestModel):
     access_status: UserAccessStatus
 
 
-class AdminUserAccessRequestDecision(BaseModel):
+class AdminUserAccessRequestDecision(StrictRequestModel):
     decision: Literal["APPROVE", "REJECT"]
 
 
-class AdminUserRolePatch(BaseModel):
+class AdminUserRolePatch(StrictRequestModel):
     role: UserRole
 
 

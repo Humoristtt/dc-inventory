@@ -34,8 +34,8 @@ Source RBAC foundation уже реализует:
 
 ENGINEER / SENIOR_ENGINEER / MANAGER / ADMIN / OWNER.
 
-Accepted production baseline остаётся на historical USER / ADMIN до отдельного
-maintenance cutover `f8a9b0c1d2e3 -> a1b2c3d4e5f6`.
+RBAC maintenance cutover `f8a9b0c1d2e3 -> a1b2c3d4e5f6` выполнен и
+принят. Production и source используют five-role capability model.
 
 Canonical role matrix, procurement lifecycle, immutable revision rules,
 manager collaboration, discrepancy handling и atomic warehouse acceptance:
@@ -187,8 +187,7 @@ Movement и notification outbox record фиксируются одной тра�
 
 Сохраняется текущая access/auth модель:
 
-- ADMIN;
-- USER;
+- ENGINEER / SENIOR_ENGINEER / MANAGER / ADMIN / OWNER;
 - PENDING / APPROVED / REJECTED / BLOCKED;
 - server-side Telegram initData verification;
 - HttpOnly session;

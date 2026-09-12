@@ -654,6 +654,11 @@ async def update_item(
         raise CatalogNotFoundError("item not found")
     if "category_key" in fields_set:
         raise CatalogValidationError("category_immutable", "item category cannot be changed")
+    if "name" in fields_set and payload.name is None:
+        raise CatalogValidationError(
+            "name_required",
+            "item name must not be null",
+        )
     record = await get_item_record(db, item_id)
     data: dict[str, Any] = dict(
         category_key=record.category.key,

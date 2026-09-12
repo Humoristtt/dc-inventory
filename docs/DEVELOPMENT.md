@@ -127,11 +127,11 @@ Baseline Alembic:
 
 Production migration head на текущем принятом production baseline:
 
-    f8a9b0c1d2e3
+    b2c3d4e5f6a7
 
-Source и accepted production head сейчас намеренно различаются. Migration
-`b2c3d4e5f6a7` является source state и не считается production state до
-отдельного maintenance cutover и migration acceptance.
+Source и accepted production migration head после RBAC maintenance cutover
+совпадают на `b2c3d4e5f6a7`. Последующие source changes становятся production
+state только после отдельного deploy/runtime-provenance acceptance.
 
 ## Локальный backend
 

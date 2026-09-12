@@ -90,6 +90,13 @@ async def test_readiness_checks_schema_even_when_tables_are_empty() -> None:
     assert "ua.before_access_status" in query
     assert "ua.after_access_status" in query
     assert "ua.occurred_at" in query
+    assert "u.role" in query
+    assert "public.user_role_events ur" in query
+    assert "ur.actor_user_id" in query
+    assert "ur.target_user_id" in query
+    assert "ur.before_role" in query
+    assert "ur.after_role" in query
+    assert "ur.occurred_at" in query
     connection.execute.side_effect = ProgrammingError("sql", {}, Exception("missing column"))
     with pytest.raises(DatabaseUnavailableError):
         await ensure_database_ready(engine)

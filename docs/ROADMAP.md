@@ -210,13 +210,13 @@ Regular warehouse mutation gate на accepted production baseline:
 
 Initial bootstrap завершён и повторно не запускается.
 
-## 11. RBAC foundation — CURRENT
+## 11. RBAC foundation — PRODUCTION CUTOVER COMPLETE / AUDIT REMEDIATION
 
 Canonical contract:
 
 `docs/RBAC_PROCUREMENT.md`
 
-- [~] RBAC foundation реализован в source и проходит pre-production audit/remediation.
+- [~] RBAC foundation развёрнут в production; source проходит Audit #2 remediation и последующие full audits.
 - [x] Product role model согласована.
 - [x] Capability model согласована.
 - [x] Existing-role migration contract реализован.
@@ -237,7 +237,7 @@ Canonical contract:
 - [x] Frontend unit/browser acceptance.
 - [~] Full CI acceptance повторяется после audit remediation.
 - [x] Source migration head `b2c3d4e5f6a7`.
-- [ ] Production RBAC maintenance cutover.
+- [x] Production RBAC maintenance cutover.
 
 ## 12. Procurement domain
 

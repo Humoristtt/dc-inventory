@@ -18,9 +18,9 @@ Production VM имеет read-only GitHub Deploy Key. Deploy выполняет�
 проверяются отдельно; один SHA не используется как смешанная checkout/runtime
 истина.
 
-Accepted production Alembic head до RBAC cutover:
+Current accepted production Alembic head после RBAC cutover:
 
-    f8a9b0c1d2e3
+    b2c3d4e5f6a7
 
 Текущий source Alembic head:
 
@@ -301,8 +301,7 @@ HTTP-клиент использует явный service `User-Agent`, чтоб
 
 На чистой БД configured recovery identity должен хотя бы один раз открыть
 Mini App и пройти Telegram authentication: auth flow создаёт `TelegramIdentity`
-и bootstrap OWNER. До RBAC production cutover accepted production продолжает
-использовать historical ADMIN semantics.
+и bootstrap OWNER. Production использует текущую five-role RBAC model.
 
 ## Миграции
 

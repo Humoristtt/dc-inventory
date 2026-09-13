@@ -17,6 +17,7 @@ backend = (ROOT / "backend/Dockerfile").read_text()
 frontend = (ROOT / "frontend/Dockerfile").read_text()
 compose = (ROOT / "compose.yaml").read_text()
 compose_dev = (ROOT / "compose.dev.yaml").read_text()
+ci = (ROOT / ".github/workflows/ci.yml").read_text()
 
 compile(
     provenance,
@@ -51,6 +52,25 @@ assert (
 assert "email-worker runtime does not match backend runtime" in provenance
 assert '"state": "disabled"' in provenance
 assert "EMAIL_DELIVERY_ENABLED" in provenance
+
+# CI must distinguish running image-backed services from a profile-gated
+# disabled email worker. Blindly requiring image provenance for every
+# runtime entry regresses when email delivery is intentionally disabled.
+assert 'for runtime in data["runtime"].values()' not in ci
+
+for service in (
+    '"backend"',
+    '"telegram_worker"',
+    '"maintenance_worker"',
+    '"web"',
+    '"postgres"',
+):
+    assert service in ci
+
+assert 'runtime["email_worker"]' in ci
+assert '"state": "disabled"' in ci
+assert 'runtime[service]["source_revision"]' in ci
+assert 'runtime[service]["image_id"]' in ci
 
 label = "org.opencontainers.image.revision"
 

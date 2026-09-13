@@ -459,9 +459,21 @@ jobs:
 
           assert data["production_checkout_sha"] == expected
 
-          for runtime in data["runtime"].values():
-              assert runtime["source_revision"] == expected
-              assert runtime["image_id"].startswith("sha256:")
+          runtime = data["runtime"]
+
+          for service in (
+              "backend",
+              "telegram_worker",
+              "maintenance_worker",
+              "web",
+              "postgres",
+          ):
+              assert runtime[service]["source_revision"] == expected
+              assert runtime[service]["image_id"].startswith("sha256:")
+
+          assert runtime["email_worker"] == {
+              "state": "disabled",
+          }
 
           print("CI_RUNTIME_PROVENANCE=PASS")
           PY

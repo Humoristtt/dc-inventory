@@ -61,10 +61,16 @@ Warehouse mutation privileges отсутствуют.
 
 Warehouse Domain V2 принят в production.
 
-Current schema:
+Current running schema:
 
-    ALEMBIC_HEAD=b2c3d4e5f6a7
+    ALEMBIC_HEAD=c3d4e5f6a7b8
     RBAC_CUTOVER=PASS
+    PROCUREMENT_DEPLOYMENT=PASS
+
+Current source migration head:
+
+    SOURCE_ALEMBIC_HEAD=d4e5f6a7b8c9
+    D4_AUDIT_REMEDIATION_DEPLOYMENT=PENDING
 
 Stage15:
 
@@ -80,7 +86,7 @@ Initial production inventory bootstrap:
     POST_IMPORT_BACKUP=PASS
     TELEGRAM_VISUAL_ACCEPTANCE=PASS
 
-Independent audit / production closeout 2026-09-10:
+Previous independent audit / production closeout 2026-09-10 (historical evidence):
 
     PRODUCTION_RUNTIME_REVISION=c32df46426125d16cf8a1dc490a36706eaa9a50b
     ALEMBIC_HEAD=f8a9b0c1d2e3
@@ -103,6 +109,13 @@ regular mutation gate.
 Exact production checkout и runtime image provenance являются отдельными
 operational facts. Исторические acceptance SHA фиксируются в `docs/HISTORY.md`,
 а текущее состояние проверяется непосредственно на production.
+
+Current running Procurement deployment проверен на checkout/runtime
+`6d9bafef494f910b9bd1ebea7c5b7cf45f853742` и schema `c3d4e5f6a7b8`:
+runtime health, public edge и inventory projection reconciliation прошли.
+Regular warehouse mutation gate остаётся `false`. Real Telegram Procurement
+acceptance и release-closeout post-deploy backup ещё не зафиксированы.
+Source remediation `d4e5f6a7b8c9` в production ещё не развёрнута.
 
 ## Deploy sequence
 

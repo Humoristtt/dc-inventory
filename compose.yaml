@@ -90,8 +90,11 @@ services:
       PGPASSWORD: ${POSTGRES_PASSWORD}
       RUNTIME_DB_USER: ${POSTGRES_RUNTIME_USER}
       RUNTIME_DB_PASSWORD: ${POSTGRES_RUNTIME_PASSWORD}
-      WORKER_DB_USER: ${POSTGRES_WORKER_USER}
-      WORKER_DB_PASSWORD: ${POSTGRES_WORKER_PASSWORD}
+      TELEGRAM_WORKER_DB_USER: ${POSTGRES_TELEGRAM_WORKER_USER}
+      TELEGRAM_WORKER_DB_PASSWORD: ${POSTGRES_TELEGRAM_WORKER_PASSWORD}
+      EMAIL_WORKER_DB_USER: ${POSTGRES_EMAIL_WORKER_USER}
+      EMAIL_WORKER_DB_PASSWORD: ${POSTGRES_EMAIL_WORKER_PASSWORD}
+      LEGACY_WORKER_DB_USER: ${POSTGRES_LEGACY_WORKER_USER:-dc_inventory_worker}
       MAINTENANCE_DB_USER: ${POSTGRES_MAINTENANCE_USER}
       MAINTENANCE_DB_PASSWORD: ${POSTGRES_MAINTENANCE_PASSWORD}
     command:
@@ -100,20 +103,43 @@ services:
       - |
         test -n "$$RUNTIME_DB_USER"
         test -n "$$RUNTIME_DB_PASSWORD"
-        test -n "$$WORKER_DB_USER"
-        test -n "$$WORKER_DB_PASSWORD"
+        test -n "$$TELEGRAM_WORKER_DB_USER"
+        test -n "$$TELEGRAM_WORKER_DB_PASSWORD"
+        test -n "$$EMAIL_WORKER_DB_USER"
+        test -n "$$EMAIL_WORKER_DB_PASSWORD"
+        test -n "$$LEGACY_WORKER_DB_USER"
         test -n "$$MAINTENANCE_DB_USER"
         test -n "$$MAINTENANCE_DB_PASSWORD"
 
-        test "$$RUNTIME_DB_USER" != "$$WORKER_DB_USER"
+        test "$$RUNTIME_DB_USER" != "$$TELEGRAM_WORKER_DB_USER"
+        test "$$RUNTIME_DB_USER" != "$$EMAIL_WORKER_DB_USER"
         test "$$RUNTIME_DB_USER" != "$$MAINTENANCE_DB_USER"
-        test "$$WORKER_DB_USER" != "$$MAINTENANCE_DB_USER"
+        test "$$TELEGRAM_WORKER_DB_USER" != "$$EMAIL_WORKER_DB_USER"
+        test "$$TELEGRAM_WORKER_DB_USER" != "$$MAINTENANCE_DB_USER"
+        test "$$EMAIL_WORKER_DB_USER" != "$$MAINTENANCE_DB_USER"
+
+        test "$$LEGACY_WORKER_DB_USER" != "$$RUNTIME_DB_USER"
+        test "$$LEGACY_WORKER_DB_USER" != "$$TELEGRAM_WORKER_DB_USER"
+        test "$$LEGACY_WORKER_DB_USER" != "$$EMAIL_WORKER_DB_USER"
+        test "$$LEGACY_WORKER_DB_USER" != "$$MAINTENANCE_DB_USER"
 
         test "$$RUNTIME_DB_USER" != "$$PGUSER"
-        test "$$WORKER_DB_USER" != "$$PGUSER"
+        test "$$TELEGRAM_WORKER_DB_USER" != "$$PGUSER"
+        test "$$EMAIL_WORKER_DB_USER" != "$$PGUSER"
+        test "$$LEGACY_WORKER_DB_USER" != "$$PGUSER"
         test "$$MAINTENANCE_DB_USER" != "$$PGUSER"
 
-        psql           -v ON_ERROR_STOP=1           -v runtime_user="$$RUNTIME_DB_USER"           -v runtime_password="$$RUNTIME_DB_PASSWORD"           -v worker_user="$$WORKER_DB_USER"           -v worker_password="$$WORKER_DB_PASSWORD" -v maintenance_user="$$MAINTENANCE_DB_USER" -v maintenance_password="$$MAINTENANCE_DB_PASSWORD"           -f /scripts/apply_database_permissions.sql
+        psql -v ON_ERROR_STOP=1 \
+          -v runtime_user="$$RUNTIME_DB_USER" \
+          -v runtime_password="$$RUNTIME_DB_PASSWORD" \
+          -v telegram_worker_user="$$TELEGRAM_WORKER_DB_USER" \
+          -v telegram_worker_password="$$TELEGRAM_WORKER_DB_PASSWORD" \
+          -v email_worker_user="$$EMAIL_WORKER_DB_USER" \
+          -v email_worker_password="$$EMAIL_WORKER_DB_PASSWORD" \
+          -v legacy_worker_user="$$LEGACY_WORKER_DB_USER" \
+          -v maintenance_user="$$MAINTENANCE_DB_USER" \
+          -v maintenance_password="$$MAINTENANCE_DB_PASSWORD" \
+          -f /scripts/apply_database_permissions.sql
     depends_on:
       postgres:
         condition: service_healthy
@@ -152,6 +178,11 @@ services:
       AUTH_COOKIE_NAME: ${AUTH_COOKIE_NAME:-dc_inventory_session}
       TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
       TELEGRAM_WEB_APP_URL: ${TELEGRAM_WEB_APP_URL:-https://app.spik-inventory.ru}
+      EMAIL_DELIVERY_ENABLED: ${EMAIL_DELIVERY_ENABLED:-false}
+      MICROSOFT_GRAPH_TENANT_ID: ${MICROSOFT_GRAPH_TENANT_ID:-}
+      MICROSOFT_GRAPH_CLIENT_ID: ${MICROSOFT_GRAPH_CLIENT_ID:-}
+      MICROSOFT_GRAPH_CLIENT_SECRET: ${MICROSOFT_GRAPH_CLIENT_SECRET:-}
+      MICROSOFT_GRAPH_SENDER: ${MICROSOFT_GRAPH_SENDER:-}
     depends_on:
       postgres:
         condition: service_healthy
@@ -192,7 +223,7 @@ services:
     command: ["python", "-m", "app.modules.notifications.worker"]
     environment:
       <<: *backend-environment
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_WORKER_USER}:${POSTGRES_WORKER_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_TELEGRAM_WORKER_USER}:${POSTGRES_TELEGRAM_WORKER_PASSWORD}@postgres:5432/${POSTGRES_DB}
       TELEGRAM_GATEWAY_URL: ${TELEGRAM_GATEWAY_URL:-}
       TELEGRAM_GATEWAY_SECRET: ${TELEGRAM_GATEWAY_SECRET:-}
       TELEGRAM_GATEWAY_TIMEOUT_SECONDS: ${TELEGRAM_GATEWAY_TIMEOUT_SECONDS:-10}
@@ -243,7 +274,8 @@ services:
     command: ["python", "-m", "app.modules.procurement.email"]
     environment:
       <<: *backend-environment
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_WORKER_USER}:${POSTGRES_WORKER_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_EMAIL_WORKER_USER}:${POSTGRES_EMAIL_WORKER_PASSWORD}@postgres:5432/${POSTGRES_DB}
+      EMAIL_DELIVERY_ENABLED: ${EMAIL_DELIVERY_ENABLED:-false}
       TELEGRAM_WEB_APP_URL: ${TELEGRAM_WEB_APP_URL:-https://app.spik-inventory.ru}
       MICROSOFT_GRAPH_TENANT_ID: ${MICROSOFT_GRAPH_TENANT_ID:-}
       MICROSOFT_GRAPH_CLIENT_ID: ${MICROSOFT_GRAPH_CLIENT_ID:-}

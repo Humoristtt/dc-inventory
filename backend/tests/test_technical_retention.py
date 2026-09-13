@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -39,6 +41,13 @@ def test_retention_defaults_are_bounded() -> None:
     assert settings.notification_outbox_retention_days == 90
     assert settings.email_outbox_retention_days == 90
     assert settings.access_callback_retention_days == 30
+
+
+def test_maintenance_worker_reports_email_outbox_count() -> None:
+    source = (
+        Path(__file__).resolve().parents[1] / "app" / "maintenance" / "worker.py"
+    ).read_text()
+    assert 'f" email_outbox={counts.email_outbox}"' in source
 
 
 @pytest.mark.parametrize(

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { Navigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 
 import { useAuthState } from "../../features/auth/useAuthState";
 import { MovementAdminActions } from "../../features/inventory/MovementAdminActions";
@@ -13,6 +13,7 @@ import {
 } from "../../shared/api/catalog";
 import {
   getLocations,
+  getMovement,
   inventoryRequest,
   movementLabels,
   type Movement,
@@ -22,10 +23,19 @@ import "../../features/inventory/inventory.css";
 import { PageHeader } from "../../shared/ui";
 
 const PAGE_SIZE = 30;
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function MovementsPage() {
   const auth = useAuthState();
   const user = auth.data?.user;
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedMovementId = searchParams.get("movement");
+  const hasValidMovementLink =
+    requestedMovementId !== null && UUID_PATTERN.test(requestedMovementId);
+  const hasInvalidMovementLink =
+    requestedMovementId !== null && !hasValidMovementLink;
+  const focusedMovementRef = useRef<HTMLElement>(null);
 
   const canReadAll = hasCapability(
     user,
@@ -133,8 +143,20 @@ export function MovementsPage() {
         "GET",
         signal,
       ),
-    enabled: canReadMovements,
+    enabled: canReadMovements && !hasValidMovementLink,
   });
+
+  const focusedMovement = useQuery({
+    queryKey: ["inventory", "movement", requestedMovementId],
+    queryFn: ({ signal }) => getMovement(requestedMovementId ?? "", signal),
+    enabled: canReadMovements && hasValidMovementLink,
+  });
+
+  useEffect(() => {
+    if (focusedMovement.data) {
+      focusedMovementRef.current?.focus();
+    }
+  }, [focusedMovement.data]);
 
   const changeFilter = (
     setter: (value: string) => void,
@@ -175,6 +197,12 @@ export function MovementsPage() {
     return <Navigate replace to="/catalog" />;
   }
 
+  const displayedMovements = hasValidMovementLink
+    ? focusedMovement.data
+      ? [focusedMovement.data]
+      : []
+    : history.data?.items ?? [];
+
   return (
     <main className="catalog-page">
       <PageHeader
@@ -183,6 +211,30 @@ export function MovementsPage() {
       />
 
       <div className="catalog-page__body">
+        {hasInvalidMovementLink ? (
+          <p role="alert">
+            Некорректная ссылка на движение. Показан общий журнал.
+          </p>
+        ) : null}
+
+        {hasValidMovementLink ? (
+          <button
+            className="button button--ghost"
+            onClick={() => setSearchParams({}, { replace: true })}
+            type="button"
+          >
+            Показать весь журнал
+          </button>
+        ) : null}
+
+        {hasValidMovementLink && focusedMovement.isPending ? (
+          <p role="status">Загружаем движение…</p>
+        ) : null}
+
+        {hasValidMovementLink && focusedMovement.isError ? (
+          <p role="alert">Движение не найдено или недоступно.</p>
+        ) : null}
+
         <div className="history-filters form-surface">
           <label>
             Период
@@ -367,13 +419,13 @@ export function MovementsPage() {
           </p>
         ) : null}
 
-        {history.isPending ? (
+        {!hasValidMovementLink && history.isPending ? (
           <p role="status">
             Загружаем журнал…
           </p>
         ) : null}
 
-        {history.isError ? (
+        {!hasValidMovementLink && history.isError ? (
           <p role="alert">
             Не удалось загрузить журнал.{" "}
             <button
@@ -386,17 +438,19 @@ export function MovementsPage() {
           </p>
         ) : null}
 
-        {history.data?.items.length === 0 ? (
+        {!hasValidMovementLink && history.data?.items.length === 0 ? (
           <p>
             За выбранный период движений нет.
           </p>
         ) : null}
 
-        {history.data?.items.map(
+        {displayedMovements.map(
           (movement) => (
             <article
               className="movement-entry"
               key={movement.id}
+              ref={movement.id === requestedMovementId ? focusedMovementRef : undefined}
+              tabIndex={movement.id === requestedMovementId ? -1 : undefined}
             >
               <header>
                 <span>
@@ -459,11 +513,17 @@ export function MovementsPage() {
               <MovementAdminActions
                 movement={movement}
               />
+
+              {movement.procurement_request_id ? (
+                <Link to={`/procurement/${movement.procurement_request_id}`}>
+                  Открыть закупку
+                </Link>
+              ) : null}
             </article>
           ),
         )}
 
-        <div className="warehouse-actions">
+        {!hasValidMovementLink ? <div className="warehouse-actions">
           {cursorStack.length > 1 ? (
             <button
               className="button"
@@ -481,7 +541,7 @@ export function MovementsPage() {
               Следующая страница
             </button>
           ) : null}
-        </div>
+        </div> : null}
       </div>
     </main>
   );

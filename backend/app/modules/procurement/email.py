@@ -23,6 +23,7 @@ from app.modules.procurement.schemas import ProcurementEmailCreate
 from app.modules.procurement.service import (
     ProcurementConflictError,
     ProcurementRecord,
+    ProcurementServiceUnavailableError,
 )
 
 logger = logging.getLogger(__name__)
@@ -55,12 +56,17 @@ async def enqueue_procurement_email(
     actor_user_id: uuid.UUID,
     settings: Settings,
 ) -> EmailOutbox:
+    if not email_delivery_is_configured(settings):
+        raise ProcurementServiceUnavailableError(
+            "Microsoft Graph email delivery is not configured",
+            code="email_delivery_not_configured",
+        )
     if record.request.status.value != "COMPLETED":
         raise ProcurementConflictError(
             "procurement email is available only after completion",
             code="email_before_completion",
         )
-    client_request_id = " ".join(payload.client_request_id.split())
+    client_request_id = payload.client_request_id
     key = email_dedupe_key(record.request.id, actor_user_id, client_request_id)
     link = procurement_deep_link(settings, record.request.id)
     lines = record.current_revision.lines
@@ -276,7 +282,21 @@ class MicrosoftGraphClient:
         await self.client.aclose()
 
 
+def email_delivery_is_configured(settings: Settings) -> bool:
+    return settings.email_delivery_enabled and all(
+        value is not None
+        for value in (
+            settings.microsoft_graph_tenant_id_value,
+            settings.microsoft_graph_client_id_value,
+            settings.microsoft_graph_client_secret_value,
+            settings.microsoft_graph_sender_value,
+        )
+    )
+
+
 def validate_email_worker_config(settings: Settings) -> None:
+    if not settings.email_delivery_enabled:
+        raise RuntimeError("EMAIL_DELIVERY_ENABLED must be true for the email worker")
     missing = [
         name
         for name, value in (

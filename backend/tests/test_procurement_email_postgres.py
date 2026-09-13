@@ -3,16 +3,23 @@ from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import Settings
 from app.modules.procurement.email import (
     ClaimedEmail,
     claim_email_batch,
+    enqueue_procurement_email,
     finalize_email,
 )
 from app.modules.procurement.enums import ProcurementStatus
 from app.modules.procurement.models import EmailOutbox
+from app.modules.procurement.schemas import ProcurementEmailCreate
+from app.modules.procurement.service import (
+    ProcurementServiceUnavailableError,
+    get_request_record,
+)
 from tests.test_procurement_postgres import seed_procurement
 
 pytestmark = pytest.mark.asyncio
@@ -77,6 +84,75 @@ async def seed_email(
     db.add(row)
     await db.flush()
     return row
+
+
+def configured_email_settings() -> Any:
+    return Settings(
+        app_env="test",
+        email_delivery_enabled=True,
+        microsoft_graph_tenant_id="tenant",
+        microsoft_graph_client_id="client",
+        microsoft_graph_client_secret="secret",
+        microsoft_graph_sender="inventory@example.test",
+    )
+
+
+async def test_unconfigured_email_rejects_without_outbox_row(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    row = await seed_email(db)
+    await db.delete(row)
+    await db.flush()
+    record = await get_request_record(db, row.request_id)
+    before = await db.scalar(select(func.count()).select_from(EmailOutbox))
+
+    with pytest.raises(ProcurementServiceUnavailableError) as error:
+        await enqueue_procurement_email(
+            db,
+            record=record,
+            payload=ProcurementEmailCreate(
+                to=["receiver@example.test"],
+                client_request_id="email-disabled",
+            ),
+            actor_user_id=record.request.initiator_user_id,
+            settings=Settings(app_env="test", email_delivery_enabled=False),
+        )
+    assert error.value.code == "email_delivery_not_configured"
+    assert await db.scalar(select(func.count()).select_from(EmailOutbox)) == before
+
+
+async def test_configured_email_enqueue_is_normalized_and_idempotent(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    row = await seed_email(db)
+    await db.delete(row)
+    await db.flush()
+    record = await get_request_record(db, row.request_id)
+    actor_id = record.request.initiator_user_id
+    first = await enqueue_procurement_email(
+        db,
+        record=record,
+        payload=ProcurementEmailCreate(
+            to=["receiver@example.test"],
+            client_request_id="  email   request  ",
+        ),
+        actor_user_id=actor_id,
+        settings=configured_email_settings(),
+    )
+    second = await enqueue_procurement_email(
+        db,
+        record=record,
+        payload=ProcurementEmailCreate(
+            to=["receiver@example.test"],
+            client_request_id="email request",
+        ),
+        actor_user_id=actor_id,
+        settings=configured_email_settings(),
+    )
+    assert first.id == second.id
+    assert await db.scalar(select(func.count()).select_from(EmailOutbox)) == 1
 
 
 async def test_stale_final_attempt_can_be_reclaimed_without_increment(

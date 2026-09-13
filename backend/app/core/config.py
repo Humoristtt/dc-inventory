@@ -65,6 +65,7 @@ class Settings(BaseSettings):
     microsoft_graph_client_id: str | None = None
     microsoft_graph_client_secret: SecretStr | None = None
     microsoft_graph_sender: str | None = None
+    email_delivery_enabled: bool = False
     microsoft_graph_timeout_seconds: int = Field(default=15, ge=1, le=60)
     email_worker_poll_seconds: int = Field(default=5, ge=1, le=60)
     email_worker_claim_ttl_seconds: int = Field(default=60, ge=10, le=600)

@@ -88,6 +88,12 @@ StorageLocation содержит:
 - CORRECTION: linked исправляющее движение;
 - REVERSAL: полное компенсирующее движение исходного movement.
 
+Source head `d4e5f6a7b8c9` вводит дополнительный cross-domain invariant:
+movement, указанный как `ProcurementRequest.final_movement_id`, нельзя
+использовать как original movement для generic `CORRECTION` или `REVERSAL`.
+Ограничение проверяется application service и PostgreSQL trigger. Отмена
+completed procurement не моделируется generic warehouse adjustment.
+
 Для TRANSFER source и destination должны различаться.
 
 Movement хранит immutable snapshots actor, location и Item identity.

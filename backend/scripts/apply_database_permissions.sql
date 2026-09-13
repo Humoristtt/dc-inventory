@@ -24,20 +24,39 @@ SELECT format(
 
 SELECT format(
     'CREATE ROLE %I LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS',
-    :'worker_user',
-    :'worker_password'
+    :'telegram_worker_user',
+    :'telegram_worker_password'
 )
 WHERE NOT EXISTS (
     SELECT 1
     FROM pg_roles
-    WHERE rolname = :'worker_user'
+    WHERE rolname = :'telegram_worker_user'
 )
 \gexec
 
 SELECT format(
     'ALTER ROLE %I WITH LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS',
-    :'worker_user',
-    :'worker_password'
+    :'telegram_worker_user',
+    :'telegram_worker_password'
+)
+\gexec
+
+SELECT format(
+    'CREATE ROLE %I LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS',
+    :'email_worker_user',
+    :'email_worker_password'
+)
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM pg_roles
+    WHERE rolname = :'email_worker_user'
+)
+\gexec
+
+SELECT format(
+    'ALTER ROLE %I WITH LOGIN PASSWORD %L NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS',
+    :'email_worker_user',
+    :'email_worker_password'
 )
 \gexec
 
@@ -61,6 +80,72 @@ SELECT format(
 \gexec
 
 
+-- One-way cutover from the pre-split delivery-worker credential.
+-- Fresh installations normally have no such role. Existing installations
+-- disable login first, terminate already-authenticated sessions, and revoke
+-- every privilege previously granted by the old bootstrap.
+SELECT format(
+    'ALTER ROLE %I WITH NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS',
+    :'legacy_worker_user'
+)
+WHERE EXISTS (
+    SELECT 1
+    FROM pg_roles
+    WHERE rolname = :'legacy_worker_user'
+)
+\gexec
+
+SELECT pg_terminate_backend(pid)
+FROM pg_stat_activity
+WHERE usename = :'legacy_worker_user'
+  AND pid <> pg_backend_pid();
+
+SELECT format(
+    'REVOKE ALL PRIVILEGES ON DATABASE %I FROM %I',
+    current_database(),
+    :'legacy_worker_user'
+)
+WHERE EXISTS (
+    SELECT 1
+    FROM pg_roles
+    WHERE rolname = :'legacy_worker_user'
+)
+\gexec
+
+SELECT format(
+    'REVOKE ALL PRIVILEGES ON SCHEMA public FROM %I',
+    :'legacy_worker_user'
+)
+WHERE EXISTS (
+    SELECT 1
+    FROM pg_roles
+    WHERE rolname = :'legacy_worker_user'
+)
+\gexec
+
+SELECT format(
+    'REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %I',
+    :'legacy_worker_user'
+)
+WHERE EXISTS (
+    SELECT 1
+    FROM pg_roles
+    WHERE rolname = :'legacy_worker_user'
+)
+\gexec
+
+SELECT format(
+    'REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM %I',
+    :'legacy_worker_user'
+)
+WHERE EXISTS (
+    SELECT 1
+    FROM pg_roles
+    WHERE rolname = :'legacy_worker_user'
+)
+\gexec
+
+
 -- No application role may create persistent objects in public.
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 
@@ -74,7 +159,14 @@ SELECT format(
 SELECT format(
     'GRANT CONNECT ON DATABASE %I TO %I',
     current_database(),
-    :'worker_user'
+    :'telegram_worker_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT CONNECT ON DATABASE %I TO %I',
+    current_database(),
+    :'email_worker_user'
 )
 \gexec
 
@@ -93,7 +185,13 @@ SELECT format(
 
 SELECT format(
     'GRANT USAGE ON SCHEMA public TO %I',
-    :'worker_user'
+    :'telegram_worker_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT USAGE ON SCHEMA public TO %I',
+    :'email_worker_user'
 )
 \gexec
 
@@ -111,7 +209,13 @@ SELECT format(
 
 SELECT format(
     'REVOKE CREATE ON SCHEMA public FROM %I',
-    :'worker_user'
+    :'telegram_worker_user'
+)
+\gexec
+
+SELECT format(
+    'REVOKE CREATE ON SCHEMA public FROM %I',
+    :'email_worker_user'
 )
 \gexec
 
@@ -137,13 +241,25 @@ SELECT format(
 
 SELECT format(
     'REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %I',
-    :'worker_user'
+    :'telegram_worker_user'
 )
 \gexec
 
 SELECT format(
     'REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM %I',
-    :'worker_user'
+    :'telegram_worker_user'
+)
+\gexec
+
+SELECT format(
+    'REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %I',
+    :'email_worker_user'
+)
+\gexec
+
+SELECT format(
+    'REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM %I',
+    :'email_worker_user'
 )
 \gexec
 
@@ -346,26 +462,13 @@ WHERE pg_get_serial_sequence(
 -- Telegram delivery worker: outbox plus start-welcome chat state.
 SELECT format(
     'GRANT SELECT, UPDATE ON TABLE notification_outbox TO %I',
-    :'worker_user'
-)
-\gexec
-
-SELECT format(
-    'GRANT SELECT ON TABLE email_outbox TO %I',
-    :'worker_user'
-)
-\gexec
-
-SELECT format(
-    'GRANT UPDATE (status, attempts, available_at, claimed_at, claim_token, '
-    'sent_at, last_error, updated_at) ON TABLE email_outbox TO %I',
-    :'worker_user'
+    :'telegram_worker_user'
 )
 \gexec
 
 SELECT format(
     'GRANT SELECT ON TABLE telegram_chat_states TO %I',
-    :'worker_user'
+    :'telegram_worker_user'
 )
 \gexec
 
@@ -373,7 +476,22 @@ SELECT format(
     'GRANT UPDATE '
     '(last_welcome_message_id, last_welcome_sent_at, updated_at) '
     'ON TABLE telegram_chat_states TO %I',
-    :'worker_user'
+    :'telegram_worker_user'
+)
+\gexec
+
+
+-- Procurement email delivery worker: email outbox only.
+SELECT format(
+    'GRANT SELECT ON TABLE email_outbox TO %I',
+    :'email_worker_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT UPDATE (status, attempts, available_at, claimed_at, claim_token, '
+    'sent_at, last_error, updated_at) ON TABLE email_outbox TO %I',
+    :'email_worker_user'
 )
 \gexec
 

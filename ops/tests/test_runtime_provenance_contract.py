@@ -34,6 +34,7 @@ for service in (
     '"backend"',
     '"telegram_worker"',
     '"maintenance_worker"',
+    '"email_worker"',
     '"web"',
     '"postgres"',
 ):
@@ -47,6 +48,9 @@ assert (
     "maintenance-worker runtime does not match backend runtime"
     in provenance
 )
+assert "email-worker runtime does not match backend runtime" in provenance
+assert '"state": "disabled"' in provenance
+assert "EMAIL_DELIVERY_ENABLED" in provenance
 
 label = "org.opencontainers.image.revision"
 
@@ -81,3 +85,7 @@ assert '["docker", "image", "inspect", image_id]' in provenance
 recovery = (ROOT / "ops/recovery/rehearse_restore.sh").read_text()
 assert 'manifest["runtime"].get("postgres")' in recovery
 assert "PostgreSQL image revision mismatch" in recovery
+assert 'manifest["runtime"].get("email_worker")' in recovery
+assert "RESTORE_EMAIL_RUNTIME=LEGACY_MANIFEST" in recovery
+assert "RESTORE_EMAIL_RUNTIME=DISABLED" in recovery
+assert "RESTORE_EMAIL_RUNTIME=ENABLED" in recovery

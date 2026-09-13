@@ -10,6 +10,7 @@ import {
 import {
   TELEGRAM_WEB_APP_SDK_PATH,
   bindDesktopEscapeGuard,
+  bindTelegramSafeAreaEvents,
   bindTelegramBackButton,
   getTelegramWebAppSdkLoadStatus,
   loadTelegramWebAppSdk,
@@ -156,6 +157,45 @@ describe("Telegram Web App SDK delivery", () => {
     expect(ready).toHaveBeenCalledTimes(1);
     expect(expand).toHaveBeenCalledTimes(1);
     expect(requestFullscreen).not.toHaveBeenCalled();
+  });
+
+  it("refreshes changing safe areas and removes Telegram event handlers", () => {
+    const handlers = new Map<string, () => void>();
+    const onEvent = vi.fn((event: string, handler: () => void) => {
+      handlers.set(event, handler);
+    });
+    const offEvent = vi.fn();
+    const webApp = {
+      initData: "query_id=test",
+      ready: vi.fn(),
+      expand: vi.fn(),
+      onEvent,
+      offEvent,
+      contentSafeAreaInset: { top: 1, right: 2, bottom: 3, left: 4 },
+    };
+    window.Telegram = { WebApp: webApp };
+
+    prepareTelegramWebApp();
+    const cleanupEvents = bindTelegramSafeAreaEvents(webApp);
+    webApp.contentSafeAreaInset.bottom = 24;
+    handlers.get("contentSafeAreaChanged")?.();
+
+    expect(document.documentElement.style.getPropertyValue("--app-safe-area-bottom")).toBe("24px");
+    expect(onEvent).toHaveBeenCalledTimes(3);
+
+    cleanupEvents();
+    expect(offEvent).toHaveBeenCalledTimes(3);
+    expect(offEvent).toHaveBeenCalledWith(
+      "contentSafeAreaChanged",
+      handlers.get("contentSafeAreaChanged"),
+    );
+  });
+
+  it("keeps clients without Telegram event APIs compatible", () => {
+    window.Telegram = {
+      WebApp: { initData: "query_id=test", ready: vi.fn(), expand: vi.fn() },
+    };
+    expect(() => bindTelegramSafeAreaEvents()()).not.toThrow();
   });
 
   it("requests fullscreen only after explicit user action", () => {

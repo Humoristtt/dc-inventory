@@ -8,6 +8,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, StrictInt, field_validator
 
+from app.modules.catalog.schemas import ItemCreate
 from app.modules.procurement.enums import (
     ProcurementEventType,
     ProcurementLineType,
@@ -19,6 +20,16 @@ type ProcurementScalar = str | int | Decimal | bool
 
 class StrictRequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    @field_validator("client_request_id", mode="before", check_fields=False)
+    @classmethod
+    def normalize_client_request_id(cls, value: object) -> object:
+        if not isinstance(value, str):
+            return value
+        normalized = " ".join(value.split())
+        if not normalized:
+            raise ValueError("client_request_id must not be blank")
+        return normalized
 
 
 class ExistingItemLineCreate(StrictRequestModel):
@@ -79,6 +90,11 @@ class ManagerTransfer(AssignmentMutation):
 class LineBindingCreate(ExpectedStateMutation):
     item_id: UUID
     line_id: UUID
+
+
+class ProposedItemCreateAndBind(ExpectedStateMutation):
+    line_id: UUID
+    item: ItemCreate
 
 
 class DiscrepancyCreate(ExpectedStateMutation):

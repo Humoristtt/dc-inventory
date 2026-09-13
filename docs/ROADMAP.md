@@ -163,7 +163,7 @@ ADMIN / OWNER:
 - [x] Responsive/mobile/desktop warehouse UI acceptance.
 - [x] Header/fullscreen/Escape remediation.
 - [x] Desktop form consistency and smart suggestions.
-- [x] Accepted production migration head `b2c3d4e5f6a7`.
+- [x] Current running production migration head `c3d4e5f6a7b8`.
 - [x] External authoritative workbook contract.
 - [x] Fail-closed production one-shot bootstrap path.
 - [x] Empty-domain production preflight.
@@ -236,7 +236,7 @@ Canonical contract:
 - [x] PostgreSQL integration acceptance.
 - [x] Frontend unit/browser acceptance.
 - [x] Full CI acceptance.
-- [x] Source migration head `c3d4e5f6a7b8`.
+- [x] Source migration head `d4e5f6a7b8c9`.
 - [x] Production RBAC maintenance cutover.
 
 ## 12. Procurement domain
@@ -270,21 +270,28 @@ Canonical contract:
 - [x] Telegram notifications + Mini App deep links.
 - [x] PostgreSQL integration acceptance.
 - [x] Role-specific browser E2E.
-- [~] Full CI acceptance.
-- [ ] Real Telegram acceptance.
+- [x] Procurement schema `c3d4e5f6a7b8` deployed in production.
+- [~] Source `d4e5f6a7b8c9` audit remediation implemented; full regression and
+  production deployment are still pending.
+- [~] Full CI acceptance for the remediation source.
+- [ ] Real Telegram Procurement acceptance for the current release.
 
 ## 13. Procurement email delivery
 
-После acceptance core procurement workflow:
+Source implementation готова, production delivery пока намеренно выключен:
 
-- [ ] Microsoft Graph application integration.
-- [ ] OAuth credentials через secret boundary.
-- [ ] To / CC policy.
-- [ ] HTML/text procurement message.
-- [ ] Async delivery через outbox/worker semantics.
-- [ ] Retry/dead-letter behavior.
-- [ ] Email failure не откатывает business transaction.
-- [ ] Production secret/runbook documentation.
+- [x] Microsoft Graph application client implementation.
+- [x] OAuth credentials через secret boundary.
+- [x] To / CC policy.
+- [x] HTML/text procurement message.
+- [x] Async delivery через durable email outbox/worker semantics.
+- [x] Retry/dead-letter behavior.
+- [x] Email failure не откатывает business transaction.
+- [x] API fail-closed при `EMAIL_DELIVERY_ENABLED=false` или неполной Graph config.
+- [x] Отдельная least-privilege DB identity для email worker.
+- [x] Optional email-worker отражён в backup/recovery runtime provenance.
+- [ ] Production Graph credentials + `EMAIL_DELIVERY_ENABLED=true` + profile `email`.
+- [ ] Production live email acceptance.
 
 ## 14. Future product work
 

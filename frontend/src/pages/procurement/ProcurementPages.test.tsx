@@ -525,6 +525,70 @@ it("detail показывает только действия из available_act
   ).toBeNull();
 });
 
+it("MANAGER не видит ссылку на складской приход без movement read capability", async () => {
+  const request = procurementRequest({
+    status: "COMPLETED",
+    status_label: "Завершена",
+    final_movement_id: "movement-1",
+  });
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "/api/procurement/requests/request-1") {
+        return jsonResponse(request);
+      }
+
+      throw new Error(`unexpected fetch ${url}`);
+    }),
+  );
+
+  renderDetail(authState("MANAGER"));
+
+  expect(
+    await screen.findByText("PR-2026-0001"),
+  ).toBeTruthy();
+
+  expect(
+    screen.queryByRole("link", {
+      name: "Открыть складской приход",
+    }),
+  ).toBeNull();
+});
+
+it("пользователь с movement read capability видит ссылку на складской приход", async () => {
+  const request = procurementRequest({
+    status: "COMPLETED",
+    status_label: "Завершена",
+    final_movement_id: "movement-1",
+  });
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+
+      if (url === "/api/procurement/requests/request-1") {
+        return jsonResponse(request);
+      }
+
+      throw new Error(`unexpected fetch ${url}`);
+    }),
+  );
+
+  renderDetail(authState("SENIOR_ENGINEER"));
+
+  const link = await screen.findByRole("link", {
+    name: "Открыть складской приход",
+  });
+
+  expect(link.getAttribute("href")).toBe(
+    "/movements?movement=movement-1",
+  );
+});
+
 it("acceptance требует второй confirm, место и отправляет полный state contract", async () => {
   const request = procurementRequest({
     available_actions: ["complete_acceptance"],

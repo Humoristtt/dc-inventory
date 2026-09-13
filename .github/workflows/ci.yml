@@ -368,8 +368,10 @@ jobs:
           POSTGRES_PASSWORD=ci-runtime-only-password
           POSTGRES_RUNTIME_USER=dc_inventory_app_ci
           POSTGRES_RUNTIME_PASSWORD=ci-runtime-role-password
-          POSTGRES_WORKER_USER=dc_inventory_worker_ci
-          POSTGRES_WORKER_PASSWORD=ci-worker-role-password
+          POSTGRES_TELEGRAM_WORKER_USER=dc_inventory_telegram_worker_ci
+          POSTGRES_TELEGRAM_WORKER_PASSWORD=ci-telegram-worker-role-password
+          POSTGRES_EMAIL_WORKER_USER=dc_inventory_email_worker_ci
+          POSTGRES_EMAIL_WORKER_PASSWORD=ci-email-worker-role-password
           POSTGRES_MAINTENANCE_USER=dc_inventory_maintenance_ci
           POSTGRES_MAINTENANCE_PASSWORD=ci-maintenance-role-password
           DATABASE_URL=postgresql+asyncpg://dc_inventory:ci-runtime-only-password@postgres:5432/dc_inventory
@@ -571,12 +573,27 @@ jobs:
             docker compose --env-file .env.ci -f compose.yaml exec -T postgres \
               psql -U dc_inventory -d dc_inventory -At -c "
                 SELECT has_table_privilege(
-                  'dc_inventory_worker_ci',
+                  'dc_inventory_telegram_worker_ci',
                   'user_item_custody_balances',
                   'SELECT, INSERT, UPDATE, DELETE'
                 );
               "
           )" = "f"
+
+          worker_privileges="$(
+            docker compose --env-file .env.ci -f compose.yaml exec -T postgres \
+              psql -U dc_inventory -d dc_inventory -AtF '|' -c "
+                SELECT
+                  has_table_privilege('dc_inventory_telegram_worker_ci', 'notification_outbox', 'SELECT, UPDATE'),
+                  has_table_privilege('dc_inventory_telegram_worker_ci', 'email_outbox', 'SELECT'),
+                  has_table_privilege('dc_inventory_email_worker_ci', 'email_outbox', 'SELECT'),
+                  has_table_privilege('dc_inventory_email_worker_ci', 'notification_outbox', 'SELECT'),
+                  has_table_privilege('dc_inventory_email_worker_ci', 'telegram_chat_states', 'SELECT'),
+                  has_table_privilege('dc_inventory_email_worker_ci', 'procurement_requests', 'UPDATE'),
+                  has_table_privilege('dc_inventory_email_worker_ci', 'movements', 'INSERT');
+              "
+          )"
+          test "$worker_privileges" = "t|f|t|f|f|f|f"
 
       - name: Verify backend database role
         run: |

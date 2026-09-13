@@ -36,19 +36,12 @@ def test_runtime_database_permission_source_is_least_privilege() -> None:
         "\n    'ON TABLE user_item_custody_balances TO %I'" in permissions
     )
     assert permissions.count("user_item_custody_balances") == 1
-    assert (
-        "GRANT SELECT, INSERT ON TABLE user_access_events, user_role_events"
-        in permissions
-    )
+    assert "GRANT SELECT, INSERT ON TABLE user_access_events, user_role_events" in permissions
     assert "UPDATE ON TABLE user_role_events" not in permissions
     assert "DELETE ON TABLE user_role_events" not in permissions
+    assert "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE items TO %I" in permissions
     assert (
-        "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE items TO %I"
-        in permissions
-    )
-    assert (
-        "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE movements, movement_lines"
-        not in permissions
+        "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE movements, movement_lines" not in permissions
     )
 
 
@@ -80,3 +73,34 @@ def test_telegram_start_state_permissions_are_column_scoped() -> None:
     )
     assert "'GRANT SELECT, INSERT, UPDATE ON TABLE telegram_chat_states TO %I'" not in permissions
     assert "'GRANT SELECT, UPDATE ON TABLE telegram_chat_states TO %I'" not in permissions
+
+
+def test_delivery_workers_have_separate_least_privilege_roles() -> None:
+    permissions = (
+        Path(__file__).resolve().parents[1] / "scripts" / "apply_database_permissions.sql"
+    ).read_text()
+
+    assert ":'telegram_worker_user'" in permissions
+    assert ":'email_worker_user'" in permissions
+    assert ":'worker_user'" not in permissions
+    telegram_section, email_section = permissions.split(
+        "-- Procurement email delivery worker: email outbox only."
+    )
+    assert "notification_outbox" in telegram_section
+    assert "email_outbox TO %I',\n    :'telegram_worker_user'" not in telegram_section
+    assert "email_outbox" in email_section
+    assert "notification_outbox TO %I',\n    :'email_worker_user'" not in email_section
+
+
+def test_legacy_delivery_worker_is_retired_fail_closed() -> None:
+    permissions = (
+        Path(__file__).resolve().parents[1] / "scripts" / "apply_database_permissions.sql"
+    ).read_text()
+
+    assert ":'legacy_worker_user'" in permissions
+    assert "WITH NOLOGIN NOSUPERUSER" in permissions
+    assert "pg_terminate_backend(pid)" in permissions
+    assert "REVOKE ALL PRIVILEGES ON DATABASE %I FROM %I" in permissions
+    assert "REVOKE ALL PRIVILEGES ON SCHEMA public FROM %I" in permissions
+    assert "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %I" in permissions
+    assert "REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM %I" in permissions

@@ -2,16 +2,27 @@ import uuid
 from typing import Any
 
 import pytest
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.modules.catalog.models import Item
 from app.modules.catalog.service import create_item
 from app.modules.identity.enums import UserRole
 from app.modules.inventory.models import Movement, StockBalance
-from app.modules.inventory.schemas import LocationCreate
-from app.modules.inventory.service import create_location
+from app.modules.inventory.schemas import (
+    LocationCreate,
+    MovementCreate,
+    MovementLineCreate,
+    MovementReversalCreate,
+)
+from app.modules.inventory.service import (
+    InventoryConflictError,
+    create_location,
+    create_movement,
+    reverse_movement,
+)
 from app.modules.procurement.enums import (
     ProcurementEventType,
     ProcurementLineType,
@@ -30,11 +41,14 @@ from app.modules.procurement.schemas import (
     ExpectedStateMutation,
     ProcurementAcceptanceCreate,
     ProcurementRequestCreate,
+    ProposedItemCreateAndBind,
+    ProposedItemLineCreate,
     RevisionCreate,
 )
 from app.modules.procurement.service import (
     ProcurementConflictError,
     complete_acceptance,
+    create_and_bind_line,
     create_request,
     manager_accept,
     report_discrepancy,
@@ -150,6 +164,275 @@ async def move_to_acceptance(
     assert record.request.status == ProcurementStatus.AWAITING_ACCEPTANCE
 
     return record
+
+
+async def completed_procurement(db: AsyncSession) -> tuple[Any, ...]:
+    initiator, manager, senior, item_id, location, record = await seed_procurement(db)
+    record = await move_to_acceptance(db, record, manager_id=manager.id)
+    record = await complete_acceptance(
+        db,
+        record.request.id,
+        ProcurementAcceptanceCreate(
+            expected_state_version=record.request.state_version,
+            expected_revision_id=record.request.current_revision_id,
+            client_request_id=uuid.uuid4().hex,
+            receiving_location_id=location.id,
+        ),
+        actor_user_id=senior.id,
+        settings=settings(),
+    )
+    return initiator, manager, senior, item_id, location, record
+
+
+async def test_completed_procurement_receipt_rejects_generic_reversal_and_correction(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    _initiator, _manager, senior, item_id, location, record = await completed_procurement(db)
+    movement_id = record.request.final_movement_id
+    assert movement_id is not None
+    movement_count = await db.scalar(select(func.count(Movement.id)))
+    stock_before = await db.scalar(
+        select(StockBalance.quantity).where(
+            StockBalance.item_id == item_id,
+            StockBalance.location_id == location.id,
+        )
+    )
+
+    with pytest.raises(InventoryConflictError) as reversal_error:
+        await reverse_movement(
+            db,
+            movement_id,
+            MovementReversalCreate(client_request_id="protected-reversal"),
+            actor_user_id=senior.id,
+            actor_display_name="Synthetic actor",
+        )
+    assert reversal_error.value.code == "procurement_movement_protected"
+
+    with pytest.raises(InventoryConflictError) as correction_error:
+        await create_movement(
+            db,
+            MovementCreate(
+                movement_type="CORRECTION",
+                source_location_id=location.id,
+                original_movement_id=movement_id,
+                client_request_id="protected-correction",
+                lines=[MovementLineCreate(item_id=item_id, quantity=1)],
+            ),
+            actor_user_id=senior.id,
+            actor_display_name="Synthetic actor",
+        )
+    assert correction_error.value.code == "procurement_movement_protected"
+    assert await db.scalar(select(func.count(Movement.id))) == movement_count
+    assert (
+        await db.scalar(
+            select(StockBalance.quantity).where(
+                StockBalance.item_id == item_id,
+                StockBalance.location_id == location.id,
+            )
+        )
+        == stock_before
+    )
+    await db.refresh(record.request)
+    assert record.request.status == ProcurementStatus.COMPLETED
+    assert record.request.final_movement_id == movement_id
+
+
+@pytest.mark.parametrize("movement_type", ["CORRECTION", "REVERSAL"])
+async def test_procurement_receipt_db_trigger_rejects_direct_adjustment(
+    warehouse_db: AsyncSession,
+    movement_type: str,
+) -> None:
+    db = warehouse_db
+    (
+        _initiator,
+        _manager,
+        _senior,
+        _item_id,
+        _location,
+        record,
+    ) = await completed_procurement(db)
+
+    movement_id = record.request.final_movement_id
+    assert movement_id is not None
+
+    movement_count = await db.scalar(select(func.count(Movement.id)))
+
+    with pytest.raises(DBAPIError) as error:
+        async with db.begin_nested():
+            await db.execute(
+                text(
+                    """
+                    INSERT INTO movements (
+                        id,
+                        line_count,
+                        movement_type,
+                        actor_user_id,
+                        custody_user_id,
+                        source_location_id,
+                        destination_location_id,
+                        original_movement_id,
+                        client_request_id,
+                        request_fingerprint,
+                        actor_display_name_snapshot,
+                        source_location_code_snapshot,
+                        source_location_name_snapshot,
+                        destination_location_code_snapshot,
+                        destination_location_name_snapshot
+                    )
+                    SELECT
+                        gen_random_uuid(),
+                        line_count,
+                        :movement_type,
+                        actor_user_id,
+                        NULL,
+                        source_location_id,
+                        destination_location_id,
+                        id,
+                        :client_request_id,
+                        repeat('f', 64),
+                        actor_display_name_snapshot,
+                        source_location_code_snapshot,
+                        source_location_name_snapshot,
+                        destination_location_code_snapshot,
+                        destination_location_name_snapshot
+                    FROM movements
+                    WHERE id = :movement_id
+                    """
+                ),
+                {
+                    "movement_type": movement_type,
+                    "client_request_id": (f"direct-db-protected-{movement_type.lower()}"),
+                    "movement_id": movement_id,
+                },
+            )
+
+    assert getattr(error.value.orig, "sqlstate", None) == "23514"
+    assert "procurement movement is protected" in str(error.value.orig)
+    assert await db.scalar(select(func.count(Movement.id))) == movement_count
+
+
+async def test_d4_downgrade_refuses_completed_procurement(
+    migration_database: str,
+) -> None:
+    from sqlalchemy.ext.asyncio import create_async_engine
+
+    from tests.migration_helpers import alembic
+
+    alembic(migration_database, "upgrade", "head")
+    engine = create_async_engine(migration_database)
+
+    try:
+        async with (
+            AsyncSession(
+                engine,
+                expire_on_commit=False,
+            ) as db,
+            db.begin(),
+        ):
+            (
+                _initiator,
+                _manager,
+                _senior,
+                _item_id,
+                _location,
+                record,
+            ) = await completed_procurement(db)
+            assert record.request.final_movement_id is not None
+    finally:
+        await engine.dispose()
+
+    output = alembic(
+        migration_database,
+        "downgrade",
+        "c3d4e5f6a7b8",
+        success=False,
+    )
+    assert (
+        "procurement receipt protection downgrade refused: completed procurement exists"
+    ) in output
+
+    engine = create_async_engine(migration_database)
+    try:
+        async with engine.connect() as connection:
+            assert (
+                await connection.scalar(text("SELECT version_num FROM alembic_version"))
+                == "d4e5f6a7b8c9"
+            )
+            assert (
+                await connection.scalar(
+                    text(
+                        "SELECT count(*) "
+                        "FROM procurement_requests "
+                        "WHERE final_movement_id IS NOT NULL"
+                    )
+                )
+                == 1
+            )
+    finally:
+        await engine.dispose()
+
+
+async def test_create_and_bind_proposed_item_is_atomic_and_idempotent(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    initiator, _ = await actor(db, UserRole.ADMIN)
+    manager, _ = await actor(db, UserRole.MANAGER)
+    senior, _ = await actor(db, UserRole.SENIOR_ENGINEER)
+    proposed = cable_payload()
+    record = await create_request(
+        db,
+        ProcurementRequestCreate(
+            assigned_manager_user_id=manager.id,
+            client_request_id=uuid.uuid4().hex,
+            lines=[
+                ProposedItemLineCreate(
+                    line_type=ProcurementLineType.PROPOSED_ITEM,
+                    category_key=proposed.category_key,
+                    manufacturer_id=proposed.manufacturer_id,
+                    name=proposed.name,
+                    model=proposed.model,
+                    attributes=proposed.attributes,
+                    quantity=2,
+                )
+            ],
+        ),
+        actor_user_id=initiator.id,
+        settings=settings(),
+    )
+    line_id = record.current_revision.lines[0].id
+    payload = ProposedItemCreateAndBind(
+        expected_state_version=record.request.state_version,
+        expected_revision_id=record.request.current_revision_id,
+        client_request_id=" create-and-bind ",
+        line_id=line_id,
+        item=proposed,
+    )
+    item_count = await db.scalar(select(func.count()).select_from(Item))
+    saved = await create_and_bind_line(db, record.request.id, payload, actor_user_id=senior.id)
+    saved_binding = saved.current_revision.lines[0].binding
+    assert saved_binding is not None
+    bound_id = saved_binding.item_id
+    assert await db.scalar(select(func.count()).select_from(Item)) == (item_count or 0) + 1
+
+    replay = await create_and_bind_line(db, record.request.id, payload, actor_user_id=senior.id)
+    replay_binding = replay.current_revision.lines[0].binding
+    assert replay_binding is not None
+    assert replay_binding.item_id == bound_id
+    assert await db.scalar(select(func.count()).select_from(Item)) == (item_count or 0) + 1
+
+    conflict = ProposedItemCreateAndBind(
+        expected_state_version=replay.request.state_version,
+        expected_revision_id=replay.request.current_revision_id,
+        client_request_id="second-create-and-bind",
+        line_id=line_id,
+        item=cable_payload(),
+    )
+    with pytest.raises(ProcurementConflictError) as error:
+        await create_and_bind_line(db, record.request.id, conflict, actor_user_id=senior.id)
+    assert error.value.code == "line_already_bound"
+    assert await db.scalar(select(func.count()).select_from(Item)) == (item_count or 0) + 1
 
 
 async def test_request_creation_is_idempotent(

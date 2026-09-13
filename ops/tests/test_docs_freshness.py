@@ -143,7 +143,7 @@ for name in CURRENT_DOCS + HISTORICAL_STAGE15_DOCS:
 # Accepted production head remains an explicit operational fact in
 # production-facing documentation. Source head is derived from the migration
 # graph independently.
-ACCEPTED_PRODUCTION_ALEMBIC_HEAD = "b2c3d4e5f6a7"
+ACCEPTED_PRODUCTION_ALEMBIC_HEAD = "c3d4e5f6a7b8"
 
 for name in (
     "README.md",
@@ -560,7 +560,27 @@ require(
 
 require(
     "docs/RBAC_PROCUREMENT.md",
-    "RBAC + PROCUREMENT SOURCE IMPLEMENTED / PRODUCTION PENDING",
+    "Procurement domain также",
+)
+require(
+    "docs/RBAC_PROCUREMENT.md",
+    SOURCE_ALEMBIC_HEAD,
+)
+require(
+    "docs/RBAC_PROCUREMENT.md",
+    "REAL_INVENTORY_MUTATIONS_ENABLED=false",
+)
+require(
+    "docs/DEPLOYMENT.md",
+    "POSTGRES_TELEGRAM_WORKER_USER",
+)
+require(
+    "docs/DEPLOYMENT.md",
+    "POSTGRES_EMAIL_WORKER_USER",
+)
+require(
+    "docs/DEPLOYMENT.md",
+    "EMAIL_DELIVERY_ENABLED=false",
 )
 
 require(

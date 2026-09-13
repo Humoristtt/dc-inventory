@@ -21,9 +21,11 @@ export function ProcurementCreatePage() {
   const [manager, setManager] = useState("");
   const [comment, setComment] = useState("");
   const [lines, setLines] = useState<ProcurementLineInput[]>([]);
+  const canCreate = hasCapability(auth.data?.user, "procurement.create");
   const managers = useQuery({
     queryKey: ["procurement", "managers"],
     queryFn: ({ signal }) => getProcurementManagers(signal),
+    enabled: !auth.isPending && canCreate,
   });
   const mutation = useMutation({
     mutationFn: () =>
@@ -40,7 +42,7 @@ export function ProcurementCreatePage() {
   });
 
   if (auth.isPending) return <p role="status">Загрузка…</p>;
-  if (!hasCapability(auth.data?.user, "procurement.create")) {
+  if (!canCreate) {
     return <Navigate replace to="/catalog" />;
   }
 

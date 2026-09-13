@@ -19,6 +19,7 @@ import {
   getProcurementRequest,
   mutateProcurement,
   procurementError,
+  procurementLinesPayload,
   type ProcurementLine,
   type ProcurementLineInput,
 } from "../../shared/api/procurement";
@@ -43,6 +44,7 @@ function inputFromLine(line: ProcurementLine): ProcurementLineInput {
     return {
       line_type: "EXISTING_ITEM",
       item_id: line.catalog_item_id,
+      display_name: lineTitle(line),
       quantity: line.quantity,
     };
   }
@@ -190,6 +192,12 @@ export function ProcurementDetailPage() {
   const auth = useAuthState();
   const canReadProcurement =
     auth.data?.user.capabilities.includes("procurement.read") ?? false;
+  const canReadMovements =
+    auth.data?.user.capabilities.some(
+      (capability) =>
+        capability === "movement.read_own"
+        || capability === "movement.read_all",
+    ) ?? false;
   const queryClient = useQueryClient();
   const request = useQuery({
     queryKey: ["procurement", "request", requestId],
@@ -243,7 +251,16 @@ export function ProcurementDetailPage() {
   const actions = useMemo(() => new Set(current?.available_actions ?? []), [current]);
   const act = (action: string, extra: Record<string, unknown> = {}) => {
     if (!current) return;
-    mutation.mutate({ action, body: { ...expectedState(current), ...extra } });
+    const body: Record<string, unknown> = { ...expectedState(current), ...extra };
+    if (Array.isArray(body.lines)) {
+      body.lines = procurementLinesPayload(body.lines as ProcurementLineInput[]);
+    }
+    if (Array.isArray(body.alternative_proposal)) {
+      body.alternative_proposal = procurementLinesPayload(
+        body.alternative_proposal as ProcurementLineInput[],
+      );
+    }
+    mutation.mutate({ action, body });
   };
 
   if (auth.isPending || request.isPending) return <p role="status">Загрузка…</p>;
@@ -272,7 +289,7 @@ export function ProcurementDetailPage() {
           <div><span>Инициатор</span><strong>{current.initiator.display_name}</strong></div>
           <div><span>Менеджер</span><strong>{current.assigned_manager.display_name}</strong></div>
           <div><span>Редакция</span><strong>№ {current.revision_number}</strong></div>
-          {current.final_movement_id ? (
+          {current.final_movement_id && canReadMovements ? (
             <Link to={`/movements?movement=${current.final_movement_id}`}>Открыть складской приход</Link>
           ) : null}
         </section>

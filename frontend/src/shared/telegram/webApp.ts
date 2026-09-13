@@ -297,6 +297,31 @@ function applyTelegramSafeArea(webApp: TelegramWebApp | null): void {
   }
 }
 
+export function bindTelegramSafeAreaEvents(
+  webApp: TelegramWebApp | null = getTelegramWebApp(),
+): () => void {
+  if (webApp?.onEvent === undefined || webApp.offEvent === undefined) {
+    return () => undefined;
+  }
+
+  const refresh = () => applyTelegramSafeArea(webApp);
+  const events = [
+    "safeAreaChanged",
+    "contentSafeAreaChanged",
+    "viewportChanged",
+  ];
+
+  for (const event of events) {
+    webApp.onEvent(event, refresh);
+  }
+
+  return () => {
+    for (const event of events) {
+      webApp.offEvent?.(event, refresh);
+    }
+  };
+}
+
 export function bindTelegramBackButton(
   visible: boolean,
   handler: () => void,

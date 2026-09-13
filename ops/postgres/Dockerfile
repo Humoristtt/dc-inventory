@@ -24,6 +24,10 @@ RUN test -n "$APP_REVISION" && test "$APP_REVISION" != "unknown"
 LABEL org.opencontainers.image.revision=$APP_REVISION
 
 ARG OPENSSL_VERSION=3.5.7-1~deb13u2
+ARG GZIP_VERSION=1.13-1+deb13u1
+ARG PCRE2_VERSION=10.46-1~deb13u2
+ARG PERL_VERSION=5.40.1-6+deb13u1
+ARG SQLITE_VERSION=3.46.1-7+deb13u2
 
 COPY --from=gosu-builder /out/gosu /usr/local/bin/gosu
 
@@ -33,7 +37,14 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends --only-upgrade \
       "openssl=${OPENSSL_VERSION}" \
       "libssl3t64=${OPENSSL_VERSION}" \
-      "openssl-provider-legacy=${OPENSSL_VERSION}"; \
+      "openssl-provider-legacy=${OPENSSL_VERSION}" \
+      "gzip=${GZIP_VERSION}" \
+      "libpcre2-8-0=${PCRE2_VERSION}" \
+      "libperl5.40=${PERL_VERSION}" \
+      "perl=${PERL_VERSION}" \
+      "perl-base=${PERL_VERSION}" \
+      "perl-modules-5.40=${PERL_VERSION}" \
+      "libsqlite3-0=${SQLITE_VERSION}"; \
     rm -rf /var/lib/apt/lists/*; \
     gosu --version; \
     gosu nobody true

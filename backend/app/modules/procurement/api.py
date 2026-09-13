@@ -17,6 +17,7 @@ from app.modules.auth.dependencies import (
     ProcurementRead,
 )
 from app.modules.catalog.service import CatalogError
+from app.modules.identity.policy import Capability, has_capability
 from app.modules.inventory.service import InventoryError
 from app.modules.procurement.email import enqueue_procurement_email
 from app.modules.procurement.enums import STATUS_LABELS
@@ -39,6 +40,7 @@ from app.modules.procurement.schemas import (
     ProcurementRequestPageOut,
     ProcurementRequestSummaryOut,
     ProcurementRevisionOut,
+    ProposedItemCreateAndBind,
     RevisionCreate,
     UserSummaryOut,
 )
@@ -48,9 +50,11 @@ from app.modules.procurement.service import (
     ProcurementForbiddenError,
     ProcurementNotFoundError,
     ProcurementRecord,
+    ProcurementServiceUnavailableError,
     available_actions,
     bind_line,
     complete_acceptance,
+    create_and_bind_line,
     create_request,
     get_request_record,
     list_managers,
@@ -70,6 +74,8 @@ router = APIRouter(prefix="/api/procurement", tags=["procurement"])
 def _raise_procurement_error(error: Exception) -> NoReturn:
     if isinstance(error, ProcurementNotFoundError):
         code = status.HTTP_404_NOT_FOUND
+    elif isinstance(error, ProcurementServiceUnavailableError):
+        code = status.HTTP_503_SERVICE_UNAVAILABLE
     elif isinstance(error, ProcurementForbiddenError):
         code = status.HTTP_403_FORBIDDEN
     elif isinstance(
@@ -399,6 +405,27 @@ async def post_bind_line(
     approved: ProcurementAccept,
 ) -> ProcurementRequestOut:
     record = await _mutate(bind_line(db, request_id, payload, actor_user_id=approved.user.id), db)
+    return _detail(record, approved.user)
+
+
+@router.post(
+    "/requests/{request_id}/create-and-bind-line",
+    response_model=ProcurementRequestOut,
+)
+async def post_create_and_bind_line(
+    request_id: UUID,
+    payload: ProposedItemCreateAndBind,
+    request: Request,
+    db: DbSession,
+    approved: ProcurementAccept,
+) -> ProcurementRequestOut:
+    if not has_capability(approved.user.role, Capability.CATALOG_MANAGE):
+        raise HTTPException(status_code=403, detail="catalog manage capability required")
+    require_real_inventory_mutations_enabled(request)
+    record = await _mutate(
+        create_and_bind_line(db, request_id, payload, actor_user_id=approved.user.id),
+        db,
+    )
     return _detail(record, approved.user)
 
 

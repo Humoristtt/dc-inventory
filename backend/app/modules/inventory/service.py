@@ -229,6 +229,18 @@ async def _create_movement(
     original: MovementRecord | None = None
     if payload.original_movement_id:
         await _lock_original_movement_context(db, payload.original_movement_id)
+        from app.modules.procurement.models import ProcurementRequest
+
+        protected_request_id = await db.scalar(
+            select(ProcurementRequest.id)
+            .where(ProcurementRequest.final_movement_id == payload.original_movement_id)
+            .with_for_update()
+        )
+        if protected_request_id is not None:
+            raise InventoryConflictError(
+                "procurement receipt cannot be generically adjusted",
+                code="procurement_movement_protected",
+            )
         original = await get_movement_record(db, payload.original_movement_id)
         if original.movement.movement_type == MovementType.REVERSAL:
             raise InventoryValidationError("invalid correction/reversal target")

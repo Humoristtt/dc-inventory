@@ -38,6 +38,7 @@ async def _run_worker_loop(
             f" auth_sessions={counts.auth_sessions}"
             f" telegram_updates={counts.telegram_updates}"
             f" notification_outbox={counts.notification_outbox}"
+            f" email_outbox={counts.email_outbox}"
             " access_decision_callbacks="
             f"{counts.access_decision_callbacks}"
             f" total={counts.total}",

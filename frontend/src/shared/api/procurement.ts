@@ -11,6 +11,7 @@ export type ProcurementLineInput =
   | {
       line_type: "EXISTING_ITEM";
       item_id: string;
+      display_name?: string;
       quantity: number;
     }
   | {
@@ -162,8 +163,34 @@ export function createProcurementRequest(body: {
 }) {
   return procurementRequest<ProcurementRequest>(
     "/api/procurement/requests",
-    body,
+    { ...body, lines: procurementLinesPayload(body.lines) },
   );
+}
+
+export function procurementLinesPayload(lines: ProcurementLineInput[]) {
+  return lines.map((line) => {
+    if (line.line_type === "PROPOSED_ITEM") return line;
+    const { display_name: _displayName, ...payload } = line;
+    return payload;
+  });
+}
+
+export function createAndBindProcurementLine(
+  request: ProcurementRequest,
+  lineId: string,
+  item: {
+    category_key: string;
+    manufacturer_id: string | null;
+    name: string;
+    model: string | null;
+    attributes: Record<string, string | number | boolean>;
+  },
+) {
+  return mutateProcurement(request.id, "create-and-bind-line", {
+    ...expectedState(request),
+    line_id: lineId,
+    item,
+  });
 }
 
 export function mutateProcurement(

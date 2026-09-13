@@ -88,6 +88,7 @@ export function MovementAdminActions({
 
   const canCorrect =
     canAdmin
+    && !movement.generic_adjustment_protected
     && movement.custody_user_id === null
     && movement.movement_type !== "CORRECTION"
     && movement.movement_type !== "REVERSAL"
@@ -95,6 +96,7 @@ export function MovementAdminActions({
 
   const canReverse =
     canAdmin
+    && !movement.generic_adjustment_protected
     && movement.movement_type !== "REVERSAL";
 
   const refreshWarehouse = () => {

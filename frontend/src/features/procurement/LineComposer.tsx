@@ -25,6 +25,8 @@ const manufactured = new Set([
   "pcie_adapter",
 ]);
 
+const MAX_PROCUREMENT_LINES = 500;
+
 function quantity(value: string): number | null {
   if (!/^\d+$/.test(value)) return null;
   const parsed = Number(value);
@@ -32,7 +34,9 @@ function quantity(value: string): number | null {
 }
 
 function lineLabel(line: ProcurementLineInput): string {
-  if (line.line_type === "EXISTING_ITEM") return `Карточка ${line.item_id}`;
+  if (line.line_type === "EXISTING_ITEM") {
+    return line.display_name ?? `Карточка ${line.item_id}`;
+  }
   return [line.name, line.model].filter(Boolean).join(" · ");
 }
 
@@ -85,6 +89,10 @@ export function LineComposer({ lines, onChange }: Props) {
   });
 
   const add = () => {
+    if (lines.length >= MAX_PROCUREMENT_LINES) {
+      setError("В одной заявке может быть не более 500 позиций.");
+      return;
+    }
     const amount = quantity(qty);
     if (amount === null) {
       setError("Количество должно быть положительным целым числом.");
@@ -95,9 +103,22 @@ export function LineComposer({ lines, onChange }: Props) {
         setError("Выберите позицию каталога.");
         return;
       }
+      const selectedItem = items.data?.items.find(
+        (item) => item.id === existingItemId,
+      );
+      const displayName = selectedItem
+        ? [selectedItem.manufacturer?.name, selectedItem.name, selectedItem.model]
+            .filter(Boolean)
+            .join(" · ")
+        : undefined;
       onChange([
         ...lines,
-        { line_type: "EXISTING_ITEM", item_id: existingItemId, quantity: amount },
+        {
+          line_type: "EXISTING_ITEM",
+          item_id: existingItemId,
+          display_name: displayName,
+          quantity: amount,
+        },
       ]);
       setExistingItemId("");
       setSearch("");
@@ -268,10 +289,18 @@ export function LineComposer({ lines, onChange }: Props) {
           Количество
           <input inputMode="numeric" value={qty} onChange={(event) => setQty(event.target.value)} />
         </label>
-        <button className="button button--accent" onClick={add} type="button">
+        <button
+          className="button button--accent"
+          disabled={lines.length >= MAX_PROCUREMENT_LINES}
+          onClick={add}
+          type="button"
+        >
           Добавить позицию
         </button>
       </div>
+      {lines.length >= MAX_PROCUREMENT_LINES ? (
+        <p role="alert">В одной заявке может быть не более 500 позиций.</p>
+      ) : null}
       {error ? <p role="alert">{error}</p> : null}
     </section>
   );

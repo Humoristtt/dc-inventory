@@ -25,6 +25,7 @@ import {
 import { SpikatelBrand } from "../../shared/brand/SpikatelBrand";
 import {
   bindDesktopEscapeGuard,
+  bindTelegramSafeAreaEvents,
   getTelegramInitData,
   getTelegramWebAppSdkLoadStatus,
   loadTelegramWebAppSdk,
@@ -334,15 +335,23 @@ export function TelegramAccessGate({ children }: TelegramAccessGateProps) {
 
   useEffect(() => {
     let active = true;
+    let unbindSafeArea: () => void = () => undefined;
     const status = getTelegramWebAppSdkLoadStatus();
     const sdk = status === "load-error" || status === "timeout"
       ? Promise.resolve()
       : loadTelegramWebAppSdk();
     void sdk.then(() => {
-      if (active) prepareTelegramWebApp();
+      if (active) {
+        const webApp = prepareTelegramWebApp();
+        unbindSafeArea = bindTelegramSafeAreaEvents(webApp);
+      }
     });
     const unbindEscape = bindDesktopEscapeGuard();
-    return () => { active = false; unbindEscape(); };
+    return () => {
+      active = false;
+      unbindSafeArea();
+      unbindEscape();
+    };
   }, []);
 
   const authQuery = useQuery({

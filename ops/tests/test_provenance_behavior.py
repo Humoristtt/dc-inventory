@@ -34,6 +34,25 @@ class ProvenanceTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 module.collect(ROOT, None, "postgres")
 
+    def test_email_delivery_flag_is_read_from_backend_container(self):
+        inspected = {"Config": {"Env": ["EMAIL_DELIVERY_ENABLED=false"]}}
+        with patch.object(module, "run", return_value="backend-container"), patch.object(
+            module.subprocess,
+            "run",
+            return_value=SimpleNamespace(stdout=json.dumps([inspected])),
+        ):
+            self.assertFalse(module.email_delivery_enabled(ROOT, None))
+
+    def test_email_delivery_flag_must_be_explicit(self):
+        inspected = {"Config": {"Env": []}}
+        with patch.object(module, "run", return_value="backend-container"), patch.object(
+            module.subprocess,
+            "run",
+            return_value=SimpleNamespace(stdout=json.dumps([inspected])),
+        ):
+            with self.assertRaises(RuntimeError):
+                module.email_delivery_enabled(ROOT, None)
+
 
 if __name__ == "__main__":
     unittest.main()

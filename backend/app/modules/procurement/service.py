@@ -19,7 +19,7 @@ from app.core.config import Settings
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Item
 from app.modules.catalog.schemas import ItemCreate
-from app.modules.catalog.service import get_item_record, validate_item_create_payload
+from app.modules.catalog.service import create_item, get_item_record, validate_item_create_payload
 from app.modules.identity.enums import UserAccessStatus, UserRole
 from app.modules.identity.models import TelegramIdentity, User
 from app.modules.identity.policy import Capability, has_capability
@@ -53,6 +53,7 @@ from app.modules.procurement.schemas import (
     ProcurementAcceptanceCreate,
     ProcurementLineCreate,
     ProcurementRequestCreate,
+    ProposedItemCreateAndBind,
     ProposedItemLineCreate,
     RevisionCreate,
 )
@@ -82,6 +83,10 @@ class ProcurementConflictError(ProcurementError):
 
 class ProcurementForbiddenError(ProcurementError):
     code = "procurement_forbidden"
+
+
+class ProcurementServiceUnavailableError(ProcurementError):
+    code = "procurement_service_unavailable"
 
 
 @dataclass(frozen=True, slots=True)
@@ -115,6 +120,10 @@ def _normalize_client_request_id(value: str) -> str:
     if not normalized:
         raise ProcurementValidationError(
             "client_request_id must not be blank", code="client_request_id_required"
+        )
+    if len(normalized) > 128:
+        raise ProcurementValidationError(
+            "client_request_id exceeds 128 characters", code="client_request_id_too_long"
         )
     return normalized
 
@@ -874,6 +883,61 @@ async def bind_line(
         request_fingerprint=fingerprint,
         revision_id=record.request.current_revision_id,
         metadata={"line_id": str(line.id), "item_id": str(item.id)},
+    )
+    await db.flush()
+    return await get_request_record(db, request_id)
+
+
+async def create_and_bind_line(
+    db: AsyncSession,
+    request_id: uuid.UUID,
+    payload: ProposedItemCreateAndBind,
+    *,
+    actor_user_id: uuid.UUID,
+) -> ProcurementRecord:
+    """Create a proposed catalog Item and bind it in the same transaction."""
+    record, key, fingerprint, replay = await _lock_and_validate_expected(
+        db, request_id, payload, actor_user_id=actor_user_id
+    )
+    if replay is not None:
+        return record
+    if record.request.status == ProcurementStatus.COMPLETED:
+        raise ProcurementConflictError("completed request cannot be changed")
+    line = next(
+        (
+            candidate
+            for candidate in record.current_revision.lines
+            if candidate.id == payload.line_id
+        ),
+        None,
+    )
+    if line is None:
+        raise ProcurementNotFoundError("current revision line not found", code="line_not_found")
+    if line.line_type != ProcurementLineType.PROPOSED_ITEM:
+        raise ProcurementValidationError("existing item line is already bound")
+    if line.binding is not None:
+        raise ProcurementConflictError("proposed line is already bound", code="line_already_bound")
+
+    item_id = await create_item(db, payload.item)
+    db.add(
+        ProcurementLineCatalogBinding(
+            revision_line_id=line.id,
+            item_id=item_id,
+            bound_by_user_id=actor_user_id,
+        )
+    )
+    record.request.state_version += 1
+    record.request.updated_at = datetime.now(UTC)
+    await _add_event(
+        db,
+        request=record.request,
+        event_type=ProcurementEventType.LINE_BOUND,
+        actor_user_id=actor_user_id,
+        actor_snapshot=await _actor_snapshot(db, actor_user_id),
+        client_request_id=key,
+        request_fingerprint=fingerprint,
+        revision_id=record.request.current_revision_id,
+        metadata={"line_id": str(line.id), "item_id": str(item_id), "item_created": True},
     )
     await db.flush()
     return await get_request_record(db, request_id)

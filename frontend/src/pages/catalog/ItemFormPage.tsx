@@ -31,9 +31,8 @@ import { useInternalBackNavigation } from "../../features/navigation/useTelegram
 import { ApiRequestError } from "../../shared/api/auth";
 import { PageHeader } from "../../shared/ui";
 import {
-  expectedState,
+  createAndBindProcurementLine,
   getProcurementRequest,
-  mutateProcurement,
 } from "../../shared/api/procurement";
 import {
   createCatalogItem,
@@ -237,8 +236,6 @@ export function ItemFormPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [manufacturerName, setManufacturerName] = useState("");
   const [manufacturerInput, setManufacturerInput] = useState("");
-  const [procurementBindingError, setProcurementBindingError] = useState(false);
-
   const manufacturerInitialized = useRef(false);
 
   const item = useQuery({
@@ -457,19 +454,46 @@ export function ItemFormPage() {
   });
 
   const mutation = useMutation({
-    mutationFn: (payload: ItemWritePayload) => {
+    mutationFn: async (payload: ItemWritePayload) => {
       if (itemId) {
         const {
           category_key: _categoryKey,
           ...patch
         } = payload;
 
-        return patchCatalogItem(itemId, patch);
+        return {
+          kind: "item" as const,
+          saved: await patchCatalogItem(itemId, patch),
+        };
       }
 
-      return createCatalogItem(payload);
+      if (procurement.data && procurementLineId && procurementRequestId) {
+        return {
+          kind: "procurement" as const,
+          saved: await createAndBindProcurementLine(
+            procurement.data,
+            procurementLineId,
+            payload,
+          ),
+        };
+      }
+
+      return {
+        kind: "item" as const,
+        saved: await createCatalogItem(payload),
+      };
     },
-    onSuccess: async (saved) => {
+    onSuccess: ({ kind, saved }) => {
+      if (kind === "procurement") {
+        client.setQueryData(
+          ["procurement", "request", saved.id],
+          saved,
+        );
+        void client.invalidateQueries({ queryKey: ["catalog"] });
+        navigate(`/procurement/${saved.id}`, { replace: true });
+        return;
+      }
+
       client.setQueryData(
         ["catalog", "item", saved.id],
         saved,
@@ -495,28 +519,7 @@ export function ItemFormPage() {
         queryKey: ["catalog", "form-attribute-suggestions"],
       });
 
-      if (procurement.data && procurementLineId && procurementRequestId) {
-        try {
-          const linked = await mutateProcurement(
-            procurementRequestId,
-            "bind-line",
-            {
-              ...expectedState(procurement.data),
-              line_id: procurementLineId,
-              item_id: saved.id,
-            },
-          );
-          client.setQueryData(
-            ["procurement", "request", procurementRequestId],
-            linked,
-          );
-          navigate(`/procurement/${procurementRequestId}`, { replace: true });
-        } catch {
-          setProcurementBindingError(true);
-        }
-      } else {
-        navigate(`/catalog/items/${saved.id}`, { replace: true });
-      }
+      navigate(`/catalog/items/${saved.id}`, { replace: true });
     },
   });
 
@@ -910,13 +913,6 @@ export function ItemFormPage() {
                     && mutation.error.status === 423
                   ? "Изменения каталога пока отключены администратором."
                   : "Не удалось сохранить. Проверьте обязательные поля и дальность."}
-            </p>
-          ) : null}
-
-          {procurementBindingError ? (
-            <p role="alert">
-              Карточка создана, но заявка успела измениться. Вернитесь в закупку
-              и свяжите позицию с созданной карточкой.
             </p>
           ) : null}
 

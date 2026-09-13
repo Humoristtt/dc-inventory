@@ -1,6 +1,6 @@
 # RBAC и Procurement — канонический контракт
 
-Статус документа: APPROVED PRODUCT CONTRACT / RBAC + PROCUREMENT SOURCE IMPLEMENTED / PRODUCTION PENDING.
+Статус документа: APPROVED PRODUCT CONTRACT / RBAC + PROCUREMENT PRODUCTION DEPLOYED / SOURCE REMEDIATION IN PROGRESS.
 
 Дата фиксации: 2026-09-12.
 
@@ -13,8 +13,12 @@ RBAC + Procurement feature cycle.
 
 RBAC foundation реализован и развёрнут в production с пятью ролями и
 capability policy, описанными этим документом. Production и source используют
-текущую five-role RBAC model. Procurement domain остаётся implementation
-pending.
+текущую five-role RBAC model. Procurement domain также реализован и развёрнут
+в production на migration `c3d4e5f6a7b8`. Current source head
+`d4e5f6a7b8c9` содержит последующую audit remediation и ещё не развёрнут в
+production. Regular warehouse mutation boundary остаётся
+`REAL_INVENTORY_MUTATIONS_ENABLED=false`; Real Telegram Procurement acceptance
+для текущего release ещё не зафиксирован.
 
 ## 1. Основные принципы
 
@@ -32,6 +36,10 @@ pending.
 - Procurement и Warehouse являются разными bounded domains.
 - Procurement никогда не меняет остатки до отдельного подтверждения приёмки.
 - Финальная приёмка закупки использует обычный immutable Warehouse movement.
+- Финальный Warehouse RECEIPT, записанный в `ProcurementRequest.final_movement_id`,
+  является business-protected: generic Warehouse `CORRECTION / REVERSAL` для него
+  запрещены. Отмена completed procurement требует отдельного business workflow,
+  а не generic warehouse adjustment.
 - История закупки и её редакций не перезаписывается задним числом.
 
 ## 2. Роли
@@ -609,9 +617,11 @@ Telegram message содержит краткий состав и deep link в Mi
 
 ## 21. Email
 
-Email является отдельным delivery phase после acceptance core workflow.
+Email delivery реализован в source как optional asynchronous subsystem и
+не является prerequisite для Procurement completion. В production delivery
+остаётся выключен до отдельного operational enablement.
 
-Целевой transport:
+Transport:
 
 Microsoft Graph / OAuth.
 

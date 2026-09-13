@@ -137,6 +137,12 @@ assert "os.utime" in health_source
 
 db_permissions = service_block("db-permissions")
 assert "/var/lib/postgresql" in db_permissions
+assert "POSTGRES_TELEGRAM_WORKER_USER" in db_permissions
+assert "POSTGRES_EMAIL_WORKER_USER" in db_permissions
+assert "POSTGRES_LEGACY_WORKER_USER" in db_permissions
+assert "POSTGRES_WORKER_USER" not in text
+assert "POSTGRES_TELEGRAM_WORKER_USER" in service_block("telegram-worker")
+assert "POSTGRES_EMAIL_WORKER_USER" in service_block("email-worker")
 
 print("WORKER_HEALTH_CONTRACT=PASS")
 print("DOCKER_RUNTIME_POLICY_CONTRACT=PASS")

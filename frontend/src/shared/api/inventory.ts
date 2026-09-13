@@ -14,6 +14,8 @@ export type Movement = {
   source_location_id: string | null; destination_location_id: string | null;
   source_location_name_snapshot: string | null; destination_location_name_snapshot: string | null;
   original_movement_id: string | null;
+  procurement_request_id?: string | null;
+  generic_adjustment_protected?: boolean;
   lines: { id: string; item_id: string; item_name_snapshot: string; quantity: number }[];
 };
 export type MovementInput = { movement_type: MovementType; client_request_id: string;
@@ -38,6 +40,7 @@ export function inventoryError(error: unknown): string {
     if (error.code === "location_not_empty") return "Сначала переместите или спишите остаток в этом месте хранения.";
     if (error.code === "movement_already_reversed") return "Эта операция уже была отменена.";
     if (error.code === "custody_correction_forbidden") return "Движение с персональной ответственностью нельзя корректировать.";
+    if (error.code === "procurement_movement_protected") return "Приход завершённой закупки нельзя отменить или корректировать общей складской операцией.";
     if (error.code === "inventory_concurrency_conflict") return "Данные изменились одновременно с операцией. Обновите журнал и повторите.";
     if (error.status === 403) return "Недостаточно прав для этой операции.";
     if (error.status === 409) return "Данные изменились. Обновите страницу и проверьте операцию.";
@@ -58,6 +61,15 @@ export async function getLocations(signal?: AbortSignal): Promise<StorageLocatio
   }
 }
 export function createMovement(body: MovementInput) { return inventoryRequest<Movement>("/api/inventory/movements", body); }
+
+export function getMovement(movementId: string, signal?: AbortSignal) {
+  return inventoryRequest<Movement>(
+    `/api/inventory/movements/${encodeURIComponent(movementId)}`,
+    undefined,
+    "GET",
+    signal,
+  );
+}
 
 export function reverseMovement(
   movementId: string,

@@ -229,11 +229,11 @@ ADMIN может назначать ENGINEER / SENIOR_ENGINEER / MANAGER, но �
 OWNER может назначать ADMIN. OWNER нельзя изменять обычным role/access API.
 
 Migration `a1b2c3d4e5f6` реализует five-role RBAC, а production RBAC
-maintenance cutover уже принят. Current production и source schema находятся
-на `b2c3d4e5f6a7`; runtime использует ENGINEER / SENIOR_ENGINEER / MANAGER /
-ADMIN / OWNER.
+maintenance cutover уже принят. Current running production schema находится
+на `c3d4e5f6a7b8`, source head — `d4e5f6a7b8c9`; runtime использует ENGINEER /
+SENIOR_ENGINEER / MANAGER / ADMIN / OWNER.
 
-## Procurement architecture target
+## Procurement architecture
 
 Procurement реализуется отдельным modular-monolith module и не встраивается в
 catalog/inventory models.

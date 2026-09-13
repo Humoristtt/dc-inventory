@@ -80,7 +80,7 @@ Development implementation выполняется по стадиям:
       -> procurement persistence/state machine
       -> procurement UI
       -> Telegram notifications
-      -> email delivery отдельным последующим этапом
+      -> email outbox / Microsoft Graph worker source implementation
 
 ## Конфигурация
 
@@ -123,14 +123,14 @@ Baseline Alembic:
 
 Текущий source migration head:
 
+    d4e5f6a7b8c9
+
+Production migration head на текущем running production baseline:
+
     c3d4e5f6a7b8
 
-Production migration head на текущем принятом production baseline:
-
-    b2c3d4e5f6a7
-
-Source и accepted production migration head после RBAC maintenance cutover
-совпадают на `b2c3d4e5f6a7`. Последующие source changes становятся production
+Procurement migration `c3d4e5f6a7b8` уже работает в production. Source
+`d4e5f6a7b8c9` содержит последующую audit remediation и становится production
 state только после отдельного deploy/runtime-provenance acceptance.
 
 ## Локальный backend

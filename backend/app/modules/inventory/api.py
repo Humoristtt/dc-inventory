@@ -89,6 +89,7 @@ _CUSTODY_TRIGGER_CONFLICT_CODES = {
     "reversal original movement not found": "reversal_original_not_found",
     "reversal custody must match original movement": "reversal_custody_mismatch",
     "custody reversal requires issue or return original": "reversal_custody_original_invalid",
+    "procurement movement is protected": "procurement_movement_protected",
 }
 
 
@@ -207,18 +208,47 @@ def _location_out(location: Location) -> LocationOut:
 def _movement_out(
     record: MovementRecord,
     procurement_request_id: UUID | None = None,
+    *,
+    generic_adjustment_protected: bool = False,
 ) -> MovementOut:
     return MovementOut.model_validate(
         {
             **{
                 key: getattr(record.movement, key)
                 for key in MovementOut.model_fields
-                if key not in {"lines", "procurement_request_id"}
+                if key
+                not in {
+                    "lines",
+                    "procurement_request_id",
+                    "generic_adjustment_protected",
+                }
             },
             "lines": record.lines,
             "procurement_request_id": procurement_request_id,
+            "generic_adjustment_protected": generic_adjustment_protected,
         }
     )
+
+
+async def _procurement_movement_links(
+    db: DbSession,
+    records: list[MovementRecord],
+) -> dict[UUID, UUID]:
+    movement_ids = [record.movement.id for record in records]
+    if not movement_ids:
+        return {}
+    from app.modules.procurement.models import ProcurementRequest
+
+    rows = await db.execute(
+        select(ProcurementRequest.final_movement_id, ProcurementRequest.id).where(
+            ProcurementRequest.final_movement_id.in_(movement_ids)
+        )
+    )
+    return {
+        movement_id: request_id
+        for movement_id, request_id in rows
+        if movement_id is not None
+    }
 
 
 def _stock_balance_out(record: StockBalanceRecord) -> StockBalanceOut:
@@ -381,8 +411,20 @@ async def get_movements(
         )
     except CatalogError as error:
         _raise_catalog_error(error)
+    links = await _procurement_movement_links(db, page.items)
+    expose_procurement = has_capability(approved.user.role, Capability.PROCUREMENT_READ)
     return MovementListOut(
-        items=[_movement_out(x) for x in page.items], total=page.total, limit=limit, offset=offset
+        items=[
+            _movement_out(
+                record,
+                links.get(record.movement.id) if expose_procurement else None,
+                generic_adjustment_protected=record.movement.id in links,
+            )
+            for record in page.items
+        ],
+        total=page.total,
+        limit=limit,
+        offset=offset,
     )
 
 
@@ -545,8 +587,17 @@ async def get_movement_feed(
             scope=scope,
         )
 
+    links = await _procurement_movement_links(db, page.items)
+    expose_procurement = has_capability(approved.user.role, Capability.PROCUREMENT_READ)
     return MovementCursorListOut(
-        items=[_movement_out(record) for record in page.items],
+        items=[
+            _movement_out(
+                record,
+                links.get(record.movement.id) if expose_procurement else None,
+                generic_adjustment_protected=record.movement.id in links,
+            )
+            for record in page.items
+        ],
         limit=limit,
         snapshot_at=effective_snapshot_at,
         cursor=current_cursor,
@@ -571,7 +622,13 @@ async def get_movement(movement_id: UUID, db: DbSession, approved: MovementRead)
         procurement_request_id = await db.scalar(
             select(ProcurementRequest.id).where(ProcurementRequest.final_movement_id == movement_id)
         )
-        return _movement_out(record, procurement_request_id)
+        return _movement_out(
+            record,
+            procurement_request_id
+            if has_capability(approved.user.role, Capability.PROCUREMENT_READ)
+            else None,
+            generic_adjustment_protected=procurement_request_id is not None,
+        )
     except InventoryError as error:
         _raise_inventory_error(error)
 

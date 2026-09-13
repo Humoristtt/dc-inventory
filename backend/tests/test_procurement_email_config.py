@@ -14,6 +14,7 @@ def email_settings(**overrides: object) -> Settings:
         "microsoft_graph_client_id": "client",
         "microsoft_graph_client_secret": "secret",
         "microsoft_graph_sender": "inventory@example.test",
+        "email_delivery_enabled": True,
         "microsoft_graph_timeout_seconds": 15,
         "email_worker_claim_ttl_seconds": 60,
     }
@@ -55,3 +56,8 @@ def test_email_worker_rejects_unsafe_claim_ttl() -> None:
         match="EMAIL_WORKER_CLAIM_TTL_SECONDS",
     ):
         validate_email_worker_config(settings)
+
+
+def test_email_worker_requires_explicit_delivery_enablement() -> None:
+    with pytest.raises(RuntimeError, match="EMAIL_DELIVERY_ENABLED"):
+        validate_email_worker_config(email_settings(email_delivery_enabled=False))

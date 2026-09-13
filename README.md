@@ -24,18 +24,20 @@
 
 Warehouse Domain V2 развёрнут и принят в production.
 
-Текущий production schema baseline:
+Текущий running production schema baseline:
 
-    ALEMBIC_HEAD=b2c3d4e5f6a7
+    ALEMBIC_HEAD=c3d4e5f6a7b8
 
 Текущий source migration head:
 
-    SOURCE_ALEMBIC_HEAD=c3d4e5f6a7b8
+    SOURCE_ALEMBIC_HEAD=d4e5f6a7b8c9
 
-Accepted production migration state и source migration head после RBAC
-maintenance cutover совпадают на `b2c3d4e5f6a7`. Five-role RBAC активен в
-production. Последующие source changes не являются production state до
-отдельного deploy/runtime-provenance acceptance.
+Procurement domain на migration `c3d4e5f6a7b8` уже развёрнут в production;
+five-role RBAC также активен. Source head `d4e5f6a7b8c9` добавляет audit
+remediation, включая защиту финального procurement RECEIPT от generic
+CORRECTION / REVERSAL, и ещё не является production state до отдельного
+deploy/runtime-provenance acceptance. Real Telegram Procurement acceptance
+для текущего release ещё не зафиксирован.
 
 Stage 15 technical hardening завершён. Automated off-VM PostgreSQL backup,
 isolated restore rehearsal, runtime provenance, least-privilege DB identities,

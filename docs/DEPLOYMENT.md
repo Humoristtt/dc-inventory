@@ -18,13 +18,16 @@ Production VM имеет read-only GitHub Deploy Key. Deploy выполняет�
 проверяются отдельно; один SHA не используется как смешанная checkout/runtime
 истина.
 
-Current accepted production Alembic head после RBAC cutover:
+Current running production Alembic head после Procurement deployment:
 
-    b2c3d4e5f6a7
+    c3d4e5f6a7b8
 
 Текущий source Alembic head:
 
-    c3d4e5f6a7b8
+    d4e5f6a7b8c9
+
+Source `d4e5f6a7b8c9` содержит audit remediation и не считается production
+state до отдельного merge/deploy/runtime-provenance acceptance.
 
 Stage15A automated off-VM backup, Stage15B real isolated restore и Stage15
 technical hardening — `PASS`.
@@ -123,7 +126,7 @@ Required backend CI gate проверяет Dockerfile, Compose, CI service imag
 
 Production `.env` создаётся непосредственно на VM и не хранится в Git.
 
-Production DB bootstrap использует четыре PostgreSQL identity:
+Production DB bootstrap использует пять независимых PostgreSQL identities:
 
     POSTGRES_DB
     POSTGRES_USER
@@ -132,15 +135,41 @@ Production DB bootstrap использует четыре PostgreSQL identity:
     POSTGRES_RUNTIME_USER
     POSTGRES_RUNTIME_PASSWORD
 
-    POSTGRES_WORKER_USER
-    POSTGRES_WORKER_PASSWORD
+    POSTGRES_TELEGRAM_WORKER_USER
+    POSTGRES_TELEGRAM_WORKER_PASSWORD
+
+    POSTGRES_EMAIL_WORKER_USER
+    POSTGRES_EMAIL_WORKER_PASSWORD
 
     POSTGRES_MAINTENANCE_USER
     POSTGRES_MAINTENANCE_PASSWORD
 
-`POSTGRES_USER` — owner/migrator. Backend, Telegram worker и maintenance worker
-используют отдельные least-privilege логины. Owner credentials runtime services
-не получают.
+`POSTGRES_USER` — owner/migrator. Backend, Telegram worker, optional email
+worker и maintenance worker используют отдельные least-privilege логины.
+Telegram worker не получает доступ к email outbox, а email worker не получает
+Telegram notification/state или warehouse mutation privileges. Owner
+credentials runtime services не получают.
+
+Для one-way cutover со старой общей worker identity `db-permissions` также
+принимает:
+
+    POSTGRES_LEGACY_WORKER_USER=dc_inventory_worker
+
+Это не активная runtime identity. Если старый production
+`POSTGRES_WORKER_USER` был переименован относительно стандартного
+`dc_inventory_worker`, перед первым deploy после credential split здесь нужно
+указать именно прежнее имя роли. Bootstrap переводит найденную legacy role в
+`NOLOGIN`, завершает её существующие DB sessions и отзывает database/schema/
+table/sequence privileges. На fresh install отсутствие legacy role является
+нормальным состоянием.
+
+Procurement email delivery по умолчанию выключен:
+
+    EMAIL_DELIVERY_ENABLED=false
+
+Email API fail-closed и не ставит новое письмо в outbox, пока delivery явно не
+включён и Microsoft Graph configuration не заполнена. Сам `email-worker`
+запускается только вместе с explicit Compose profile `email`.
 
 Backend Telegram/auth boundary использует:
 
@@ -249,7 +278,7 @@ Cloudflare Worker имеет собственное secret storage:
 
 Migration container получает owner/migration DB-конфигурацию.
 После успешного Alembic upgrade одноразовый `db-permissions` container
-идемпотентно применяет runtime/worker/maintenance grants.
+идемпотентно применяет runtime/Telegram-worker/email-worker/maintenance grants.
 Runtime containers не используют owner role.
 
 `DATABASE_URL` внутри Docker network должен использовать hostname `postgres`.

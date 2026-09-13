@@ -98,6 +98,32 @@ def collect(
     }
 
 
+def email_delivery_enabled(
+    root: Path,
+    env_file: str | None,
+) -> bool:
+    container_id = run(root, env_file, "ps", "-q", "backend")
+    if not container_id:
+        raise RuntimeError("backend: running container was not found")
+    inspected = json.loads(
+        subprocess.run(
+            ["docker", "inspect", container_id],
+            check=True,
+            text=True,
+            stdout=subprocess.PIPE,
+        ).stdout
+    )[0]
+    values = {
+        entry.split("=", 1)[0]: entry.split("=", 1)[1]
+        for entry in inspected["Config"].get("Env", [])
+        if "=" in entry
+    }
+    raw = values.get("EMAIL_DELIVERY_ENABLED")
+    if raw not in {"true", "false"}:
+        raise RuntimeError("backend: EMAIL_DELIVERY_ENABLED must be explicitly true or false")
+    return raw == "true"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
@@ -139,6 +165,16 @@ def main() -> None:
 
     postgres = collect(args.root, args.env_file, "postgres")
 
+    if email_delivery_enabled(args.root, args.env_file):
+        email = collect(args.root, args.env_file, "email-worker")
+        if email != backend:
+            raise RuntimeError("email-worker runtime does not match backend runtime")
+        email_worker: dict[str, str] = {"state": "enabled", **email}
+    else:
+        if run(args.root, args.env_file, "ps", "-q", "email-worker"):
+            raise RuntimeError("email-worker is running while email delivery is disabled")
+        email_worker = {"state": "disabled"}
+
     if telegram != backend:
         raise RuntimeError(
             "telegram-worker runtime does not match backend runtime"
@@ -156,6 +192,7 @@ def main() -> None:
             "backend": backend,
             "telegram_worker": telegram,
             "maintenance_worker": maintenance,
+            "email_worker": email_worker,
             "web": web,
             "postgres": postgres,
         },

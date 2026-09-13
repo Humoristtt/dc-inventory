@@ -96,6 +96,17 @@ PROD_WEB_BEFORE="$(production_id web)"
 PROD_TELEGRAM_BEFORE="$(production_id telegram-worker)"
 PROD_MAINTENANCE_BEFORE="$(production_id maintenance-worker)"
 PROD_POSTGRES_BEFORE="$(production_id postgres)"
+if docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' \
+    "$PROD_BACKEND_BEFORE" | grep -qx 'EMAIL_DELIVERY_ENABLED=true'; then
+    PROD_EMAIL_ENABLED=true
+    PROD_EMAIL_BEFORE="$(production_id email-worker)"
+else
+    docker inspect --format '{{range .Config.Env}}{{println .}}{{end}}' \
+        "$PROD_BACKEND_BEFORE" | grep -qx 'EMAIL_DELIVERY_ENABLED=false'
+    PROD_EMAIL_ENABLED=false
+    PROD_EMAIL_BEFORE=""
+    test -z "$(docker compose ps -q email-worker)"
+fi
 
 production_health
 
@@ -380,6 +391,38 @@ print(manifest["runtime"]["backend"]["source_revision"])
 docker image inspect "$BACKEND_IMAGE_ID" >/dev/null
 docker image inspect "$WEB_IMAGE_ID" >/dev/null
 
+python3 - "$WORK_DIR/selected.manifest.json" <<'PYEMAIL'
+import json
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+manifest = json.loads(Path(sys.argv[1]).read_text())
+email = manifest["runtime"].get("email_worker")
+if email is None:
+    print("RESTORE_EMAIL_RUNTIME=LEGACY_MANIFEST")
+elif email.get("state") == "disabled":
+    if set(email) != {"state"}:
+        raise RuntimeError("disabled email runtime has unexpected metadata")
+    print("RESTORE_EMAIL_RUNTIME=DISABLED")
+elif email.get("state") == "enabled":
+    image_id = email.get("image_id", "")
+    revision = email.get("source_revision", "")
+    if re.fullmatch(r"sha256:[0-9a-f]{64}", image_id) is None:
+        raise RuntimeError("invalid email worker image identity")
+    if re.fullmatch(r"[0-9a-f]{40}", revision) is None:
+        raise RuntimeError("invalid email worker source revision")
+    image = json.loads(subprocess.check_output(
+        ["docker", "image", "inspect", image_id], text=True
+    ))[0]
+    if image["Config"]["Labels"].get("org.opencontainers.image.revision") != revision:
+        raise RuntimeError("email worker image revision mismatch")
+    print("RESTORE_EMAIL_RUNTIME=ENABLED")
+else:
+    raise RuntimeError("invalid email worker runtime state")
+PYEMAIL
+
 test "$(
     docker image inspect \
       -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
@@ -494,6 +537,11 @@ test "$(production_id backend)" = "$PROD_BACKEND_BEFORE"
 test "$(production_id web)" = "$PROD_WEB_BEFORE"
 test "$(production_id telegram-worker)" = "$PROD_TELEGRAM_BEFORE"
 test "$(production_id maintenance-worker)" = "$PROD_MAINTENANCE_BEFORE"
+if [ "$PROD_EMAIL_ENABLED" = true ]; then
+    test "$(production_id email-worker)" = "$PROD_EMAIL_BEFORE"
+else
+    test -z "$(docker compose ps -q email-worker)"
+fi
 test "$(production_id postgres)" = "$PROD_POSTGRES_BEFORE"
 
 production_health

@@ -17,6 +17,7 @@ backend = (ROOT / "backend/Dockerfile").read_text()
 frontend = (ROOT / "frontend/Dockerfile").read_text()
 compose = (ROOT / "compose.yaml").read_text()
 compose_dev = (ROOT / "compose.dev.yaml").read_text()
+ci = (ROOT / ".github/workflows/ci.yml").read_text()
 
 compile(
     provenance,
@@ -34,6 +35,7 @@ for service in (
     '"backend"',
     '"telegram_worker"',
     '"maintenance_worker"',
+    '"email_worker"',
     '"web"',
     '"postgres"',
 ):
@@ -47,6 +49,28 @@ assert (
     "maintenance-worker runtime does not match backend runtime"
     in provenance
 )
+assert "email-worker runtime does not match backend runtime" in provenance
+assert '"state": "disabled"' in provenance
+assert "EMAIL_DELIVERY_ENABLED" in provenance
+
+# CI must distinguish running image-backed services from a profile-gated
+# disabled email worker. Blindly requiring image provenance for every
+# runtime entry regresses when email delivery is intentionally disabled.
+assert 'for runtime in data["runtime"].values()' not in ci
+
+for service in (
+    '"backend"',
+    '"telegram_worker"',
+    '"maintenance_worker"',
+    '"web"',
+    '"postgres"',
+):
+    assert service in ci
+
+assert 'runtime["email_worker"]' in ci
+assert '"state": "disabled"' in ci
+assert 'runtime[service]["source_revision"]' in ci
+assert 'runtime[service]["image_id"]' in ci
 
 label = "org.opencontainers.image.revision"
 
@@ -81,3 +105,7 @@ assert '["docker", "image", "inspect", image_id]' in provenance
 recovery = (ROOT / "ops/recovery/rehearse_restore.sh").read_text()
 assert 'manifest["runtime"].get("postgres")' in recovery
 assert "PostgreSQL image revision mismatch" in recovery
+assert 'manifest["runtime"].get("email_worker")' in recovery
+assert "RESTORE_EMAIL_RUNTIME=LEGACY_MANIFEST" in recovery
+assert "RESTORE_EMAIL_RUNTIME=DISABLED" in recovery
+assert "RESTORE_EMAIL_RUNTIME=ENABLED" in recovery

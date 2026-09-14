@@ -199,5 +199,6 @@ Production VM:
 - [`docs/OPERATIONS.md`](docs/OPERATIONS.md)
 - [`docs/STAGE15_PLAN.md`](docs/STAGE15_PLAN.md)
 - [`docs/STAGE15_AUDIT_REMEDIATION.md`](docs/STAGE15_AUDIT_REMEDIATION.md)
+- [`docs/AUDIT_0_12_REMEDIATION.md`](docs/AUDIT_0_12_REMEDIATION.md)
 - [`docs/RECOVERY_RUNBOOK.md`](docs/RECOVERY_RUNBOOK.md)
 - [`docs/ROADMAP.md`](docs/ROADMAP.md)

@@ -49,33 +49,27 @@ async def cleanup_mutable_test_rows(
 ) -> None:
     request_ids = list(
         (
-            await db.scalars(
-                select(AccessRequest.id).where(
-                    AccessRequest.user_id.in_(user_ids)
-                )
-            )
+            await db.scalars(select(AccessRequest.id).where(AccessRequest.user_id.in_(user_ids)))
         ).all()
     )
 
     if request_ids:
         await db.execute(
             delete(AccessDecisionCallback).where(
-                AccessDecisionCallback.access_request_id.in_(
-                    request_ids
-                )
+                AccessDecisionCallback.access_request_id.in_(request_ids)
             )
         )
-        await db.execute(
-            delete(AccessRequest).where(
-                AccessRequest.id.in_(request_ids)
-            )
-        )
+        await db.execute(delete(AccessRequest).where(AccessRequest.id.in_(request_ids)))
 
-    await db.execute(
-        delete(TelegramIdentity).where(
-            TelegramIdentity.user_id.in_(user_ids)
-        )
+    identities = list(
+        (
+            await db.scalars(select(TelegramIdentity).where(TelegramIdentity.user_id.in_(user_ids)))
+        ).all()
     )
+
+    for identity in identities:
+        identity.telegram_user_id = 3_000_000_000_000_000 + uuid.uuid4().int % 500_000_000_000_000
+
     await db.commit()
 
 

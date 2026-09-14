@@ -179,3 +179,55 @@ async def test_cp02_readiness_rejects_missing_critical_db_trigger(
 
     finally:
         await engine.dispose()
+
+
+async def test_cp02_catalog_update_can_replace_required_eav_rows(
+    warehouse_db: AsyncSession,
+) -> None:
+    from app.modules.catalog.schemas import ItemPatch
+    from app.modules.catalog.service import update_item
+
+    db = warehouse_db
+
+    payload = cable_payload()
+    item_id = await create_item(db, payload)
+
+    await update_item(
+        db,
+        item_id,
+        ItemPatch(
+            attributes=dict(payload.attributes),
+        ),
+        fields_set={"attributes"},
+    )
+
+    await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+
+
+async def test_cp02_eligible_user_can_receive_custody_projection(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+
+    holder, _ = await actor(
+        db,
+        UserRole.ENGINEER,
+        UserAccessStatus.APPROVED,
+    )
+
+    item_id = await create_item(
+        db,
+        cable_payload(),
+    )
+
+    db.add(
+        UserItemCustodyBalance(
+            user_id=holder.id,
+            item_id=item_id,
+            quantity=1,
+        )
+    )
+
+    await db.flush()
+
+    await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))

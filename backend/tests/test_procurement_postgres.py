@@ -339,6 +339,8 @@ async def test_d4_downgrade_refuses_completed_procurement(
                 record,
             ) = await completed_procurement(db)
             assert record.request.final_movement_id is not None
+            starting_head = await db.scalar(text("SELECT version_num FROM alembic_version"))
+            assert starting_head is not None
     finally:
         await engine.dispose()
 
@@ -357,7 +359,7 @@ async def test_d4_downgrade_refuses_completed_procurement(
         async with engine.connect() as connection:
             assert (
                 await connection.scalar(text("SELECT version_num FROM alembic_version"))
-                == "d4e5f6a7b8c9"
+                == starting_head
             )
             assert (
                 await connection.scalar(

@@ -104,3 +104,41 @@ def test_legacy_delivery_worker_is_retired_fail_closed() -> None:
     assert "REVOKE ALL PRIVILEGES ON SCHEMA public FROM %I" in permissions
     assert "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %I" in permissions
     assert "REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM %I" in permissions
+
+
+def test_identity_runtime_update_grants_are_column_scoped() -> None:
+    permissions = (
+        Path(__file__).resolve().parents[1] / "scripts" / "apply_database_permissions.sql"
+    ).read_text()
+
+    assert (
+        "GRANT SELECT, INSERT, UPDATE ON TABLE "
+        "users, telegram_identities, access_requests" not in permissions
+    )
+
+    assert "'GRANT SELECT, INSERT ON TABLE users TO %I'" in permissions
+    assert (
+        "'GRANT UPDATE '\n"
+        "    '(role, access_status, updated_at, approved_at, approved_by_user_id) '\n"
+        "    'ON TABLE users TO %I'" in permissions
+    )
+
+    assert "'GRANT SELECT, INSERT ON TABLE telegram_identities TO %I'" in permissions
+    assert (
+        "'GRANT UPDATE '\n"
+        "    '(username, first_name, last_name, language_code, updated_at, last_auth_at) '\n"
+        "    'ON TABLE telegram_identities TO %I'" in permissions
+    )
+
+    assert "'GRANT SELECT, INSERT ON TABLE access_requests TO %I'" in permissions
+    assert (
+        "'GRANT UPDATE '\n"
+        "    '(status, decided_at, decided_by_user_id, decision_note) '\n"
+        "    'ON TABLE access_requests TO %I'" in permissions
+    )
+
+    assert "UPDATE (id" not in permissions
+    assert "UPDATE (created_at" not in permissions
+    assert "UPDATE (telegram_user_id" not in permissions
+    assert "UPDATE (user_id" not in permissions
+    assert "UPDATE (requested_at" not in permissions

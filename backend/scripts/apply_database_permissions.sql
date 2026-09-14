@@ -277,8 +277,47 @@ SELECT format(
 
 
 -- Identity/auth/access runtime.
+-- Runtime may create identity/access records, but UPDATE is deliberately
+-- column-scoped. Immutable identifiers and creation/request timestamps are
+-- not writable by the application database principal.
 SELECT format(
-    'GRANT SELECT, INSERT, UPDATE ON TABLE users, telegram_identities, access_requests TO %I',
+    'GRANT SELECT, INSERT ON TABLE users TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT UPDATE '
+    '(role, access_status, updated_at, approved_at, approved_by_user_id) '
+    'ON TABLE users TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT SELECT, INSERT ON TABLE telegram_identities TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT UPDATE '
+    '(username, first_name, last_name, language_code, updated_at, last_auth_at) '
+    'ON TABLE telegram_identities TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT SELECT, INSERT ON TABLE access_requests TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT UPDATE '
+    '(status, decided_at, decided_by_user_id, decision_note) '
+    'ON TABLE access_requests TO %I',
     :'runtime_user'
 )
 \gexec

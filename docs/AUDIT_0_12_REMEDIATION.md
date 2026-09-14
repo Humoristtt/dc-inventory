@@ -138,22 +138,37 @@ Migration:
 
 #### CP-02.4 — Catalog derived identity integrity
 
-Status: `IN_PROGRESS`
+Status: `PASS`
 
 RED checkpoint:
 
 `585262281875df8448fa132bb99426ac2bcba196`
 
-Reproduced:
+Implementation checkpoint:
 
-- direct `items.name` mutation can leave `normalized_name` stale;
-- direct `normalized_name` mutation can diverge from `name`;
-- direct `model` mutation can leave both `normalized_model` and
-  `identity_signature` stale;
-- direct EAV mutation can leave `identity_signature` stale;
-- direct `identity_signature` mutation can diverge from canonical item data.
+`562a69e6f88a464c56542c4c4b132ba7fcaa37b0`
 
-Implementation: pending.
+Closed technical gaps:
+
+- `normalized_name` cannot diverge from canonical `name`;
+- `normalized_model` cannot diverge from canonical `model`;
+- `identity_signature` cannot diverge from canonical Item/EAV data;
+- Python and PostgreSQL use equivalent full Unicode case folding;
+- decimal identity representation is exact and context-independent;
+- critical Catalog identity functions, triggers and collation are covered
+  by database readiness.
+
+Migration:
+
+`f8b9c0d1e2f3`
+
+Evidence:
+
+- 12 CP-02.4 target/compatibility tests pass;
+- existing Catalog / CP-02.3 / health compatibility suite passes;
+- identity drift reconciliation returns zero rows;
+- migration downgrade/upgrade roundtrip passes;
+- post-roundtrip readiness passes.
 
 ### CP-03 — RBAC cross-channel
 

@@ -70,7 +70,7 @@ This checkpoint records failures; it does not close the findings.
 
 ### CP-02 — Database invariant foundation
 
-Status: `IN_PROGRESS`
+Status: `CLOSED`
 
 #### CP-02.1 — Procurement database invariants
 
@@ -170,6 +170,37 @@ Evidence:
 - migration downgrade/upgrade roundtrip passes;
 - post-roundtrip readiness passes.
 
+#### CP-02 consolidated closure
+
+Status: `PASS`
+
+Migration-contract compatibility checkpoint:
+
+`c4525df3be9c9a81d1240fc4886bc6f4fe81656d`
+
+Runtime least-privilege checkpoint:
+
+`a9fe1e512324718a8dbeaf8db30eb32af10193ff`
+
+Consolidated evidence:
+
+- fresh PostgreSQL database migrates from zero to the single Alembic head
+  `f8b9c0d1e2f3`;
+- fresh-database OWNER, required Catalog attribute, custody and derived Catalog
+  identity invariants report zero violations;
+- full backend regression passes with `509 passed, 1 skipped`;
+- explicit CP-02 database-contract suite passes with `52 passed`;
+- migration head remains `f8b9c0d1e2f3` after the full suite;
+- effective test safety gates keep real inventory mutations and email delivery
+  disabled;
+- the runtime database principal no longer has table-wide UPDATE on
+  `users`, `telegram_identities` or `access_requests`;
+- required identity/access mutation columns remain writable while immutable
+  `users.created_at`, `telegram_identities.telegram_user_id` and
+  `access_requests.requested_at` are denied to the runtime role;
+- runtime-role attack regression passes against the real permission contract;
+- final gate leaves the repository clean and does not change production.
+
 ### CP-03 — RBAC cross-channel
 
 Status: `OPEN`
@@ -240,5 +271,6 @@ This is a fresh independent audit after all remediation and acceptance work.
 
 ## Current next action
 
-Finish CP-02.4 derived Catalog identity integrity, then execute a consolidated
-CP-02 database-foundation gate before proceeding to CP-03.
+Execute CP-03 RBAC cross-channel remediation: prove that Web/API and Telegram
+authorization use the same capability semantics, preserve the OWNER boundary,
+and cannot diverge across administrative access paths.

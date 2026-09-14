@@ -1,0 +1,100 @@
+from __future__ import annotations
+
+import pytest
+from sqlalchemy import text, update
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.modules.identity.enums import (
+    UserAccessStatus,
+    UserRole,
+)
+from app.modules.identity.models import User
+from tests.warehouse_helpers import actor
+
+pytestmark = pytest.mark.asyncio
+
+
+async def test_cp02_owner_cannot_be_inserted_non_approved(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+
+    invalid_owner = User(
+        role=UserRole.OWNER,
+        access_status=UserAccessStatus.BLOCKED,
+    )
+    db.add(invalid_owner)
+
+    with pytest.raises(DBAPIError):
+        await db.flush()
+
+
+async def test_cp02_existing_owner_cannot_become_non_approved(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+
+    owner, _ = await actor(
+        db,
+        UserRole.OWNER,
+        UserAccessStatus.APPROVED,
+    )
+
+    with pytest.raises(DBAPIError):
+        await db.execute(
+            update(User)
+            .where(User.id == owner.id)
+            .values(
+                access_status=UserAccessStatus.BLOCKED,
+            )
+        )
+
+
+async def test_cp02_direct_access_status_change_without_audit_is_rejected(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+
+    target, _ = await actor(
+        db,
+        UserRole.ENGINEER,
+        UserAccessStatus.APPROVED,
+    )
+
+    with pytest.raises(DBAPIError):
+        await db.execute(
+            update(User)
+            .where(User.id == target.id)
+            .values(
+                access_status=UserAccessStatus.BLOCKED,
+            )
+        )
+
+        # Audit coupling is intentionally DEFERRABLE so the legitimate
+        # user mutation and immutable audit event may be flushed in either
+        # order inside one transaction. Force the transaction-end check here.
+        await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+
+
+async def test_cp02_direct_role_change_without_audit_is_rejected(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+
+    target, _ = await actor(
+        db,
+        UserRole.ENGINEER,
+        UserAccessStatus.APPROVED,
+    )
+
+    with pytest.raises(DBAPIError):
+        await db.execute(
+            update(User)
+            .where(User.id == target.id)
+            .values(
+                role=UserRole.SENIOR_ENGINEER,
+            )
+        )
+
+        await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))

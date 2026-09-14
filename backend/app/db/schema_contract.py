@@ -37,15 +37,39 @@ CRITICAL_DB_TRIGGERS = (
     ),
     CriticalTrigger(
         "items",
+        "trg_items_lock_identity",
+        "lock_catalog_item_identity",
+    ),
+    CriticalTrigger(
+        "items",
         "trg_items_required_attributes",
         "enforce_item_required_attributes",
         True,
         True,
     ),
     CriticalTrigger(
+        "items",
+        "trg_items_validate_identity",
+        "validate_catalog_item_identity",
+        True,
+        True,
+    ),
+    CriticalTrigger(
+        "item_attribute_values",
+        "trg_item_attribute_values_lock_identity",
+        "lock_catalog_item_attribute_identity",
+    ),
+    CriticalTrigger(
         "item_attribute_values",
         "trg_item_attribute_values_required_attributes",
         "enforce_item_attribute_required_completeness",
+        True,
+        True,
+    ),
+    CriticalTrigger(
+        "item_attribute_values",
+        "trg_item_attribute_values_validate_identity",
+        "validate_catalog_item_attribute_identity",
         True,
         True,
     ),
@@ -183,9 +207,27 @@ CRITICAL_DB_TRIGGERS = (
     ),
 )
 
+CRITICAL_DB_FUNCTIONS = (
+    "assert_catalog_item_identity",
+    "catalog_decimal_identity",
+    "catalog_identity_text",
+    "catalog_item_signature",
+    "catalog_normalize_comparison",
+)
+
+CRITICAL_DB_COLLATIONS = (
+    (
+        "public",
+        "dc_inventory_unicode_fast",
+        "b",
+        "PG_UNICODE_FAST",
+        True,
+    ),
+)
+
 
 def critical_trigger_contract_sql() -> str:
-    values = ",\n".join(
+    trigger_values = ",\n".join(
         (
             f"('{trigger.table_name}', "
             f"'{trigger.trigger_name}', "
@@ -196,8 +238,27 @@ def critical_trigger_contract_sql() -> str:
         for trigger in CRITICAL_DB_TRIGGERS
     )
 
+    function_values = ",\n".join(f"('{name}')" for name in CRITICAL_DB_FUNCTIONS)
+
+    collation_values = ",\n".join(
+        (
+            f"('{schema_name}', "
+            f"'{collation_name}', "
+            f"'{provider_code}', "
+            f"'{locale_name}', "
+            f"{str(deterministic).lower()})"
+        )
+        for (
+            schema_name,
+            collation_name,
+            provider_code,
+            locale_name,
+            deterministic,
+        ) in CRITICAL_DB_COLLATIONS
+    )
+
     return f"""
-        WITH expected(
+        WITH expected_triggers(
             table_name,
             trigger_name,
             function_name,
@@ -205,15 +266,16 @@ def critical_trigger_contract_sql() -> str:
             is_initially_deferred
         ) AS (
             VALUES
-            {values}
+            {trigger_values}
         ),
-        actual AS (
+        actual_triggers AS (
             SELECT
                 c.relname AS table_name,
                 t.tgname AS trigger_name,
                 p.proname AS function_name,
                 t.tgdeferrable AS is_deferrable,
-                t.tginitdeferred AS is_initially_deferred
+                t.tginitdeferred
+                    AS is_initially_deferred
             FROM pg_trigger t
             JOIN pg_class c
               ON c.oid = t.tgrelid
@@ -224,17 +286,75 @@ def critical_trigger_contract_sql() -> str:
             WHERE n.nspname = 'public'
               AND NOT t.tgisinternal
               AND t.tgenabled IN ('O', 'A')
+        ),
+        expected_functions(function_name) AS (
+            VALUES
+            {function_values}
+        ),
+        actual_functions AS (
+            SELECT DISTINCT
+                p.proname AS function_name
+            FROM pg_proc p
+            JOIN pg_namespace n
+              ON n.oid = p.pronamespace
+            WHERE n.nspname = 'public'
+              AND p.prokind = 'f'
+        ),
+        expected_collations(
+            schema_name,
+            collation_name,
+            provider_code,
+            locale_name,
+            deterministic
+        ) AS (
+            VALUES
+            {collation_values}
+        ),
+        actual_collations AS (
+            SELECT
+                n.nspname AS schema_name,
+                c.collname AS collation_name,
+                c.collprovider::text AS provider_code,
+                c.colllocale AS locale_name,
+                c.collisdeterministic AS deterministic
+            FROM pg_collation c
+            JOIN pg_namespace n
+              ON n.oid = c.collnamespace
         )
-        SELECT EXISTS (
-            SELECT 1
-            FROM expected e
-            LEFT JOIN actual a
-              ON a.table_name = e.table_name
-             AND a.trigger_name = e.trigger_name
-            WHERE a.trigger_name IS NULL
-               OR a.function_name <> e.function_name
-               OR a.is_deferrable <> e.is_deferrable
-               OR a.is_initially_deferred
-                  <> e.is_initially_deferred
-        )
+        SELECT
+            EXISTS (
+                SELECT 1
+                FROM expected_triggers e
+                LEFT JOIN actual_triggers a
+                  ON a.table_name = e.table_name
+                 AND a.trigger_name = e.trigger_name
+                WHERE a.trigger_name IS NULL
+                   OR a.function_name
+                      <> e.function_name
+                   OR a.is_deferrable
+                      <> e.is_deferrable
+                   OR a.is_initially_deferred
+                      <> e.is_initially_deferred
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM expected_functions e
+                LEFT JOIN actual_functions a
+                  ON a.function_name = e.function_name
+                WHERE a.function_name IS NULL
+            )
+            OR EXISTS (
+                SELECT 1
+                FROM expected_collations e
+                LEFT JOIN actual_collations a
+                  ON a.schema_name = e.schema_name
+                 AND a.collation_name = e.collation_name
+                WHERE a.collation_name IS NULL
+                   OR a.provider_code
+                      <> e.provider_code
+                   OR a.locale_name
+                      <> e.locale_name
+                   OR a.deterministic
+                      <> e.deterministic
+            )
     """

@@ -224,3 +224,164 @@ async def test_cp02_direct_identity_signature_change_cannot_diverge_from_data(
             )
 
             assert actual_signature == expected_signature
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [
+        "1000.0000000000",
+        "123000.0000000000",
+        "0.0000001000",
+        "5.0000000000",
+        "-25.5000000000",
+    ],
+)
+async def test_cp02_decimal_identity_python_and_db_match(
+    warehouse_db: AsyncSession,
+    raw: str,
+) -> None:
+    from app.modules.catalog.normalization import (
+        decimal_identity_text,
+    )
+
+    db = warehouse_db
+
+    python_value = decimal_identity_text(Decimal(raw))
+
+    database_value = await db.scalar(
+        text(
+            """
+            SELECT catalog_decimal_identity(
+                CAST(:value AS numeric)
+            )
+            """
+        ),
+        {"value": raw},
+    )
+
+    assert database_value == python_value
+
+
+async def test_cp02_normal_catalog_service_satisfies_identity_guard(
+    warehouse_db: AsyncSession,
+) -> None:
+    from app.modules.catalog.schemas import ItemPatch
+    from app.modules.catalog.service import update_item
+
+    db = warehouse_db
+
+    payload = cable_payload(
+        length_m="1000",
+    )
+
+    item_id = await create_item(
+        db,
+        payload,
+    )
+
+    await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+
+    stored_signature = await db.scalar(select(Item.identity_signature).where(Item.id == item_id))
+
+    database_signature = await db.scalar(
+        text(
+            """
+            SELECT catalog_item_signature(
+                CAST(:item_id AS uuid)
+            )
+            """
+        ),
+        {"item_id": str(item_id)},
+    )
+
+    assert stored_signature == database_signature
+
+    await db.execute(text("SET CONSTRAINTS ALL DEFERRED"))
+
+    attributes = dict(payload.attributes)
+    attributes["length_m"] = "123000"
+
+    patch = ItemPatch(
+        name="CP02 Straße Cable",
+        model="MÖDEL-ß",
+        attributes=attributes,
+    )
+
+    await update_item(
+        db,
+        item_id,
+        patch,
+        fields_set=patch.model_fields_set,
+    )
+
+    await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
+
+    record = await get_item_record(
+        db,
+        item_id,
+    )
+
+    assert record.item.normalized_name == normalize_comparison(
+        record.item.name,
+        field="name",
+        max_length=255,
+    )
+
+    assert record.item.normalized_model == normalize_comparison(
+        record.item.model or "",
+        field="model",
+        max_length=255,
+    )
+
+    assert record.item.identity_signature == await _expected_signature(
+        db,
+        item_id,
+    )
+
+    assert record.item.identity_signature == await db.scalar(
+        text(
+            """
+                SELECT catalog_item_signature(
+                    CAST(:item_id AS uuid)
+                )
+                """
+        ),
+        {"item_id": str(item_id)},
+    )
+
+
+async def test_cp02_readiness_rejects_missing_identity_helper_function(
+    migration_database: str,
+) -> None:
+    from sqlalchemy.ext.asyncio import (
+        create_async_engine,
+    )
+
+    from app.db.health import (
+        DatabaseUnavailableError,
+        ensure_database_ready,
+    )
+    from tests.migration_helpers import alembic
+
+    alembic(
+        migration_database,
+        "upgrade",
+        "head",
+    )
+
+    engine = create_async_engine(
+        migration_database,
+        pool_pre_ping=True,
+    )
+
+    try:
+        await ensure_database_ready(engine)
+
+        async with engine.begin() as connection:
+            await connection.execute(text("DROP FUNCTION catalog_item_signature(uuid)"))
+
+        with pytest.raises(DatabaseUnavailableError):
+            await ensure_database_ready(engine)
+
+    finally:
+        await engine.dispose()

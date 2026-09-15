@@ -203,7 +203,53 @@ Consolidated evidence:
 
 ### CP-03 — RBAC cross-channel
 
-Status: `OPEN`
+Status: `CLOSED`
+
+RED checkpoint:
+
+`ccc02dccc985bb156fed5ebc170d46469304821e`
+
+Test-isolation checkpoint:
+
+`35d6477e91c45f3e4c4ad5a0499e15deff0cf13a`
+
+Implementation checkpoint:
+
+`3b0fd7cf0a70d5a8eaa3fd3a7ed020e849571270`
+
+Closed technical gaps:
+
+- Web and Telegram access decisions use the same target-aware authorization primitive;
+- ADMIN-target access decisions require OWNER capability on both channels;
+- privileged Telegram access callbacks expire after the configured TTL;
+- Telegram no longer owns a separate direct access-state transition path;
+- access audit semantics remain coupled to the shared identity lifecycle;
+- Telegram delivery PostgreSQL tests preserve User/TelegramIdentity consistency
+  across repeated runs.
+
+Evidence:
+
+- CP-03 target / cross-channel PostgreSQL suite: `74 passed`;
+- configuration contract suite: `40 passed`;
+- backend regression excluding separately tracked CP-01 Procurement RED:
+  `512 passed, 1 skipped`;
+- migration head remained `f8b9c0d1e2f3`;
+- frontend RBAC suite: `25 passed`;
+- frontend regression excluding the separately tracked CP-05
+  `ProcurementCreatePage.cp01.test.tsx`: `139 passed`;
+- frontend typecheck, lint and production build pass;
+- fresh PostgreSQL migration from zero to `f8b9c0d1e2f3` passes;
+- repository was clean after the implementation checkpoint;
+- production was not changed.
+
+Deferred dependency:
+
+- the Procurement lost-response `client_request_id` regression remains RED and
+  is intentionally deferred to CP-05 / `R-PROC-IDEMP`.
+
+Exit marker:
+
+`CP-03_RBAC_CHANNEL_PARITY=PASS`
 
 ### CP-04 — Procurement semantic identity / lifecycle
 
@@ -271,6 +317,7 @@ This is a fresh independent audit after all remediation and acceptance work.
 
 ## Current next action
 
-Execute CP-03 RBAC cross-channel remediation: prove that Web/API and Telegram
-authorization use the same capability semantics, preserve the OWNER boundary,
-and cannot diverge across administrative access paths.
+Execute CP-04 Procurement semantic identity and lifecycle remediation:
+bind received Catalog identity to the approved Procurement snapshot, close
+archive/concurrency races, and preserve authorization across user lifecycle
+changes and notification delivery.

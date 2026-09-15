@@ -31,6 +31,7 @@ def test_telegram_delivery_defaults(
     assert settings.telegram_gateway_secret_value is None
     assert settings.telegram_web_app_url == "https://app.spik-inventory.ru"
     assert settings.notification_worker_claim_ttl_seconds == 60
+    assert settings.access_callback_ttl_seconds == 900
 
 
 def test_gateway_worker_requires_url_and_secret() -> None:
@@ -65,6 +66,7 @@ def test_webhook_secret_and_opaque_callback() -> None:
         ("telegram_gateway_timeout_seconds", 0),
         ("notification_worker_poll_seconds", 0),
         ("notification_worker_claim_ttl_seconds", 9),
+        ("access_callback_ttl_seconds", 59),
         ("notification_worker_batch_size", 0),
         ("notification_worker_max_attempts", 0),
     ],

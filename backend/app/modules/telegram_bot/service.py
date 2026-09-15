@@ -14,7 +14,13 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
-from app.modules.identity.access_lifecycle import transition_user_access
+from app.modules.identity.admin_service import (
+    AdminUserForbiddenError,
+    InvalidAccessTransitionError,
+    PendingAccessRequestNotFoundError,
+    RecoveryAdminInvariantError,
+    decide_pending_access_request,
+)
 from app.modules.identity.enums import (
     AccessRequestStatus,
     UserAccessStatus,
@@ -180,9 +186,7 @@ async def enqueue_access_request_admin_notification(
 ) -> None:
     notification_id = settings.notification_telegram_user_id
     if notification_id is None:
-        raise TelegramDeliveryConfigurationError(
-            "NOTIFICATION_TELEGRAM_USER_ID is not configured"
-        )
+        raise TelegramDeliveryConfigurationError("NOTIFICATION_TELEGRAM_USER_ID is not configured")
 
     approve, reject = await get_or_create_access_decision_callbacks(
         db,
@@ -363,8 +367,7 @@ async def _resolve_actor_user_id(
 ) -> uuid.UUID:
     user_id = await db.scalar(
         select(TelegramIdentity.user_id).where(
-            TelegramIdentity.telegram_user_id
-            == telegram_user_id
+            TelegramIdentity.telegram_user_id == telegram_user_id
         )
     )
 
@@ -383,8 +386,7 @@ def _require_approved_access_manager(
             user.role,
             Capability.ACCESS_MANAGE_USERS,
         )
-        or user.access_status
-        != UserAccessStatus.APPROVED
+        or user.access_status != UserAccessStatus.APPROVED
     ):
         raise TelegramAccessManagerAuthorizationError
 
@@ -512,70 +514,60 @@ async def apply_access_decision(
 ) -> AccessDecisionResult:
     current_time = now or datetime.now(UTC)
 
-    await acquire_identity_management_shared_barrier(
-        db
-    )
+    await acquire_identity_management_shared_barrier(db)
 
     actor_user_id = await _resolve_actor_user_id(
         db,
         actor_telegram_user_id,
     )
-    token = parse_access_callback_data(
-        callback_data
-    )
+    token = parse_access_callback_data(callback_data)
 
     callback = await db.scalar(
         select(AccessDecisionCallback)
-        .where(
-            AccessDecisionCallback.token
-            == token
-        )
+        .where(AccessDecisionCallback.token == token)
         .with_for_update()
     )
     if callback is None:
-        raise InvalidAccessCallbackError(
-            "unknown callback"
-        )
+        raise InvalidAccessCallbackError("unknown callback")
 
+    expires_at = callback.created_at + timedelta(seconds=settings.access_callback_ttl_seconds)
+    if current_time >= expires_at:
+        raise InvalidAccessCallbackError("expired callback")
+
+    # Resolve the target without taking the access-request row lock yet.
+    # Both Web and Telegram then acquire identity locks before the
+    # AccessRequest lock, preserving one cross-channel lock order.
+    access_request = await db.scalar(
+        select(AccessRequest).where(AccessRequest.id == callback.access_request_id)
+    )
+    if access_request is None:
+        raise InvalidAccessCallbackError("access request no longer exists")
+
+    locked_actor, target_user = await lock_identity_actor_and_target(
+        db,
+        actor_user_id=actor_user_id,
+        target_user_id=access_request.user_id,
+    )
+
+    access_manager = _require_approved_access_manager(locked_actor)
+
+    if target_user is None:
+        raise RuntimeError("access request user no longer exists")
+
+    # Lock the exact callback request only after identity rows.
     access_request = await db.scalar(
         select(AccessRequest)
-        .where(
-            AccessRequest.id
-            == callback.access_request_id
-        )
+        .where(AccessRequest.id == callback.access_request_id)
         .with_for_update()
     )
     if access_request is None:
-        raise InvalidAccessCallbackError(
-            "access request no longer exists"
-        )
-
-    locked_actor, target_user = (
-        await lock_identity_actor_and_target(
-            db,
-            actor_user_id=actor_user_id,
-            target_user_id=access_request.user_id,
-        )
-    )
-
-    access_manager = _require_approved_access_manager(
-        locked_actor
-    )
-
-    if target_user is None:
-        raise RuntimeError(
-            "access request user no longer exists"
-        )
+        raise InvalidAccessCallbackError("access request no longer exists")
 
     if (
-        access_request.status
-        == AccessRequestStatus.PENDING
-        and target_user.access_status
-        != UserAccessStatus.PENDING
+        access_request.status == AccessRequestStatus.PENDING
+        and target_user.access_status != UserAccessStatus.PENDING
     ):
-        raise InvalidAccessCallbackError(
-            "user access state is already terminal"
-        )
+        raise InvalidAccessCallbackError("user access state is already terminal")
 
     target_identity = await db.scalar(
         select(TelegramIdentity).where(TelegramIdentity.user_id == target_user.id)
@@ -584,24 +576,40 @@ async def apply_access_decision(
         raise RuntimeError("access request Telegram identity is missing")
 
     changed = access_request.status == AccessRequestStatus.PENDING
-    if changed:
-        if callback.action == "APPROVE":
-            access_request.status = AccessRequestStatus.APPROVED
-            target_access_status = UserAccessStatus.APPROVED
-        else:
-            access_request.status = AccessRequestStatus.REJECTED
-            target_access_status = UserAccessStatus.REJECTED
 
-        transition_user_access(
-            db,
-            user=target_user,
-            actor_user_id=access_manager.id,
-            access_status=target_access_status,
-            now=current_time,
+    if changed:
+        decision = (
+            AccessRequestStatus.APPROVED
+            if callback.action == "APPROVE"
+            else AccessRequestStatus.REJECTED
         )
 
-        access_request.decided_at = current_time
-        access_request.decided_by_user_id = access_manager.id
+        try:
+            (
+                target_user,
+                access_request,
+                _event,
+            ) = await decide_pending_access_request(
+                db,
+                actor_user_id=access_manager.id,
+                target_user_id=target_user.id,
+                decision=decision,
+                recovery_telegram_user_id=(settings.admin_telegram_user_id),
+                now=current_time,
+            )
+
+        except AdminUserForbiddenError as exc:
+            raise TelegramAccessManagerAuthorizationError(str(exc)) from exc
+
+        except (
+            InvalidAccessTransitionError,
+            PendingAccessRequestNotFoundError,
+            RecoveryAdminInvariantError,
+        ) as exc:
+            raise InvalidAccessCallbackError(str(exc)) from exc
+
+        # Authorization and lifecycle mutation are owned by the shared
+        # Web/Telegram primitive. Keep only channel provenance here.
         access_request.decision_note = "Telegram inline callback"
 
         await enqueue_access_decision_user_notification(

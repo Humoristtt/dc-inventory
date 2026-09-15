@@ -48,8 +48,6 @@ async def test_cp03_owner_can_approve_pending_admin_via_telegram(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
-    now = datetime(2026, 9, 15, 1, 0, tzinfo=UTC)
-
     owner, _ = await actor(
         db,
         UserRole.OWNER,
@@ -72,6 +70,9 @@ async def test_cp03_owner_can_approve_pending_admin_via_telegram(
         db,
         request.id,
     )
+    await db.refresh(approve)
+
+    now = approve.created_at + timedelta(minutes=1)
 
     result = await apply_access_decision(
         db,

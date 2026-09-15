@@ -115,6 +115,7 @@ class ValidatedItemDraft:
     name: str
     model: str | None
     attributes: dict[str, str | int | Decimal | bool]
+    identity_signature: str
 
 
 def normalize_inline_text(value: str, *, field: str, max_length: int) -> str:
@@ -643,7 +644,7 @@ async def validate_item_create_payload(
     obey exactly the same leaf/category/identity/attribute rules as normal
     catalog creation.
     """
-    category, values, _signature = await _prepare_identity(db, payload)
+    category, values, signature = await _prepare_identity(db, payload)
     manufacturer = await _get_manufacturer(db, payload.manufacturer_id)
     attributes: dict[str, str | int | Decimal | bool] = {}
     for value in values:
@@ -665,6 +666,7 @@ async def validate_item_create_payload(
         name=normalize_inline_text(payload.name, field="name", max_length=255),
         model=normalize_optional_inline_text(payload.model, field="model", max_length=255),
         attributes=attributes,
+        identity_signature=signature,
     )
 
 
@@ -679,7 +681,8 @@ async def create_item(db: AsyncSession, payload: ItemCreate) -> uuid.UUID:
         model=normalize_optional_inline_text(payload.model, field="model", max_length=255),
         normalized_model=(
             normalize_comparison(payload.model, field="model", max_length=255)
-            if payload.model else None
+            if payload.model
+            else None
         ),
         identity_signature=signature,
         status=ItemStatus.ACTIVE,
@@ -761,43 +764,27 @@ async def delete_unused_item(
     db: AsyncSession,
     item_id: uuid.UUID,
 ) -> None:
-    item = await db.scalar(
-        select(Item)
-        .where(Item.id == item_id)
-        .with_for_update()
-    )
+    item = await db.scalar(select(Item).where(Item.id == item_id).with_for_update())
     if item is None:
         raise CatalogNotFoundError("item not found")
 
     movement_line_id = await db.scalar(
-        select(MovementLine.id)
-        .where(MovementLine.item_id == item_id)
-        .limit(1)
+        select(MovementLine.id).where(MovementLine.item_id == item_id).limit(1)
     )
     if movement_line_id is not None:
-        raise CatalogItemInUseError(
-            "item has warehouse history and cannot be deleted"
-        )
+        raise CatalogItemInUseError("item has warehouse history and cannot be deleted")
 
     stock_balance_id = await db.scalar(
-        select(StockBalance.id)
-        .where(StockBalance.item_id == item_id)
-        .limit(1)
+        select(StockBalance.id).where(StockBalance.item_id == item_id).limit(1)
     )
     if stock_balance_id is not None:
-        raise CatalogItemInUseError(
-            "item has warehouse stock state and cannot be deleted"
-        )
+        raise CatalogItemInUseError("item has warehouse stock state and cannot be deleted")
 
     custody_balance_id = await db.scalar(
-        select(UserItemCustodyBalance.id)
-        .where(UserItemCustodyBalance.item_id == item_id)
-        .limit(1)
+        select(UserItemCustodyBalance.id).where(UserItemCustodyBalance.item_id == item_id).limit(1)
     )
     if custody_balance_id is not None:
-        raise CatalogItemInUseError(
-            "item has custody state and cannot be deleted"
-        )
+        raise CatalogItemInUseError("item has custody state and cannot be deleted")
 
     # Import locally to keep the catalog model independent from the
     # Procurement bounded module while still enforcing delete safety.
@@ -817,9 +804,7 @@ async def delete_unused_item(
         .limit(1)
     )
     if procurement_line_id is not None or procurement_binding_id is not None:
-        raise CatalogItemInUseError(
-            "item has procurement history and cannot be deleted"
-        )
+        raise CatalogItemInUseError("item has procurement history and cannot be deleted")
 
     await db.delete(item)
     await db.flush()

@@ -204,6 +204,77 @@ async def _prepare_lines(
     payloads: Sequence[ProcurementLineCreate],
     revision_id: uuid.UUID,
 ) -> list[ProcurementRevisionLine]:
+    cp04_existing_item_ids = sorted(
+        {
+            source_line.item_id
+            for source_line in payloads
+            if isinstance(
+                source_line,
+                ExistingItemLineCreate,
+            )
+        },
+        key=str,
+    )
+
+    cp04_locked_items: dict[uuid.UUID, Item] = {}
+
+    if cp04_existing_item_ids:
+        cp04_locked_rows = list(
+            (
+                await db.scalars(
+                    select(Item)
+                    .where(Item.id.in_(cp04_existing_item_ids))
+                    .order_by(Item.id)
+                    .with_for_update()
+                )
+            ).all()
+        )
+        cp04_locked_items = {item.id: item for item in cp04_locked_rows}
+
+    cp04_expected_identity_signatures: list[str] = []
+
+    for source_line in payloads:
+        if isinstance(
+            source_line,
+            ExistingItemLineCreate,
+        ):
+            item = cp04_locked_items.get(source_line.item_id)
+
+            if item is None:
+                raise ProcurementConflictError(
+                    "catalog item not found",
+                    code="catalog_item_not_found",
+                )
+
+            if item.status != ItemStatus.ACTIVE:
+                raise ProcurementConflictError(
+                    "archived item cannot be procured",
+                    code="catalog_item_archived",
+                )
+
+            cp04_expected_identity_signatures.append(item.identity_signature)
+            continue
+
+        if isinstance(
+            source_line,
+            ProposedItemLineCreate,
+        ):
+            validated_identity = await validate_item_create_payload(
+                db,
+                ItemCreate(
+                    category_key=(source_line.category_key),
+                    manufacturer_id=(source_line.manufacturer_id),
+                    name=source_line.name,
+                    model=source_line.model,
+                    attributes=(source_line.attributes),
+                ),
+            )
+
+            cp04_expected_identity_signatures.append(validated_identity.identity_signature)
+            continue
+
+        raise ProcurementValidationError("unsupported procurement line type")
+
     rows: list[ProcurementRevisionLine] = []
     for line_no, payload in enumerate(payloads, 1):
         snapshot: dict[str, object]
@@ -272,6 +343,16 @@ async def _prepare_lines(
                 quantity=payload.quantity,
             )
         )
+    for (
+        prepared_line,
+        expected_identity_signature,
+    ) in zip(
+        rows,
+        cp04_expected_identity_signatures,
+        strict=True,
+    ):
+        prepared_line.expected_identity_signature = expected_identity_signature
+
     return rows
 
 
@@ -864,6 +945,12 @@ async def bind_line(
         raise ProcurementConflictError(
             "archived item cannot be bound", code="catalog_item_archived"
         )
+    if item.identity_signature != line.expected_identity_signature:
+        raise ProcurementConflictError(
+            "catalog item identity does not match approved procurement line",
+            code="item_identity_mismatch",
+        )
+
     db.add(
         ProcurementLineCatalogBinding(
             revision_line_id=line.id,
@@ -917,6 +1004,17 @@ async def create_and_bind_line(
         raise ProcurementValidationError("existing item line is already bound")
     if line.binding is not None:
         raise ProcurementConflictError("proposed line is already bound", code="line_already_bound")
+
+    validated_item = await validate_item_create_payload(
+        db,
+        payload.item,
+    )
+
+    if validated_item.identity_signature != line.expected_identity_signature:
+        raise ProcurementConflictError(
+            "created catalog identity does not match approved procurement line",
+            code="item_identity_mismatch",
+        )
 
     item_id = await create_item(db, payload.item)
     db.add(
@@ -1005,6 +1103,60 @@ async def complete_acceptance(
     if replay is not None:
         return record
     _require_status(record.request, ProcurementStatus.AWAITING_ACCEPTANCE)
+    cp04_acceptance_item_ids = sorted(
+        {
+            item_id
+            for line in record.current_revision.lines
+            if (item_id := _bound_item_id(line)) is not None
+        },
+        key=str,
+    )
+
+    cp04_acceptance_items: dict[
+        uuid.UUID,
+        Item,
+    ] = {}
+
+    if cp04_acceptance_item_ids:
+        cp04_acceptance_rows = list(
+            (
+                await db.scalars(
+                    select(Item)
+                    .where(Item.id.in_(cp04_acceptance_item_ids))
+                    .order_by(Item.id)
+                    .with_for_update()
+                )
+            ).all()
+        )
+
+        cp04_acceptance_items = {item.id: item for item in cp04_acceptance_rows}
+
+    if len(cp04_acceptance_items) != len(cp04_acceptance_item_ids):
+        raise ProcurementConflictError(
+            "catalog item no longer exists",
+            code="catalog_item_not_found",
+        )
+
+    for line in record.current_revision.lines:
+        item_id = _bound_item_id(line)
+
+        if item_id is None:
+            continue
+
+        item = cp04_acceptance_items[item_id]
+
+        if item.status != ItemStatus.ACTIVE:
+            raise ProcurementConflictError(
+                "archived item cannot be accepted",
+                code="catalog_item_archived",
+            )
+
+        if item.identity_signature != line.expected_identity_signature:
+            raise ProcurementConflictError(
+                "catalog item identity changed after procurement approval",
+                code="item_identity_mismatch",
+            )
+
     quantities: defaultdict[uuid.UUID, int] = defaultdict(int)
     for line in record.current_revision.lines:
         item_id = _bound_item_id(line)

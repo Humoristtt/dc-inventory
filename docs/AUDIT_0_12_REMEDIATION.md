@@ -253,7 +253,20 @@ Exit marker:
 
 ### CP-04 — Procurement semantic identity / lifecycle
 
-Status: `OPEN`
+Status: `CLOSED`
+
+Exit marker: `CP-04_PROCUREMENT_INTEGRITY=PASS`
+
+Evidence:
+- implementation commits: `bd7603c`, `bdb719d`;
+- migration metadata commit: `6821f85`;
+- Alembic head: `a9c0d1e2f3a4`;
+- CP-04 contract set: PASS;
+- full backend: `524 passed, 1 skipped`;
+- frontend non-CP05 baseline: `139 passed`;
+- frontend typecheck / lint / build: PASS;
+- CP-05 lost-response retry RED intentionally preserved;
+- production changed: NO.
 
 ### CP-05 — Procurement UI correctness
 
@@ -321,3 +334,40 @@ Execute CP-04 Procurement semantic identity and lifecycle remediation:
 bind received Catalog identity to the approved Procurement snapshot, close
 archive/concurrency races, and preserve authorization across user lifecycle
 changes and notification delivery.
+
+---
+
+## Checkpoint journal — CP-04 Procurement integrity
+
+CHECKPOINT_ID=CP-04
+DATE=2026-09-16
+BASELINE_BEFORE=77ad901092f638b9a9ef04bfc7e801a9bd1bcb60
+IMPLEMENTATION_HEAD=6821f8537b7070e9daa5cf5f0aa12f5e8b98352f
+
+RED_CHECKPOINT=fa78cd249cebceaae372c7f50f528cd5fe7028ae
+IDENTITY_IMPLEMENTATION=bd7603c82244ef19fddb77031584bafdbffbd8a7
+AUTHORIZATION_IMPLEMENTATION=bdb719d6b27e7c49f8ed5be6d2886f3fc2a85898
+MIGRATION_TEST_METADATA=6821f8537b7070e9daa5cf5f0aa12f5e8b98352f
+
+MIGRATION_HEAD=a9c0d1e2f3a4
+MIGRATION_ZERO_TO_HEAD=PASS
+MIGRATION_ROUNDTRIP=PASS
+PROCUREMENT_APPEND_ONLY=PASS
+CP04_CONTRACT_SET=PASS
+FULL_BACKEND_REGRESSION=PASS
+BACKEND_RESULT=524 passed, 1 skipped
+FRONTEND_NON_CP05_BASELINE=PASS
+FRONTEND_RESULT=139 passed
+FRONTEND_TYPECHECK=PASS
+FRONTEND_LINT=PASS
+FRONTEND_BUILD=PASS
+CP05_KNOWN_RED_PRESERVED=PASS
+
+REAL_INVENTORY_MUTATIONS_ENABLED=false
+EMAIL_DELIVERY_ENABLED=false
+PRODUCTION_CHANGED=NO
+
+STATUS=PASS
+NEXT_CHECKPOINT=CP-05_PROCUREMENT_UI_CORRECTNESS
+
+CP-04_PROCUREMENT_INTEGRITY=PASS

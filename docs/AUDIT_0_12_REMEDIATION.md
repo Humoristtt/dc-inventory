@@ -260,17 +260,42 @@ Exit marker: `CP-04_PROCUREMENT_INTEGRITY=PASS`
 Evidence:
 - implementation commits: `bd7603c`, `bdb719d`;
 - migration metadata commit: `6821f85`;
+- historical migration RED: `8e06ed7`;
+- historical snapshot migration fix: `0ca4292`;
 - Alembic head: `a9c0d1e2f3a4`;
-- CP-04 contract set: PASS;
-- full backend: `524 passed, 1 skipped`;
-- frontend non-CP05 baseline: `139 passed`;
-- frontend typecheck / lint / build: PASS;
-- CP-05 lost-response retry RED intentionally preserved;
+- approved historical Procurement identity is reconstructed from immutable
+  `display_snapshot`, not current Catalog Item or binding state;
+- unresolved historical identity reconstruction fails closed;
+- historical populated migration regression: `1 passed`;
+- migration regression: `15 passed`;
+- zero-to-head / Alembic check: PASS;
+- Procurement append-only trigger after migration: PASS;
+- consolidated full backend: `527 passed, 1 skipped`;
+- consolidated full frontend: `147 passed`;
+- frontend typecheck / lint / build / bundle contract: PASS;
 - production changed: NO.
 
 ### CP-05 — Procurement UI correctness
 
-Status: `OPEN`
+Status: `CLOSED`
+
+Exit marker: `CP-05_PROCUREMENT_UI_CORRECTNESS=PASS`
+
+Evidence:
+- idempotency / queue pagination RED: `ef0c764`;
+- stable logical retry and queue pagination implementation: `1b00ae5`;
+- lookup / picker RED: `fad61c6`;
+- searchable and paginated lookup / picker implementation: `5f4fdd9`;
+- lost-response retry preserves one stable `client_request_id`;
+- Procurement queues are paginated beyond the initial 30 rows;
+- manager and manufacturer lookups are searchable and paginated;
+- Catalog and binding pickers load beyond their initial page;
+- stale Catalog selection is cleared when search context changes;
+- focused Procurement frontend contracts: `18 passed`;
+- consolidated full frontend: `147 passed`;
+- consolidated full backend: `527 passed, 1 skipped`;
+- frontend typecheck / lint / build / bundle contract: PASS;
+- production changed: NO.
 
 ### CP-06 — Performance
 
@@ -330,10 +355,11 @@ This is a fresh independent audit after all remediation and acceptance work.
 
 ## Current next action
 
-Execute CP-04 Procurement semantic identity and lifecycle remediation:
-bind received Catalog identity to the approved Procurement snapshot, close
-archive/concurrency races, and preserve authorization across user lifecycle
-changes and notification delivery.
+Execute CP-06 — Performance remediation.
+
+CP-04 Procurement integrity and CP-05 Procurement UI correctness are closed.
+Next work must begin from the CP-06 performance scope without modifying the
+closed CP-04 / CP-05 contracts unless a new regression is independently proven.
 
 ---
 
@@ -371,3 +397,85 @@ STATUS=PASS
 NEXT_CHECKPOINT=CP-05_PROCUREMENT_UI_CORRECTNESS
 
 CP-04_PROCUREMENT_INTEGRITY=PASS
+
+---
+
+## Checkpoint journal — CP-04 historical migration addendum
+
+CHECKPOINT_ID=CP-04.3
+DATE=2026-09-16
+BASELINE_BEFORE=0ca4292879100489994403584b63f6521f7f8e66
+
+HISTORICAL_MIGRATION_RED=8e06ed74c7c74b593c9e58edbafba02b788db2e6
+HISTORICAL_MIGRATION_FIX=0ca4292879100489994403584b63f6521f7f8e66
+
+MIGRATION_HEAD=a9c0d1e2f3a4
+HISTORICAL_POPULATED_MIGRATION=PASS
+HISTORICAL_MIGRATION_RESULT=1 passed
+MIGRATION_REGRESSION=PASS
+MIGRATION_REGRESSION_RESULT=15 passed
+MIGRATION_ZERO_TO_HEAD=PASS
+ALEMBIC_CHECK=PASS
+PROCUREMENT_APPEND_ONLY=PASS
+CURRENT_ITEM_MIGRATION_AUTHORITY=REMOVED
+CURRENT_BINDING_MIGRATION_AUTHORITY=REMOVED
+IMMUTABLE_SNAPSHOT_AUTHORITY=PASS
+FAIL_CLOSED_UNRESOLVED_HISTORY=PASS
+
+FULL_BACKEND_REGRESSION=PASS
+BACKEND_RESULT=527 passed, 1 skipped
+FULL_FRONTEND_REGRESSION=PASS
+FRONTEND_RESULT=147 passed
+FRONTEND_TYPECHECK=PASS
+FRONTEND_LINT=PASS
+FRONTEND_BUILD=PASS
+DISPOSABLE_DATABASE_CLEANUP=PASS
+
+PRODUCTION_CHANGED=NO
+
+STATUS=PASS
+NEXT_CHECKPOINT=CP-05_PROCUREMENT_UI_CORRECTNESS
+
+CP-04_PROCUREMENT_INTEGRITY=PASS
+
+---
+
+## Checkpoint journal — CP-05 Procurement UI correctness
+
+CHECKPOINT_ID=CP-05
+DATE=2026-09-16
+BASELINE_BEFORE=471ced2d2d90bc41ebe9c40e4717a0f89c466c14
+IMPLEMENTATION_HEAD=5f4fdd9d7b22d776303059fd6e7dc4796ddb55b7
+CONSOLIDATED_HEAD=0ca4292879100489994403584b63f6521f7f8e66
+
+IDEMPOTENCY_PAGINATION_RED=ef0c764fdd9b30a9824bd33dc6cb65171afc742f
+IDEMPOTENCY_PAGINATION_IMPLEMENTATION=1b00ae509b2a5b58aaa1652552fb09efc27795ee
+LOOKUP_PICKER_RED=fad61c6a2d0a55fed31105913c91ba4e1f4dfa1e
+LOOKUP_PICKER_IMPLEMENTATION=5f4fdd9d7b22d776303059fd6e7dc4796ddb55b7
+
+STABLE_CLIENT_REQUEST_ID=PASS
+LOST_RESPONSE_RETRY=PASS
+PROCUREMENT_QUEUE_PAGINATION=PASS
+MANAGER_LOOKUP_SEARCH_PAGINATION=PASS
+MANUFACTURER_LOOKUP_SEARCH_PAGINATION=PASS
+CATALOG_PICKER_PAGINATION=PASS
+BINDING_PICKER_PAGINATION=PASS
+STALE_SELECTION_RESET=PASS
+
+PROCUREMENT_FRONTEND_CONTRACTS=PASS
+PROCUREMENT_FRONTEND_RESULT=18 passed
+FULL_FRONTEND_REGRESSION=PASS
+FRONTEND_RESULT=147 passed
+FRONTEND_TYPECHECK=PASS
+FRONTEND_LINT=PASS
+FRONTEND_BUILD=PASS
+FULL_BACKEND_REGRESSION=PASS
+BACKEND_RESULT=527 passed, 1 skipped
+DISPOSABLE_DATABASE_CLEANUP=PASS
+
+PRODUCTION_CHANGED=NO
+
+STATUS=PASS
+NEXT_CHECKPOINT=CP-06_QUERY_SCALABILITY
+
+CP-05_PROCUREMENT_UI_CORRECTNESS=PASS

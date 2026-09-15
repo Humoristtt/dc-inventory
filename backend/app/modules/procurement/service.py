@@ -10,7 +10,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.base import ExecutableOption
@@ -167,22 +167,69 @@ async def _validate_manager(db: AsyncSession, user_id: uuid.UUID) -> User:
 
 
 async def list_managers(
-    db: AsyncSession, *, limit: int, offset: int
+    db: AsyncSession,
+    *,
+    query: str | None = None,
+    limit: int,
+    offset: int,
 ) -> tuple[list[User], int, dict[uuid.UUID, str]]:
-    filters = [User.role == UserRole.MANAGER, User.access_status == UserAccessStatus.APPROVED]
-    total = int(await db.scalar(select(func.count(User.id)).where(*filters)) or 0)
+    filters = [
+        User.role == UserRole.MANAGER,
+        User.access_status == UserAccessStatus.APPROVED,
+    ]
+
+    user_query = select(User)
+    count_query = select(func.count(User.id)).select_from(User)
+
+    search = " ".join(query.split()) if query else ""
+
+    if search:
+        username_search = search.removeprefix("@") or search
+        search_pattern = f"%{search}%"
+        username_pattern = f"%{username_search}%"
+
+        identity_filter = or_(
+            TelegramIdentity.username.ilike(username_pattern),
+            TelegramIdentity.first_name.ilike(search_pattern),
+            TelegramIdentity.last_name.ilike(search_pattern),
+            func.concat_ws(
+                " ",
+                TelegramIdentity.first_name,
+                TelegramIdentity.last_name,
+            ).ilike(search_pattern),
+        )
+
+        user_query = user_query.outerjoin(
+            TelegramIdentity,
+            TelegramIdentity.user_id == User.id,
+        )
+        count_query = count_query.outerjoin(
+            TelegramIdentity,
+            TelegramIdentity.user_id == User.id,
+        )
+        filters.append(identity_filter)
+
+    total = int(await db.scalar(count_query.where(*filters)) or 0)
+
     users = list(
         (
             await db.scalars(
-                select(User)
-                .where(*filters)
-                .order_by(User.created_at, User.id)
+                user_query.where(*filters)
+                .order_by(
+                    User.created_at,
+                    User.id,
+                )
                 .limit(limit)
                 .offset(offset)
             )
         ).all()
     )
-    names = await _display_names(db, {user.id for user in users})
+
+    names = await _display_names(
+        db,
+        {user.id for user in users},
+    )
+
     return users, total, names
 
 

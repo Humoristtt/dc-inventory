@@ -209,10 +209,16 @@ async def get_managers(
     response: Response,
     db: DbSession,
     _approved: ProcurementRead,
+    q: Annotated[str | None, Query(max_length=255)] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> ProcurementManagerPageOut:
-    users, total, names = await list_managers(db, limit=limit, offset=offset)
+    users, total, names = await list_managers(
+        db,
+        query=q,
+        limit=limit,
+        offset=offset,
+    )
     response.headers["Cache-Control"] = "no-store"
     return ProcurementManagerPageOut(
         items=[UserSummaryOut(id=user.id, display_name=names[user.id]) for user in users],

@@ -335,10 +335,21 @@ it(
       ),
     );
 
-    fireEvent.change(
+    const categorySelect =
       await screen.findByLabelText(
         "Категория",
-      ),
+      );
+
+    await screen.findByRole(
+      "option",
+      {
+        name:
+          "Ethernet transceivers",
+      },
+    );
+
+    fireEvent.change(
+      categorySelect,
       {
         target: {
           value:

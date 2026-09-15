@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import {
   useEffect,
   useId,
@@ -207,11 +212,46 @@ export function ProcurementDetailPage() {
       && !auth.isPending
       && canReadProcurement,
   });
-  const managers = useQuery({
-    queryKey: ["procurement", "managers"],
-    queryFn: ({ signal }) => getProcurementManagers(signal),
-    enabled: Boolean(request.data?.available_actions.includes("transfer_manager")),
+  const [managerSearch, setManagerSearch] = useState("");
+
+  const managers = useInfiniteQuery({
+    queryKey: [
+      "procurement",
+      "managers",
+      "transfer",
+      managerSearch,
+    ],
+    queryFn: ({ pageParam, signal }) =>
+      getProcurementManagers(
+        {
+          q: managerSearch,
+          limit: 50,
+          offset: pageParam,
+        },
+        signal,
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => {
+      const nextOffset =
+        lastPage.offset
+        + lastPage.items.length;
+
+      return nextOffset < lastPage.total
+        ? nextOffset
+        : undefined;
+    },
+    enabled: Boolean(
+      request.data?.available_actions.includes(
+        "transfer_manager",
+      ),
+    ),
   });
+
+  const managerOptions =
+    managers.data?.pages.flatMap(
+      (page) => page.items,
+    )
+    ?? [];
   const locations = useQuery({
     queryKey: ["inventory", "locations"],
     queryFn: ({ signal }) => getLocations(signal),
@@ -226,11 +266,41 @@ export function ProcurementDetailPage() {
   const [bindingLine, setBindingLine] = useState<string | null>(null);
   const [bindingSearch, setBindingSearch] = useState("");
 
-  const bindingItems = useQuery({
-    queryKey: ["catalog", "procurement-binding", bindingSearch],
-    queryFn: ({ signal }) => getCatalogItems({ q: bindingSearch, limit: 20 }, signal),
-    enabled: bindingLine !== null && bindingSearch.trim().length >= 2,
+  const bindingItems = useInfiniteQuery({
+    queryKey: [
+      "catalog",
+      "procurement-binding",
+      bindingSearch,
+    ],
+    queryFn: ({ pageParam, signal }) =>
+      getCatalogItems(
+        {
+          q: bindingSearch,
+          limit: 20,
+          offset: pageParam,
+        },
+        signal,
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => {
+      const nextOffset =
+        lastPage.offset
+        + lastPage.items.length;
+
+      return nextOffset < lastPage.total
+        ? nextOffset
+        : undefined;
+    },
+    enabled:
+      bindingLine !== null
+      && bindingSearch.trim().length >= 2,
   });
+
+  const bindingItemOptions =
+    bindingItems.data?.pages.flatMap(
+      (page) => page.items,
+    )
+    ?? [];
 
   const mutation = useMutation({
     mutationFn: ({ action, body }: { action: string; body: Record<string, unknown> }) =>
@@ -365,9 +435,86 @@ export function ProcurementDetailPage() {
         </section>
       </div>
 
-      <Dialog open={dialog === "transfer"} title="Передать менеджеру" onClose={() => setDialog(null)}>
-        <label>Новый менеджер<select value={managerId} onChange={(event) => setManagerId(event.target.value)}><option value="">Выберите</option>{(managers.data?.items ?? []).filter((entry) => entry.id !== current.assigned_manager.id).map((entry) => <option key={entry.id} value={entry.id}>{entry.display_name}</option>)}</select></label>
-        <button className="button button--dark" disabled={!managerId} onClick={() => act("transfer-manager", { expected_assigned_manager_user_id: current.assigned_manager.id, manager_user_id: managerId })} type="button">Передать</button>
+      <Dialog
+        open={dialog === "transfer"}
+        title="Передать менеджеру"
+        onClose={() => setDialog(null)}
+      >
+        <label>
+          Поиск менеджера
+          <input
+            value={managerSearch}
+            onChange={(event) => {
+              setManagerSearch(
+                event.target.value,
+              );
+              setManagerId("");
+            }}
+          />
+        </label>
+
+        <label>
+          Новый менеджер
+          <select
+            value={managerId}
+            onChange={(event) =>
+              setManagerId(
+                event.target.value,
+              )}
+          >
+            <option value="">
+              Выберите
+            </option>
+            {managerOptions
+              .filter(
+                (entry) =>
+                  entry.id
+                  !== current.assigned_manager.id,
+              )
+              .map((entry) => (
+                <option
+                  key={entry.id}
+                  value={entry.id}
+                >
+                  {entry.display_name}
+                </option>
+              ))}
+          </select>
+        </label>
+
+        {managers.hasNextPage ? (
+          <button
+            className="button button--load-more"
+            disabled={
+              managers.isFetchingNextPage
+            }
+            onClick={() =>
+              void managers.fetchNextPage()
+            }
+            type="button"
+          >
+            {managers.isFetchingNextPage
+              ? "Загружаем менеджеров…"
+              : "Показать ещё менеджеров"}
+          </button>
+        ) : null}
+
+        <button
+          className="button button--dark"
+          disabled={!managerId}
+          onClick={() =>
+            act(
+              "transfer-manager",
+              {
+                expected_assigned_manager_user_id:
+                  current.assigned_manager.id,
+                manager_user_id: managerId,
+              },
+            )}
+          type="button"
+        >
+          Передать
+        </button>
       </Dialog>
 
       <Dialog open={dialog === "correction"} title="Вернуть на корректировку" onClose={() => setDialog(null)}>
@@ -394,9 +541,68 @@ export function ProcurementDetailPage() {
         <button className="button button--accent" disabled={!locationId || current.current_revision.lines.some((line) => !line.bound_item_id)} onClick={() => act("acceptance", { receiving_location_id: locationId })} type="button">Подтвердить и оприходовать</button>
       </Dialog>
 
-      <Dialog open={bindingLine !== null} title="Связать с каталогом" onClose={() => setBindingLine(null)}>
-        <label>Поиск<input value={bindingSearch} onChange={(event) => setBindingSearch(event.target.value)} /></label>
-        <div className="procurement-binding-results">{(bindingItems.data?.items ?? []).map((item) => <button className="button" key={item.id} onClick={() => act("bind-line", { line_id: bindingLine, item_id: item.id })} type="button">{[item.manufacturer?.name, item.name, item.model].filter(Boolean).join(" · ")}</button>)}</div>
+      <Dialog
+        open={bindingLine !== null}
+        title="Связать с каталогом"
+        onClose={() => setBindingLine(null)}
+      >
+        <label>
+          Поиск
+          <input
+            value={bindingSearch}
+            onChange={(event) =>
+              setBindingSearch(
+                event.target.value,
+              )}
+          />
+        </label>
+
+        <div className="procurement-binding-results">
+          {bindingItemOptions.map(
+            (item) => (
+              <button
+                className="button"
+                key={item.id}
+                onClick={() =>
+                  act(
+                    "bind-line",
+                    {
+                      line_id:
+                        bindingLine,
+                      item_id:
+                        item.id,
+                    },
+                  )}
+                type="button"
+              >
+                {[
+                  item.manufacturer?.name,
+                  item.name,
+                  item.model,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </button>
+            ),
+          )}
+        </div>
+
+        {bindingItems.hasNextPage ? (
+          <button
+            className="button button--load-more"
+            disabled={
+              bindingItems.isFetchingNextPage
+            }
+            onClick={() =>
+              void bindingItems.fetchNextPage()
+            }
+            type="button"
+          >
+            {bindingItems.isFetchingNextPage
+              ? "Загружаем…"
+              : "Показать ещё"}
+          </button>
+        ) : null}
       </Dialog>
     </main>
   );

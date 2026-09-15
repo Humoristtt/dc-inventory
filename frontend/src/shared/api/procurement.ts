@@ -157,9 +157,31 @@ export function getProcurementRequest(id: string, signal?: AbortSignal) {
   );
 }
 
-export function getProcurementManagers(signal?: AbortSignal) {
+export function getProcurementManagers(
+  {
+    q,
+    limit = 50,
+    offset = 0,
+  }: {
+    q?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+
+  const search = q?.trim();
+
+  if (search) {
+    params.set("q", search);
+  }
+
   return procurementRequest<ManagerPage>(
-    "/api/procurement/managers?limit=200&offset=0",
+    `/api/procurement/managers?${params.toString()}`,
     undefined,
     signal,
   );

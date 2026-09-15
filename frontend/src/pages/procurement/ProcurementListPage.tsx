@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link, Navigate } from "react-router-dom";
 
@@ -9,6 +9,8 @@ import { PageHeader } from "../../shared/ui";
 import "../../features/procurement/procurement.css";
 
 type View = "my" | "active" | "history";
+
+const pageSize = 30;
 
 export function ProcurementListPage() {
   const auth = useAuthState();
@@ -23,11 +25,32 @@ export function ProcurementListPage() {
   const [selectedView, setSelectedView] = useState<View | null>(null);
   const view = selectedView ?? (manager ? "my" : "active");
 
-  const list = useQuery({
+  const list = useInfiniteQuery({
     queryKey: ["procurement", "requests", view],
-    queryFn: ({ signal }) => getProcurementRequests(view, signal),
+    queryFn: ({ pageParam, signal }) =>
+      getProcurementRequests(
+        view,
+        {
+          limit: pageSize,
+          offset: pageParam,
+        },
+        signal,
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => {
+      const nextOffset =
+        lastPage.offset + lastPage.items.length;
+
+      return nextOffset < lastPage.total
+        ? nextOffset
+        : undefined;
+    },
     enabled: !auth.isPending && canReadProcurement,
   });
+
+  const items =
+    list.data?.pages.flatMap((page) => page.items)
+    ?? [];
 
   if (auth.isPending) return <p role="status">Загрузка…</p>;
   if (!canReadProcurement) {
@@ -48,41 +71,100 @@ export function ProcurementListPage() {
         title="Закупки"
       />
       <div className="procurement-page__body">
-        <div className="procurement-tabs" role="tablist" aria-label="Очередь закупок">
+        <div
+          aria-label="Очередь закупок"
+          className="procurement-tabs"
+          role="tablist"
+        >
           {manager ? (
-            <button role="tab" onClick={() => setSelectedView("my")} aria-selected={view === "my"} type="button">
+            <button
+              aria-selected={view === "my"}
+              onClick={() => setSelectedView("my")}
+              role="tab"
+              type="button"
+            >
               Мои
             </button>
           ) : null}
-          <button role="tab" onClick={() => setSelectedView("active")} aria-selected={view === "active"} type="button">
+          <button
+            aria-selected={view === "active"}
+            onClick={() => setSelectedView("active")}
+            role="tab"
+            type="button"
+          >
             {manager ? "Все активные" : "Активные"}
           </button>
-          <button role="tab" onClick={() => setSelectedView("history")} aria-selected={view === "history"} type="button">
+          <button
+            aria-selected={view === "history"}
+            onClick={() => setSelectedView("history")}
+            role="tab"
+            type="button"
+          >
             История
           </button>
         </div>
-        {list.isPending ? <p role="status">Загружаем заявки…</p> : null}
+
+        {list.isPending ? (
+          <p role="status">Загружаем заявки…</p>
+        ) : null}
+
         {list.isError ? (
           <p role="alert">
             Не удалось загрузить заявки.{" "}
-            <button onClick={() => void list.refetch()} type="button">Повторить</button>
+            <button
+              onClick={() => void list.refetch()}
+              type="button"
+            >
+              Повторить
+            </button>
           </p>
         ) : null}
-        {list.data?.items.length === 0 ? (
-          <p className="empty-state">В этой очереди пока нет заявок.</p>
+
+        {!list.isPending
+        && !list.isError
+        && items.length === 0 ? (
+          <p className="empty-state">
+            В этой очереди пока нет заявок.
+          </p>
         ) : null}
+
         <div className="procurement-list">
-          {(list.data?.items ?? []).map((entry) => (
-            <Link className="procurement-card" key={entry.id} to={`/procurement/${entry.id}`}>
+          {items.map((entry) => (
+            <Link
+              className="procurement-card"
+              key={entry.id}
+              to={`/procurement/${entry.id}`}
+            >
               <div>
                 <strong>{entry.request_number}</strong>
-                <span className="procurement-status">{entry.status_label}</span>
+                <span className="procurement-status">
+                  {entry.status_label}
+                </span>
               </div>
-              <p>Редакция {entry.revision_number} · {entry.line_count} поз.</p>
-              <p>Менеджер: {entry.assigned_manager.display_name}</p>
+              <p>
+                Редакция {entry.revision_number}
+                {" · "}
+                {entry.line_count} поз.
+              </p>
+              <p>
+                Менеджер: {entry.assigned_manager.display_name}
+              </p>
             </Link>
           ))}
         </div>
+
+        {list.hasNextPage ? (
+          <button
+            className="button button--load-more"
+            disabled={list.isFetchingNextPage}
+            onClick={() => void list.fetchNextPage()}
+            type="button"
+          >
+            {list.isFetchingNextPage
+              ? "Загружаем…"
+              : "Показать ещё"}
+          </button>
+        ) : null}
       </div>
     </main>
   );

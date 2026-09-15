@@ -130,10 +130,20 @@ export async function procurementRequest<T>(
 
 export function getProcurementRequests(
   view: "my" | "active" | "history",
+  page: {
+    limit: number;
+    offset: number;
+  },
   signal?: AbortSignal,
 ) {
+  const params = new URLSearchParams({
+    view,
+    limit: String(page.limit),
+    offset: String(page.offset),
+  });
+
   return procurementRequest<ProcurementPage>(
-    `/api/procurement/requests?view=${view}&limit=30&offset=0`,
+    `/api/procurement/requests?${params.toString()}`,
     undefined,
     signal,
   );

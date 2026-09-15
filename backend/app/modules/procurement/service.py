@@ -422,6 +422,12 @@ async def create_request(
     actor_user_id: uuid.UUID,
     settings: Settings,
 ) -> ProcurementRecord:
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_CREATE,),
+    )
+
     request_key = _normalize_client_request_id(payload.client_request_id)
     fingerprint = _payload_fingerprint(payload)
     await _advisory_lock(db, "procurement-create", actor_user_id, request_key)
@@ -569,6 +575,40 @@ async def list_requests(
     )
 
 
+async def _lock_and_require_actor_capabilities(
+    db: AsyncSession,
+    *,
+    actor_user_id: uuid.UUID,
+    capabilities: tuple[Capability, ...],
+) -> None:
+    from app.modules.identity.enums import (
+        UserAccessStatus,
+    )
+    from app.modules.identity.models import User
+
+    actor = await db.scalar(
+        select(User)
+        .where(User.id == actor_user_id)
+        .with_for_update()
+        .execution_options(
+            populate_existing=True,
+        )
+    )
+
+    if (
+        actor is None
+        or actor.access_status != UserAccessStatus.APPROVED
+        or any(
+            not has_capability(
+                actor.role,
+                capability,
+            )
+            for capability in capabilities
+        )
+    ):
+        raise ProcurementForbiddenError("required procurement capability is no longer available")
+
+
 async def _lock_and_validate_expected(
     db: AsyncSession,
     request_id: uuid.UUID,
@@ -634,6 +674,12 @@ async def manager_accept(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_MANAGE,),
+    )
+
     if replay is not None:
         return record
     previous = _set_status(record.request, ProcurementStatus.PURCHASING)
@@ -678,6 +724,12 @@ async def return_for_correction(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_MANAGE,),
+    )
+
     if replay is not None:
         return record
     _require_status(
@@ -730,6 +782,12 @@ async def submit_revision(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_CREATE,),
+    )
+
     if replay is not None:
         return record
     if record.request.initiator_user_id != actor_user_id:
@@ -790,6 +848,12 @@ async def _change_assignment(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_MANAGE,),
+    )
+
     if replay is not None:
         return record
     if record.request.status not in ACTIVE_PROCUREMENT_STATUSES:
@@ -880,6 +944,12 @@ async def transfer_to_acceptance(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_MANAGE,),
+    )
+
     if replay is not None:
         return record
     previous = _set_status(record.request, ProcurementStatus.AWAITING_ACCEPTANCE)
@@ -920,6 +990,12 @@ async def bind_line(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_ACCEPT,),
+    )
+
     if replay is not None:
         return record
     if record.request.status == ProcurementStatus.COMPLETED:
@@ -986,6 +1062,15 @@ async def create_and_bind_line(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(
+            Capability.PROCUREMENT_ACCEPT,
+            Capability.CATALOG_MANAGE,
+        ),
+    )
+
     if replay is not None:
         return record
     if record.request.status == ProcurementStatus.COMPLETED:
@@ -1053,6 +1138,12 @@ async def report_discrepancy(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_ACCEPT,),
+    )
+
     if replay is not None:
         return record
     _require_status(record.request, ProcurementStatus.AWAITING_ACCEPTANCE)
@@ -1100,6 +1191,12 @@ async def complete_acceptance(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_ACCEPT,),
+    )
+
     if replay is not None:
         return record
     _require_status(record.request, ProcurementStatus.AWAITING_ACCEPTANCE)

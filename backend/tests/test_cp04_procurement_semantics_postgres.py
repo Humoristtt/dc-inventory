@@ -122,3 +122,62 @@ async def test_cp04_actor_capability_is_rechecked_after_request_serialization(
     await db.refresh(record.request)
 
     assert record.request.status.value == "AGREEMENT_PENDING_MANAGER"
+
+
+async def test_cp04_revision_required_initiator_cannot_be_blocked(
+    warehouse_db: AsyncSession,
+) -> None:
+    from app.modules.identity.admin_service import (
+        AdminUserError,
+        update_user_access,
+    )
+    from app.modules.identity.enums import (
+        UserAccessStatus,
+        UserRole,
+    )
+    from tests.test_cp01_cross_domain_regressions import (
+        actor,
+        create_existing_request,
+        settings,
+    )
+
+    db = warehouse_db
+
+    owner, _ = await actor(
+        db,
+        UserRole.OWNER,
+        UserAccessStatus.APPROVED,
+    )
+
+    initiator, manager, _item_id, record = await create_existing_request(
+        db,
+        initiator_role=UserRole.ADMIN,
+    )
+
+    record = await procurement_service.return_for_correction(
+        db,
+        record.request.id,
+        procurement_service.CorrectionRequest(
+            expected_state_version=(record.request.state_version),
+            expected_revision_id=(record.request.current_revision_id),
+            client_request_id=(f"cp04-access-lifecycle-{record.request.id}"),
+            comment="CP04 lifecycle guard",
+        ),
+        actor_user_id=manager.id,
+        settings=settings(),
+    )
+
+    assert record.request.status.value == "AGREEMENT_REVISION_REQUIRED"
+
+    with pytest.raises(AdminUserError):
+        await update_user_access(
+            db,
+            actor_user_id=owner.id,
+            target_user_id=initiator.id,
+            access_status=UserAccessStatus.BLOCKED,
+            recovery_telegram_user_id=None,
+        )
+
+    await db.refresh(initiator)
+
+    assert initiator.access_status == UserAccessStatus.APPROVED

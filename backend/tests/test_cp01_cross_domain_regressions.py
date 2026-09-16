@@ -247,27 +247,27 @@ async def test_cp01_archive_and_procurement_snapshot_are_serialized(
         snapshot_loaded = asyncio.Event()
         allow_creation_to_continue = asyncio.Event()
 
-        original_get_item_record = procurement_service.get_item_record
+        original_load_attributes_for_items = procurement_service.load_attributes_for_items
 
-        async def paused_get_item_record(
+        async def paused_load_attributes_for_items(
             db: AsyncSession,
-            candidate_item_id: uuid.UUID,
+            candidate_item_ids: list[uuid.UUID],
         ):
-            item_record = await original_get_item_record(
+            attributes = await original_load_attributes_for_items(
                 db,
-                candidate_item_id,
+                candidate_item_ids,
             )
 
-            if candidate_item_id == item_id:
+            if item_id in candidate_item_ids:
                 snapshot_loaded.set()
                 await allow_creation_to_continue.wait()
 
-            return item_record
+            return attributes
 
         monkeypatch.setattr(
             procurement_service,
-            "get_item_record",
-            paused_get_item_record,
+            "load_attributes_for_items",
+            paused_load_attributes_for_items,
         )
 
         async def create_procurement() -> uuid.UUID:

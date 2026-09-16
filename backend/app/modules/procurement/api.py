@@ -51,6 +51,7 @@ from app.modules.procurement.service import (
     ProcurementNotFoundError,
     ProcurementRecord,
     ProcurementServiceUnavailableError,
+    ProcurementSummaryRecord,
     available_actions,
     bind_line,
     complete_acceptance,
@@ -104,7 +105,10 @@ def _raise_db_error(error: DBAPIError) -> NoReturn:
     ) from error
 
 
-def _name(record: ProcurementRecord, user_id: UUID) -> UserSummaryOut:
+def _name(
+    record: ProcurementRecord | ProcurementSummaryRecord,
+    user_id: UUID,
+) -> UserSummaryOut:
     return UserSummaryOut(id=user_id, display_name=record.display_names.get(user_id, str(user_id)))
 
 
@@ -152,7 +156,9 @@ def _event_out(record: ProcurementRecord, event: ProcurementEvent) -> Procuremen
     )
 
 
-def _summary(record: ProcurementRecord) -> ProcurementRequestSummaryOut:
+def _summary(
+    record: ProcurementRecord | ProcurementSummaryRecord,
+) -> ProcurementRequestSummaryOut:
     request = record.request
     revision = record.current_revision
     return ProcurementRequestSummaryOut(

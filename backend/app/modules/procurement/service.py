@@ -12,14 +12,19 @@ from decimal import Decimal
 from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.sql.base import ExecutableOption
 
 from app.core.config import Settings
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Item
 from app.modules.catalog.schemas import ItemCreate
-from app.modules.catalog.service import create_item, get_item_record, validate_item_create_payload
+from app.modules.catalog.service import (
+    create_item,
+    load_attributes_for_items,
+    load_item_create_validation_context,
+    validate_item_create_payload,
+)
 from app.modules.identity.enums import UserAccessStatus, UserRole
 from app.modules.identity.models import TelegramIdentity, User
 from app.modules.identity.policy import Capability, has_capability
@@ -105,8 +110,15 @@ class ProcurementRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class ProcurementSummaryRecord:
+    request: ProcurementRequest
+    current_revision: ProcurementRevision
+    display_names: dict[uuid.UUID, str]
+
+
+@dataclass(frozen=True, slots=True)
 class ProcurementPage:
-    items: list[ProcurementRecord]
+    items: list[ProcurementSummaryRecord]
     total: int
 
 
@@ -271,95 +283,69 @@ async def _prepare_lines(
                 await db.scalars(
                     select(Item)
                     .where(Item.id.in_(cp04_existing_item_ids))
+                    .options(joinedload(Item.category), joinedload(Item.manufacturer))
                     .order_by(Item.id)
-                    .with_for_update()
+                    .with_for_update(of=Item)
                 )
             ).all()
         )
         cp04_locked_items = {item.id: item for item in cp04_locked_rows}
 
-    cp04_expected_identity_signatures: list[str] = []
+    existing_attributes = await load_attributes_for_items(
+        db,
+        [item.id for item in cp04_locked_items.values()],
+    )
+    proposed_payloads = [
+        ItemCreate(
+            category_key=payload.category_key,
+            manufacturer_id=payload.manufacturer_id,
+            name=payload.name,
+            model=payload.model,
+            attributes=payload.attributes,
+        )
+        for payload in payloads
+        if isinstance(payload, ProposedItemLineCreate)
+    ]
+    proposed_validation = await load_item_create_validation_context(db, proposed_payloads)
 
-    for source_line in payloads:
-        if isinstance(
-            source_line,
-            ExistingItemLineCreate,
-        ):
-            item = cp04_locked_items.get(source_line.item_id)
-
+    rows: list[ProcurementRevisionLine] = []
+    proposed_index = 0
+    for line_no, payload in enumerate(payloads, 1):
+        snapshot: dict[str, object]
+        catalog_item_id: uuid.UUID | None
+        expected_identity_signature: str
+        if isinstance(payload, ExistingItemLineCreate):
+            item = cp04_locked_items.get(payload.item_id)
             if item is None:
                 raise ProcurementConflictError(
                     "catalog item not found",
                     code="catalog_item_not_found",
                 )
-
             if item.status != ItemStatus.ACTIVE:
-                raise ProcurementConflictError(
-                    "archived item cannot be procured",
-                    code="catalog_item_archived",
-                )
-
-            cp04_expected_identity_signatures.append(item.identity_signature)
-            continue
-
-        if isinstance(
-            source_line,
-            ProposedItemLineCreate,
-        ):
-            validated_identity = await validate_item_create_payload(
-                db,
-                ItemCreate(
-                    category_key=(source_line.category_key),
-                    manufacturer_id=(source_line.manufacturer_id),
-                    name=source_line.name,
-                    model=source_line.model,
-                    attributes=(source_line.attributes),
-                ),
-            )
-
-            cp04_expected_identity_signatures.append(validated_identity.identity_signature)
-            continue
-
-        raise ProcurementValidationError("unsupported procurement line type")
-
-    rows: list[ProcurementRevisionLine] = []
-    for line_no, payload in enumerate(payloads, 1):
-        snapshot: dict[str, object]
-        catalog_item_id: uuid.UUID | None
-        if isinstance(payload, ExistingItemLineCreate):
-            record = await get_item_record(db, payload.item_id)
-            if record.item.status != ItemStatus.ACTIVE:
                 raise ProcurementConflictError(
                     "archived item cannot be procured", code="catalog_item_archived"
                 )
             snapshot = {
-                "category_key": record.category.key,
-                "category_name": record.category.display_name,
+                "category_key": item.category.key,
+                "category_name": item.category.display_name,
                 "manufacturer_id": (
-                    str(record.manufacturer.id) if record.manufacturer is not None else None
+                    str(item.manufacturer.id) if item.manufacturer is not None else None
                 ),
                 "manufacturer_name": (
-                    record.manufacturer.name if record.manufacturer is not None else None
+                    item.manufacturer.name if item.manufacturer is not None else None
                 ),
-                "name": record.item.name,
-                "model": record.item.model,
+                "name": item.name,
+                "model": item.model,
                 "attributes": {
                     key: str(value) if isinstance(value, Decimal) else value
-                    for key, value in record.attributes.items()
+                    for key, value in existing_attributes[item.id].items()
                 },
             }
-            catalog_item_id = record.item.id
+            catalog_item_id = item.id
+            expected_identity_signature = item.identity_signature
         elif isinstance(payload, ProposedItemLineCreate):
-            validated = await validate_item_create_payload(
-                db,
-                ItemCreate(
-                    category_key=payload.category_key,
-                    manufacturer_id=payload.manufacturer_id,
-                    name=payload.name,
-                    model=payload.model,
-                    attributes=payload.attributes,
-                ),
-            )
+            validated = proposed_validation.validate(proposed_payloads[proposed_index])
+            proposed_index += 1
             snapshot = {
                 "category_key": validated.category.key,
                 "category_name": validated.category.display_name,
@@ -377,6 +363,7 @@ async def _prepare_lines(
                 },
             }
             catalog_item_id = None
+            expected_identity_signature = validated.identity_signature
         else:  # pragma: no cover - discriminated schema closes this branch
             raise ProcurementValidationError("unsupported procurement line")
         rows.append(
@@ -387,18 +374,10 @@ async def _prepare_lines(
                 line_type=payload.line_type,
                 catalog_item_id=catalog_item_id,
                 display_snapshot=snapshot,
+                expected_identity_signature=expected_identity_signature,
                 quantity=payload.quantity,
             )
         )
-    for (
-        prepared_line,
-        expected_identity_signature,
-    ) in zip(
-        rows,
-        cp04_expected_identity_signatures,
-        strict=True,
-    ):
-        prepared_line.expected_identity_signature = expected_identity_signature
 
     return rows
 
@@ -594,29 +573,33 @@ async def list_requests(
     else:
         raise ProcurementValidationError("unknown procurement view", code="view_invalid")
     total = int(await db.scalar(select(func.count(ProcurementRequest.id)).where(*filters)) or 0)
-    requests = list(
-        (
-            await db.scalars(
-                select(ProcurementRequest)
-                .where(*filters)
-                .options(*_record_options())
-                .order_by(ProcurementRequest.created_at.desc(), ProcurementRequest.id.desc())
-                .limit(limit)
-                .offset(offset)
+    rows = (
+        await db.execute(
+            select(ProcurementRequest, ProcurementRevision)
+            .join(
+                ProcurementRevision,
+                ProcurementRevision.id == ProcurementRequest.current_revision_id,
             )
+            .where(*filters)
+            .order_by(ProcurementRequest.created_at.desc(), ProcurementRequest.id.desc())
+            .limit(limit)
+            .offset(offset)
         )
-        .unique()
-        .all()
-    )
-    user_ids: set[uuid.UUID] = set()
-    for request in requests:
-        user_ids.update((request.initiator_user_id, request.assigned_manager_user_id))
-        user_ids.update(revision.submitted_by_user_id for revision in request.revisions)
-        user_ids.update(event.actor_user_id for event in request.events)
+    ).all()
+    user_ids = {
+        user_id
+        for request, _revision in rows
+        for user_id in (request.initiator_user_id, request.assigned_manager_user_id)
+    }
     names = await _display_names(db, user_ids)
     return ProcurementPage(
         items=[
-            ProcurementRecord(row, list(row.revisions), list(row.events), names) for row in requests
+            ProcurementSummaryRecord(
+                request=request,
+                current_revision=revision,
+                display_names=names,
+            )
+            for request, revision in rows
         ],
         total=total,
     )

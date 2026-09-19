@@ -1,48 +1,66 @@
-# CP-13 — документация: аудит и границы завершения
+# CP-13 — ревизия документации и доказательства
 
-Дата: 19.09.2026. Основа: `remediation/audit-0-12` на `7e4c66d272e215354477e7674f5bf9a106258bf9`.
+**Дата:** 19.09.2026. **Контур:** `remediation/audit-0-12`. **Начальный SHA этой редакционной ревизии:** `38d1b19871da888128926bcdab72673b5beb7b8f`. **Статус:** `IN_PROGRESS` / в основном журнале `OPEN` до проверки опубликованного итогового коммита. Изменения выполняются непосредственно через GitHub; этот способ записи сам по себе **не запускает** локальные тесты или полный CI. Не объявляем CP-13 закрытым только по числу переписанных файлов.
 
-Статус: `IN_PROGRESS`. В GitHub пересмотрена карта Markdown и подготовлены изменения действующих документов; автоматические проверки нового коммита и production-приёмка на момент этой записи не выполнялись. Запрещено считать CP-13 завершённым только потому, что изменения опубликованы.
+## 1. Объём и метод
 
-## Объём
+На исходном SHA — **23 tracked Markdown**, включая корневые `README.md`, `AGENTS.md`, карту `docs/README.md`, действующие технические контракты, исторические отчёты и provenance vendored Telegram SDK. Документы сверяем с фактическим `backend/`, `frontend/`, `compose.yaml`, миграциями и проверками. Последнюю документированную production-проверку не принимаем за live-состояние: source Alembic `a9c0d1e2f3a4`, production evidence `c3d4e5f6a7b8` — разные контуры. Значения SHA и схему production перед CP-16 требуется прочитать заново с целевой VM.
 
-На исходном SHA обнаружены 20 tracked Markdown: `AGENTS.md`, `README.md` и 18 файлов `docs/*.md`. Два новых файла этого прохода — `docs/README.md` (карта/ownership) и данный отчёт. Уникальные historical snapshots не редактируются задним числом. `AGENTS.md` — инструкции разработки; не меняется без нарушения конкретного правила.
+Каждому виду сведений назначен один владелец: [карта документации](README.md) определяет назначение каждого файла; корневой README объясняет проект; ARCHITECTURE — компоненты и доверие; предметные документы — инварианты; DEVELOPMENT — локальную работу; DEPLOYMENT — одобренный выпуск; OPERATIONS — диагностику; RECOVERY_RUNBOOK — изолированное восстановление; ROADMAP — порядок; AUDIT_0_12_REMEDIATION — фактические checkpoint evidence. Исторические файлы сохраняем, если там есть уникальные SHA, результаты и объяснение прежних решений. Наличие английских значений API, сущностей и переменных окружения не является основанием их переводить и ломать техническую идентичность.
 
-## Расхождения с проверенными исходниками и ledger
+## 2. Найденные проблемы и исправления
 
-1. В действующих README, архитектуре, development/deployment/operations, warehouse/RBAC и roadmap фигурировал устаревший source Alembic head `d4e5f6a7b8c9`. В миграционном графе присутствует последняя `a9c0d1e2f3a4`; её parent — `f8b9c0d1e2f3`. Последний документированный production Alembic `c3d4e5f6a7b8` сохраняется как отдельный факт, **не** как сегодняшняя live-проверка.
-2. В roadmap и корневом README не были отражены CP-07–CP-12 и текущая последовательность CP-13→CP-18; source код и production acceptance смешивались.
-3. Operations ошибочно описывал четыре DB identity при наличии owner/backend/Telegram/email/maintenance (пять). CP-09 применяет DB rights транзакционно и завершает legacy sessions отдельным post-commit вызовом.
-4. Для CP-07 требуется атомарно согласованное переключение Cloudflare Tunnel origin с прежнего TCP на trusted Unix ingress вместе с web image; доступ UID/GID/cloudflared и права bind mount ещё не приняты на production. Нельзя выпускать новый web с прежним TCP Tunnel origin.
-5. CP-10 добавил проверку заявленного checkout SHA против реального HEAD и атомарную публикацию release artifacts. Допустимый docs/host-tools-only sync может иметь image revision, отличный от HEAD, при неизменных build contexts и runtime source.
-6. CP-11 проверяет manifest/dump size/hash/runtime/labels, isolated cleanup и отзыв восстановленных auth sessions. Повторный настоящий production-S3 restore и восстановление внешних конфигураций **открыты**.
-7. В README/ROADMAP/доменной документации требовалось отделить historical accepted Warehouse/Procurement от текущего remediation branch, уточнить guarded one-shot bootstrap, закрытый regular mutation gate, custody и защищённый final procurement RECEIPT.
+| Область | Выявленное расхождение | Как нормализовано |
+|---|---|---|
+| Общая документация | Повторение состояния в README, архитектуре, roadmap и operations; риск принять source за production. | Разделены назначение/устройство/порядок/последние факты. Датированные SHA и Alembic явно указаны как evidence. |
+| Каталог | Старый Stage5 reference ссылался на поля и категории, отсутствующие в текущем `configuration.py`. | Действующая схема переписана по `LEAVES`, типам Attribute и `normalization.py`; reference оставлен отдельным историческим документом с явными отличиями. |
+| Склад | История, количество, custody и физический экземпляр иногда описывались без ясной границы. | Отдельно описаны immutable Movement/Line, stock/custody, роль actor, locking, idempotency и zero-drift. Уточнено отсутствие active serial/WWN lifecycle. |
+| RBAC/Procurement | Повторяющиеся описания прав, неполная граница между manager responsibility и ACL. | Матрица сверена с `identity/policy.py`; OWNER, access lifecycle, финальный RECEIPT и immutable revisions описаны вместе. |
+| Full-stack | Прежняя инструкция не отражала исправление CP-15 перед миграцией. | DEVELOPMENT объясняет проверку Docker topology/nonce по TCP до Alembic, временный gate только в child processes, domain reconciliation и cleanup. |
+| Ingress | Локальная реализация Unix-входа могла выглядеть как уже готовый production cutover. | CP-07 и DEPLOYMENT отдельно фиксируют текущий TCP Tunnel, требуемый host bind mount, UID/GID, доступ каталога и одновременный rollback web/Tunnel. |
+| Backup/DR | Старые успешные восстановления могли ошибочно использоваться вместо свежего CP-11 rehearsal. | RECOVERY_RUNBOOK явно различает historical Stage15B, synthetic local tests и настоящий S3 replay; добавлены точный image/schema SQL, отзыв сессий и границы удаления ресурсов. |
+| Frontend | Длинная смешанная русско-английская документация дублировала визуальные и performance решения. | Design-system определяет единственного владельца CSS; performance описывает последовательность загрузки и хранит старые замеры отдельно от текущего CP-14. |
+| Engineering policy | `AGENTS.md` был англоязычным. | Переведён на русский с сохранением запрета несанкционированного deploy, push, merge, доступа к production и лишних повторных тестов. |
 
-## Архитектурная нормализация
+Отдельный технический факт CP-15: предыдущий full-stack runner проверял целевую БД **после миграции**. Коммит `38d1b19` добавил проверку экземпляра PostgreSQL и одноразовой БД **до миграции**. На этом коммите локально подтверждены topology/nonce PASS, два Playwright-теста, zero-drift и удаление БД. Это относится к коду runner, не означает завершение всех трёх проходов CP-15.
 
-Создана `docs/README.md` с однозначными владельцами документационных контрактов, правилами выбора текущих и исторических источников, таблицей зависимостей, ссылками на все Markdown и критерием удаления. Корневой README — обзор; ROADMAP — состояние и порядок; AUDIT_0_12_REMEDIATION — полный журнал, ARCHITECTURE — устройство, доменные файлы — invariants, DEVELOPMENT — разработка, DEPLOYMENT — выпуск, OPERATIONS — эксплуатация, RECOVERY_RUNBOOK — восстановление.
+## 3. Переписанные и сохранённые материалы
 
-Текущие повторяющиеся описания в девяти документах нормализованы и сведены к ссылкам на owner-файлы; никто не удаляет уникальные исторические доказательства ради сокращения текста. Исторические `HISTORY.md`, `STAGE15_PLAN.md`, `STAGE15_AUDIT_REMEDIATION.md`, `CATALOG_SOURCE_REFERENCE.md`, `FRONTEND_PERFORMANCE.md` оставлены: это не мусор, а отдельные датированные evidence. `CATALOG_SCHEMA.md`, `FRONTEND_DESIGN_SYSTEM.md`, `CP07_HTTP_SOCKET_MIGRATION.md`, `RECOVERY_RUNBOOK.md` проверены как собственные действующие контракты и не объединяются со смежными файлами без потери независимой области ответственности.
+В рамках текущего редакционного этапа переработаны с прямой опорой на прочитанные контракты:
 
-## Файлы с переработанным содержанием
+- `README.md`, `AGENTS.md`;
+- `docs/ARCHITECTURE.md`, `docs/PRODUCT_REQUIREMENTS.md`, `docs/CATALOG_SCHEMA.md`, `docs/WAREHOUSE_DOMAIN.md`, `docs/RBAC_PROCUREMENT.md`;
+- `docs/DEVELOPMENT.md`, `docs/DEPLOYMENT.md`, `docs/OPERATIONS.md`, `docs/RECOVERY_RUNBOOK.md`, `docs/CP07_HTTP_SOCKET_MIGRATION.md`;
+- `docs/FRONTEND_DESIGN_SYSTEM.md`, `docs/FRONTEND_PERFORMANCE.md`, `docs/CATALOG_SOURCE_REFERENCE.md`, `docs/ROADMAP.md`.
 
-- `README.md` — сводка с явными source/production границами и ссылками.
-- `docs/ARCHITECTURE.md` — модули, data/auth, ingress, workers, provenance.
-- `docs/DEVELOPMENT.md` — локальная установка, disposable DB, реальные и synthetic gate, source SHA.
-- `docs/DEPLOYMENT.md` — release, CP-07, secrets/DB identities, миграции/rollback, operator acceptance.
-- `docs/OPERATIONS.md` — текущие/исторические факты, 5 DB roles, health, Telegram, backup/DR.
-- `docs/PRODUCT_REQUIREMENTS.md` — роли, stock/custody, procurement и bootstrap.
-- `docs/RBAC_PROCUREMENT.md` — role matrix и state machine, external at-least-once.
-- `docs/ROADMAP.md` — CP-00–18 и зависимости production acceptance.
-- `docs/WAREHOUSE_DOMAIN.md` — транзакционные invariants, защищённый final RECEIPT, reconciliation.
+`docs/README.md` уже содержит карту всех Markdown и отдельные владельцы контрактов, поэтому дублировать её таблицы здесь не нужно. Исторические `docs/HISTORY.md`, `docs/STAGE15_PLAN.md`, `docs/STAGE15_AUDIT_REMEDIATION.md` и контрольный журнал `docs/AUDIT_0_12_REMEDIATION.md` **не заменяем короткой сводкой**: у них уникальные даты, SHA, исходные FAIL/PASS и checkpoints, на которые ссылаются технические тесты. Старые pre-data значения `CURRENT_AUTHORITATIVE_INVENTORY_SOURCE=NOT_DEFINED` и `REAL_DATA_IMPORT=DEFERRED_NEXT_ROADMAP` в Stage15 относятся к конкретному прошлому моменту, а не к текущему складу. `frontend/vendor/telegram-web-app.SOURCE.md` содержит проверяемое происхождение внешнего runtime SDK; удалять его как «мусор» нельзя.
 
-Новое: `docs/README.md` и `ops/tests/test_docs_structure.py`. Тест проверяет, что каждый tracked Markdown включён в карту и ссылки существуют; не подменяет содержательный аудит.
+Физическое удаление файлов требует отдельного доказательства, что нет уникальных свидетельств, действующих ссылок и CI-контрактов. На этом этапе такого подтверждения **нет**, поэтому не удаляем архивы только ради сокращения числа Markdown.
 
-## Обязательная приёмка перед CLOSED
+## 4. Открытые замечания по source и production
 
-- На опубликованном коммите запустить `python3 ops/tests/test_docs_freshness.py`, `python3 ops/tests/test_docs_structure.py`, `python3 ops/tests/test_notification_delivery_contract.py`, `python3 ops/tests/test_recovery_runbook_contract.py`, `git diff --check`. Исправить любые failures.
-- В `docs/AUDIT_0_12_REMEDIATION.md` обновить устаревший `Current next action: CP-06` на CP-14 после подтверждённой приёмки документации и вписать уже существующий CP-11 commit `377f9a0e59e9f62684242a2b54f622536a52817d`. Этот старый журнал нельзя кратко переписать с потерей CP-00–06 evidence.
-- До нового production окна не менять зафиксированные исторические production SHA/head, не закрывать CP-07–11 gates, CP-16/17 и новый S3 rehearsal.
-- GitHub connector только создаёт Git objects/commit и не запускает локальные тесты. Push в remediation branch сам по себе не запускает CI: в `.github/workflows/ci.yml` push привязан к `main`, также есть PR, schedule и manual dispatch.
+- `docs/CP07_HTTP_SOCKET_MIGRATION.md`: в исходниках Nginx реализован Unix listener, но в прочитанном `compose.yaml` web ещё имеет только loopback-published TCP port и **не содержит готового host bind mount** для Unix-каталога. Это нужно включить в точный release plan, проверить у пользователя `cloudflared` и выполнить с согласованным переключением; документация не исправляет Compose автоматически.
+- CP-08: live Telegram/Graph delivery, actual worker secrets и configuration acceptance открыты.
+- CP-09: production transaction grant cutover и termination legacy sessions не выполнялись в рамках этой ревизии.
+- CP-10: release provenance текущего живого runtime не проверялся на VM.
+- CP-11: настоящий production-S3 rehearsal и внешняя конфигурация после локальных исправлений не проверялись.
+- CP-12: сопровождаемость и production acceptance остаются предметом отдельного аудита.
+- CP-15: помимо исправления runner, остальные проходы предрелизного аудита не завершены.
 
-Этот отчёт описывает выполненную source-документационную работу и открытые проверки, а не обещает результат tests/production.
+Regular warehouse gate по последнему evidence — `REAL_INVENTORY_MUTATIONS_ENABLED=false`; initial bootstrap завершён и **не** повторяется. Реальная Telegram Mini App приёмка текущего нового выпуска назначена на CP-17 после отдельно разрешённого CP-16.
+
+## 5. Финальная проверка и условие CLOSED
+
+После синхронизации **итогового** GitHub HEAD с чистым локальным checkout выполнить один документационный gate:
+
+```bash
+python3 ops/tests/test_docs_freshness.py
+python3 ops/tests/test_docs_structure.py
+python3 ops/tests/test_notification_delivery_contract.py
+python3 ops/tests/test_recovery_runbook_contract.py
+git diff --check
+```
+
+Зафиксировать SHA, фактические результаты, перечень изменённых файлов и обнаруженные противоречия. При необходимости исправить конкретный отказ и повторить профильную проверку. После этого обновить CP-13 evidence в `docs/AUDIT_0_12_REMEDIATION.md`; не переписывать CP-00–14 задним числом. Следующий объём — три прохода CP-15 и согласованные пользователем 12 независимых проверок разделов **после** очистки документов.
+
+**На момент этой записи:** редактирование GitHub не подтверждено локальным выполнением перечисленного gate на новом HEAD; CP-13 остаётся `OPEN`, CP-15 `OPEN`, CP-16/17/18 `OPEN`. Production и миграции не менялись этими документационными коммитами.

@@ -131,6 +131,16 @@ Backend/frontend Dockerfiles сохраняют revision в
 
 Required backend CI gate проверяет Dockerfile, Compose, CI service images и GitHub Actions и отклоняет возврат mutable external execution references.
 
+`ops/release/build_release.py --env-file <env> --output <new-directory>`
+собирает revision-tagged backend/web/PostgreSQL images только из чистого
+checkout. Перед записью `release.json` и `release.env` он проверяет Git HEAD,
+отсутствие используемых тегов, immutable Docker image IDs и revision labels
+всех трёх образов. Файлы результата появляются вместе после успешной проверки;
+при ошибке сборки, проверки или записи каталог результата не остаётся.
+Docker при прерванной сборке может сохранить уже созданные revision tags;
+перед повтором их нужно осмотреть и удалить вручную только после проверки,
+что они относятся к неудачной попытке. Скрипт не выполняет deploy.
+
 Обновление pin выполняется явно: сначала выбирается новая версия/tag, затем проверяется upstream digest или Action commit SHA, после чего новый immutable reference проходит обычные runtime/CI gates.
 
 ## Секреты
@@ -467,6 +477,14 @@ zero-drift reconciliation и fresh verified off-VM backup.
   containers, если Docker build contexts и application runtime source не
   менялись; изменённые host-side tools обязаны отдельно пройти
   syntax/contract checks.
+
+При снятии runtime provenance `--production-checkout-sha` должен совпадать с
+фактическим `git rev-parse HEAD` указанного `--root`; несовпадение завершает
+проверку ошибкой. `production_checkout_sha` описывает checkout на момент
+снятия provenance. `source_revision` каждого runtime image берётся из label
+самого immutable Docker image. После разрешённого source-only sync эти SHA
+могут различаться; решение о допустимости принимается по diff build contexts
+и runtime source, а не по искусственному требованию равенства.
 
 Для Telegram delivery после runtime-changing deploy выполняется минимальный live
 smoke: `/start` должен пройти webhook/outbox/worker/Gateway, удалить входящую

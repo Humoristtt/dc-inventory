@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,6 +25,8 @@ def output(*args: str) -> str:
 
 
 def build(env_file: Path, destination: Path) -> None:
+    if destination.exists():
+        raise FileExistsError(f"release output already exists: {destination}")
     if output("git", "status", "--porcelain"):
         raise RuntimeError("release build requires a clean checkout")
     revision = output("git", "rev-parse", "HEAD")
@@ -33,7 +36,6 @@ def build(env_file: Path, destination: Path) -> None:
     existing = set(output("docker", "image", "ls", "--format", "{{.Repository}}:{{.Tag}}").splitlines())
     if existing.intersection(refs.values()):
         raise RuntimeError("release tag already exists; reuse retained artifacts, do not rebuild")
-    destination.mkdir(parents=True, exist_ok=False)
     environment = {**os.environ, **refs, "APP_REVISION": revision}
     subprocess.run(
         ["docker", "compose", "--env-file", str(env_file.resolve()), "-f", "compose.yaml",
@@ -51,10 +53,16 @@ def build(env_file: Path, destination: Path) -> None:
             raise RuntimeError(f"{service}: invalid image ID")
         images[service] = {"reference": refs[variable], "image_id": image_id,
                            "source_revision": revision, "repo_digests": metadata.get("RepoDigests", [])}
-    (destination / "release.json").write_text(json.dumps(
-        {"schema_version": 1, "source_revision": revision, "images": images}, indent=2) + "\n")
-    (destination / "release.env").write_text(
-        f"APP_REVISION={revision}\n" + "".join(f"{key}={value}\n" for key, value in refs.items()))
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=".release-", dir=destination.parent) as staging:
+        staged = Path(staging)
+        (staged / "release.json").write_text(json.dumps(
+            {"schema_version": 1, "source_revision": revision, "images": images}, indent=2) + "\n")
+        (staged / "release.env").write_text(
+            f"APP_REVISION={revision}\n" + "".join(f"{key}={value}\n" for key, value in refs.items()))
+        if destination.exists():
+            raise FileExistsError(f"release output already exists: {destination}")
+        staged.rename(destination)
 
 
 def main() -> None:

@@ -28,6 +28,7 @@ compile(
 assert "source_checkout_sha" not in backup
 assert '"schema_version": 2' in backup
 assert '"production_checkout_sha"' in backup
+assert "verify_checkout(args.root, checkout)" in provenance
 assert '"runtime": provenance["runtime"]' in backup
 assert "runtime-provenance.json" in backup
 

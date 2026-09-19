@@ -29,6 +29,29 @@ class ProvenanceTests(unittest.TestCase):
             self.assertEqual(result, {"image_id": image_id, "source_revision": revision})
             self.assertEqual(run.call_args.args[0], ["docker", "image", "inspect", image_id])
 
+    def test_claimed_checkout_must_match_actual_git_head(self):
+        actual = "a" * 40
+        claimed = "b" * 40
+
+        with patch.object(
+            module.subprocess,
+            "check_output",
+            return_value=actual + "\n",
+        ) as git:
+            module.verify_checkout(ROOT, actual)
+
+            with self.assertRaisesRegex(RuntimeError, "mismatch"):
+                module.verify_checkout(ROOT, claimed)
+
+            self.assertEqual(git.call_count, 2)
+            self.assertEqual(git.call_args.args, (["git", "rev-parse", "HEAD"],))
+            self.assertEqual(git.call_args.kwargs["cwd"], ROOT)
+
+        with patch.object(module.subprocess, "check_output") as git:
+            with self.assertRaisesRegex(RuntimeError, "invalid production checkout SHA"):
+                module.verify_checkout(ROOT, "invalid")
+            git.assert_not_called()
+
     def test_missing_container_fails_closed(self):
         with patch.object(module, "run", return_value=""):
             with self.assertRaises(RuntimeError):

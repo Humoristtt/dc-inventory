@@ -434,7 +434,35 @@ Status: `OPEN` — локальное исправление проверено;
 
 ### CP-10 — Release / deploy / artifact integrity
 
-Status: `OPEN`
+Status: `OPEN` — локальная реализация и регрессии проверены; production acceptance не выполнялся.
+
+Проверено: release builder, Docker image IDs и revision labels, Compose image
+overrides, чистота checkout и занятые release tags, runtime provenance,
+CI contracts и documented source-only sync.
+
+Подтверждённые дефекты:
+- Заявленный production checkout SHA проверялся только по формату и мог не
+  совпадать с фактическим Git HEAD.
+- Release builder создавал каталог результата до сборки и проверки образов;
+  неудачная сборка/проверка оставляла пустой или частичный output.
+- Начатая регрессионная фикстура возвращала буквальный `\\n` вместо newline.
+
+Исправлено: сравнение checkout SHA с `git rev-parse HEAD`; фикстура; запись
+release manifest/env через временный каталог с публикацией после проверки.
+Существующий output не перезаписывается. Равенство revision labels текущему
+checkout при source-only sync не требуется.
+
+Проверки: `python3 -m unittest -v ops.tests.test_release_artifacts
+ops.tests.test_provenance_behavior` — 12 PASS; `python3
+ops/tests/test_runtime_provenance_contract.py` — PASS; `docker compose config
+--images` с release refs и digest refs — PASS (в составе unittest).
+
+Ограничения: реальный Docker build из clean checkout и production runtime
+provenance здесь не выполнялись. После сбоя Docker build созданные теги могут
+остаться в локальном daemon; output manifest при этом не публикуется.
+Production acceptance остаётся OPEN: сверка production Git HEAD, запущенных
+image IDs/labels и build-context diff перед source-only sync.
+Commit: будет указан после фиксации checkpoint.
 
 ### CP-11 — Backup / restore / DR
 

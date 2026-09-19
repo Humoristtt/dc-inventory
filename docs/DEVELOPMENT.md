@@ -1,10 +1,10 @@
-# Локальная разработка Spikatel Inventory
+# Разработка и локальные проверки
 
-Документ описывает команды разработки и проверки **локального source**, а не текущую конфигурацию production. Каноническая архитектура: `docs/ARCHITECTURE.md`; требования ролей/закупок: `docs/RBAC_PROCUREMENT.md`; общее оформление: `docs/FRONTEND_DESIGN_SYSTEM.md`.
+Разработку ведём на Mac в отдельном checkout. Production VM не используем как среду разработки и не направляем на неё локальные миграции, SQL или тесты. Этот документ отвечает за настройку и безопасный запуск; устройство модулей — в [ARCHITECTURE.md](ARCHITECTURE.md), правила склада — в [WAREHOUSE_DOMAIN.md](WAREHOUSE_DOMAIN.md), ролей и закупок — в [RBAC_PROCUREMENT.md](RBAC_PROCUREMENT.md).
 
-## Версии и установка
+## 1. Инструменты и установка
 
-Нужны Python 3.12, Node.js 24, Docker Engine и Docker Compose. В `backend`:
+Нужны Python 3.12, Node.js 24, Docker Engine/Compose и Git. Для backend создаём виртуальное окружение в `backend/.venv` и устанавливаем зафиксированные зависимости:
 
 ```bash
 cd backend
@@ -13,95 +13,75 @@ source .venv/bin/activate
 python -m pip install --require-hashes -r requirements-dev.lock
 ```
 
-`requirements-dev.lock` обновляется при изменении `pyproject.toml`, затем проверяется чистой установкой с `--require-hashes`. Окружение `.venv` не коммитится.
+`requirements-dev.lock` должен соответствовать `pyproject.toml`; при изменении зависимостей обновляем lock и проверяем чистую установку с `--require-hashes`. Окружение `.venv` не добавляем в Git.
 
-Frontend:
+Для frontend:
 
 ```bash
 cd frontend
 npm ci
-npm run dev
-npm run lint
-npm run typecheck
-npm test
-npm run build
 npx playwright install chromium webkit
-npm run test:e2e
+npm run dev
 ```
 
-Общие header, button, form-control и dialog primitives принадлежат `frontend/src/shared/ui`. Feature CSS отвечает за компоновку, а не за независимую геометрию базовых controls. Изменения visual contract сопровождаются обновлением design-system документа и регрессионных проверок.
+Зависимости устанавливаем по `package-lock.json`; не используем произвольное обновление пакетов как побочный эффект работы над документацией.
 
-## Конфигурация и безопасность
+## 2. Локальная конфигурация и PostgreSQL
 
-Локальный `.env` создаётся по `.env.example`; настоящие production secrets и datasets в Git не помещаются. Никогда не направляйте тесты на production или общую development DB. Production VM — не development environment.
-
-Для RBAC/Procurement нельзя подменять backend authorization frontend-видимостью, считать MANAGER уровнем линейной иерархии, считать assigned Manager ACL, менять stock по статусу закупки, автоматически создавать Item из proposed line либо переписывать submitted revision. Читайте `docs/RBAC_PROCUREMENT.md` перед изменениями этих доменов.
-
-## PostgreSQL и Alembic
-
-Development PostgreSQL поднимается только на loopback через отдельный `dev_host_net`:
+Создаём локальный `.env` по `.env.example`. В Git не помещаем `.env`, токены, дампы, реальные инвентарные таблицы и секреты. Dev Compose: `compose.dev.yaml`; он публикует PostgreSQL **только на loopback** через порт `${POSTGRES_DEV_PORT:-55432}`, а внутренние backend/DB соединения использует через Docker `db_net`. Web не подключается к БД напрямую.
 
 ```bash
+# Из корня репозитория
+
 docker compose --env-file .env -f compose.dev.yaml up -d --wait postgres
 ```
 
-Host port `127.0.0.1:55432`; backend и БД взаимодействуют внутри `db_net`, web к БД не подключается.
-
-Для миграций с Mac:
+Для ручного запуска backend/миграций на Mac нужен URL с `127.0.0.1`, а не Docker hostname `postgres`:
 
 ```bash
-set -a; source .env; set +a
-HOST_DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:55432/${POSTGRES_DB}"
-cd backend
-DATABASE_URL="$HOST_DATABASE_URL" alembic upgrade head
+set -a
+source .env
+set +a
+HOST_DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_DEV_PORT:-55432}/${POSTGRES_DB}"
 ```
 
-Baseline Alembic: `48c2f07f01a0`. Текущий source migration head: `a9c0d1e2f3a4`. Последний документированный running production migration head: `c3d4e5f6a7b8`; это разные контуры. Миграции `d4e5f6a7b8c9` … `a9c0d1e2f3a4` и исправления CP-07–12 не являются production state до отдельного deploy/provenance acceptance. Не выводите версию БД из Git HEAD.
-
-## Локальный backend и полный dev runtime
+**Внимание:** эта команда лишь формирует URL. Прежде чем выполнять любую миграцию, убедитесь, что выбранная БД — выделенная dev/test БД, а не production или общая рабочая БД. Не выводите строку с паролем в логи и не копируйте её в переписку.
 
 ```bash
-set -a; source .env; set +a
-HOST_DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:55432/${POSTGRES_DB}"
 cd backend
-DATABASE_URL="$HOST_DATABASE_URL" APP_ENV=development uvicorn app.main:app --host 127.0.0.1 --port 8000
+DATABASE_URL="$HOST_DATABASE_URL" APP_ENV=development .venv/bin/alembic upgrade head
+DATABASE_URL="$HOST_DATABASE_URL" APP_ENV=development .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-Endpoints: `/api/health/live`, `/api/health/ready`; Swagger только вне production: `http://127.0.0.1:8000/api/docs`.
-
-Полный dev стек из корня:
+Backend предоставляет `/api/health/live` и `/api/health/ready`; Swagger `/api/docs` доступен вне production. Для запуска dev Compose целиком из корня:
 
 ```bash
 docker compose --env-file .env -f compose.dev.yaml up -d --build --wait web
 ```
 
-Публичный локальный entrypoint: `http://127.0.0.1:8080`. Backend/PostgreSQL host ports в production не публикуются. Dev `POSTGRES_DEV_PORT` позволяет использовать отдельный loopback-порт для одноразовой БД.
+Локальный web доступен на `http://127.0.0.1:8080`. Это не production release и не подтверждение доступности Telegram Tunnel.
 
-## Проверки
+## 3. Версия БД и миграции
 
-Backend из `backend`:
+Базовая миграция: `48c2f07f01a0`. Текущий **исходный** Alembic head: `a9c0d1e2f3a4`. Последний документированный production Alembic head: `c3d4e5f6a7b8`; фактическое значение на сервере перед CP-16 проверяется повторно. Разница этих двух значений не устраняется `git pull` или синхронизацией документации.
 
-```bash
-ruff check app tests migrations
-mypy app tests migrations/env.py migrations/versions
-pytest -q
-```
+Исторические миграции не переписываем. Новая миграция должна быть детерминированной, иметь ограничения и безопасный порядок downgrade. Миграции с несовместимым форматом данных нельзя откатывать без проверки guard; для SFP downgrade предусмотрен специальный CI gate. Подробный порядок production cutover — только в [DEPLOYMENT.md](DEPLOYMENT.md).
 
-PostgreSQL integration tests по умолчанию пропускаются и требуют **отдельной мигрированной disposable БД**:
+## 4. Backend-проверки
+
+Выполняем из `backend`:
 
 ```bash
-RUN_POSTGRES_INTEGRATION=1 DATABASE_URL=postgresql+asyncpg://USER:PASS@127.0.0.1:PORT/TEST_DB pytest -q
+.venv/bin/ruff check app tests migrations
+.venv/bin/mypy app tests migrations/env.py migrations/versions
+.venv/bin/pytest -q
 ```
 
-Деструктивный SFP downgrade gate только на одноразовой БД:
+PostgreSQL integration suite включается только при `RUN_POSTGRES_INTEGRATION=1`, с URL **заранее созданной и мигрированной одноразовой БД**. Не назначаем этот флаг базе с реальными данными. Отдельная проверка разрушительного SFP downgrade использует `RUN_SFP_DOWNGRADE_POSTGRES=1` и `tests/test_sfp_migration_downgrade_postgres.py` исключительно в собственном изолированном контуре. Исторические результаты запуска не заменяют новый прогон после изменений backend.
 
-```bash
-RUN_SFP_DOWNGRADE_POSTGRES=1 DATABASE_URL=postgresql+asyncpg://USER:PASS@127.0.0.1:PORT/TEST_DB pytest -q tests/test_sfp_migration_downgrade_postgres.py
-```
+Профильные проверки по необходимости: `tests/test_catalog_postgres.py`, `tests/test_catalog_api_postgres.py`, `tests/test_inventory_postgres.py`, `tests/test_inventory_api_postgres.py`, `tests/test_runtime_database_role_contract.py`. Изменения ролей должны отдельно подтверждать защиту журнала от UPDATE/DELETE, ограниченные права workers, аудит доступа, recovery и DB-инварианты. Не проверяем безопасность только скрытием кнопок в React.
 
-Focused проверки: `tests/test_catalog_postgres.py`, `tests/test_catalog_api_postgres.py`, `tests/test_inventory_postgres.py`, `tests/test_inventory_api_postgres.py`; для production roles — `tests/test_runtime_database_role_contract.py` и соответствующие integration tests. Тесты ролей обязаны проверять отсутствие broad journal UPDATE/DELETE, ограниченный UPDATE Telegram processed state, delivery recovery и изоляцию worker identities.
-
-Frontend:
+## 5. Frontend и браузерные тесты
 
 ```bash
 cd frontend
@@ -112,27 +92,29 @@ npm run build
 npm run test:e2e
 ```
 
-`frontend/e2e/warehouse-v2.spec.ts` использует synthetic Telegram/API fixtures, проверяет responsive/browser UX, но **не** является full-stack доказательством. Browser profiles: Telegram Desktop narrow, Android-like, iPhone-like, WebKit и desktop/admin. Отдельного active «Моё оборудование» UI нет; custody является backend integrity projection.
+`frontend/e2e/warehouse-v2.spec.ts` и предметные UI-тесты применяют синтетические Telegram/API fixtures, в том числе для мобильных и desktop-профилей. Это проверки интерфейса, **не** подтверждение настоящих PostgreSQL side effects. Отдельного пользовательского экрана «Моё оборудование» нет; custody является backend integrity projection.
 
-Для локального real API/DB browser gate:
+Для полного локального сценария с настоящими HTTP API и PostgreSQL используем только штатный runner из `ops/tests/run_fullstack_local.sh`:
 
 ```bash
 cd frontend
 npm run test:e2e:fullstack:local
 ```
 
-Runner создаёт уникальную test DB, мигрирует до head, запускает временные backend/Vite процессы, применяет синтетический signed Telegram context, проверяет БД и удаляет свои ресурсы. Запрещено вручную `source`-ить `.env.fullstack` в интерактивную оболочку или запускать сценарий против общей БД. CI запускает `npm run test:e2e:fullstack` с production-shaped Compose: настоящий frontend → FastAPI → PostgreSQL, Telegram context синтетический, API не мокается.
+Runner читает локальный `.env`, создаёт уникальную БД `dc_inventory_fullstack_*`, проверяет соответствие Compose-контейнера и loopback-порта, создаёт случайный маркер и **до первой миграции** сверяет его через реальное TCP-подключение backend. После этого выполняет Alembic, запускает отдельные backend/Vite, применяет подписанный синтетический Telegram `initData`, временно разрешает мутации только дочерним тестовым процессам и запускает `npm run test:e2e:fullstack`. В конце сверяет предметное состояние и `backend/scripts/reconcile_inventory_projections.sql`, останавливает свои процессы и удаляет созданную БД.
 
-Health regression: при PostgreSQL UP `live/ready=200/200`, DOWN `200/503`, BACK `200/200` без перезапуска backend. Для change set сначала focused checks, потом один affected full gate; CI — repository-wide gate. После каждого небольшого редактирования полный стек повторно не гоняется.
+Маркер, топология, DB URL и удаление защищены `ops/tests/fullstack_db_guard.py`; его отрицательные регрессии находятся в `ops/tests/test_fullstack_db_guard.py`, текстовый контракт — в `ops/tests/test_fullstack_e2e_contract.py`. Для нового запуска нужны `FULLSTACK_POSTGRES_TOPOLOGY=PASS`, `FULLSTACK_PREMIGRATION_DATABASE=PASS` **до Alembic**, успешный Playwright и `FULLSTACK_DATABASE_CLEANUP=PASS`. Не запускайте эти сценарии через вручную загруженный `.env.fullstack` и не переносите переменные разрешения мутаций в текущую оболочку. При неуспешном cleanup проверяйте только названную тестовую БД, не выполняя массовые удаления.
 
-## Reconciliation и inventory safety
+CI отдельно выполняет `npm run test:e2e:fullstack` в production-shaped Compose. Синтетический Telegram контекст допускается, но HTTP API не мокается. Этот сценарий не заменяет реальную Telegram-приёмку после развёртывания.
 
-Read-only скрипт: `backend/scripts/reconcile_inventory_projections.sql`. Он сверяет stock и custody с immutable Movement/MovementLine journal; zero rows — норма. Любая строка — data-integrity blocker, а не приглашение автоматически пересоздать остатки. После warehouse migration, restore и risky data maintenance reconciliation обязателен. Regular production mutation gate независимо остаётся `REAL_INVENTORY_MUTATIONS_ENABLED=false`.
+## 6. Сверка данных и health
 
-Initial production bootstrap завершён однократно. Валидатор `app.bootstrap.inventory_workbook` и guarded production CLI `app.bootstrap.production_inventory` — разные interfaces. Внешний workbook и реальные dataset values не хранятся в source.
+Read-only `backend/scripts/reconcile_inventory_projections.sql` пересчитывает stock/custody из неизменяемого журнала. Нормальный результат — ноль строк; любое отклонение требует остановки опасных операций, сохранения доказательств и расследования, а не автоматического исправления остатков. После миграций Warehouse, восстановления и рискованного обслуживания БД сверка обязательна.
 
-## Git и release provenance
+Health regression: при рабочем PostgreSQL `live/ready = 200/200`; при его недоступности — `200/503`; после восстановления — `200/200` без перезапуска backend. Initial production bootstrap уже выполнялся однократно; повторный импорт через `app.bootstrap.production_inventory` запрещён, реальные workbook и значения остаются вне Git. Последний документированный штатный gate — `REAL_INVENTORY_MUTATIONS_ENABLED=false`.
 
-Путь: Mac → GitHub → проверенный exact commit/CI → production VM (read-only Deploy Key). Runtime-changing image build получает `APP_REVISION="$(git rev-parse HEAD)"`; OCI label `org.opencontainers.image.revision` проверяется по самому образу, а не только контейнеру. `ops/release/build_release.py` публикует manifest/env после валидации всех release images. Runtime provenance сравнивает заявленный checkout SHA с фактическим Git HEAD; source-only documentation/host-tools sync допускает отличающийся image revision при неизменных runtime source и Docker build contexts.
+## 7. Git, проверки и выпуск
 
-Production deployment, реальная доставka Telegram/email, восстановление S3 и live acceptance являются отдельными задачами; результаты локальных тестов их не заменяют. Текущий журнал: `docs/AUDIT_0_12_REMEDIATION.md`.
+Путь изменений: Mac → разрешённый push в GitHub → проверенный точный SHA и CI → отдельно согласованный production release. Сборка runtime image маркируется `APP_REVISION="$(git rev-parse HEAD)"`; OCI label `org.opencontainers.image.revision` проверяется по образу. `ops/release/build_release.py` публикует артефакты только после их проверки. Documentation/host-side `ops/` sync без пересборки допустим при неизменных runtime source и Docker build contexts, но host scripts требуют собственных проверок.
+
+Не запускаем полный набор проверок после каждого файла: сначала профильная проверка изменённой области, затем один общий gate для итогового изменения. В рамках текущей документационной ревизии повторные проверки двенадцати разделов запланированы **после** сведения документации; прежние PASS нельзя выдавать за результат нового Git HEAD. Журнал: [AUDIT_0_12_REMEDIATION.md](AUDIT_0_12_REMEDIATION.md).

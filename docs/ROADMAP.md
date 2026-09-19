@@ -16,7 +16,8 @@ Git push, изменение документации и синхронизац�
 
 - [x] Telegram Mini App, React/TypeScript, FastAPI, PostgreSQL, Docker Compose, Cloudflare Tunnel и Telegram Gateway.
 - [x] Проверка Telegram `initData` сервером, HttpOnly-сессии, lifecycle заявок на доступ и capability-based RBAC.
-- [x] Роли `ENGINEER`, `SENIOR_ENGINEER`, `MANAGER`, `ADMIN`, `OWNER`; исторический RBAC maintenance cutover принят. **Production RBAC maintenance cutover.**
+- [x] Роли `ENGINEER`, `SENIOR_ENGINEER`, `MANAGER`, `ADMIN`, `OWNER` в исходниках и последнем подтверждённом production baseline.
+- [x] Production RBAC maintenance cutover.
 - [x] PostgreSQL outbox для Telegram и опционального Microsoft Graph email; внешняя доставка at-least-once.
 - [x] Разделённые учётные записи PostgreSQL для миграций, backend, Telegram, email и maintenance в конфигурации текущего исходного кода.
 

@@ -51,6 +51,14 @@ for required in (
     "unset TELEGRAM_GATEWAY_URL",
     "npm run test:e2e:fullstack",
     "FULLSTACK_LOCAL_ISOLATION=PASS",
+    "FULLSTACK_DATABASE_DOMAIN_STATE=PASS",
+    "FULLSTACK_PROJECTION_RECONCILIATION=PASS",
+    "FULLSTACK_DATABASE_CLEANUP=PASS",
+    "FULLSTACK_MUTATIONS_ENABLED=true",
+    "REAL_INVENTORY_MUTATIONS_ENABLED=false",
+    "REAL_INVENTORY_MUTATIONS_ENABLED=true",
+    "SELECT current_database()",
+    "env -i",
 ):
     assert required in local_runner, required
 
@@ -59,6 +67,9 @@ assert ".env.fullstack" not in local_runner
 assert "createHmac" in spec
 assert "/api/auth/telegram" in spec
 assert "/api/catalog/categories" in spec
+assert "/api/inventory/locations" in spec
+assert "/api/procurement/requests" in spec
+assert "isolated HTTP acceptance covers RBAC, warehouse and procurement" in spec
 assert "page.waitForResponse" in spec
 
 # Telegram WebApp context may be injected, but API transport

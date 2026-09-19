@@ -31,6 +31,7 @@ if nc -z 127.0.0.1 5173 >/dev/null 2>&1; then
 fi
 
 TEST_DB="dc_inventory_fullstack_$(date +%Y%m%d%H%M%S)_$$"
+export TEST_DB
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/dc-inventory-fullstack.XXXXXX")"
 BACKEND_PID=""
 FRONTEND_PID=""
@@ -62,7 +63,10 @@ cleanup() {
     fi
   fi
 
-  rm -rf "$TMP_DIR"
+  if ! rm -rf "$TMP_DIR"; then
+    echo "FULLSTACK_TEMP_CLEANUP=FAIL: $TMP_DIR" >&2
+    status=1
+  fi
   exit "$status"
 }
 
@@ -100,6 +104,10 @@ export EMAIL_DELIVERY_ENABLED=false
 unset TELEGRAM_GATEWAY_URL
 unset TELEGRAM_GATEWAY_SECRET
 unset TELEGRAM_GATEWAY_TIMEOUT_SECONDS
+unset MICROSOFT_GRAPH_TENANT_ID
+unset MICROSOFT_GRAPH_CLIENT_ID
+unset MICROSOFT_GRAPH_CLIENT_SECRET
+unset MICROSOFT_GRAPH_SENDER
 
 export TELEGRAM_BOT_TOKEN="123456789:local-fullstack-token"
 export FULLSTACK_TELEGRAM_BOT_TOKEN="$TELEGRAM_BOT_TOKEN"
@@ -111,12 +119,64 @@ export TELEGRAM_WEB_APP_URL="http://127.0.0.1:5173"
 
 (
   cd backend
-  .venv/bin/alembic upgrade head
+  env -i PATH="$PATH" APP_ENV=test DATABASE_URL="$DATABASE_URL" \
+    REAL_INVENTORY_MUTATIONS_ENABLED=false .venv/bin/alembic upgrade head
+)
+
+effective_database="$(
+  cd backend
+  env -i PATH="$PATH" APP_ENV=test DATABASE_URL="$DATABASE_URL" \
+    TEST_DB="$TEST_DB" REAL_INVENTORY_MUTATIONS_ENABLED=false \
+    .venv/bin/python - <<'PY'
+import asyncio
+import os
+from sqlalchemy import text
+from sqlalchemy.engine import make_url
+from app.db.engine import create_engine
+
+url = make_url(os.environ["DATABASE_URL"])
+expected = os.environ["TEST_DB"]
+if url.host != "127.0.0.1" or url.database != expected:
+    raise SystemExit("full-stack database URL is not the disposable local database")
+
+async def verify():
+    engine = create_engine(application_name="dc-inventory-fullstack-verify")
+    try:
+        async with engine.connect() as connection:
+            return await connection.scalar(text("SELECT current_database()"))
+    finally:
+        await engine.dispose()
+
+print(asyncio.run(verify()))
+PY
+)"
+
+test "$effective_database" = "$TEST_DB"
+test "$(docker compose -f compose.dev.yaml exec -T postgres \
+  psql -U "$POSTGRES_USER" -d "$TEST_DB" -At -v ON_ERROR_STOP=1 \
+  -c 'SELECT current_database()' </dev/null)" = "$TEST_DB"
+
+# The override exists only in this runner's child processes, after fresh-DB
+# creation, migration, and effective-connection verification.
+export REAL_INVENTORY_MUTATIONS_ENABLED=true
+export FULLSTACK_MUTATIONS_ENABLED=true
+
+runtime_env=(
+  "PATH=$PATH"
+  "APP_ENV=test"
+  "DATABASE_URL=$DATABASE_URL"
+  "REAL_INVENTORY_MUTATIONS_ENABLED=true"
+  "EMAIL_DELIVERY_ENABLED=false"
+  "TELEGRAM_BOT_TOKEN=$TELEGRAM_BOT_TOKEN"
+  "ADMIN_TELEGRAM_USER_ID=$ADMIN_TELEGRAM_USER_ID"
+  "NOTIFICATION_TELEGRAM_USER_ID=$NOTIFICATION_TELEGRAM_USER_ID"
+  "TELEGRAM_WEBHOOK_SECRET=$TELEGRAM_WEBHOOK_SECRET"
+  "TELEGRAM_WEB_APP_URL=$TELEGRAM_WEB_APP_URL"
 )
 
 (
   cd backend
-  exec .venv/bin/uvicorn \
+  exec env -i "${runtime_env[@]}" .venv/bin/uvicorn \
     app.main:app \
     --host 127.0.0.1 \
     --port 58000
@@ -131,7 +191,7 @@ wait_for_url \
 
 (
   cd frontend
-  exec ./node_modules/.bin/vite \
+  exec env -i PATH="$PATH" HOME="$HOME" ./node_modules/.bin/vite \
     --host 127.0.0.1 \
     --port 5173
 ) >"$TMP_DIR/frontend.log" 2>&1 &
@@ -145,7 +205,11 @@ wait_for_url \
 
 (
   cd frontend
-  PLAYWRIGHT_BASE_URL="http://127.0.0.1:5173" \
+  env -i PATH="$PATH" HOME="$HOME" \
+    PLAYWRIGHT_BASE_URL="http://127.0.0.1:5173" \
+    FULLSTACK_TELEGRAM_BOT_TOKEN="$FULLSTACK_TELEGRAM_BOT_TOKEN" \
+    FULLSTACK_TELEGRAM_USER_ID="$FULLSTACK_TELEGRAM_USER_ID" \
+    FULLSTACK_MUTATIONS_ENABLED=true \
     npm run test:e2e:fullstack
 )
 
@@ -183,6 +247,33 @@ session_count="$(
 )"
 
 test "$session_count" -ge 1
+
+domain_state="$(docker compose -f compose.dev.yaml exec -T postgres \
+  psql -U "$POSTGRES_USER" -d "$TEST_DB" -AtF '|' -v ON_ERROR_STOP=1 \
+  -c "SELECT
+    (SELECT count(*) FROM procurement_requests WHERE status = 'COMPLETED' AND final_movement_id IS NOT NULL),
+    (SELECT count(*) FROM procurement_revisions),
+    (SELECT count(*) FROM procurement_events),
+    (SELECT count(*) FROM movements),
+    (SELECT coalesce(sum(quantity), 0) FROM stock_balances),
+    (SELECT coalesce(sum(quantity), 0) FROM user_item_custody_balances)
+  " </dev/null)"
+test "$domain_state" = "1|2|6|5|12|2"
+echo "FULLSTACK_DATABASE_DOMAIN_STATE=PASS"
+
+test "$(docker compose -f compose.dev.yaml exec -T postgres \
+  psql -U "$POSTGRES_USER" -d "$TEST_DB" -At -v ON_ERROR_STOP=1 \
+  -c "SELECT version_num FROM alembic_version" </dev/null)" = "a9c0d1e2f3a4"
+
+drift="$(docker compose -f compose.dev.yaml exec -T postgres \
+  psql -U "$POSTGRES_USER" -d "$TEST_DB" -qAt -v ON_ERROR_STOP=1 \
+  -f - <backend/scripts/reconcile_inventory_projections.sql)"
+if [[ -n "$drift" ]]; then
+  echo "FULLSTACK_PROJECTION_RECONCILIATION=FAIL" >&2
+  exit 1
+fi
+
+echo "FULLSTACK_PROJECTION_RECONCILIATION=PASS"
 
 echo "FULLSTACK_LOCAL_ISOLATION=PASS"
 echo "FULLSTACK_LOCAL_DATABASE=$TEST_DB"

@@ -1,45 +1,63 @@
-# Требования Spikatel Inventory
+# Требования к Spikatel Inventory
 
-Warehouse Domain V2 развёрнут и принят в production. Telegram Mini App отвечает на вопросы: какая номенклатура есть, сколько её на локациях, какие immutable движения изменили остатки, кто был actor и какое количество числится за custody-capable сотрудниками.
+Этот документ отвечает на вопрос, **какие задачи решает система и какое поведение получает пользователь**. Точные поля каталога — в [CATALOG_SCHEMA.md](CATALOG_SCHEMA.md), транзакции и ограничения склада — в [WAREHOUSE_DOMAIN.md](WAREHOUSE_DOMAIN.md), разрешения и закупки — в [RBAC_PROCUREMENT.md](RBAC_PROCUREMENT.md). Команды для оператора не являются продуктовыми требованиями и находятся в [DEPLOYMENT.md](DEPLOYMENT.md) и [OPERATIONS.md](OPERATIONS.md).
 
-**Контуры не смешиваются:** последний зафиксированный production Procurement Alembic head `c3d4e5f6a7b8`; текущий source head `a9c0d1e2f3a4` и CP-07–12 локально проверены, но не подтверждены на production. Regular mutations закрыты отдельным gate `REAL_INVENTORY_MUTATIONS_ENABLED=false`; initial bootstrap уже состоялся через guarded one-shot path.
+По последней подтверждённой проверке Warehouse Domain V2 развёрнут и принят в production. Procurement и пяти-ролевая RBAC также были развёрнуты на документированной production-схеме `c3d4e5f6a7b8`. Новые source-инварианты до `a9c0d1e2f3a4` не следует объявлять развёрнутыми без CP-16. Обычные складские изменения по последнему production evidence закрыты флагом `REAL_INVENTORY_MUTATIONS_ENABLED=false`; первоначальный импорт уже состоялся отдельно.
 
-## Склад и ответственность
+## 1. Назначение и единица учёта
 
-`Item` — номенклатура, не физический экземпляр. `StockBalance = Item × StorageLocation × positive quantity`; `UserItemCustodyBalance = User × Item × positive quantity`. ENGINEER/SENIOR_ENGINEER ISSUE увеличивает их custody, RETURN уменьшает её и не может превышать имеющееся количество. ADMIN/OWNER складские движения не создают personal custody автоматически. Пользователя с ненулевой custody нельзя заблокировать или перевести в роль, не поддерживающую custody. Доступ и custody-changing movements синхронизируются по PostgreSQL lock.
+Система должна показывать номенклатуру оборудования ЦОД, количество на каждой локации, историю движения и количество, числящееся за конкретным сотрудником. Пользователь должен понимать, **какая операция** изменила цифру, кто её выполнил и какие данные были в позиции на момент движения.
 
-Система **не** ведёт serial/WWN/current-holder конкретного physical unit. Отдельного экрана «Моё оборудование» нет; custody является backend integrity projection. Количества изменяются только движениями, а не редактированием карточки Item.
+`Item` — тип оборудования/материала, а не самостоятельный физический экземпляр. `StockBalance` хранит положительное количество по сочетанию Item и StorageLocation, `UserItemCustodyBalance` — положительное количество по сочетанию User и Item. Исполнитель (`actor_user_id`) и сотрудник, за которым числится количество (`custody_user_id`), могут иметь разный смысл и не должны объединяться в одно поле.
 
-## Роли и безопасность
+Система не обещает жизненный цикл отдельного serial/WWN, физическую привязку конкретного устройства к сотруднику или полноценную CMDB. Отдельного пользовательского экрана «Моё оборудование» пока нет; custody — защищённая backend-проекция. Не следует выводить местоположение конкретного физического экземпляра из агрегированного остатка.
 
-Production и source используют `ENGINEER / SENIOR_ENGINEER / MANAGER / ADMIN / OWNER` с backend-derived capabilities. OWNER singleton/recovery role; ADMIN не назначает ADMIN/OWNER. MANAGER имеет read-only catalog/stock, manager procurement actions, но не Warehouse mutations или общий movement journal. SENIOR_ENGINEER видит общий journal, управляет каталогом и проводит technical procurement acceptance. ADMIN/OWNER администрируют склад, пользователей и техническую приёмку. Frontend скрывает недоступные действия, но не является security boundary. Canonical matrix и state machine — `docs/RBAC_PROCUREMENT.md`.
+## 2. Каталог и поиск
 
-Auth: Telegram initData HMAC на backend, server-side HttpOnly session, независимый access lifecycle PENDING/APPROVED/REJECTED/BLOCKED. Owner rotation — только guarded CLI, не обычный UI/API. Настоящие credentials, datasets, private IDs и workbook contents в public repository запрещены.
+Категории образуют фиксированную иерархию семейств и листьев. Новая позиция принадлежит только листу; форма отображает характеристики его версии схемы, проверяет обязательные поля и отправляет типизированные значения в backend. Машинные ключи и русские названия разделены. Отдельная область «Дальние» вычисляется из нормализованной дальности трансивера, а не создаётся как категория.
 
-## Каталог
+Пользователь может искать позиции, применять фильтры и фасеты в пределах выбранной категории/поиска, открывать карточку с характеристиками, общим количеством и распределением по локациям. Сервер отвечает за сортировку и пагинацию: интерфейс не должен ограничивать результат первой страницей. Значения фильтров без доступных совпадений не предлагаются; измерение с единственным значением скрывается.
 
-Фиксированная family → leaf hierarchy: трансиверы Ethernet/FC; оптические патч-корды и сплиттеры; сетевые адаптеры Ethernet/FC; SSD/HDD; RAM; PCIe; кабели питания. Item создаётся только в leaf. Machine key отделён от русского display name. «Дальние» — derived scope с нормализованной reach_m ≥ 2000, не category; неоднозначные значения — явная ошибка/validation warning, без догадки.
+Цвет оптического патч-корда необязателен, вводится свободным текстом и учитывается при идентификации, только если задан. Неоднозначная дальность не должна автоматически классифицироваться. Нельзя создавать фиктивного производителя по служебной строке из Excel или автоматически объединять похожие позиции без проверенной идентичности.
 
-Backend отдаёт scoped dynamic facets внутри выбранной category/search; single-value dimensions скрыты. Color оптического патч-корда optional free text, distinct suggestions, участвует в identity только при заполнении. Item detail показывает attributes, total stock и breakdown по StorageLocation. Архивирование Item запрещает новый RECEIPT/ISSUE, но разрешает допустимое завершение существующего остатка через RETURN/TRANSFER/WRITE_OFF/CORRECTION/REVERSAL. Локацию с остатком архивировать нельзя. Спецификация полей — `docs/CATALOG_SCHEMA.md`.
+Архивирование позиции сохраняет карточку и историю. Для ARCHIVED Item запрещаем новый RECEIPT/ISSUE, но разрешаем корректные операции завершения уже существующего количества. Архивирование локации с ненулевым остатком запрещено. Изменение карточки каталога **не** является операцией изменения остатка.
 
-## Warehouse movements
+## 3. Складские сценарии и инварианты
 
-RECEIPT, ISSUE, RETURN, TRANSFER, WRITE_OFF, CORRECTION, REVERSAL хранятся в immutable journal. Actor и custody различаются. Idempotent replay одного actor/request/payload возвращает существующее движение, несовпадающий payload — conflict. Negative stock/custody запрещены, zero projection rows не хранятся. Проекции stock/custody сверяются read-only reconciliation по journal; normal result — zero rows.
+Поддерживаются RECEIPT, ISSUE, RETURN, TRANSFER, WRITE_OFF, CORRECTION и REVERSAL. Каждая операция создаёт неизменяемые Movement/MovementLine и в одной транзакции обновляет соответствующие проекции. Нельзя получить отрицательный stock или custody; нулевые строки проекций удаляются. Попытка повторить одну и ту же операцию с тем же идентификатором и телом возвращает исходный результат, с другим телом — конфликт.
 
-ENGINEER видит собственную actor-history; SENIOR_ENGINEER/ADMIN/OWNER — общий журнал и employee filter; MANAGER не видит journal. Периоды: 7 дней, 30 дней, 3 месяца (по умолчанию), год, всё время. Фильтры: type, hierarchy/category, location. ENGINEER/SENIOR_ENGINEER выполняют «Взять», «Вернуть», «Переместить», «Приход»; ADMIN/OWNER дополнительно — write-off, correction, reversal.
+При ISSUE инженер или старший инженер уменьшает stock выбранной локации и увеличивает собственную custody. При RETURN уменьшается его custody и растёт stock; вернуть больше числящегося количества нельзя. Административные операции ADMIN/OWNER не должны автоматически создавать персональную custody. TRANSFER меняет распределение между локациями; WRITE_OFF выводит количество из оборота. CORRECTION и REVERSAL подчиняются дополнительным ограничениям исходного движения и не изменяют историческую запись задним числом.
 
-## Procurement
+Сверка stock/custody по журналу должна быть доступна только на чтение; любой дрейф блокирует дальнейшее опасное обслуживание до расследования. У сотрудников с ненулевой custody нельзя автоматически отнимать право владения: блокировка доступа или смена на неподходящую роль должна быть отвергнута, а конкурентные изменения доступа и движения должны сериализоваться на уровне PostgreSQL.
 
-Закупка создаётся ADMIN/OWNER и использует immutable revisions, events и назначенного Manager как ответственность, не ACL. Любой активный MANAGER может работать с любой активной закупкой, но actor фиксируется в event. Состояния: «Ожидает менеджера», «Требует корректировки», «В закупке», «На приёмке», «Выполнена». Корректировка создаёт новую revision, альтернативное предложение не применяет её автоматически. Proposed line до приёмки не создаёт Item. Manager transfer to acceptance и discrepancy не меняют stock.
+## 4. Роли и видимость
 
-Техническая приёмка SENIOR_ENGINEER/ADMIN/OWNER с двойным подтверждением и проверкой всех Item bindings/location атомарно создаёт ровно один Warehouse RECEIPT и переводит закупку в COMPLETED. Generic CORRECTION/REVERSAL этого final RECEIPT запрещены. Partial acceptance не входит в первый release. Production real Telegram Procurement acceptance ещё не подтверждена.
+Действующие роли: `ENGINEER / SENIOR_ENGINEER / MANAGER / ADMIN / OWNER`. Пользователь может иметь независимый от роли статус `PENDING`, `APPROVED`, `REJECTED` или `BLOCKED`; защищённые действия требуют APPROVED и соответствующей серверной capability. Отображение кнопок в React — UX, а не проверка прав.
 
-## Уведомления и optional email
+ENGINEER читает каталог/остатки, видит свою actor-history и выполняет разрешённые обычные складские операции. SENIOR_ENGINEER дополнительно управляет каталогом, видит общий журнал и проводит техническую приёмку закупок. MANAGER работает с заявками и читает каталог/остатки, но не меняет склад и не видит общий журнал. ADMIN управляет пользователями, складом и закупками в пределах матрицы; OWNER единственный и обладает отдельными правами на назначение ADMIN. Нельзя назначить второго OWNER или менять его обычным API. Полный список capabilities приводим только в нормативной матрице [RBAC_PROCUREMENT.md](RBAC_PROCUREMENT.md).
 
-ISSUE ставит deduplicated Telegram intent в одной транзакции с warehouse movement. Procurement notifications также используют transactional outbox. Внешняя доставка Telegram и Microsoft Graph email — at-least-once, не exactly-once: возможен duplicate side effect при потерянном подтверждении. Email реализован в source, но production по умолчанию выключен `EMAIL_DELIVERY_ENABLED=false`; для enablement нужны отдельные secrets, Compose profile и live acceptance.
+## 5. Закупки: бизнес-процесс без преждевременного изменения склада
 
-## Initial bootstrap
+ADMIN/OWNER создаёт заявку с позициями и редакцией. Менеджер принимает её, возвращает с комментарием на корректировку, может предложить альтернативный состав и передаёт на приёмку. Исправление создаёт новую неизменяемую revision, прежние версии и события остаются доступны для аудита. Назначение менеджера обозначает ответственность, но не закрывает активную заявку от других APPROVED MANAGER; фактический исполнитель каждого действия записывается в событии.
 
-Initial production inventory bootstrap — guarded one-shot operator operation. Она валидирует внешний workbook, ожидаемые counts/quantity и SHA, требует закрытый mutation gate и empty warehouse domain, проверяет existing APPROVED ADMIN, атомарно создаёт target StorageLocation и opening RECEIPT, выполняет post-write counts и zero-drift reconciliation до commit. Validation-only workbook reader не изменяет БД. Локальный `--import-local` helper допускается только на disposable loopback test DB с существующей active Location; он не заменяет production bootstrap.
+Позиция заявки может ссылаться на Item либо описывать предлагаемую номенклатуру. Предложение **не** создаёт новую карточку каталога автоматически. До приёмки технический сотрудник связывает все позиции с подтверждёнными Item и выбирает StorageLocation. Состояния «Ожидает менеджера», «Требует корректировки», «В закупке», «На приёмке» сами по себе не изменяют stock.
 
-Bootstrap уже принят с post-import verified off-VM backup и Telegram visual acceptance. Повторный запуск на наполненной production DB запрещён.
+Техническая приёмка доступна SENIOR_ENGINEER/ADMIN/OWNER и требует двух подтверждений в UI. Сервер повторно проверяет текущий статус, revision, все связи и локацию и атомарно создаёт **ровно один** Warehouse RECEIPT, связывает его с закупкой и переводит её в `COMPLETED`. При ошибке обе части откатываются. Generic CORRECTION/REVERSAL итогового RECEIPT запрещены; отмена завершённой закупки требует нового самостоятельного бизнес-контракта. Частичная приёмка в текущей версии не предусмотрена.
+
+## 6. Авторизация, доставка и данные
+
+Вход через Telegram использует проверенное backend `initData`; сессия серверная, cookie — HttpOnly. Заявки на доступ, смена ролей, решения администратора и действия закупок сохраняют audit. OWNER rotation выполняется только через отдельный защищённый maintenance CLI.
+
+Складская ISSUE и события Procurement ставят уведомление в outbox **в той же транзакции**, что и предметное изменение. Worker доставляет через Telegram Gateway или опциональный Microsoft Graph email, используя retry/DEAD. Доставка at-least-once: при потере подтверждения возможно повторное внешнее сообщение, несмотря на dedupe key намерения. Email по умолчанию выключен (`EMAIL_DELIVERY_ENABLED=false`), а реальные credentials/profile и delivery проверяются отдельно перед включением.
+
+Секреты, реальные inventory datasets, workbook contents, дампы и приватные идентификаторы не входят в публичный исходный код. Публичные адрес приложения и support username допустимы по назначению. Нельзя использовать исторические reference spreadsheets как текущие складские данные.
+
+## 7. Первоначальное наполнение и его граница
+
+Первое production-наполнение — однократная операторская операция, а не публичный импорт. `app.bootstrap.inventory_workbook` проверяет внешний файл и нормализует данные; отдельный `app.bootstrap.production_inventory` требует закрытый mutation gate, пустой склад, существующего APPROVED ADMIN, подтверждённые checksum/counts и атомарно создаёт target StorageLocation вместе с начальным RECEIPT. Post-write количества и zero-drift reconciliation проверяются до COMMIT. Проверка самого файла не равна выполнению импорта.
+
+Bootstrap уже принят с health, сверкой проекций, проверенной внешней backup и реальной визуальной приёмкой Telegram. Повторный запуск на наполненной production DB запрещён. Для включения обычных складских операций необходимо отдельное решение; документ не даёт такого разрешения.
+
+## 8. Что намеренно не входит в текущий релиз
+
+Нет частичной приёмки закупок, ERP/учёта счетов и OCR, платежей, справочника поставщиков, динамических ролей, отдельного хранения вложений, ценовой аналитики или serial/WWN lifecycle отдельных экземпляров. Предметные изменения требуют самостоятельных требований, миграций и приёмки; не вводим их как «небольшие улучшения» во время закрытия текущего аудита.

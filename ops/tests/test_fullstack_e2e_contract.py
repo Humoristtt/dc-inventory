@@ -57,12 +57,23 @@ for required in (
     "FULLSTACK_MUTATIONS_ENABLED=true",
     "REAL_INVENTORY_MUTATIONS_ENABLED=false",
     "REAL_INVENTORY_MUTATIONS_ENABLED=true",
-    "SELECT current_database()",
+    "fullstack_db_guard.py verify",
     "env -i",
 ):
     assert required in local_runner, required
 
 assert ".env.fullstack" not in local_runner
+
+assert (
+    local_runner.index("fullstack_db_guard.py topology")
+    < local_runner.index("createdb")
+    < local_runner.index("CREATE TABLE cp15_fullstack_probe")
+    < local_runner.index("fullstack_db_guard.py verify")
+    < local_runner.index("DROP TABLE cp15_fullstack_probe")
+    < local_runner.index(".venv/bin/alembic upgrade head")
+    < local_runner.index("export REAL_INVENTORY_MUTATIONS_ENABLED=true")
+)
+
 
 assert "createHmac" in spec
 assert "/api/auth/telegram" in spec

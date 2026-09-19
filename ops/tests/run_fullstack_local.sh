@@ -91,6 +91,10 @@ wait_for_url() {
 
 docker compose -f compose.dev.yaml up -d --no-recreate postgres >/dev/null
 
+env -i PATH="$PATH" POSTGRES_DEV_PORT="${POSTGRES_DEV_PORT:-55432}" \
+  python3 ops/tests/fullstack_db_guard.py topology
+
+
 docker compose -f compose.dev.yaml exec -T postgres \
   createdb -U "$POSTGRES_USER" "$TEST_DB" </dev/null
 
@@ -117,47 +121,35 @@ export NOTIFICATION_TELEGRAM_USER_ID="42424243"
 export TELEGRAM_WEBHOOK_SECRET="local-fullstack-webhook-secret"
 export TELEGRAM_WEB_APP_URL="http://127.0.0.1:5173"
 
+nonce="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+
+docker compose -f compose.dev.yaml exec -T postgres \
+  psql -U "$POSTGRES_USER" -d "$TEST_DB" -v ON_ERROR_STOP=1 \
+  -c "CREATE TABLE cp15_fullstack_probe (token text NOT NULL);
+      INSERT INTO cp15_fullstack_probe (token) VALUES ('$nonce');" \
+  </dev/null >/dev/null
+
+(
+  cd backend
+  env -i PATH="$PATH" APP_ENV=test DATABASE_URL="$DATABASE_URL" \
+    TEST_DB="$TEST_DB" FULLSTACK_DB_NONCE="$nonce" \
+    POSTGRES_DEV_PORT="${POSTGRES_DEV_PORT:-55432}" \
+    REAL_INVENTORY_MUTATIONS_ENABLED=false \
+    .venv/bin/python ../ops/tests/fullstack_db_guard.py verify
+)
+
+docker compose -f compose.dev.yaml exec -T postgres \
+  psql -U "$POSTGRES_USER" -d "$TEST_DB" -v ON_ERROR_STOP=1 \
+  -c 'DROP TABLE cp15_fullstack_probe' </dev/null >/dev/null
+
 (
   cd backend
   env -i PATH="$PATH" APP_ENV=test DATABASE_URL="$DATABASE_URL" \
     REAL_INVENTORY_MUTATIONS_ENABLED=false .venv/bin/alembic upgrade head
 )
 
-effective_database="$(
-  cd backend
-  env -i PATH="$PATH" APP_ENV=test DATABASE_URL="$DATABASE_URL" \
-    TEST_DB="$TEST_DB" REAL_INVENTORY_MUTATIONS_ENABLED=false \
-    .venv/bin/python - <<'PY'
-import asyncio
-import os
-from sqlalchemy import text
-from sqlalchemy.engine import make_url
-from app.db.engine import create_engine
-
-url = make_url(os.environ["DATABASE_URL"])
-expected = os.environ["TEST_DB"]
-if url.host != "127.0.0.1" or url.database != expected:
-    raise SystemExit("full-stack database URL is not the disposable local database")
-
-async def verify():
-    engine = create_engine(application_name="dc-inventory-fullstack-verify")
-    try:
-        async with engine.connect() as connection:
-            return await connection.scalar(text("SELECT current_database()"))
-    finally:
-        await engine.dispose()
-
-print(asyncio.run(verify()))
-PY
-)"
-
-test "$effective_database" = "$TEST_DB"
-test "$(docker compose -f compose.dev.yaml exec -T postgres \
-  psql -U "$POSTGRES_USER" -d "$TEST_DB" -At -v ON_ERROR_STOP=1 \
-  -c 'SELECT current_database()' </dev/null)" = "$TEST_DB"
-
 # The override exists only in this runner's child processes, after fresh-DB
-# creation, migration, and effective-connection verification.
+# creation, pre-migration identity verification, and migration.
 export REAL_INVENTORY_MUTATIONS_ENABLED=true
 export FULLSTACK_MUTATIONS_ENABLED=true
 

@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
 
+import appSource from "../app/App.tsx?raw";
+import routeModulesSource from "../app/routeModules.ts?raw";
+import mainSource from "../main.tsx?raw";
+
 import dockerIgnore from "../../.dockerignore?raw";
 import nginxConfig from "../../nginx.conf?raw";
 
@@ -140,6 +144,20 @@ describe("production API rate limiting", () => {
     );
     expect(body).toContain(
       "limit_req zone=telegram_webhook burst=100 nodelay;",
+    );
+  });
+});
+
+describe("CP-07 route loading contract", () => {
+  it("preloads the requested route without warming every page", () => {
+    expect(mainSource).toContain(
+      "void preloadRouteForPath(window.location.pathname);",
+    );
+
+    expect(appSource).not.toContain("preloadApplicationRoutes");
+
+    expect(routeModulesSource).not.toContain(
+      "export async function preloadApplicationRoutes",
     );
   });
 });

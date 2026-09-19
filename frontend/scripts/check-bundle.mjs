@@ -28,6 +28,9 @@ assert(gzip <= 100_000, `Initial gzip JS ${gzip} exceeds 100000 bytes`);
 for (const route of [
   "catalog/CatalogLandingPage", "catalog/CategoryPage", "catalog/ItemDetailPage",
   "catalog/ItemFormPage", "inventory/MovementsPage", "inventory/LocationsPage",
+  "more/MorePage", "admin/AdminUsersPage",
+  "procurement/ProcurementListPage", "procurement/ProcurementDetailPage",
+  "procurement/ProcurementCreatePage",
 ]) {
   const key = `src/pages/${route}.tsx`;
   assert(manifest[key]?.isDynamicEntry, `${route} must remain a lazy route`);

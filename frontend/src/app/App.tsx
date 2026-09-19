@@ -1,7 +1,4 @@
-import {
-  lazy,
-  useEffect,
-} from "react";
+import { lazy } from "react";
 
 import {
   BrowserRouter,
@@ -23,7 +20,6 @@ import {
   loadProcurementCreatePage,
   loadProcurementDetailPage,
   loadProcurementListPage,
-  preloadApplicationRoutes,
 } from "./routeModules";
 import "../features/catalog/catalog.css";
 
@@ -63,19 +59,6 @@ export function ApplicationRoutes() {
 }
 
 export function App() {
-  useEffect(() => {
-    // Give the first visible page/API requests a short head start, then warm
-    // the fixed and small MVP route set. These dynamic imports stay outside
-    // the initial bundle and are browser-cached for subsequent navigation.
-    const timer = window.setTimeout(() => {
-      void preloadApplicationRoutes();
-    }, 100);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, []);
-
   return (
     <BrowserRouter>
       <ApplicationRoutes />

@@ -119,19 +119,3 @@ export async function preloadRouteForPath(pathname: string): Promise<void> {
     // RouteContent remains the recovery boundary for a real chunk failure.
   }
 }
-
-export async function preloadApplicationRoutes(): Promise<void> {
-  await Promise.allSettled([
-    loadCatalogLandingPage(),
-    loadCategoryPage(),
-    loadItemDetailPage(),
-    loadItemFormPage(),
-    loadMovementsPage(),
-    loadLocationsPage(),
-    loadMorePage(),
-    loadAdminUsersPage(),
-    loadProcurementListPage(),
-    loadProcurementDetailPage(),
-    loadProcurementCreatePage(),
-  ]);
-}

@@ -1,75 +1,83 @@
-# RBAC и Procurement — канонический контракт
+# Управление доступом и закупками
 
-Статус на 19.09.2026: RBAC foundation и Procurement domain развёрнуты в production по последней документированной проверке (Alembic `c3d4e5f6a7b8`). Production и source используют пять ролей и backend capability policy. Procurement domain также содержит локальную audit remediation до source Alembic `a9c0d1e2f3a4`; эти изменения **не** считаются production state до отдельного cutover и runtime-provenance acceptance. Real Telegram Procurement acceptance текущего нового release не зафиксирован. Regular warehouse gate — `REAL_INVENTORY_MUTATIONS_ENABLED=false`.
+Это нормативное описание двух связанных предметных областей: серверных разрешений пользователей и бизнес-процесса закупки. Источник текущей матрицы — `backend/app/modules/identity/policy.py`, переходов — `backend/app/modules/identity/`, `backend/app/modules/access/` и `backend/app/modules/procurement/`. Складские транзакции описаны в [WAREHOUSE_DOMAIN.md](WAREHOUSE_DOMAIN.md); команды сопровождения — в [DEPLOYMENT.md](DEPLOYMENT.md).
 
-Historical feature-cycle baseline: `1242f56c131d0f8c470e05cbaf209c48a37e85a4`. Дальнейшие подтверждённые изменения и неисполненные проверки отражены в `docs/AUDIT_0_12_REMEDIATION.md` и `docs/HISTORY.md`.
+**Состояние на 19.09.2026.** Production и source используют пять ролей и capability-based authorization. По последней документированной проверке RBAC/Procurement развернуты на production Alembic `c3d4e5f6a7b8`. Procurement domain также содержит более поздние исправления в source migration head `a9c0d1e2f3a4`; они не становятся production state до отдельного cutover. Настоящая Telegram-приёмка нового выпуска ещё не выполнена. Штатный складской gate по последней проверке — `REAL_INVENTORY_MUTATIONS_ENABLED=false`.
 
-## 1. Предметные границы
+## 1. Роль, допуск и сессия — разные сущности
 
-Backend — единственная authorization boundary. Frontend только скрывает/показывает действия; User role сохраняется в PostgreSQL, capabilities вычисляются статической server-side policy, динамических ролей пока нет. Access lifecycle `PENDING / APPROVED / REJECTED / BLOCKED` независим от роли. Изменение роли сохраняет User UUID, TelegramIdentity, warehouse/custody/access history и записывает неизменяемый `UserRoleEvent`. Procurement и Warehouse — отдельные модули. Статус закупки не меняет остатки до атомарной финальной приёмки.
+`User.role` задаёт набор capabilities. `User.access_status` независимо задаёт жизненный цикл доступа: `PENDING`, `APPROVED`, `REJECTED`, `BLOCKED`. Для обычного защищённого действия недостаточно существования TelegramIdentity или скрытой/видимой кнопки: FastAPI должен установить действительную HttpOnly-сессию, проверить допуск и требуемую capability.
 
-`ProcurementRequest.final_movement_id` ссылается на защищённый финальный RECEIPT. Generic Warehouse CORRECTION/REVERSAL этого движения запрещены application service и PostgreSQL invariant. Отмена completed procurement потребует отдельного бизнес-процесса.
+Telegram `initData` сервер проверяет криптографически. При успешном входе сохраняется User/TelegramIdentity, создаётся серверная AuthSession; frontend получает только разрешённое представление состояния. Смена роли не пересоздаёт User UUID и не уничтожает историю движения, закупок и доступа. Изменения роли/допуска записываются в аудит. Пользователя с ненулевой custody нельзя заблокировать или перевести на роль, не поддерживающую custody; проверка сериализуется вместе с конкурирующими складскими операциями.
 
-## 2. Роли и capability matrix
+MANAGER — самостоятельная роль со своим набором возможностей, **не** уровень `role >= ENGINEER`. Необходимо проверять capabilities, а не порядок перечисления ролей. Frontend отображает доступные страницы/кнопки, но не является границей авторизации.
 
-| Роль | Разрешено | Не разрешено |
+## 2. Матрица действующих ролей
+
+Таблица построена по `ROLE_CAPABILITIES` в исходном коде, а не по историческим предположениям о двух ролях.
+
+| Роль | Возможности | Ограничения |
 |---|---|---|
-| ENGINEER | Каталог/остатки/локации; своя actor-history; ISSUE, RETURN, RECEIPT существующей позиции, TRANSFER | Управление каталогом, admin adjustments, роли, закупки |
-| SENIOR_ENGINEER | ENGINEER + catalog create/edit/archive, общий journal, просмотр закупок и technical acceptance, proposed Item binding | Создать procurement request, manager workflow, role assignment, `inventory.admin` |
-| MANAGER | Каталог/остатки read-only, все активные закупки, manager actions и history | Warehouse mutations, каталог manage, техническая приёмка, назначение ролей, создание закупки |
-| ADMIN | Каталог/warehouse administration, write-off/correction/reversal, access lifecycle, стандартные роли, закупка create/monitor, technical acceptance | Назначить ADMIN/OWNER, изменить/заблокировать OWNER, штатно исполнять manager workflow |
-| OWNER | ADMIN + назначение ADMIN; единственная recovery identity; procurement create/monitor/acceptance | Обычное назначение второго OWNER, собственная блокировка/понижение через normal API |
+| `ENGINEER` | Чтение каталога и склада, обычные складские операции, собственная actor-history. | Нет управления каталогом, чужого журнала, закупок и управления пользователями. |
+| `SENIOR_ENGINEER` | Всё, что у ENGINEER, плюс управление/архивация/удаление неиспользуемых позиций каталога, общий журнал, чтение закупок и техническая приёмка. | Нет `inventory.admin`, создания закупки, менеджерских переходов или назначения ролей. |
+| `MANAGER` | Чтение каталога и остатков, просмотр закупок и их менеджерские переходы. | Нет складских мутаций, общего журнала, управления каталогом, технической приёмки и создания закупки. |
+| `ADMIN` | Чтение/управление каталогом, обычные и административные складские операции, общий журнал, создание/просмотр и техническая приёмка закупок, управление доступом и назначение стандартных ролей. | Не получает `procurement.manage` и не назначает ADMIN/OWNER. |
+| `OWNER` | Возможности ADMIN и дополнительная capability назначения ADMIN. | Нельзя создать второго OWNER, понизить или заблокировать действующего OWNER обычным API. |
 
-ENGINEER/SENIOR_ENGINEER ISSUE/RETURN изменяют только допустимую custody собственных users. ADMIN/OWNER движения склада не создают персональную custody автоматически. Пользователя с ненулевой custody нельзя заблокировать или перевести на роль без custody. Все проверки на backend, с PostgreSQL lock при concurrent access/movement.
+Названия capabilities из `identity/policy.py`: `catalog.read`, `catalog.manage`, `catalog.archive`, `catalog.delete_unused`, `inventory.read`, `inventory.operate`, `inventory.admin`, `movement.read_own`, `movement.read_all`, `procurement.read`, `procurement.create`, `procurement.manage`, `procurement.accept`, `access.manage_users`, `access.assign_standard_roles`, `access.assign_admin`. Права административного склада не означают автоматическое создание custody: она возникает при допустимых ISSUE/RETURN инженерной роли. `CUSTODY_ROLES` — `ENGINEER` и `SENIOR_ENGINEER`.
 
-Capabilities: `catalog.read`, `catalog.manage`, `catalog.archive`, `catalog.delete_unused`, `inventory.read`, `inventory.operate`, `inventory.admin`, `movement.read_own`, `movement.read_all`, `procurement.read`, `procurement.create`, `procurement.manage`, `procurement.accept`, `access.manage_users`, `access.assign_standard_roles`, `access.assign_admin`. MANAGER не моделируется как линейный `role >= ...`.
+Стандартно назначаемые роли: ENGINEER, SENIOR_ENGINEER и MANAGER. ADMIN может назначать только их; OWNER может назначить ADMIN, но штатный API не назначает OWNER. Наличие `procurement.read` не предоставляет `procurement.manage`, а `procurement.accept` не предоставляет право выполнять менеджерскую ветку.
 
-## 3. OWNER и migration существующих пользователей
+## 3. OWNER: единственная recovery-identity
 
-Историческая RBAC migration `a1b2c3d4e5f6`: `USER` → `ENGINEER`, configured recovery identity → `OWNER`, остальные ADMIN сохраняют ADMIN. Не пересоздаются User/TelegramIdentity и не удаляется audit/custody/session history. Migration несовместима со старым runtime; historical maintenance cutover выполнен. Downgrade fail-closed, если есть новые роли/role events, которые старая двухролевая модель не представляет.
+`ADMIN_TELEGRAM_USER_ID` исторически назван как admin, но по текущему контракту обозначает единственную recovery OWNER-identity. Он **не** означает адресата всех рабочих уведомлений: для этого существует отдельный `NOTIFICATION_TELEGRAM_USER_ID`. Инвариант единственного OWNER проверяется приложением и PostgreSQL.
 
-`ADMIN_TELEGRAM_USER_ID` — bootstrap/recovery OWNER, но **не** implicit адресат рабочих уведомлений. `NOTIFICATION_TELEGRAM_USER_ID` — отдельный recipient. OWNER singleton и не назначается нормальным API. Смена OWNER — только guarded maintenance CLI `python -m app.bootstrap.recovery_owner_rotation`: существующая Telegram identity, нет custody у target, verified backup, остановленный runtime, одна PostgreSQL transaction с locks и immutable role/access audit, отзыв sessions обоих users. После COMMIT сначала изменить `ADMIN_TELEGRAM_USER_ID` на нового OWNER, затем запускать backend; иначе recovery reconciliation fail-closed. Полная операторская процедура — `docs/DEPLOYMENT.md`.
+Историческая миграция `a1b2c3d4e5f6` преобразовала прежнюю роль USER в ENGINEER, назначила configured recovery identity OWNER и сохранила существующие UUID, TelegramIdentity, sessions и audit. Это уже принятый maintenance cutover; старый двухролевой runtime несовместим с новой схемой. Downgrade должен отказывать, если новые роли и события не представимы прежней моделью.
 
-## 4. Procurement persistence и бизнес-правила
+Смена OWNER разрешена только через защищённый CLI `python -m app.bootstrap.recovery_owner_rotation`, не через пользовательский API. Требуются существующая целевая TelegramIdentity, отсутствие custody у нового владельца, проверенная backup, остановленные application/worker процессы и здоровая БД. Одна транзакция с locks переводит прежнего OWNER в ADMIN, назначает нового OWNER, записывает immutable audit, отзывает sessions и контролирует singleton. **После COMMIT, до запуска backend**, оператор должен изменить `ADMIN_TELEGRAM_USER_ID` в production `.env`; иначе проверка recovery-состояния остановит сервис. Команды и prerequisites — в [DEPLOYMENT.md](DEPLOYMENT.md).
 
-Модуль `procurement` отделён от `catalog`/`inventory`. Сущности: `ProcurementRequest`, immutable `ProcurementRevision` и lines, immutable `ProcurementEvent`, manager assignment/alternative proposal и final Warehouse Movement linkage. Assigned Manager означает ответственность, **не ACL**: любой APPROVED MANAGER может работать с любой активной закупкой; каждый event фиксирует фактического actor.
+## 4. Из каких данных состоит закупка
 
-Закупка создаётся ADMIN/OWNER, содержит number/initiator/assigned manager, активную immutable revision, позиции, комментарий и timestamps. Новая закупка уведомляет назначенного Manager; остальных Managers не спамит и остаётся видимой во «Все активные». Actions «Взять на себя» / «Передать менеджеру» записывают immutable assignment events.
+`ProcurementRequest` отделён от каталога и склада. Он содержит номер, инициатора, назначенного менеджера, статус, текущую редакцию, комментарии, времена и при завершении `final_movement_id`. `ProcurementRevision` и её позиции сохраняют исторический состав; `ProcurementEvent` — неизменяемый журнал действий с реальным actor. Исправление не перезаписывает старую редакцию; создаётся новая. Альтернативное предложение менеджера не заменяет текущую согласованную редакцию автоматически.
 
-После submission нельзя менять старую revision — корректировка создаёт новую, сохраняя предыдущие позиции, комментарии и alternative proposal. Manager alternative composition не становится active revision автоматически. Позиция бывает существующей (`item_id` + display snapshot) либо предлагаемой (category, manufacturer/model, typed attributes, quantity snapshot). Proposed line не создаёт catalog Item автоматически. Перед final acceptance SENIOR_ENGINEER/ADMIN/OWNER должен связать все proposed lines с реальными Items, при необходимости через prefilled форму «Создать карточку из позиции закупки».
+Позиция бывает существующей (`item_id` плюс сохранённый display/identity snapshot) или предлагаемой (описание категории, производителя/модели, атрибутов и количества). Предлагаемая позиция **не** создаёт Item автоматически. На технической приёмке каждую предлагаемую позицию связывают с реальной карточкой, при необходимости предварительно создавая её через явную форму каталога. Историческую identity одобренной редакции нельзя задним числом реконструировать из изменившейся карточки Item: исходный snapshot и DB-инварианты текущих миграций защищают смысл предыдущего решения.
 
-## 5. State machine
+Назначенный менеджер — ответственный за заявку, а **не ACL**. Любой APPROVED MANAGER с `procurement.manage` может выполнять разрешённые действия по активной заявке; фактический исполнитель записывается в event. При создании новой заявки уведомляется назначенный менеджер, без массовой рассылки всем менеджерам; остальные видят её среди активных. «Взять на себя» или «Передать менеджеру» сохраняются как отдельные события.
 
-| Состояние | UI | Смысл |
+## 5. Состояния и переходы
+
+| Код состояния | Пользовательское название | Что происходит со складом |
 |---|---|---|
-| `AGREEMENT_PENDING_MANAGER` | Ожидает менеджера | Передана Manager, stock не меняется |
-| `AGREEMENT_REVISION_REQUIRED` | Требует корректировки | Manager вернул инициатору, обязательный комментарий, optional structured alternative |
-| `PURCHASING` | В закупке | Менеджер принял текущую редакцию |
-| `AWAITING_ACCEPTANCE` | На приёмке | Ресурсы переданы на техническую приёмку, stock ещё не меняется |
-| `COMPLETED` | Выполнена | Техническая приёмка завершена и создан ровно один RECEIPT |
+| `AGREEMENT_PENDING_MANAGER` | Ожидает менеджера | Склад не меняется. |
+| `AGREEMENT_REVISION_REQUIRED` | Требует корректировки | Менеджер вернул с обязательным комментарием; может приложить альтернативу. |
+| `PURCHASING` | В закупке | Текущая редакция принята менеджером, но прихода нет. |
+| `AWAITING_ACCEPTANCE` | На приёмке | Передано техническим ролям; прихода ещё нет. |
+| `COMPLETED` | Выполнена | Техническая приёмка создала один финальный RECEIPT и связала движение с заявкой. |
 
-Manager correction loop может повторяться. Передача на приёмку уведомляет технические роли, но не меняет stock. Кнопка «Есть расхождения» требует comment, создаёт immutable discrepancy event, уведомляет assigned Manager, сохраняет `AWAITING_ACCEPTANCE` и не создаёт RECEIPT. Partial acceptance в первой версии отсутствует; изменение официального состава идёт через correction + новую revision.
+Цикл корректировки может повторяться; каждая официальная правка создаёт новую revision. Альтернатива менеджера сама не заменяет заказ. Действие «Есть расхождения» требует комментарий, создаёт immutable discrepancy event, уведомляет назначенного менеджера, сохраняет `AWAITING_ACCEPTANCE` и **не** создаёт складское движение. Частичной приёмки в текущем выпуске нет: официальный состав сначала исправляется новой редакцией.
 
-## 6. Техническая приёмка и атомарность
+## 6. Как выполняется техническая приёмка
 
-Только SENIOR_ENGINEER/ADMIN/OWNER. Перед подтверждением все lines связаны с Items, выбрана receiving StorageLocation, показан состав/количества. UI требует двух действий: «Подтвердить приёмку» и финальное «Подтвердить и оприходовать» с confirmation dialog.
+Только `SENIOR_ENGINEER`, `ADMIN` или `OWNER` с `procurement.accept`. До подтверждения сервер и UI должны показывать текущую редакцию, позиции, количества, выбранную активную StorageLocation и связи каждой позиции с Item. Интерфейс требует последовательного подтверждения приёмки и окончательного «Подтвердить и оприходовать». Отключенная кнопка в UI не заменяет повторной серверной проверки.
 
-В одной PostgreSQL transaction: lock request → перепроверить status/current revision → validate item bindings/location → создать immutable Warehouse RECEIPT → связать `final_movement_id` → записать event → перевести в `COMPLETED` → enqueue notifications → COMMIT. Любой сбой откатывает Procurement и Warehouse одновременно. Concurrent несовместимые manager transitions возвращают conflict; double click/idempotent replay не создаёт второй RECEIPT.
+В одной PostgreSQL transaction: блокировка заявки → проверка статуса и текущей revision → проверка Item bindings, сохранённой identity и локации → создание Warehouse RECEIPT → связывание `final_movement_id` → запись immutable event и перехода в `COMPLETED` → постановка notification intent → COMMIT. Ошибка любого шага откатывает закупку, движение, проекции и outbox. Двойной клик, повтор после потерянного ответа или конкурирующее подтверждение не должны создавать второй приход.
 
-`PURCHASING` и `AWAITING_ACCEPTANCE` сами по себе не меняют stock. Procurement quantity не является stock quantity. Movement history и procurement history сохраняют двустороннюю связь. Final RECEIPT нельзя обходить generic stock adjustments.
+Generic Warehouse CORRECTION/REVERSAL для `ProcurementRequest.final_movement_id` запрещены на уровне приложения и БД. Для отмены завершённой закупки нужен отдельный бизнес-процесс, отсутствующий в текущем контракте. Промежуточный `PURCHASING` или `AWAITING_ACCEPTANCE` не может считаться фактическим складским поступлением.
 
-## 7. UI и notifications
+## 7. Интерфейс и уведомления
 
-ENGINEER не видит раздел закупок. MANAGER видит «Мои», «Все активные», «История»; SENIOR_ENGINEER — monitor/acceptance без manager actions. Detail: номер, status, initiator, assigned manager, active revision, lines, comments/events, revision history, разрешённые действия. Disabled frontend button никогда не заменяет backend authorization.
+ENGINEER не получает раздел закупок. MANAGER видит «Мои», «Все активные», «История», редакции и действия менеджера. SENIOR_ENGINEER видит мониторинг и техническую приёмку, но не manager workflow. ADMIN/OWNER создают и отслеживают заявки, выполняют техническую приёмку. Detail содержит номер, статус, инициатора, назначенного менеджера, текущий состав, комментарии, историю редакций и событий.
 
-Telegram events: новая закупка/новая revision → assigned Manager; возврат на корректировку → initiator; передача на приёмку → технические роли; discrepancy → assigned Manager; assignment transfer → новый Manager; completion → initiator и участвовавшие Managers по текущему уведомительному контракту. Notification содержит краткий состав и Mini App deep link; большой список сокращается. `NotificationOutbox` фиксирует intent транзакционно; доставка через Gateway at-least-once, duplicate внешнего сообщения возможен.
+События направляются по назначению: новая заявка/редакция — назначенному менеджеру; возврат — инициатору; техническая приёмка — техническим ролям; discrepancy — ответственному менеджеру; смена назначения — новому менеджеру; завершение — инициатору и участвовавшим менеджерам согласно актуальному notification contract. Список позиций в сообщении может сокращаться; ссылка ведёт в Mini App. Intent создаётся в PostgreSQL outbox в общей предметной транзакции.
 
-## 8. Optional email
+Telegram/Graph отправка выполняется позже и имеет семантику **at-least-once**: дедупликация intent не исключает второго внешнего сообщения при потерянном подтверждении Gateway/Graph. Ошибка доставки не откатывает уже совершённую закупку.
 
-В source реализованы Microsoft Graph OAuth application client, To/CC, HTML/text body, procurement number/positions/deep link, durable email outbox, retry/DEAD и отдельная least-privilege identity. Email failure не откатывает procurement transaction; отправка доступна только после `COMPLETED`. Production email по умолчанию выключен (`EMAIL_DELIVERY_ENABLED=false`), включение требует явных secrets/profile `email`/live acceptance. Потерянное подтверждение Graph может привести к повторной отправке — exactly-once не заявляется. SMTP Basic Auth не используется как целевой транспорт.
+## 8. Опциональный Microsoft Graph email
 
-## 9. Acceptance и исключённый scope
+Source содержит OAuth application client, To/CC, HTML/text содержание, номер/позиции закупки и Mini App deep link, email outbox с retry/DEAD и отдельную PostgreSQL identity. Отправка относится к завершённой закупке. `EMAIL_DELIVERY_ENABLED=false` по умолчанию; нужны утверждённые production secrets, явный Compose profile `email` и проверка реальной доставки перед включением. SMTP Basic Auth не является целевым механизмом. Exactly-once при внешнем Graph acknowledgement не заявляется.
 
-RBAC acceptance требует PostgreSQL migration и OWNER invariant, audit events, permission matrix, текущую backend authorisation, role-specific frontend, tests и CI. Procurement acceptance требует immutable revisions/events, correction loop, multi-manager workflow, discrepancy без stock changes, unique final RECEIPT, concurrency/idempotency, PostgreSQL integration, browser E2E, Telegram acceptance и production provenance. Source unit/integration PASS не означает real Telegram acceptance нового production release.
+## 9. Приёмка и исключённые функции
 
-Без отдельного решения не добавлять partial acceptance, ERP/accounting, supplier directory, payments, invoice OCR, attachments, price analytics, dynamic roles, Redis/external queues или автоматический stock update по manager status.
+RBAC требует подтверждения миграций, OWNER singleton, server-side authorization, immutable audit, соответствия интерфейса ролям и интеграционных регрессий. Procurement требует сохранения редакций/событий, correction loop, работы нескольких менеджеров, расхождений без stock, единственного final RECEIPT, concurrency/idempotency, реального PostgreSQL и браузерной проверки. Отдельная реальная Telegram-приёмка после нового deployment ещё не выполнена: локальный synthetic Playwright CP-14 её не заменяет.
+
+В текущем цикле не добавляем частичную приёмку, ERP/бухгалтерию, OCR счетов, платежи, вложения, каталог поставщиков, цены, динамические роли, Redis или автоматическое обновление stock по статусу менеджера. Статусы исправлений и production-зависимости фиксируются в [AUDIT_0_12_REMEDIATION.md](AUDIT_0_12_REMEDIATION.md).

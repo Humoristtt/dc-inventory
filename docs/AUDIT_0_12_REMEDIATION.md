@@ -541,7 +541,34 @@ Status: `OPEN`
 
 ### CP-14 — Real isolated full-stack acceptance
 
-Status: `OPEN`
+Status: `CLOSED`
+
+Implementation commits:
+
+- `126ee2b` — реальные браузерные маршруты склада и закупок.
+- `6e939cf` — изолированные RBAC, Warehouse и Procurement lifecycle.
+- `df1c8b0` — исправления типизации backend regression tests.
+
+Acceptance evidence (2026-09-19):
+
+- PostgreSQL: миграции с нуля до `a9c0d1e2f3a4` — PASS.
+- Backend: 540 passed, 1 skipped.
+- Ruff — PASS; mypy — PASS (191 source files).
+- Real full-stack Playwright: 2 passed.
+- Signed synthetic Telegram authentication — PASS.
+- RBAC, Warehouse и Procurement HTTP acceptance — PASS.
+- Database domain state и projection reconciliation — PASS.
+- Frontend: 150 passed; lint, typecheck, build — PASS.
+- Full-stack и documentation contracts — PASS.
+- Временные тестовые БД удалены — PASS.
+
+Ограничения:
+
+- SFP downgrade safety test выполняется в отдельном CI gate.
+- Production deployment не выполнялся.
+- Production acceptance остаётся в CP-16.
+
+Exit marker: `CP14_FINAL_GATE=PASS`
 
 ### CP-15 — Three-pass pre-deployment audit
 
@@ -565,11 +592,11 @@ This is a fresh independent audit after all remediation and acceptance work.
 
 ## Current next action
 
-Execute CP-06 — Performance remediation.
+Execute CP-15 — Three-pass pre-deployment audit.
 
-CP-04 Procurement integrity and CP-05 Procurement UI correctness are closed.
-Next work must begin from the CP-06 performance scope without modifying the
-closed CP-04 / CP-05 contracts unless a new regression is independently proven.
+CP-14 isolated full-stack acceptance is closed.
+CP-15 must verify release readiness and remaining CP-07–CP-12
+production dependencies before CP-16 deployment approval.
 
 ---
 

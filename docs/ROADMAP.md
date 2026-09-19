@@ -1,62 +1,78 @@
-# План разработки Spikatel Inventory
+# Состояние проекта и порядок дальнейших работ
 
-Актуализировано 19.09.2026. `[x]` — реализовано/исторически принято в указанном контуре, `[~]` — локально проверено, но приёмка не завершена, `[ ]` — не выполнено. Реальное production-состояние нельзя выводить из локального Git HEAD. История закрытых работ — `docs/HISTORY.md`; журнал CP-00–18 — `docs/AUDIT_0_12_REMEDIATION.md`.
+Документ фиксирует последовательность работ, а не заменяет технические требования или журнал проверок. Дата сверки: 19.09.2026. Текущий исходный код — ветка `remediation/audit-0-12` после коммита `38d1b19`. Для описания устройства системы используем [архитектуру](ARCHITECTURE.md), для технических подробностей исправлений — [журнал CP-00–18](AUDIT_0_12_REMEDIATION.md), для истории предыдущих выпусков — [HISTORY.md](HISTORY.md).
 
-## 1. Базовая платформа
+## 1. Разделяем исходники и работающую систему
 
-- [x] Telegram Mini App, FastAPI, PostgreSQL, Docker Compose, Cloudflare HTTPS/Tunnel.
-- [x] Telegram initData server-side validation, HttpOnly session, access requests и approve/reject.
-- [x] Five-role RBAC с backend-derived capabilities.
-- [x] Transactional notification outbox и раздельные PostgreSQL identities.
-- [x] Fail-closed boundary `REAL_INVENTORY_MUTATIONS_ENABLED=false`.
+| Контур | Подтверждённое состояние | Что означает |
+|---|---|---|
+| Исходный код | Source migration head `a9c0d1e2f3a4`; CP-14 закрыт, CP-15 открыт | Код, миграции и локальные проверки доступны в remediation-ветке, но это не свидетельство развёртывания. |
+| Production | Последняя документированная проверка checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`, Alembic `c3d4e5f6a7b8` | Фактический текущий SHA, схема, образы и конфигурация требуют новой проверки перед CP-16. |
+| Складские изменения | `REAL_INVENTORY_MUTATIONS_ENABLED=false` по последнему production evidence | Обычные мутации закрыты. Ранее выполненный одноразовый импорт не означал снятие этой защиты. |
 
-## 2. Warehouse Domain V2
+Git push, изменение документации и синхронизация checkout не меняют запущенные контейнеры. Локальный PASS нельзя переносить на production. CP-16 требует отдельного разрешённого окна, резервной копии, планов отката и проверки конфигурации.
 
-- [x] Quantity-only inventory без active physical-unit/serial lifecycle.
-- [x] `StockBalance = Item × Location × positive quantity`.
-- [x] `UserItemCustodyBalance = User × Item × positive quantity`.
-- [x] Actor отделён от custody; ENGINEER/SENIOR_ENGINEER ISSUE/RETURN меняют custody.
-- [x] Zero rows не хранятся, negative stock/custody запрещены.
-- [x] StorageLocation WAREHOUSE/DATACENTER; архивирование локации с остатком запрещено.
-- [x] Immutable journal: RECEIPT, ISSUE, RETURN, TRANSFER, WRITE_OFF, CORRECTION, REVERSAL.
-- [x] Idempotency, ordered PostgreSQL locks, read-only projection reconciliation.
-- [x] Финальный procurement RECEIPT защищён от generic CORRECTION/REVERSAL в source.
+## 2. Реализованная основа
 
-## 3. Роли и операции
+- [x] Telegram Mini App, React/TypeScript, FastAPI, PostgreSQL, Docker Compose, Cloudflare Tunnel и Telegram Gateway.
+- [x] Проверка Telegram `initData` сервером, HttpOnly-сессии, lifecycle заявок на доступ и capability-based RBAC.
+- [x] Роли `ENGINEER`, `SENIOR_ENGINEER`, `MANAGER`, `ADMIN`, `OWNER`; исторический RBAC maintenance cutover принят. **Production RBAC maintenance cutover.**
+- [x] PostgreSQL outbox для Telegram и опционального Microsoft Graph email; внешняя доставка at-least-once.
+- [x] Разделённые учётные записи PostgreSQL для миграций, backend, Telegram, email и maintenance в конфигурации текущего исходного кода.
 
-- [x] ENGINEER — каталог/остатки/свои движения; ISSUE, RETURN, RECEIPT существующей позиции, TRANSFER.
-- [x] SENIOR_ENGINEER — операции ENGINEER, общий журнал, управление каталогом, technical procurement acceptance.
-- [x] MANAGER — каталог/остатки/закупки; без складских mutations и общего журнала.
-- [x] ADMIN/OWNER — складские и catalog administration, роли/доступ, technical acceptance.
-- [x] OWNER singleton/recovery; ADMIN не назначает ADMIN/OWNER; защита реализована backend.
+Роли, разрешения и жизненный цикл закупки определены в [RBAC_PROCUREMENT.md](RBAC_PROCUREMENT.md). Внешнюю доставку нельзя считать exactly-once при потере ответа шлюза.
 
-## 4. Каталог и интерфейс
+## 3. Каталог и склад
 
-- [x] Fixed family → leaf hierarchy: Ethernet/FC трансиверы и адаптеры, оптика, SSD/HDD, RAM, PCIe, питание.
-- [x] Leaf-schema attributes, нормализация reach, «Дальние» как derived scope, optional color.
-- [x] Dynamic scoped facets, search, карточки, stock by location, create/edit/archive.
-- [x] Warehouse actions, capability-aware journal, фильтры и периоды.
-- [x] Responsive shared UI design system и performance acceptance прошлого цикла.
-- [x] Archived Item запрещает новый RECEIPT/ISSUE, но допускает завершение существующего остатка.
+- [x] Каталог с фиксированной иерархией family → leaf и версионированными схемами атрибутов; поиск, фильтры, фасеты и отображение остатков по локациям.
+- [x] Количественный Warehouse Domain V2 без действующего учёта serial/WWN конкретных экземпляров.
+- [x] `StockBalance = Item × StorageLocation × positive quantity`; `UserItemCustodyBalance = User × Item × positive quantity`.
+- [x] Неизменяемый журнал RECEIPT, ISSUE, RETURN, TRANSFER, WRITE_OFF, CORRECTION, REVERSAL; атомарное обновление остатков и custody.
+- [x] Идемпотентность движений, сериализация конфликтующих операций и read-only сверка проекций по журналу.
+- [x] Защита итогового RECEIPT закупки от обычного складского CORRECTION/REVERSAL реализована в исходниках; новые DB-инварианты ещё требуют production cutover.
 
-## 5. Initial inventory bootstrap
+Warehouse Domain V2 развёрнут и принят ранее. Initial bootstrap завершён и повторно не запускается. Его результат подтверждался сверкой остатков и внешней резервной копией. Разрешение обычных складских операций — отдельное решение, не часть повторного импорта. Точные инварианты — [WAREHOUSE_DOMAIN.md](WAREHOUSE_DOMAIN.md), атрибуты каталога — [CATALOG_SCHEMA.md](CATALOG_SCHEMA.md).
 
-- [x] Внешний workbook parser, validation, identity normalization и aggregation.
-- [x] Guarded one-shot production bootstrap: empty domain, mutation gate закрыт, atomic location + opening RECEIPT.
-- [x] Initial bootstrap завершён и повторно не запускается.
-- [x] Counts/quantity check, ZERO_DRIFT reconciliation, post-import off-VM backup и Telegram visual acceptance.
+## 4. Закупки и пользовательские сценарии
 
-## 6. Procurement и доставка
+- [x] Закупки с неизменяемыми редакциями и событиями, назначением менеджера, циклом корректировок и расхождениями без изменения склада.
+- [x] При финальной технической приёмке создаётся один Warehouse RECEIPT в общей транзакции с завершением закупки.
+- [x] Локально проверены исправления идентичности закупочных позиций, пагинации, поиска и повторной отправки с постоянным `client_request_id`.
+- [x] CP-14: изолированный браузерный сценарий с реальными HTTP API и PostgreSQL, подписанным синтетическим Telegram `initData`, проверкой RBAC, склада, закупок и reconciliation.
+- [ ] Реальная приёмка актуального выпуска через Telegram Mini App после CP-16.
+- [ ] Включение и проверка Microsoft Graph email в production — только с утверждёнными секретами и отдельным профилем.
 
-- [x] Production RBAC maintenance cutover.
-- [x] Procurement domain на production migration `c3d4e5f6a7b8`: immutable revisions/events, manager collaboration, discrepancy без stock mutation, ровно один final RECEIPT.
-- [x] Source migration head `a9c0d1e2f3a4`: дополнительные предметные/DB инварианты реализованы, но не развёрнуты автоматически.
-- [x] ISSUE notification и procurement notifications используют транзакционный outbox с dedupe key.
-- [x] Optional Microsoft Graph OAuth, To/CC, email outbox/retry/DEAD и отдельная DB identity реализованы в source.
-- [ ] Production email credentials, `EMAIL_DELIVERY_ENABLED=true`, Compose profile `email` и live acceptance.
-- [ ] Real Telegram Procurement acceptance текущего release.
+В рамках CP-14 зафиксированы backend `540 passed, 1 skipped`, frontend `150 passed`, Playwright `2 passed`. SFP downgrade safety относится к отдельному CI gate. Эти результаты относятся к локальному изолированному контуру, не к production.
 
-Внешняя доставка Telegram/email — **at-least-once**, не exactly-once. При потере ответа шлюза возможно повторное сообщение/письмо даже при дедупликации outbox intent.
+## 5. Исправления Audit 0–12 и предрелизная работа
+
+| Этап | Состояние | Следующее действие |
+|---|---|---|
+| CP-00–CP-06 | Закрытые локальные технические этапы по журналу | Не изменять без воспроизведённой регрессии. |
+| CP-07 | OPEN | Проверить права Unix socket, UID/GID и совместно переключить web/Tunnel в production. |
+| CP-08 | OPEN | Проверить реальные Telegram/Graph delivery, конфигурацию и worker lifecycle. |
+| CP-09 | OPEN | Выполнить контролируемое применение PostgreSQL permissions и проверить legacy sessions. |
+| CP-10 | OPEN | Подтвердить provenance реальных образов и release artifacts на целевом сервере. |
+| CP-11 | OPEN | Выполнить восстановление настоящей резервной копии и внешней конфигурации по runbook. |
+| CP-12 | OPEN | Завершить независимый обзор сопровождаемости и production acceptance. |
+| CP-13 | OPEN в журнале | Завершить полную редакционную и техническую сверку Markdown, затем записать доказательства и закрыть отдельно. |
+| CP-14 | CLOSED | Изолированная full-stack приёмка пройдена, см. коммит `3f549d5`. |
+| CP-15 | OPEN, выполняется | Проверить исходники, документы, безопасность и эксплуатационные риски тремя проходами. |
+| CP-16 | OPEN | Выпуск только после согласования и закрытия предрелизных блокеров. |
+| CP-17 | OPEN | Ручная проверка настоящего Telegram Mini App после выпуска. |
+| CP-18 | OPEN | Новый независимый аудит двенадцати разделов по итоговому коду и документации. |
+
+В CP-15 выявлен и исправлен порядок проверки одноразовой PostgreSQL: проверка топологии и случайного маркера выполняется **до** Alembic. Коммит `38d1b19`; после исправления — два Playwright-теста, zero-drift reconciliation и удаление одноразовой БД. Это закрывает конкретный локальный дефект runner, **не** весь CP-15.
+
+## 6. Порядок завершения текущего цикла
+
+1. Сверить все Markdown с исходниками и реальными статусами; устранить дубли и расхождения, сохранив уникальные исторические доказательства. Не менять статусы CP-07–CP-12 без production evidence.
+2. Провести оставшиеся проходы CP-15, зафиксировать найденные дефекты и их исправления; отдельно проверить CI и критичные эксплуатационные сценарии.
+3. После итоговой редакции документации выполнить запланированные повторные проверки двенадцати разделов; результат каждого раздела фиксировать с конкретным SHA и датой, не подменяя ими CP-16/17.
+4. Только после явного согласования переходить к CP-16: определить approved SHA, подтвердить CI, свежую off-VM backup, совместимость миграций и планы отката; отдельно согласовать CP-07 Tunnel/web cutover.
+5. После развёртывания выполнить CP-17 и затем CP-18. Открытые production-зависимости закрывать только по фактическим результатам.
+
+Команды развёртывания, восстановления и критерии остановки не копируем в roadmap: их владельцы — [DEPLOYMENT.md](DEPLOYMENT.md), [OPERATIONS.md](OPERATIONS.md), [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md) и [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md).
 
 ## 10. Accepted clean baseline
 
@@ -64,37 +80,15 @@ Accepted production/runtime golden baseline перед новым feature cycle:
 
 `1242f56c131d0f8c470e05cbaf209c48a37e85a4`
 
-Историческая приёмка предыдущего цикла:
+Историческая приёмка предыдущего цикла, не результат текущего CP-15:
 
 - [x] required CI;
 - [x] Warehouse V2/UX/design-system production acceptance;
 - [x] real Telegram desktop acceptance и fresh verified production backup;
 - [x] local/source/runtime golden-state verification.
 
-Более поздняя зафиксированная production Procurement проверка: checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`, Alembic `c3d4e5f6a7b8`. Это историческая проверка, а не мониторинг текущего сервера. `REAL_INVENTORY_MUTATIONS_ENABLED=false` остаётся задокументированным production gate.
+Более позднее документированное production evidence — checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`, схема `c3d4e5f6a7b8`. Его актуальность на момент будущего деплоя проверяется отдельно.
 
-## 11. Текущий CP-00–CP-18 remediation cycle
+## 11. Работы вне текущего цикла
 
-Проверяемый объём, коммиты и ограничения: `docs/AUDIT_0_12_REMEDIATION.md`.
-
-- [x] CP-00–CP-06: локальные результаты зафиксированы в журнале.
-- [~] CP-07: trusted Unix-socket ingress проверен локально; Tunnel/web migration в production не выполнена.
-- [~] CP-08: устранена гонка Telegram welcome/outbox; live delivery и Graph acceptance не проведены.
-- [~] CP-09: права БД атомарны, legacy sessions завершаются после commit; production cutover не проведён.
-- [~] CP-10: Git HEAD/provenance и release publication локально проверены; production images не сверялись.
-- [~] CP-11: проверка backup manifest, cleanup и session revocation, одноразовый PostgreSQL restore; real S3/production rehearsal не выполнен.
-- [~] CP-12: общий helper provenance в restore; локальные тесты прошли, независимый аудит впереди.
-- [ ] CP-13: полная ревизия текущих Markdown и docs freshness gate.
-- [ ] CP-14: isolated full-stack acceptance.
-- [ ] CP-15: three-pass pre-deployment audit.
-- [ ] CP-16: controlled production deployment.
-- [ ] CP-17: real Telegram Mini App acceptance после deployment.
-- [ ] CP-18: fresh independent Audit 0–12.
-
-## 12. Операционная последовательность
-
-Approved target SHA/CI → verified off-VM backup → согласованный maintenance/rollback plan → миграции и `db-permissions` → health, provenance, reconciliation, live smoke. CP-07 требует совместного переключения Tunnel и нового web image. Source-only sync без пересборки допустим только при неизменных Docker build contexts и runtime source; изменённые host-side `ops/` scripts требуют собственных syntax/contract checks. Production-зависимые CP-07–11 остаются OPEN до фактической проверки.
-
-## 13. Дальнейший backlog
-
-Без отдельного решения не входят в текущий цикл: partial procurement acceptance, supplier directory, invoices/OCR, ERP/accounting, dynamic custom roles, attachment storage, price analytics. Исторические решения и закрытые этапы не дублируются вместо `docs/HISTORY.md`.
+Без отдельного решения не добавляем частичную приёмку закупок, каталог поставщиков, счета/OCR, ERP, аналитику цен, динамические роли или учёт отдельных serial/WWN экземпляров. Новые функции не должны блокировать завершение уже определённого remediation cycle.

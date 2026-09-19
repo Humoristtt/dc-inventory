@@ -52,9 +52,14 @@ cleanup() {
   fi
 
   if [[ "$DB_CREATED" = "1" ]]; then
-    docker compose -f compose.dev.yaml exec -T postgres \
+    if docker compose -f compose.dev.yaml exec -T postgres \
       dropdb -U "$POSTGRES_USER" --force --if-exists "$TEST_DB" \
-      >/dev/null 2>&1
+      </dev/null >/dev/null 2>&1; then
+      echo "FULLSTACK_DATABASE_CLEANUP=PASS"
+    else
+      echo "FULLSTACK_DATABASE_CLEANUP=FAIL: $TEST_DB" >&2
+      status=1
+    fi
   fi
 
   rm -rf "$TMP_DIR"
@@ -80,16 +85,17 @@ wait_for_url() {
   return 1
 }
 
-docker compose -f compose.dev.yaml up -d postgres >/dev/null
+docker compose -f compose.dev.yaml up -d --no-recreate postgres >/dev/null
 
 docker compose -f compose.dev.yaml exec -T postgres \
-  createdb -U "$POSTGRES_USER" "$TEST_DB"
+  createdb -U "$POSTGRES_USER" "$TEST_DB" </dev/null
 
 DB_CREATED=1
 
 export APP_ENV=test
 export DATABASE_URL="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_DEV_PORT:-55432}/${TEST_DB}"
 export REAL_INVENTORY_MUTATIONS_ENABLED=false
+export EMAIL_DELIVERY_ENABLED=false
 
 unset TELEGRAM_GATEWAY_URL
 unset TELEGRAM_GATEWAY_SECRET
@@ -155,7 +161,7 @@ identity_state="$(
       FROM telegram_identities ti
       JOIN users u ON u.id = ti.user_id
       WHERE ti.telegram_user_id = 42424242;
-    "
+    " </dev/null
 )"
 
 test "$identity_state" = "OWNER|APPROVED"
@@ -173,7 +179,7 @@ session_count="$(
       JOIN telegram_identities ti
         ON ti.user_id = s.user_id
       WHERE ti.telegram_user_id = 42424242;
-    "
+    " </dev/null
 )"
 
 test "$session_count" -ge 1

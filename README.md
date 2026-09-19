@@ -1,71 +1,81 @@
-# Инвентаризация оборудования ЦОД — Spikatel Inventory
+# Spikatel Inventory — учёт оборудования и материалов ЦОД
 
-Telegram Mini App для количественного учёта оборудования и расходных материалов ЦОД. PostgreSQL — источник истины: остатки изменяются только складскими операциями, immutable movement journal сохраняет историю. Код организован как модульный монолит с отдельными модулями auth/access, catalog, inventory, procurement и notifications.
+Spikatel Inventory — Telegram Mini App для ведения номенклатуры, остатков оборудования и расходных материалов, складских движений и закупок. Система отвечает на вопросы: **что числится на складе, где находится количество каждой позиции, каким движением оно изменилось и какое количество выдано сотруднику**. Это количественный учёт, а не CMDB с жизненным циклом отдельного серийного устройства.
 
-## Актуальность данных — 19.09.2026
+Я описываю ниже устройство текущего исходного кода и отдельно — подтверждённое состояние работающего сервиса. Описание ветки Git не является свидетельством того, что новая версия уже развёрнута.
 
-Нельзя смешивать подтверждённое production-состояние, состояние исходного кода и локальные результаты тестов.
+## 1. Как устроена система
 
-| Контур | Последняя подтверждённая информация |
+Пользователь открывает интерфейс в Telegram. React-приложение обращается к FastAPI через HTTPS и Nginx; FastAPI проверяет авторизацию и выполняет предметные операции в PostgreSQL. Внешние сообщения не отправляются внутри складской транзакции: backend записывает намерение доставки в PostgreSQL outbox, а отдельные workers отправляют его через Telegram Gateway или, при отдельном включении, Microsoft Graph.
+
+```text
+Telegram Mini App / браузер
+          │ HTTPS
+          ▼
+Cloudflare Tunnel → Nginx → FastAPI ──→ PostgreSQL
+                              │             ▲
+                              └─ outbox ────┘
+                                               │
+                                   Telegram / email workers
+                                               │
+                                Cloudflare Gateway / Graph
+```
+
+Backend — модульный монолит на Python 3.12, FastAPI, SQLAlchemy 2, asyncpg и Alembic. Предметные модули разделены на `auth`, `access`, `identity`, `catalog`, `inventory`, `procurement`, `notifications`, `telegram_bot` и `maintenance`. Frontend — React, TypeScript и Vite. Окружение использует PostgreSQL 18, Docker Compose, Nginx и Cloudflare. Непосредственно к PostgreSQL из браузера не обращаемся. Структура и границы доверия подробно описаны в [архитектуре](docs/ARCHITECTURE.md).
+
+## 2. Что хранится и почему остаток нельзя редактировать вручную
+
+`Item` — карточка номенклатуры: категория, производитель, модель и технические характеристики. Она **не** является отдельным экземпляром оборудования. Позиции относятся к фиксированным категориям-листьям: трансиверы Ethernet/FC, оптика, сетевые адаптеры, SSD/HDD, RAM, PCIe-адаптеры и кабели питания. Схема полей задаётся приложением и миграциями; создание пользовательских типов характеристик во время работы не предусмотрено. См. [схему каталога](docs/CATALOG_SCHEMA.md).
+
+Количество формируется только складскими операциями. `Movement` и `MovementLine` образуют неизменяемый журнал; текущие остатки — транзакционная проекция `StockBalance` по сочетанию Item и StorageLocation. `UserItemCustodyBalance` отдельно учитывает количество, закреплённое за сотрудником и номенклатурой. `actor_user_id` фиксирует исполнителя движения, `custody_user_id` — сотрудника, за которым возникает или уменьшается ответственность. Это разные поля и разные смыслы.
+
+Пример: инженер берёт две одинаковые позиции со склада. ISSUE уменьшает остаток конкретной локации на два и увеличивает его custody на два. RETURN выполняет обратную операцию в допустимом количестве. Передача между локациями меняет распределение, а не суммарное количество. Нельзя получить отрицательный остаток или отрицательную custody; нулевые строки проекций удаляются. История не переписывается ради исправления ошибки: предусмотрены допустимые CORRECTION и REVERSAL с отдельными ограничениями. Истинность проекций проверяем read-only SQL-сверкой по журналу; нормальный результат — ноль строк расхождений.
+
+Warehouse Domain V2 ранее принят в production. Активного учёта serial/WWN конкретного экземпляра и отдельного пользовательского экрана «Моё оборудование» в текущей версии нет. Подробные транзакции, блокировки, идемпотентность и запрет обычного исправления финального прихода закупки — в [складском контракте](docs/WAREHOUSE_DOMAIN.md).
+
+## 3. Кто и что может делать
+
+По последней подтверждённой проверке production и source используют capability-based five-role RBAC: `ENGINEER`, `SENIOR_ENGINEER`, `MANAGER`, `ADMIN`, `OWNER`. Роль и статус доступа хранятся в PostgreSQL. Backend проверяет capabilities на каждом защищённом действии; скрытая кнопка frontend не служит защитой.
+
+Инженер выполняет разрешённые складские действия и видит свою историю. Старший инженер дополнительно управляет каталогом, видит общий журнал и принимает закупки технически. Менеджер работает с закупками, но не получает право изменять склад. Администратор управляет доступом и административными операциями; OWNER — единственная recovery-роль. Назначенный менеджер отвечает за заявку, но это не ограничение доступа других допущенных менеджеров. Точную матрицу и защиту OWNER используем из [RBAC и закупок](docs/RBAC_PROCUREMENT.md).
+
+Закупка живёт отдельно от склада: согласование, корректировки, смена менеджера и передача на приёмку не изменяют остаток. Только финальная техническая приёмка с подтверждёнными позициями и локацией атомарно создаёт один Warehouse RECEIPT и завершает закупку. Этот итоговый приход нельзя отменить обычной складской коррекцией; для отмены завершённой закупки понадобится отдельный бизнес-процесс.
+
+## 4. Авторизация и доставка
+
+Backend проверяет подпись и срок действия Telegram `initData`, затем выдаёт серверную сессию через HttpOnly cookie. Статус пользователя (`PENDING`, `APPROVED`, `REJECTED`, `BLOCKED`) не подменяется ролью. Webhook проверяет свой secret token и дедуплицирует входящие обновления.
+
+Складское движение и outbox intent записываются одной транзакцией. Telegram worker доставляет сообщение через HTTPS Cloudflare Worker Gateway; optional email worker обращается к Microsoft Graph из отдельного контура доступа к БД. Доставка **at-least-once**: ключ дедупликации предотвращает повторную запись намерения, но потеря подтверждения внешнего сервиса может привести к повторному сообщению или письму. Exactly-once не обещаем. Email по умолчанию выключен (`EMAIL_DELIVERY_ENABLED=false`); секреты, запуск и реальная доставка требуют отдельной приёмки.
+
+## 5. Текущее состояние исходников и production
+
+Актуальность этой записи: **19.09.2026**. Различаем исходный код, последнюю документированную проверку production и фактическое состояние production, которое перед следующим выпуском нужно проверить заново.
+
+| Контур | Последние подтверждённые сведения |
 |---|---|
-| Production | Checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`, схема `c3d4e5f6a7b8`; Procurement и пяти-ролевая RBAC развёрнуты. Это **последняя документированная проверка**, не live monitoring. |
-| Source `remediation/audit-0-12` | Alembic head `a9c0d1e2f3a4`; CP-07–12 зафиксированы в исходниках, но production acceptance не выполнена. |
-| Операционные ограничения | `REAL_INVENTORY_MUTATIONS_ENABLED=false`; первоначальный импорт выполнен через отдельный one-shot bootstrap. |
+| Исходники `remediation/audit-0-12` | Кодовая база проверялась на `38d1b19`; текущий Alembic head `a9c0d1e2f3a4`. После этого коммита редакционные изменения документов не означают изменения runtime. |
+| Последняя документированная production-проверка | Checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`; схема `c3d4e5f6a7b8`. Это датированное свидетельство, не live monitoring. |
+| Склад | По последнему зафиксированному состоянию `REAL_INVENTORY_MUTATIONS_ENABLED=false`: обычные мутации запрещены до отдельного решения. |
 
-    ALEMBIC_HEAD=c3d4e5f6a7b8
-    SOURCE_ALEMBIC_HEAD=a9c0d1e2f3a4
-
-Исторические результаты — `docs/HISTORY.md`; текущее состояние production нужно заново сверить перед deploy. Git push/source-only sync не обновляет схему или уже запущенные контейнеры.
-
-Текущая post-cutover source-фаза:
-
-    CP-13: аудит документации
-      -> CP-14: изолированная full-stack приёмка
-      -> CP-15: трёхпроходный pre-deployment аудит
-      -> CP-16: согласованное production deployment
-      -> CP-17: реальная приёмка Telegram Mini App
-      -> CP-18: независимый повторный аудит
-
-CP-07 требует согласованного переключения Tunnel/web с TCP на trusted Unix ingress, проверки UID/GID и rollback; новый web image нельзя выпускать при старом Tunnel origin. CP-08/09/10/11 имеют отдельные незавершённые production gates: live delivery, permission cutover, runtime provenance, настоящий S3 restore rehearsal. Локальный PASS не равен production PASS. Статусы и evidence: `docs/AUDIT_0_12_REMEDIATION.md`, процедура CP-07: `docs/CP07_HTTP_SOCKET_MIGRATION.md`.
-
-## Warehouse Domain V2
-
-Warehouse Domain V2 развёрнут и принят в production. `Item` — номенклатура, а не physical unit. `StockBalance` = Item × StorageLocation × positive quantity, `UserItemCustodyBalance` = User × Item × positive quantity. Actor (`actor_user_id`) и custody (`custody_user_id`) различаются. ENGINEER/SENIOR_ENGINEER ISSUE/RETURN меняют custody; ADMIN/OWNER административные movements не создают её автоматически. Отрицательные остатки запрещены, нулевые строки удаляются.
-
-Immutable journal поддерживает RECEIPT, ISSUE, RETURN, TRANSFER, WRITE_OFF, CORRECTION и REVERSAL. Финальный procurement RECEIPT нельзя подвергать generic CORRECTION/REVERSAL: для отмены completed procurement нужен отдельный business workflow. Движения, projections и outbox фиксируются одной транзакцией. Нет active serial/WWN/physical-unit lifecycle и отдельного пользовательского экрана «Моё оборудование»; custody существует как backend integrity projection.
+```text
+ALEMBIC_HEAD=c3d4e5f6a7b8
+SOURCE_ALEMBIC_HEAD=a9c0d1e2f3a4
+```
 
 Первоначальное production-наполнение склада также завершено:
 
-- внешний authoritative operator workbook хранится вне Git и прошёл fail-closed validation;
-- guarded one-shot CLI создал одну opening RECEIPT transaction;
-- проверены counts/quantities, post-import reconciliation zero drift, health, fresh verified off-VM backup и real Telegram visual acceptance.
+- внешний операторский workbook проверен вне Git;
+- guarded one-shot CLI создал начальную локацию и opening RECEIPT;
+- выполнены проверка количества, zero-drift reconciliation, health, резервная копия вне VM и визуальная приёмка через Telegram.
 
-Повторный initial bootstrap запрещён. Обычные складские mutations остаются заблокированы отдельной границей `REAL_INVENTORY_MUTATIONS_ENABLED=false` до явного go-live решения.
+Повторный initial bootstrap запрещён. Его успешное выполнение не снимает защиту обычных складских операций.
 
-## Каталог, роли, закупки
+Текущая post-cutover source-фаза: CP-14 закрыт после изолированной full-stack приёмки; CP-15 выполняется. В CP-15 исправлена проверка одноразовой БД перед миграциями (`38d1b19`). CP-07–CP-12 остаются OPEN из-за незавершённых production-зависимостей; CP-13 ещё требует полной финальной сверки документации. CP-16 — согласованное развёртывание, CP-17 — реальная Telegram-приёмка после него, CP-18 — независимый повторный аудит. Подробные статусы, факты и ограничения фиксируем в [журнале исправлений](docs/AUDIT_0_12_REMEDIATION.md) и [плане работ](docs/ROADMAP.md).
 
-Versioned fixed family → leaf hierarchy включает трансиверы Ethernet/FC, оптику, сетевые адаптеры Ethernet/FC, SSD/HDD, RAM, PCIe-адаптеры и питание. Item создаётся только в leaf, «Дальние» — derived scope, а не category. Технические поля/identity зависят от leaf schema (`docs/CATALOG_SCHEMA.md`).
+**Критическое ограничение CP-07:** подготовленный Nginx разделяет недоверенный TCP-вход и доверенный Unix socket. Последний документированный production Tunnel всё ещё направлен на `http://localhost:8080`. Нельзя разворачивать новый web-образ без согласованного переключения Tunnel и проверки UID/GID, прав каталога сокета и отката: иначе реальные клиенты могут разделить один bucket ограничения запросов. Остальные production-проверки включают delivery, DB permissions, provenance образов и настоящий S3 restore rehearsal.
 
-production и source используют capability-based five-role RBAC: `ENGINEER`, `SENIOR_ENGINEER`, `MANAGER`, `ADMIN`, `OWNER`. Роль и access status хранятся в PostgreSQL; backend выводит capabilities и проверяет каждый protected action. MANAGER — отдельная ветка закупок, assigned Manager означает ответственность, не ACL. OWNER singleton/recovery и не назначается обычным API. Procurement immutable revisions/events; manager status не изменяет stock. Техническая финальная приёмка атомарно создаёт ровно один Warehouse RECEIPT. Полный контракт: `docs/RBAC_PROCUREMENT.md`.
+## 6. Где искать инструкции
 
-## Telegram, email, безопасность
+Начальная точка для разработчика и оператора — [карта документации](docs/README.md), которая перечисляет **все** Markdown и их назначение. Для изменения исходников: [DEVELOPMENT](docs/DEVELOPMENT.md). Для выпуска: [DEPLOYMENT](docs/DEPLOYMENT.md) и отдельный [план CP-07](docs/CP07_HTTP_SOCKET_MIGRATION.md). Для сопровождения: [OPERATIONS](docs/OPERATIONS.md). Для аварийного восстановления: [RECOVERY_RUNBOOK](docs/RECOVERY_RUNBOOK.md). Для истории завершённых работ: [HISTORY](docs/HISTORY.md). Команды production не копируем из локального dev-сценария.
 
-Telegram `initData` проверяется backend; пользовательская сессия хранится server-side и выдаётся через HttpOnly cookie. Webhook дедуплицирует update ID; доставка идёт через PostgreSQL outbox, отдельный Telegram worker и Cloudflare Worker Gateway. Production VM не выполняет прямые Bot API вызовы к `api.telegram.org:443`.
-
-Внешняя Telegram/email доставка — **at-least-once**, не exactly-once: dedupe key предотвращает повторное создание outbox intent, но при lost acknowledgement отправка может повториться. Microsoft Graph email worker source реализован и изолирован отдельной PostgreSQL identity, однако production по умолчанию выключен `EMAIL_DELIVERY_ENABLED=false`: secrets, profile `email` и live acceptance отдельно.
-
-Реальные inventory datasets, workbook contents, credentials, database dumps, private/runtime-only production identifiers и operator source artifacts запрещены в публичном репозитории. Публичные service identifiers (host Mini App, support username) могут находиться в документации и исходниках по назначению.
-
-## Технологии и эксплуатация
-
-Python 3.12, FastAPI, SQLAlchemy 2 async, asyncpg, Alembic; PostgreSQL 18; React/TypeScript/Vite, Vitest/Playwright; Nginx, Docker Compose, Cloudflare Tunnel/Worker. Production VM — Ubuntu 24.04 LTS. Backend/PostgreSQL не публикуют host ports, текущий web bind — `127.0.0.1:8080` до CP-07 migration. Отдельные database identities: owner/migrator, backend, Telegram, optional email и maintenance.
-
-OCI image label `org.opencontainers.image.revision` фиксирует source revision самого образа; Git checkout и running image — разные факты. Source-only docs/host-tools sync без rebuild допустим только при неизменных application runtime source/Docker build contexts. `ops/release/build_release.py` публикует manifest/env после проверки всех release artifacts.
-
-## Документы
-
-- `docs/ROADMAP.md` — последовательность этапов; `docs/AUDIT_0_12_REMEDIATION.md` — CP-00–18 и открытые acceptance; `docs/HISTORY.md` — исторические доказательства.
-- `docs/ARCHITECTURE.md`, `docs/WAREHOUSE_DOMAIN.md`, `docs/CATALOG_SCHEMA.md`, `docs/RBAC_PROCUREMENT.md` — архитектура и предметные контракты.
-- `docs/DEVELOPMENT.md`, `docs/FRONTEND_DESIGN_SYSTEM.md`, `docs/FRONTEND_PERFORMANCE.md` — локальная разработка и UI.
-- `docs/DEPLOYMENT.md`, `docs/OPERATIONS.md`, `docs/RECOVERY_RUNBOOK.md`, `docs/CP07_HTTP_SOCKET_MIGRATION.md` — выпуск, эксплуатация и восстановление.
-- Документы Stage 15/source reference исторические; их старые snapshots не следует превращать в нынешний production state.
+Реальные наборы оборудования, содержимое workbook, секреты, дампы БД и private/runtime-only production identifiers не помещаем в публичный Git. Публичные service identifiers (например, адрес Mini App и публичный support username) допустимы по назначению. Source-only sync, Git push или обновление документации **не** обновляют контейнеры, миграции и внешний Tunnel. Production меняем только по явно согласованному release-плану.

@@ -158,5 +158,55 @@ test(
         { name: "Найти оборудование" },
       ),
     ).toBeVisible();
+
+    // Real warehouse route -> backend -> isolated PostgreSQL.
+    const locationsRequest = page.waitForResponse(
+      (response) => (
+        new URL(response.url()).pathname === "/api/inventory/locations"
+        && response.request().method() === "GET"
+      ),
+    );
+
+    await page.goto("/more/locations");
+
+    const locationsResponse = await locationsRequest;
+    expect(locationsResponse.status()).toBe(200);
+
+    const locationsBody = await locationsResponse.json() as {
+      items: unknown[];
+      total: number;
+    };
+
+    expect(Array.isArray(locationsBody.items)).toBe(true);
+    expect(Number.isInteger(locationsBody.total)).toBe(true);
+    await expect(page.getByRole("heading", { name: "Места хранения" }))
+      .toBeVisible();
+    await expect(page.getByRole("alert")).toHaveCount(0);
+
+    // Real procurement route -> backend -> isolated PostgreSQL.
+    const procurementRequest = page.waitForResponse(
+      (response) => (
+        new URL(response.url()).pathname === "/api/procurement/requests"
+        && response.request().method() === "GET"
+      ),
+    );
+
+    await page.goto("/procurement");
+
+    const procurementResponse = await procurementRequest;
+    expect(procurementResponse.status()).toBe(200);
+
+    const procurementBody = await procurementResponse.json() as {
+      items: unknown[];
+      total: number;
+    };
+
+    expect(Array.isArray(procurementBody.items)).toBe(true);
+    expect(Number.isInteger(procurementBody.total)).toBe(true);
+    await expect(page.getByRole("heading", { name: "Закупки" }))
+      .toBeVisible();
+    await expect(page.getByRole("tablist", { name: "Очередь закупок" }))
+      .toBeVisible();
+    await expect(page.getByRole("alert")).toHaveCount(0);
   },
 );

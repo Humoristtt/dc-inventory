@@ -1,501 +1,73 @@
-# Frontend Design System
+# Визуальная архитектура интерфейса
 
-Этот документ является нормативным контрактом визуальной архитектуры
-Spikatel Inventory.
+Это действующий контракт общих компонентов Spikatel Inventory. Он определяет владельца оформления, допустимые варианты компонентов, адаптивные размеры и обязательные проверки. Исторические решения о скорости загрузки описаны отдельно в [FRONTEND_PERFORMANCE.md](FRONTEND_PERFORMANCE.md). Если код или старый CSS нарушает изложенные правила, исправляем код и контракт в одном изменении, а не создаём вторую систему оформления.
 
-Он определяет, где живут общие визуальные правила, какие UI primitives
-разрешено использовать страницам и какие page-local CSS решения запрещены.
+## 1. Разделение ответственности
 
-Если реализация, старый CSS, тест или историческая документация противоречат
-этому документу, противоречие должно быть устранено в том же change set.
-Нельзя сохранять второй визуальный контракт только ради совместимости со
-старой разметкой.
+| Область | Владелец | Содержимое |
+|---|---|---|
+| Токены | `frontend/src/app/styles/tokens.css` | Цвета, типографика, размеры, радиусы, отступы, адаптивные значения. |
+| Глобальные стили | `frontend/src/app/styles/global.css` | Сброс стилей документа, базовые правила и глобальная доступность. |
+| Общие компоненты | `frontend/src/shared/ui/` и `design-system.css` | PageHeader, бренд, кнопки, поля формы, dialog/sheet и базовые визуальные контракты. |
+| Предметные стили | `frontend/src/features/*/*.css` | Размещение конкретных карточек, таблиц, фильтров и других элементов домена. |
+| Страницы | `frontend/src/pages/` | Компоновка готовых компонентов и предметное поведение. |
 
-## 1. Scope
+`catalog.css` не является общим файлом оформления. Нельзя подключать стили одного feature к другому ради получения кнопки или шапки. Базовые свойства `height`, `padding`, `radius`, `border`, `font-size`, `focus` обычных кнопок и форм не должны переопределяться внутри feature CSS. Допустимое отличие оформляем как именованный вариант в `shared/ui`, а не как локальный каскадный override.
 
-Design system отвечает за:
+## 2. Токены и типографика
 
-- page shell и основные content boundaries;
-- page header;
-- brand toolbar;
-- page title / section title / kicker;
-- buttons;
-- icon buttons;
-- form fields;
-- input / select / textarea / combobox geometry;
-- dialog / sheet surface primitives;
-- typography roles;
-- spacing, radius, color и elevation tokens;
-- responsive geometry общих UI primitives.
+Один смысл — один токен. Для обычных форм единственный токен радиуса — `--form-control-radius`; старый дублирующий `--radius-control` не возвращаем. Основные семантические роли текста: `kicker`, `meta`, `secondary`, `body`, `control`, `emphasis`, `card-title`, `section-title`, `page-title`. Страница выбирает роль, а не задаёт произвольный размер шрифта. Новую общую роль сначала описываем и реализуем в `shared/ui`.
 
-Feature CSS отвечает только за:
+Общий брендированный заголовок использует `--brand-header-background`, заголовок страницы — `--font-page-title`, надзаголовок — `--font-kicker`. Вторичный текст одинаковых карточек (например, описание категории и страницы «Ещё») использует `meta`/`--font-meta`. Отдельные мелкие надписи допустимы, только если их назначение отличается и это отличие описано в визуальном контракте.
 
-- layout конкретной предметной области;
-- presentation специфичных сущностей;
-- grid/list composition;
-- уникальные визуальные элементы предметной области.
+## 3. Единый заголовок страницы
 
-Feature CSS не должен заново определять базовую геометрию header, button,
-input, select, textarea или dialog surface.
+Основные страницы используют `PageHeader`, содержащий `BrandToolbar`/`SpikatelBrand`/`TelegramFullscreenButton`, строку заголовка с необязательной кнопкой «Назад», надзаголовком, `h1`, описанием и действиями, а также необязательную область поиска или контекстных элементов.
 
-## 2. Current architecture baseline
+Структурные слоты back/title/actions остаются в DOM даже без содержимого. Это предотвращает смещение заголовка из-за автоматического размещения CSS Grid. Позиционирование, вертикальный ритм, адаптивные отступы и декоративная поверхность принадлежат `PageHeader`. Страница передаёт содержимое слотов, а не рисует новый брендированный header.
 
-Architecture refactor начат от source baseline:
+Контракт применяется к стартовой странице каталога, категории, карточке/созданию/редактированию Item, движениям, локациям, «Ещё» и администрированию пользователей. Размер бренда выбирается через вариант `SpikatelBrand`: `default` для обычного интерфейса, `compact` для access/auth surfaces. Менять внутреннюю геометрию `.compact-brand__logo` или `.compact-brand__title` из CSS конкретной страницы запрещено.
 
-`1a34aa407696163ad81e913d346bb8d334feafc6`
+## 4. Кнопки и формы
 
-Рабочая ветка:
+Обычные кнопки используют единый компонент и варианты `dark` (основной), `accent`, `ghost`, `danger`. Иконки, компактные toolbar/filter controls и текстовые действия могут иметь отдельные **именованные** shared-контракты. Предметный CSS задаёт расположение и, по смыслу, ширину, но не основные размеры, радиусы, типографику и состояние фокуса.
 
-`refactor/frontend-design-system`
+Обычные `input`, `select`, `combobox` имеют одинаковую геометрию на каждом breakpoint:
 
-На момент начала refactor production runtime уже переведён на:
+| Область | Высота однострочного поля |
+|---|---:|
+| По умолчанию / мобильный интерфейс | 52 px |
+| Ширина от 680 px | 56 px |
+| Ширина от 1100 px | 60 px |
 
-`1a34aa407696163ad81e913d346bb8d334feafc6`
+Одновременно должны совпадать `height`, `min-height`, размер шрифта, горизонтальные отступы, радиус и обработка границы. `textarea` сохраняет общие шрифт/радиус/отступы, но имеет отдельную общую минимальную высоту. После применения общего токена нельзя переопределять `min-height` на конкретной странице.
 
-Для этого revision подтверждены exact image provenance, successful migrations,
-healthy runtime, Alembic `f8a9b0c1d2e3`, закрытый regular mutation gate,
-internal/external health `200`, loopback-only web bind и active backup timer.
+`.form-surface` — явно подключаемая область обычной геометрии `input`, `select`, `textarea`; `SuggestionInput` не создаёт собственный набор размеров. Компонент поля отвечает за подпись, обязательность, подсказку, ошибку и invalid-state. Если валидацией владеет React, форма использует `noValidate`, а сообщения и проверка обязательности отображаются внутри приложения на русском, без нативного browser bubble.
 
-Последующий real Telegram Desktop review именно этого production revision
-выявил visual/design-system inconsistencies, из-за которых начат текущий
-architecture refactor.
+## 5. Диалоги, исключения и адаптивность
 
-Regular warehouse mutation gate остаётся:
+Dialog и нижняя панель (sheet) могут иметь разное положение на экране, но используют общие цвет поверхности, границу, группу радиусов, иерархию заголовков, размещение действий и доступный фокус. Предметная область задаёт содержимое, не переопределяя базовый dialog.
 
-`REAL_INVENTORY_MUTATIONS_ENABLED=false`
+Отдельные общие контракты допустимы для icon buttons, компактных фильтров, поиска, нижней навигации, переключателей и status badges. Исключение должно иметь семантическое имя, жить в `shared/ui`, быть описано здесь и покрыто регрессией. Случайный `height` в feature CSS не считается исключением.
 
-Design-system refactor не имеет права менять backend domain model,
-database schema, warehouse mutation semantics или production safety gates.
+Рабочая последовательность визуальной приёмки — сначала desktop, затем tablet/mobile, **но адаптивная архитектура сохраняется сразу**. Ширина приложения ограничена и центрирована на широком экране; высота не масштабируется по физической диагонали. Длинная страница прокручивается обычным способом. Диалог ограничивается viewport и при необходимости прокручивает содержимое; кнопки не должны исчезать за нижней границей. Проверяем отсутствие горизонтального переполнения и перекрытия нижней навигацией.
 
-## 3. Причина refactor
+## 6. Запрещённые архитектурные обходы
 
-Frontend исторически развивался несколькими UX passes.
+Не возвращаем самостоятельные шапки `.detail-header`, `.category-header`, `.warehouse-page-header`, `.more-page__header`, `.admin-users-page__header`; универсальный `.page-toolbar` внутри `catalog.css`; обычную геометрию форм и кнопок в feature CSS; дубли токенов; повторное объявление селектора в конце файла ради «доуточнения»; зависимости feature → feature ради общих стилей; исправление shared-компонента переопределением его потомков. Изменение общей геометрии выполняется в единственном владельце.
 
-В результате общие визуальные элементы оказались распределены по feature CSS:
+## 7. Проверки
 
-- catalog landing/category header;
-- detail/create/edit header;
-- warehouse header;
-- More/Admin header;
-- page toolbar;
-- buttons;
-- form controls;
-- dialogs/sheets.
+`npm run check:design-system` — статический архитектурный gate. Он обнаруживает возвращение известных запрещённых классов/селекторов, дубли визуальных токенов и отсутствие общей таблицы стилей в entrypoint. Вместе с ним используются Vitest, TypeScript typecheck, oxlint, production build и затронутые Playwright-сценарии. Статический анализ **не** заменяет браузерную визуальную приёмку.
 
-Это позволило страницам выглядеть похожими, но не гарантировало их
-архитектурную идентичность.
+Браузерные регрессии должны сравнивать поверхности шапок и типографику заголовков между маршрутами, высоты форм в одном viewport, геометрию `input`/`select`/кнопок по вариантам, отсутствие horizontal overflow, ограничение ширины на ultrawide, размещение диалогов и отступ под нижнюю навигацию. Два похожих screenshot без единого владельца CSS не доказывают архитектурную унификацию.
 
-Типичный дефект такого подхода: изменение общей шапки исправляет один route,
-но не меняет другой route, потому что они используют разные selectors и
-разные CSS ownership boundaries.
+На последнем локальном CP-14 gate (19.09.2026) `check:design-system`, frontend lint/typecheck, 150 Vitest и production build прошли; это **не** новая визуальная приёмка реального Telegram. Статусы выпуска — в [AUDIT_0_12_REMEDIATION.md](AUDIT_0_12_REMEDIATION.md).
 
-Текущий refactor устраняет эту возможность архитектурно.
+## 8. История перехода на общие компоненты
 
-## 4. CSS ownership
+Рефакторинг начинался от `1a34aa407696163ad81e913d346bb8d334feafc6` в ветке `refactor/frontend-design-system`. Ранее стили общих шапок, кнопок и форм были распределены между каталогом, складом, карточками и администрированием: изменение одного selector не гарантировало исправления остальных страниц. Миграция последовательно ввела `shared/ui`, `PageHeader`, общие tokens/controls, перевела страницы и удалила независимые старые определения.
 
-Целевая структура:
+Историческая production-проверка исходного baseline подтверждала Alembic `f8a9b0c1d2e3`, здоровье сервисов, OCI provenance, loopback web bind и закрытый mutation gate; эти факты **не являются** результатом проверки сегодняшней remediation-ветки. Дизайн-рефакторинг не менял backend, БД или смысл складских операций.
 
-    frontend/src/app/styles/tokens.css
-        только design tokens и responsive token values
-
-    frontend/src/app/styles/global.css
-        reset, document defaults, accessibility globals
-
-    frontend/src/shared/ui/
-        reusable React UI primitives
-        shared visual contracts
-
-    frontend/src/shared/ui/design-system.css
-        implementation общих UI primitives
-
-    frontend/src/features/*/*.css
-        только feature-specific presentation/layout
-
-    frontend/src/pages/
-        composition; page не создаёт собственную design system
-
-`catalog.css` не является глобальной design system.
-
-Ни один другой feature stylesheet также не может становиться скрытой
-design system.
-
-## 5. Design tokens
-
-Числовое значение, которое относится к общему UI contract, должно иметь
-semantic token.
-
-Не допускается создавать несколько tokens с одинаковым смыслом.
-
-Например, одновременно иметь общий control radius и отдельный form control
-radius без различия semantics запрещено.
-
-### Typography roles
-
-Канонические semantic roles:
-
-- `kicker`;
-- `meta`;
-- `secondary`;
-- `body`;
-- `control`;
-- `emphasis`;
-- `card-title`;
-- `section-title`;
-- `page-title`.
-
-Страница выбирает роль, а не произвольный `font-size`.
-
-Feature-specific мелкий текст допускается только если он действительно имеет
-отдельную semantic роль. Такое исключение сначала добавляется в design-system
-contract, затем используется в feature CSS.
-
-### Form controls
-
-Single-line input/select/combobox используют один geometry contract.
-
-Высота:
-
-- default/mobile: `52px`;
-- `>=680px`: `56px`;
-- `>=1100px`: `60px`.
-
-Для одного breakpoint должны совпадать:
-
-- height;
-- min-height;
-- font-size;
-- horizontal padding;
-- radius;
-- border treatment.
-
-Textarea использует тот же font/radius/padding contract, но отдельный
-shared minimum-height.
-
-Нельзя после применения shared textarea token повторно перебивать его
-page-local `min-height`.
-
-## 6. PageHeader
-
-Все основные application pages используют один reusable `PageHeader`.
-
-Его anatomy:
-
-    PageHeader
-      BrandToolbar
-        SpikatelBrand
-        TelegramFullscreenButton
-
-      HeadingRow
-        optional Back action
-        TitleBlock
-          kicker
-          h1
-          optional description
-        optional actions
-
-      optional HeaderContent
-        search / contextual controls
-
-Один `PageHeader` используется для:
-
-- Catalog landing;
-- Category;
-- Item detail;
-- Item create;
-- Item edit;
-- Movements;
-- Locations;
-- More;
-- Admin users.
-
-Страницы не рисуют собственный branded header вручную.
-
-### Visual contract
-
-Основная branded header surface всегда использует единый
-`--brand-header-background`.
-
-Page title использует `--font-page-title`.
-
-Kicker использует `--font-kicker` и acid brand color.
-
-Верхняя brand toolbar, вертикальный rhythm, responsive paddings и decorative
-surface принадлежат `PageHeader`, а не конкретной странице.
-
-Back action и page actions являются slots одного header, а не поводом создавать
-новый header class.
-
-`PageHeader` всегда сохраняет structural back/title/actions slots в DOM,
-даже когда optional back/action content отсутствует. Это не позволяет CSS grid
-auto-placement сдвигать title между разными страницами.
-
-### SpikatelBrand variants
-
-`SpikatelBrand` является shared primitive.
-
-Feature CSS не имеет права изменять внутреннюю геометрию
-`.compact-brand__logo`, `.compact-brand__title` или других внутренних
-selectors этого component.
-
-Различия размера оформляются только explicit shared variants.
-
-Текущие variants:
-
-- `default` — canonical branded application header;
-- `compact` — access/auth surfaces с уменьшенной brand presentation.
-
-Если потребуется новый визуальный размер бренда, сначала добавляется
-semantic shared variant и документируется здесь. Descendant override из
-feature CSS запрещён.
-
-## 7. Buttons
-
-Основные actions используют единый Button contract.
-
-Разрешённые semantic variants:
-
-- primary/dark;
-- accent;
-- ghost;
-- danger.
-
-Отдельно допускаются:
-
-- icon button;
-- compact toolbar/filter control;
-- text action.
-
-Каждый такой variant имеет собственный shared contract.
-
-Запрещено создавать feature-specific button только потому, что существующий
-button отличается на несколько пикселей.
-
-Feature CSS может управлять placement (`width`, grid position, alignment), но
-не базовыми:
-
-- height;
-- padding;
-- radius;
-- typography;
-- focus treatment.
-
-## 8. Form fields
-
-Общий form-field contract определяет:
-
-- label typography;
-- label/control gap;
-- required marker;
-- help/meta text;
-- error text;
-- invalid state.
-
-Native input, select и combobox должны визуально совпадать.
-
-`SuggestionInput` не должен иметь отдельную геометрию от обычного input.
-
-Location editor, catalog create/edit, movement filters и admin filters должны
-потреблять один control contract.
-
-Формы с application-owned validation не должны отдавать пользователю native
-browser validation bubble: такой form использует `noValidate`, а обязательность,
-ошибки и тексты валидации остаются в React/application layer и показываются на
-русском языке.
-
-Secondary description text у одинаковых card surfaces использует semantic
-typography role `meta` (`--font-meta`), а не feature-local hardcoded font size.
-В частности этот контракт общий для category-card description и More-card
-description.
-
-## 9. Dialogs and sheets
-
-Modal dialog и bottom sheet могут иметь разную responsive placement, но общие:
-
-- surface color;
-- border;
-- radius family;
-- heading hierarchy;
-- footer action layout;
-- focus treatment
-
-должны исходить из shared UI layer.
-
-Feature определяет содержимое dialog, а не заново его visual foundation.
-
-## 10. Responsive policy
-
-Текущий visual acceptance workflow — desktop-first.
-
-Это означает:
-
-- desktop правится и принимается первым;
-- responsive architecture сохраняется сразу;
-- tablet/mobile не переводятся в fixed desktop layout;
-- final tablet/mobile visual polish выполняется после desktop feature set.
-
-Width policy:
-
-- application content центрирован;
-- ultrawide не растягивает content бесконечно;
-- текущий максимальный application width остаётся bounded.
-
-Height policy:
-
-- интерфейс не масштабируется по физической диагонали монитора;
-- длинный content использует normal document scroll;
-- dialogs ограничены viewport и имеют внутренний scroll при необходимости;
-- actions не должны становиться недоступными на меньшей высоте viewport.
-
-## 11. Allowed exceptions
-
-Не каждый control обязан иметь одинаковый размер.
-
-Отдельные shared contracts допустимы для:
-
-- icon buttons;
-- compact filter controls;
-- search field;
-- bottom navigation;
-- switches;
-- status badges.
-
-Но исключение должно быть:
-
-1. семантически названо;
-2. реализовано в shared UI layer;
-3. описано здесь;
-4. покрыто regression contract.
-
-Исключение нельзя реализовывать случайным hardcoded size внутри feature CSS.
-
-## 12. Запрещённые patterns
-
-После завершения migration запрещены:
-
-- branded page header implementation в feature CSS;
-- `.detail-header`, `.category-header`, `.warehouse-page-header`,
-  `.more-page__header`, `.admin-users-page__header` как независимые visual
-  systems;
-- общая `.page-toolbar` внутри `catalog.css`;
-- generic input/select/textarea geometry внутри feature CSS;
-- generic button geometry внутри feature CSS;
-- повторное объявление одного selector ниже файла как `refinement`;
-- hardcoded page-local form-control height;
-- hardcoded page-local base radius для обычного form control;
-- импорт feature CSS только ради получения shared primitive;
-- исправление shared component через cascade override вместо изменения
-  shared component/token.
-
-## 13. Testing contract
-
-Design system должен защищаться автоматически.
-
-Required frontend gate после migration включает:
-
-1. static design-system architecture check;
-2. Vitest;
-3. TypeScript typecheck;
-4. oxlint;
-5. production build;
-6. Playwright responsive acceptance.
-
-Browser regression обязан проверять минимум:
-
-- одинаковую header surface на основных routes;
-- одинаковую page-title typography;
-- одинаковую form-control height внутри одного viewport;
-- одинаковую input/select geometry;
-- Button geometry по variant;
-- отсутствие horizontal overflow;
-- bounded ultrawide content;
-- dialog viewport fit;
-- bottom-navigation clearance.
-
-Нельзя считать UI унифицированным только потому, что два screenshot выглядят
-похоже.
-
-## 14. Static architecture gate
-
-После migration frontend получает script:
-
-    npm run check:design-system
-
-Он должен fail при возврате известных архитектурных нарушений.
-
-Минимальные invariants:
-
-- page-level branded header classes не возвращаются;
-- `page-toolbar` не возвращается в feature CSS;
-- generic form control geometry не определяется вне shared UI;
-- запрещённые duplicate design tokens не возвращаются;
-- canonical shared UI stylesheet подключён из application entrypoint.
-
-Static gate не заменяет visual/browser acceptance.
-
-## 15. Migration sequence
-
-### Phase A — contract and inventory
-
-- зафиксировать этот документ;
-- зафиксировать known architecture findings;
-- синхронизировать ROADMAP/ARCHITECTURE/DEVELOPMENT/HISTORY.
-
-### Phase B — shared foundation
-
-- создать `shared/ui`;
-- создать canonical `PageHeader`;
-- перенести shared toolbar/header styles;
-- создать canonical button/control/field contracts;
-- добавить static architecture gate.
-
-### Phase C — page migration
-
-Перевести все application routes на shared primitives.
-
-После каждого migration старый visual CSS удаляется, а не оставляется
-параллельно.
-
-### Phase D — cleanup and enforcement
-
-- удалить obsolete selectors;
-- убрать cascade refinements;
-- убрать feature-to-feature style dependency;
-- пройти static/unit/typecheck/lint/build/E2E;
-- провести source audit на отсутствие второго design-system layer.
-
-### Phase E — real application acceptance
-
-После merge/deploy:
-
-- desktop Telegram acceptance;
-- затем отдельный tablet/mobile visual pass по завершении desktop feature set.
-
-## 16. Documentation rule
-
-Любое изменение общего визуального контракта обязано в том же PR обновить этот
-документ.
-
-Если изменение касается только feature-specific content/layout и не меняет
-общий contract, этот файл менять не требуется.
-
-Новые общие primitives нельзя вводить только кодом без документации.
-
-### Implemented control ownership
-
-Normal application buttons and ordinary form controls now have one visual
-owner: `frontend/src/shared/ui/design-system.css`.
-
-The implementation contract is:
-
-- `.button` uses the same responsive height/radius/font scale as ordinary form
-  controls;
-- semantic button variants are `dark`, `accent`, `ghost` and `danger`;
-- `.form-surface` is the opt-in boundary for ordinary `input`, `select` and
-  `textarea` geometry;
-- feature CSS owns layout around controls, not their base height, radius,
-  border, padding or font size;
-- icon buttons, toolbar controls, search controls, switches and filter-specific
-  range controls remain explicit semantic exceptions rather than silently
-  redefining the ordinary form-control contract;
-- `--form-control-radius` is the only ordinary control-radius token;
-  the duplicate `--radius-control` token is removed.
+Любое следующее изменение общего визуального контракта требует обновить этот файл в том же change set. Если меняется только предметная компоновка без влияния на общие компоненты, редактирование данного документа не требуется.

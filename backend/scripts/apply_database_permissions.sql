@@ -95,11 +95,6 @@ WHERE EXISTS (
 )
 \gexec
 
-SELECT pg_terminate_backend(pid)
-FROM pg_stat_activity
-WHERE usename = :'legacy_worker_user'
-  AND pid <> pg_backend_pid();
-
 SELECT format(
     'REVOKE ALL PRIVILEGES ON DATABASE %I FROM %I',
     current_database(),

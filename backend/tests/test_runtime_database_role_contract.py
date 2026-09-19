@@ -99,7 +99,7 @@ def test_legacy_delivery_worker_is_retired_fail_closed() -> None:
 
     assert ":'legacy_worker_user'" in permissions
     assert "WITH NOLOGIN NOSUPERUSER" in permissions
-    assert "pg_terminate_backend(pid)" in permissions
+    assert "pg_terminate_backend(pid)" not in permissions
     assert "REVOKE ALL PRIVILEGES ON DATABASE %I FROM %I" in permissions
     assert "REVOKE ALL PRIVILEGES ON SCHEMA public FROM %I" in permissions
     assert "REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM %I" in permissions

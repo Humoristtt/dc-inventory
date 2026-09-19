@@ -129,7 +129,7 @@ services:
         test "$$LEGACY_WORKER_DB_USER" != "$$PGUSER"
         test "$$MAINTENANCE_DB_USER" != "$$PGUSER"
 
-        psql -v ON_ERROR_STOP=1 \
+        psql -X --single-transaction -v ON_ERROR_STOP=1 \
           -v runtime_user="$$RUNTIME_DB_USER" \
           -v runtime_password="$$RUNTIME_DB_PASSWORD" \
           -v telegram_worker_user="$$TELEGRAM_WORKER_DB_USER" \
@@ -140,6 +140,16 @@ services:
           -v maintenance_user="$$MAINTENANCE_DB_USER" \
           -v maintenance_password="$$MAINTENANCE_DB_PASSWORD" \
           -f /scripts/apply_database_permissions.sql
+
+        # Run only after successful transaction commit.
+        # Terminated sessions cannot be restored by SQL rollback.
+        printf '%s\n' \
+          'SELECT pg_terminate_backend(pid)' \
+          'FROM pg_stat_activity' \
+          "WHERE usename = :'legacy_worker_user'" \
+          'AND pid <> pg_backend_pid();' \
+          | psql -X -v ON_ERROR_STOP=1 \
+              -v legacy_worker_user="$$LEGACY_WORKER_DB_USER"
     depends_on:
       postgres:
         condition: service_healthy

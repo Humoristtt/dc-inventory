@@ -411,7 +411,26 @@ Production не изменён. Push не выполнялся.
 
 ### CP-09 — DB permissions / operational transaction safety
 
-Status: `OPEN`
+Status: `OPEN` — локальное исправление проверено; production cutover не выполнялся.
+
+Исправлено:
+- `db-permissions` запускает `psql -X --single-transaction -v ON_ERROR_STOP=1`: изменения ролей и прав откатываются при SQL-ошибке.
+- `pg_terminate_backend()` вынесен из транзакционного SQL-скрипта и выполняется только после успешного COMMIT.
+- Добавлены регрессионные проверки транзакционного запуска и порядка отключения legacy-роли.
+
+Проверки на одноразовой PostgreSQL 18:
+- Миграции до head — PASS.
+- Намеренная SQL-ошибка: созданные роли откатились — PASS.
+- Успешное применение прав и изоляция runtime/Telegram/email/maintenance — PASS.
+- Намеренная SQL-ошибка: legacy-роль сохранила LOGIN и прежнее право, активное соединение не прервалось — PASS.
+- Успешный COMMIT: legacy-роль получила NOLOGIN, прежнее право отозвано; соединение до post-commit шага сохранилось — PASS.
+- Post-commit завершение legacy-соединения — PASS.
+- Статические проверки и 7 тестов контрактов прав БД — PASS.
+- Тестовые контейнеры и временные файлы удалены.
+
+Остаётся:
+- Production cutover с проверкой фактических ролей, соединений и доступности сервисов.
+- Production и push в рамках CP-09 не выполнялись.
 
 ### CP-10 — Release / deploy / artifact integrity
 

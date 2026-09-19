@@ -136,7 +136,10 @@ assert "write_worker_heartbeat" in health_source
 assert "os.utime" in health_source
 
 db_permissions = service_block("db-permissions")
+assert "psql -X --single-transaction -v ON_ERROR_STOP=1" in db_permissions
 assert "/var/lib/postgresql" in db_permissions
+assert "pg_terminate_backend(pid)" not in (ROOT / "backend/scripts/apply_database_permissions.sql").read_text()
+assert db_permissions.index("-f /scripts/apply_database_permissions.sql") < db_permissions.index("pg_terminate_backend(pid)")
 assert "POSTGRES_TELEGRAM_WORKER_USER" in db_permissions
 assert "POSTGRES_EMAIL_WORKER_USER" in db_permissions
 assert "POSTGRES_LEGACY_WORKER_USER" in db_permissions

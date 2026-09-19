@@ -184,7 +184,10 @@ jobs:
 
       - name: Stage 15 recovery runbook contract
         shell: bash
-        run: python3 ops/tests/test_recovery_runbook_contract.py
+        run: |
+          python3 ops/tests/test_recovery_runbook_contract.py
+          python3 ops/tests/test_recovery_validation.py
+          python3 ops/tests/test_cp01_restore_session_invalidation.py
 
       - name: Stage 15 worker runtime contract
         shell: bash

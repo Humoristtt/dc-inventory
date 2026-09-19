@@ -462,11 +462,54 @@ provenance здесь не выполнялись. После сбоя Docker bu
 остаться в локальном daemon; output manifest при этом не публикуется.
 Production acceptance остаётся OPEN: сверка production Git HEAD, запущенных
 image IDs/labels и build-context diff перед source-only sync.
-Commit: будет указан после фиксации checkpoint.
+Commit: `c174ecfbc476f45527b16b1aa480baa945f1daf7`.
 
 ### CP-11 — Backup / restore / DR
 
-Status: `OPEN`
+Status: `OPEN` — локальная защита и одноразовое восстановление проверены;
+production/S3 acceptance остаётся открытым.
+
+Проверено: создание custom-format dump, manifest/status и remote checksum
+upload, runtime/database provenance, восстановление и сверка Alembic head,
+доступность exact backend/web/PostgreSQL images, восстановление projection SQL,
+cleanup, runbook, CI contracts и секреты в диагностике.
+
+Подтверждённые дефекты:
+- Restore принимал manifest с неверным application/type, невалидным runtime,
+  чужим dump key или размером, не сверяя размер скачанного объекта с manifest.
+- Revision label web image не сверялся с сохранённым provenance.
+- При ранней ошибке cleanup мог удалить одноимённый Docker-ресурс, которого
+  текущий запуск не создавал; UTC timestamp сам по себе не давал уникальности.
+- Ошибка формата S3 env-файла могла вывести всю строку без `=`, включая secret.
+- Пароль одноразовой БД был предсказуемым и передавался в аргументах Docker.
+- Восстановленные auth sessions оставались активными в изолированной БД.
+
+Исправлено: fail-closed validator schema-v2 manifest до создания restore
+ресурсов; проверка remote/local dump size; web label; случайный суффикс run ID,
+учёт созданных ресурсов и отдельные `docker create`/`start`; случайный пароль
+через временные mode-0600 env-файлы; безопасное сообщение об ошибке env-файла.
+В изолированной копии все активные auth sessions отзываются до запуска
+application image; отсутствие таблицы или ошибка SQL прерывают rehearsal.
+Исторические manifest без postgres/email runtime остаются допустимыми по
+задокументированному legacy path.
+
+Проверки: `python3 -m unittest -v ops.tests.test_recovery_validation
+ops.tests.test_backup_status` — 6 PASS (включая 10 вариантов повреждённого
+manifest и cleanup с fake Docker); recovery/backup/runtime/lifecycle
+contracts и CP-01 restore-session regression — PASS; `bash -n` — PASS.
+Одноразовый PostgreSQL 18: synthetic Alembic marker + строка восстановлены,
+повреждённый archive отвергнут; отдельно проверены отзыв auth sessions и
+отказ при отсутствующей таблице. Тестовые сеть, контейнеры, тома и файлы
+удалены.
+
+Ограничения: реальный S3 download/retention и полный runbook с production
+backup, exact application artifact и внешними зависимостями не выполнялись.
+Production acceptance остаётся OPEN: восстановление approved secret/config
+источников, Cloudflare/Telegram/optional Graph, проверка реального backup и
+контролируемый rehearsal по runbook. Commit будет указан после фиксации.
+Общий `test_docs_freshness.py` остаётся красным на до-CP-11 расхождении:
+`README.md` не содержит текущий source Alembic head
+`a9c0d1e2f3a4`. Это отдельный CP-13 documentation gate.
 
 ### CP-12 — Maintainability
 

@@ -15,32 +15,36 @@ STATE=/var/lib/dc-inventory-backup/last-success.json
 ENV_FILE=/etc/dc-inventory/stage15-backup.env
 PG_IMAGE='postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280'
 RUN_ID="$(date -u '+%Y%m%dT%H%M%SZ')"
-RESTORE_PASSWORD="restore-${RUN_ID}"
 WORK_DIR="$(mktemp -d "/var/tmp/dc-inventory-restore.${RUN_ID}.XXXXXX")"
+RUN_ID="${RUN_ID}-${WORK_DIR##*.}"
 RESTORE_NET="dc-inventory-restore-net-${RUN_ID}"
 RESTORE_VOL="dc-inventory-restore-vol-${RUN_ID}"
 RESTORE_PG="dc-inventory-restore-pg-${RUN_ID}"
 RESTORE_APP="dc-inventory-restore-app-${RUN_ID}"
+RESTORE_NET_CREATED=false
+RESTORE_VOL_CREATED=false
+RESTORE_PG_CREATED=false
+RESTORE_APP_CREATED=false
 cleanup_runtime() (
     set +e
-    case "${RESTORE_APP:-}" in
-        dc-inventory-restore-app-*)
+    case "${RESTORE_APP_CREATED}:${RESTORE_APP:-}" in
+        true:dc-inventory-restore-app-*)
             docker rm -f "$RESTORE_APP" >/dev/null 2>&1 || true
             ;;
     esac
 
-    case "${RESTORE_PG:-}" in
-        dc-inventory-restore-pg-*)
+    case "${RESTORE_PG_CREATED}:${RESTORE_PG:-}" in
+        true:dc-inventory-restore-pg-*)
             docker rm -f "$RESTORE_PG" >/dev/null 2>&1 || true
             ;;
     esac
-    case "${RESTORE_VOL:-}" in
-        dc-inventory-restore-vol-*)
+    case "${RESTORE_VOL_CREATED}:${RESTORE_VOL:-}" in
+        true:dc-inventory-restore-vol-*)
             docker volume rm "$RESTORE_VOL" >/dev/null 2>&1 || true
             ;;
     esac
-    case "${RESTORE_NET:-}" in
-        dc-inventory-restore-net-*)
+    case "${RESTORE_NET_CREATED}:${RESTORE_NET:-}" in
+        true:dc-inventory-restore-net-*)
             docker network rm "$RESTORE_NET" >/dev/null 2>&1 || true
             ;;
     esac
@@ -52,6 +56,7 @@ cleanup_runtime() (
     esac
 )
 trap cleanup_runtime EXIT
+RESTORE_PASSWORD="$(python3 -c 'import secrets; print(secrets.token_urlsafe(24))')"
 test -r "$STATE"
 test -r "$ENV_FILE"
 test -d "$ROOT/.git"
@@ -146,6 +151,8 @@ manifest_key = sys.argv[3]
 work_dir = Path(sys.argv[4])
 production_checkout_sha = sys.argv[5]
 sys.path.insert(0, str(helper_path.parent))
+sys.path.insert(0, str(helper_path.parent.parent / "recovery"))
+from validate_manifest import validate_manifest
 spec = importlib.util.spec_from_file_location(
     "stage15_s3",
     helper_path,
@@ -186,21 +193,9 @@ if (
     raise RuntimeError(
         "manifest checksum mismatch"
     )
-manifest = json.loads(manifest_path.read_text())
-if manifest.get("schema_version") != 2:
-    raise RuntimeError(
-        "Stage15 final recovery requires manifest schema v2"
-    )
+manifest = validate_manifest(json.loads(manifest_path.read_text()), manifest_key, prefix)
 
 manifest_checkout_sha = manifest.get("production_checkout_sha")
-
-if (
-    not isinstance(manifest_checkout_sha, str)
-    or len(manifest_checkout_sha) != 40
-):
-    raise RuntimeError(
-        "backup manifest has invalid production checkout provenance"
-    )
 
 print(
     "BACKUP_PRODUCTION_CHECKOUT_SHA="
@@ -240,6 +235,10 @@ if module.sha256_file(dump_path) != expected_dump_sha:
     raise RuntimeError(
         "downloaded dump checksum mismatch"
     )
+if dump_head.get("ContentLength") != manifest["artifact"]["size_bytes"]:
+    raise RuntimeError("dump remote size does not match manifest")
+if dump_path.stat().st_size != manifest["artifact"]["size_bytes"]:
+    raise RuntimeError("downloaded dump size does not match manifest")
 for key in (manifest_key, dump_key):
     retention = client.get_object_retention(
         Bucket=bucket,
@@ -284,17 +283,22 @@ docker run --rm \
   >/dev/null
 echo "PG_RESTORE_LIST=PASS"
 docker network create --internal "$RESTORE_NET"
+RESTORE_NET_CREATED=true
 docker volume create "$RESTORE_VOL"
-docker run -d \
+RESTORE_VOL_CREATED=true
+printf 'POSTGRES_PASSWORD=%s\n' "$RESTORE_PASSWORD" > "$WORK_DIR/postgres.env"
+docker create \
   --name "$RESTORE_PG" \
   --network "$RESTORE_NET" \
   -e POSTGRES_DB=dc_inventory_restore \
   -e POSTGRES_USER=dc_inventory_restore \
-  -e POSTGRES_PASSWORD="restore-${RUN_ID}" \
+  --env-file "$WORK_DIR/postgres.env" \
   -v "$RESTORE_VOL:/var/lib/postgresql" \
   -v "$WORK_DIR:/restore:ro" \
   "$PG_IMAGE" \
   >/dev/null
+RESTORE_PG_CREATED=true
+docker start "$RESTORE_PG" >/dev/null
 for attempt in $(seq 1 60); do
     if docker exec "$RESTORE_PG" \
       pg_isready \
@@ -318,6 +322,19 @@ docker exec "$RESTORE_PG" \
   --no-acl \
   /restore/selected.dump
 echo "ISOLATED_RESTORE=PASS"
+docker exec "$RESTORE_PG" \
+  psql -U dc_inventory_restore -d dc_inventory_restore \
+  -v ON_ERROR_STOP=1 \
+  -c "UPDATE auth_sessions SET revoked_at = GREATEST(now(), created_at) WHERE revoked_at IS NULL;" \
+  >/dev/null
+ACTIVE_RESTORED_SESSIONS="$(
+  docker exec "$RESTORE_PG" \
+    psql -U dc_inventory_restore -d dc_inventory_restore \
+    -v ON_ERROR_STOP=1 -At \
+    -c "SELECT count(*) FROM auth_sessions WHERE revoked_at IS NULL;"
+)"
+test "$ACTIVE_RESTORED_SESSIONS" = 0
+echo "RESTORE_AUTH_SESSIONS_INVALIDATED=PASS"
 RESTORED_ALEMBIC_HEAD="$(
     docker exec "$RESTORE_PG" \
       psql \
@@ -387,6 +404,15 @@ manifest = json.loads(Path(sys.argv[1]).read_text())
 print(manifest["runtime"]["backend"]["source_revision"])
 ' "$WORK_DIR/selected.manifest.json"
 )"
+WEB_REVISION="$(
+    python3 -c '
+import json
+import sys
+from pathlib import Path
+manifest = json.loads(Path(sys.argv[1]).read_text())
+print(manifest["runtime"]["web"]["source_revision"])
+' "$WORK_DIR/selected.manifest.json"
+)"
 
 docker image inspect "$BACKEND_IMAGE_ID" >/dev/null
 docker image inspect "$WEB_IMAGE_ID" >/dev/null
@@ -428,6 +454,11 @@ test "$(
       -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
       "$BACKEND_IMAGE_ID"
 )" = "$BACKEND_REVISION"
+test "$(
+    docker image inspect \
+      -f '{{ index .Config.Labels "org.opencontainers.image.revision" }}' \
+      "$WEB_IMAGE_ID"
+)" = "$WEB_REVISION"
 
 echo "EXACT_RUNTIME_ARTIFACTS_LOCAL=PASS"
 
@@ -476,7 +507,9 @@ fi
 
 echo "RESTORE_RECONCILIATION=ZERO_DRIFT"
 
-docker run -d \
+printf 'DATABASE_URL=postgresql+asyncpg://dc_inventory_restore:%s@%s:5432/dc_inventory_restore\n' \
+  "$RESTORE_PASSWORD" "$RESTORE_PG" > "$WORK_DIR/application.env"
+docker create \
   --name "$RESTORE_APP" \
   --network "$RESTORE_NET" \
   --read-only \
@@ -490,10 +523,12 @@ docker run -d \
   -e NOTIFICATION_TELEGRAM_USER_ID=2 \
   -e TELEGRAM_WEBHOOK_SECRET=restore-rehearsal-placeholder \
   -e TELEGRAM_WEB_APP_URL=https://app.spik-inventory.ru \
-  -e DATABASE_URL="postgresql+asyncpg://dc_inventory_restore:${RESTORE_PASSWORD}@${RESTORE_PG}:5432/dc_inventory_restore" \
+  --env-file "$WORK_DIR/application.env" \
   -e REAL_INVENTORY_MUTATIONS_ENABLED=false \
   "$BACKEND_IMAGE_ID" \
   >/dev/null
+RESTORE_APP_CREATED=true
+docker start "$RESTORE_APP" >/dev/null
 
 for attempt in $(seq 1 60); do
     if docker exec "$RESTORE_APP" \

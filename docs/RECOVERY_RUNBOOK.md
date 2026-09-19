@@ -75,8 +75,12 @@ Use the configured StorageGRID endpoint, bucket and `S3_PREFIX`.
 The selected manifest and dump must:
 
 - exist under the configured backup prefix;
+- describe the expected application, full backup type and custom archive format;
+- name the same backup in the manifest key and its sibling dump key;
+- contain valid checkout/runtime image provenance and a nonempty Alembic head;
 - match remote SHA-256 metadata;
 - match locally calculated SHA-256 after download;
+- match the dump byte count in the manifest, remote object and downloaded file;
 - have GOVERNANCE retention;
 - match manifest artifact metadata.
 
@@ -116,6 +120,9 @@ Restore into an empty database with:
     pg_restore       --no-owner       --no-acl       --dbname=<isolated-db>       SELECTED.dump
 
 The restore command must finish with exit code 0.
+In the isolated copy, revoke every restored active auth session and verify
+that none remain active before starting the application. The backup object
+itself remains unchanged. A missing or incompatible session table is ABORT.
 
 ## 6. Verify database
 
@@ -209,6 +216,10 @@ Only after evidence is saved:
 
 Before removal, verify every resource name begins with
 `dc-inventory-restore-`.
+The script appends a random suffix to the UTC run ID and tracks which resources
+this run actually created. Failure cleanup removes only those resources.
+Temporary PostgreSQL and application credentials are generated for each run and
+passed to Docker through mode-0600 files in the temporary work directory.
 
 Re-check production container IDs and health after cleanup.
 
@@ -245,6 +256,15 @@ Production recovery requires a separate incident/change decision and:
 8. abort criteria recorded before modification;
 9. post-cutover health PASS;
 10. post-cutover reconciliation ZERO_DRIFT.
+
+Before cutover, independently recover and review the required host/runtime
+configuration from approved secret stores: production `.env`, S3 endpoint and
+credentials, PostgreSQL role credentials, Telegram bot/webhook/gateway secrets,
+Cloudflare Tunnel and DNS routing, and optional Microsoft Graph credentials.
+Confirm that the target has the exact application images and compatible
+PostgreSQL/Alembic versions. The rehearsal tests database and application
+compatibility with isolated placeholders; it does not prove recovery of those
+external services or production configuration.
 
 In-place overwrite of the existing production PostgreSQL volume is not an
 accepted rehearsal procedure.

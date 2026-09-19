@@ -28,7 +28,7 @@ REQUIRED_ENV = {
 def load_env(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
 
-    for raw_line in path.read_text().splitlines():
+    for line_number, raw_line in enumerate(path.read_text().splitlines(), start=1):
         line = raw_line.strip()
         if not line:
             continue
@@ -36,7 +36,7 @@ def load_env(path: Path) -> dict[str, str]:
         key, separator, value = line.partition("=")
 
         if not separator:
-            raise RuntimeError(f"Invalid env line for key {key!r}")
+            raise RuntimeError(f"Invalid env line {line_number}")
 
         values[key] = value
 

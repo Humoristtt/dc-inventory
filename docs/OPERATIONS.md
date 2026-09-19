@@ -1,90 +1,102 @@
-# Operations Runbook — Spikatel Inventory
+# Эксплуатация Spikatel Inventory
 
-Актуализировано 19.09.2026. Последняя документированная production Procurement проверка: checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`, Alembic `c3d4e5f6a7b8`. Source head `a9c0d1e2f3a4` — **другой контур**; локальные CP-07–12 не являются автоматически production acceptance. Исторические SHA/evidence — `docs/HISTORY.md`, Stage 15 — `docs/STAGE15_PLAN.md`.
+Этот документ — рабочая карта сопровождения: какие сервисы ожидаются, как проверить их состояние и когда остановить опасную операцию. Пошаговый выпуск выполняется только по [DEPLOYMENT.md](DEPLOYMENT.md), изолированное восстановление — по [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md), правила склада — по [WAREHOUSE_DOMAIN.md](WAREHOUSE_DOMAIN.md). Записи ниже **не означают**, что сервер проверен в момент чтения файла.
 
-    ALEMBIC_HEAD=c3d4e5f6a7b8
-    SOURCE_ALEMBIC_HEAD=a9c0d1e2f3a4
-    RBAC_CUTOVER=PASS
-    PROCUREMENT_DEPLOYMENT=PASS
-    REAL_INVENTORY_MUTATIONS_ENABLED=false
+Актуализация документа: 19.09.2026. Последняя документированная production-проверка checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`, Alembic `c3d4e5f6a7b8`; source head `a9c0d1e2f3a4` относится к более новой ветке, а не к запущенной БД. Перед CP-16 повторно сверить все значения и конфигурацию на VM.
 
-## Source/deploy policy
+```text
+ALEMBIC_HEAD=c3d4e5f6a7b8
+SOURCE_ALEMBIC_HEAD=a9c0d1e2f3a4
+RBAC_CUTOVER=PASS
+PROCUREMENT_DEPLOYMENT=PASS
+REAL_INVENTORY_MUTATIONS_ENABLED=false
+```
 
-Production VM не является development environment. Runtime-changing deploy: проверенный change set → PR/required CI/review → approved immutable SHA → maintenance deployment → health/provenance/live smoke. Git push/sync не запускает приложение. Source-only docs/host-side `ops/` sync разрешён без image rebuild лишь при неизменных Docker build contexts/runtime source и проверенных host-side scripts.
+## 1. Граница работы с production
 
-CP-07: новый web image **не** разворачивать при старом Tunnel origin `http://localhost:8080`: TCP не доверяет клиентскому IP, пользователи разделят общий rate-limit bucket. Требуется согласованное переключение Tunnel и web на trusted Unix socket, фактическая проверка permissions/UID/GID и rollback (`docs/CP07_HTTP_SOCKET_MIGRATION.md`). Public Mini App hostname: `https://app.spik-inventory.ru`.
+VM не является development environment. Изменения runtime требуют approved SHA, CI/review, immutable images, verified off-VM backup, maintenance plan, критерии отката и явное разрешение. Source-only синхронизация docs/host-side `ops/` не запускает контейнеры и допускается без rebuild **только** при неизменных Docker build contexts/application runtime source; host scripts проверяем отдельно. Не принимать Git HEAD за фактическую версию запущенного образа.
 
-## PostgreSQL identities и права
+Критичный открытый пункт CP-07: последний подтверждённый Tunnel origin — `http://localhost:8080`. Новый web image с изменённой моделью TCP доверия нельзя разворачивать на старый Tunnel origin: разные клиенты могут делить один rate-limit bucket. Нужны согласованная миграция web/Tunnel, фактические UID/GID, защищённый host-каталог Unix-сокета и рабочий rollback. Исходный `compose.yaml` ещё не содержит готового bind mount сокета, поэтому локальный `nginx -t` не подтверждает production готовность. Полный план — [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md).
 
-Production имеет **пять** отдельных login identities: owner/migrator (`POSTGRES_USER`), backend runtime, Telegram worker, optional email worker и maintenance worker. Owner credentials не используются runtime services. Backend не может broad UPDATE/DELETE immutable warehouse journal, `telegram_updates` меняет только `processed_at`, notification payload immutable для runtime; journal sequence access минимален. Telegram и email worker не получают чужие outbox/warehouse права, maintenance ограничен bounded technical retention.
+## 2. Какие контейнеры и состояния ожидаем
 
-После успешной миграции `db-permissions` выполняет `psql -X --single-transaction -v ON_ERROR_STOP=1`. Legacy role (`POSTGRES_LEGACY_WORKER_USER`, прежнее фактическое имя требуется уточнить) получает NOLOGIN и REVOKE внутри транзакции; `pg_terminate_backend()` для её старых sessions выполняется **после COMMIT**. Ошибка SQL откатывает права, но уже завершённые sessions восстановить нельзя. Backend/workers ждут успешного exit permission service.
+| Компонент | Состояние после успешного выпуска | Что проверяем |
+|---|---|---|
+| PostgreSQL | `healthy`, постоянный volume | Readiness, Alembic head, доступ только из нужной Docker-сети. |
+| `migrate` | exited `0` | Схема точно соответствует approved release. |
+| `db-permissions` | exited `0` | Фактические права ролей и отсутствие активных legacy sessions после разрешённого cutover. |
+| Backend | `healthy` | `/api/health/live` и `/api/health/ready`, настоящий image ID/revision, OWNER/auth. |
+| Web/Nginx | `healthy` | `/healthz`, loopback/Unix ingress согласно текущему approved плану, заголовки и rate limit. |
+| Telegram worker | Работает, heartbeat актуален | Outbox claim/retry, Gateway HTTPS, отсутствие прямого Bot API token у worker. |
+| Maintenance worker | Работает, heartbeat актуален | Одна успешная bounded retention iteration. |
+| Email worker | Необязателен | Только при утверждённом профиле `email` и `EMAIL_DELIVERY_ENABLED=true`. |
 
-## Deploy sequence
+В текущем исходном Compose PostgreSQL и backend не имеют host-published ports; web публикует `127.0.0.1:${WEB_PORT:-8080}`. Проверить фактические порты после выпуска. `/healthz`, `/api/health/live`, `/api/health/ready` должны отвечать HTTP 200 в здоровом состоянии. При недоступной БД `live` остаётся доступным (200), `ready` возвращает 503; после восстановления БД `ready` должен вернуться к 200 без рестарта backend. Нельзя считать зелёный `/healthz` доказательством корректности БД или outbox.
 
-1. Подтвердить approved target SHA, successful CI, immutable images, schema compatibility.
-2. Получить fresh verified off-VM backup и определить rollback/forward-fix/abort criteria.
-3. Если migration несовместима — остановить старый web/backend/workers до неё.
-4. При healthy PostgreSQL выполнить Alembic upgrade head, затем `db-permissions`.
-5. Проверить фактические ACL/legacy sessions, запустить только новый runtime.
-6. При CP-07 одновременно перевести web и Tunnel ingress.
-7. Проверить health, OWNER/auth, worker heartbeat, actual image IDs/labels, reconciliation и live Telegram; optional email отдельно.
-8. Сохранить post-deploy backup/evidence.
+Сервисные Docker image revisions проверяем непосредственно по immutable image IDs и label `org.opencontainers.image.revision`; сравниваем с approved release manifest, а не только со строкой Git HEAD на VM. Исторический rollback image не является текущим runtime только потому, что его tag остался в Docker daemon.
 
-RBAC migration `f8a9b0c1d2e3 -> a1b2c3d4e5f6` исторически выполнена и несовместима с pre-RBAC backend. Rollback после несовместимой миграции — forward-fix или verified pre-cutover backup/restore, не запуск старого image на новой схеме.
+## 3. PostgreSQL identities и права
 
-## Recovery OWNER rotation
+В текущем runtime-контракте пять отдельных login identities: owner/migrator (`POSTGRES_USER`), backend, Telegram worker, optional email worker и maintenance. Owner credentials не передаются обычным сервисам. Backend не получает broad UPDATE/DELETE для immutable warehouse journal; изменение `telegram_updates` ограничено необходимым processed state; notification payload защищён от произвольного редактирования. Telegram и email workers не должны иметь взаимных outbox и складских привилегий. Maintenance ограничен сроками/объёмом удаления технических данных, не затрагивает immutable складской журнал.
 
-Только guarded maintenance CLI `python -m app.bootstrap.recovery_owner_rotation`, без normal admin API. Нужны existing Telegram identity target без custody, fresh verified backup, остановленный application runtime и healthy DB. CLI требует current/target Telegram IDs, target UUID и token `ROTATE_RECOVERY_OWNER`. Одна transaction пишет immutable audit, переводит старого OWNER в ADMIN, target — в OWNER, отзывает sessions и проверяет singleton. После COMMIT **до запуска backend** необходимо изменить `ADMIN_TELEGRAM_USER_ID` в production `.env`; иначе recovery reconciliation fail-closed. Подробная команда — `docs/DEPLOYMENT.md`.
+`db-permissions` применяет SQL через `psql -X --single-transaction -v ON_ERROR_STOP=1`. При неудаче SQL должна откатиться выдача прав. Legacy-роль (`POSTGRES_LEGACY_WORKER_USER`, фактическое прежнее имя сверить отдельно) получает NOLOGIN/REVOKE **внутри транзакции**. `pg_terminate_backend()` завершает её прежние сессии **только после COMMIT**; это необратимый побочный эффект, который нельзя компенсировать SQL rollback. Проверка миграции/прав входит в утверждённый deployment, а не в ежедневную диагностику «на всякий случай».
 
-## Runtime и host acceptance
+## 4. Безопасность host и доступ
 
-`postgres/backend/web` healthy; Telegram/maintenance workers running с актуальным heartbeat; optional email worker только при enablement; `migrate` и `db-permissions` exited 0; успешная `technical retention:` iteration. Host публикует лишь `127.0.0.1:8080`; backend `8000` и PostgreSQL `5432` не слушают host. `/healthz`, `/api/health/live`, `/api/health/ready` → HTTP 200. При PostgreSQL DOWN: live 200/ready 503; BACK — ready 200 без backend restart.
-
-Последний принятый host security baseline (требуется фактическая проверка перед deploy):
+Последний исторически принятый host baseline нужно измерить повторно перед выпуском:
 
 - UFW active;
-- default inbound deny / outgoing allow, SSH `22/tcp` allowlisted;
+- входящие соединения по умолчанию запрещены, исходящие разрешены, SSH `22/tcp` ограничен утверждёнными адресами;
 - `PermitRootLogin no`;
 - `PasswordAuthentication no`;
 - `PubkeyAuthentication yes`;
 - `X11Forwarding no`;
 - `GatewayPorts no`;
-- `AllowTcpForwarding yes` сохраняется для административных SSH tunnels.
+- `AllowTcpForwarding yes` сохраняется для контролируемых административных SSH tunnels.
 
-Docker loopback-only ports обязательны независимо от UFW. Запрет на слепое изменение SSH/UFW без плана доступа.
+Это список требований/последних принятых настроек, а не результат нового чтения `sshd_config` и UFW. Не менять SSH/UFW без плана сохранения доступа. Loopback-only Docker ports обязательны независимо от состояния firewall.
 
-Репозиторий публичный: `REPOSITORY_VISIBILITY_CURRENT=public`. Реальные datasets, workbook, DB dumps, private/runtime-only identifiers, secrets, `.env` в Git запрещены. Public service identifiers, например Mini App hostname и публичный support username, допустимы по назначению. `main` защищён required CI; merged topic branches удаляются после acceptance. Visibility меняется только отдельным security/operational решением.
+По последнему документированному состоянию репозиторий публичный: `REPOSITORY_VISIBILITY_CURRENT=public`. В нём не должно быть `.env`, ключей, дампов, real inventory datasets, workbook contents и private/runtime-only идентификаторов. Public service identifiers, включая `https://app.spik-inventory.ru` и публичный support username, допустимы по назначению. `main` защищён required CI; merged topic branches удаляются после acceptance. Изменять видимость репозитория — отдельное security/operational решение, не часть технической чистки Markdown.
 
-## Telegram / email smoke
+## 5. Telegram: вход и отправка
 
-Incoming: Telegram → Cloudflare/Tunnel → Nginx → FastAPI webhook → PostgreSQL update dedupe. Outgoing: DB notification outbox → Telegram worker → HTTPS Cloudflare Worker Gateway → Telegram Bot API. Production `TELEGRAM_GATEWAY_URL` обязан быть HTTPS; bot token не передаётся Telegram worker. Последняя историческая Gateway version `a738702b-e731-48be-9576-e3485d1239f4` не является live-статусом.
+Входящий путь: Telegram → Cloudflare/Tunnel → Nginx → FastAPI webhook → PostgreSQL dedupe входящего update. Исходящий путь: транзакционный notification outbox → Telegram worker → HTTPS Cloudflare Worker Gateway → Telegram Bot API. Production VM не требует прямого выхода к `api.telegram.org:443`; worker не получает bot token. Для Gateway установлен секрет и разрешённый набор методов; потеря доступности Gateway не откатывает уже зафиксированное складское или закупочное действие.
 
-После runtime changes проверить реальный `/start`: incoming command удаляется best-effort, branded `sendPhoto` welcome содержит caption/WebApp button, публично доступен `/telegram/start-welcome.png`. Access: unknown user request → ADMIN notification → approve/reject → user notification → approved login. Synthetic Playwright не заменяет real Telegram acceptance CP-17.
+После изменений runtime проверить настоящим Telegram клиентом `/start`: входящее сообщение удаляется best-effort, новое брендированное приветствие отправляется как `sendPhoto` с caption и WebApp button, публичный `/telegram/start-welcome.png` доступен. Проверить request → ADMIN notification → approve/reject → user notification → APPROVED login, включая фактические роли. Локальный Playwright с синтетически подписанным `initData` **не** заменяет CP-17 real Telegram acceptance.
 
-Принятый UI contract: Telegram/mobile shell использует expand/viewport APIs; desktop-capable runtime автоматически запрашивает fullscreen там, где Telegram Desktop поддерживает его. Fullscreen control — в header toolbar; Escape закрывает `[data-escape-dismiss]`, затем fullscreen; общий branded header/controls — во всех основных pages.
+Принятый пользовательский контракт: Telegram/mobile shell использует expand/viewport APIs; desktop-capable runtime автоматически запрашивает fullscreen там, где Telegram Desktop это поддерживает. Кнопка fullscreen находится в общей панели заголовка; Escape сначала закрывает `[data-escape-dismiss]`, затем fullscreen. Вопрос первого клика WebView после fullscreen исторически исследован в [FRONTEND_PERFORMANCE.md](FRONTEND_PERFORMANCE.md); не вводим автоматическое повторение пользовательского действия.
 
-Уведомления Telegram и optional Graph email имеют **at-least-once** semantics: dedupe key предотвращает duplicate enqueue, но потерянное подтверждение внешнего сервиса может вызвать повторное сообщение/письмо. Exactly-once Telegram delivery не заявляется; такой контракт потребовал бы отдельной durable idempotency/reconciliation на внешней границе. `DEAD` после max attempts, explicit access requeue — отдельно. Email по умолчанию выключен `EMAIL_DELIVERY_ENABLED=false`, production Graph/live acceptance не проведены.
+Telegram и Microsoft Graph email доставляются **at-least-once**, а не exactly-once. Dedupe key предотвращает дублирование outbox intent; при потере ответа внешнего провайдера сообщение/письмо может повториться. После исчерпания лимита попыток запись становится `DEAD`, а повторная постановка регулируется отдельной процедурой. Email по умолчанию выключен (`EMAIL_DELIVERY_ENABLED=false`); реальные Graph secrets, профиль `email` и live delivery acceptance ещё открыты в CP-08.
 
-## Retention и reconciliation
+## 6. Retention и контроль данных
 
-Retention defaults: auth sessions 7 d, processed Telegram updates 30 d, terminal outbox 90 d, access callbacks 30 d, batch 1000, interval 3600 s. Maintenance singleton — PostgreSQL advisory transaction lock; immutable warehouse journal не удаляется.
+Defaults исходного кода: auth sessions — 7 дней; обработанные Telegram updates — 30 дней; terminal notification/email outbox — 90 дней; access callbacks — 30 дней. Размер batch — 1000, интервал maintenance — 3600 секунд. Worker использует PostgreSQL advisory transaction lock для одиночного выполнения. Immutable Warehouse journal не входит в техническое удаление.
 
-`backend/scripts/reconcile_inventory_projections.sql` read-only сверяет stock/custody с immutable journal. После warehouse migrations/restore/data operations или при подозрении на drift нормальный результат zero rows. Drift — blocker: regular mutations disabled, fresh backup/evidence, расследование, не automated repair.
+`backend/scripts/reconcile_inventory_projections.sql` пересчитывает stock и custody **только для чтения** по immutable журналу. После миграций склада, восстановления, рискованного обслуживания или сообщения о несоответствии запускать сверку из совместимого runtime-контекста. Нормальный результат — ноль строк. При drift остановить опасные мутации, зафиксировать evidence/backup и выяснить причину; автоматического пересоздания остатков нет.
 
-## S3 backup и recovery
+## 7. S3 backup и восстановление
 
-Stage15A automated off-VM backup и исторический Stage15B isolated restore — PASS. StorageGRID endpoint `https://s3-msk-1.cloudstack.ru`, bucket `dc-inventory-prod-backups`, prefix `postgres/`; Object Lock GOVERNANCE 7 d, current lifecycle 30 d, noncurrent 1 d. Backup identity не имеет DeleteObject, bypass retention и lifecycle changes. Timer ежедневно 02:30 Europe/Moscow, `Persistent=true`, state `/var/lib/dc-inventory-backup`; постоянные локальные dumps запрещены.
+Stage15A automated off-VM backup и исторический Stage15B isolated restore были приняты, но не заменяют свежую проверку текущего backup перед новым cutover. По последнему документированному состоянию provider — StorageGRID, endpoint `https://s3-msk-1.cloudstack.ru`, bucket `dc-inventory-prod-backups`, prefix `postgres/`. Object Lock GOVERNANCE — 7 дней; lifecycle текущих версий — 30 дней, нетекущих — 1 день. У backup identity нет DeleteObject, обхода retention и права менять lifecycle. Это **исторические сведения о конфигурации**, а не проверка S3 прямо сейчас.
 
-Tools: `ops/backup/dc-inventory-backup-s3`, `ops/backup/s3_stage15.py`; runbook `docs/RECOVERY_RUNBOOK.md`, executable `ops/recovery/rehearse_restore.sh`. CP-11 локально добавил manifest application/type/key/hash/size/runtime validation, isolated credential/cleanup, session revocation, exact image check. Реальный повторный S3/production rehearsal и восстановление approved external configuration остаются OPEN. Restore не монтирует production volume и использует schema-version-matched reconciliation SQL из exact backend image.
+Backup timer ежедневно в 02:30 Europe/Moscow с `Persistent=true`, state хранится в `/var/lib/dc-inventory-backup`. Постоянно накапливать локальные дампы на VM запрещено. Используются `ops/backup/dc-inventory-backup-s3`, `ops/backup/s3_stage15.py` и штатные systemd units. После неуспешного backup проверять код выхода, journal, last-success/last-failure state и совпадение remote artifact/checksum; не объявлять успех только по факту запуска timer.
 
-## Initial production inventory bootstrap — accepted
+CP-11 локально усилил manifest validation (schema, hash, size, runtime provenance), очистку только своих контейнеров, изоляцию credentials и отзыв восстановленных auth sessions. Настоящий повторный S3 rehearsal после CP-11 и восстановление утверждённой конфигурации Cloudflare/Telegram/Graph **ещё не выполнены**. Restore использует точный backend image и соответствующий его схеме reconciliation SQL, не монтирует production volume и не запускает старые активные сессии. Процедура и критерии ABORT — [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md).
 
-    INITIAL_PRODUCTION_BOOTSTRAP=PASS
-    POST_IMPORT_RECONCILIATION=ZERO_DRIFT
-    POST_IMPORT_BACKUP=PASS
-    TELEGRAM_VISUAL_ACCEPTANCE=PASS
-    INITIAL_PRODUCTION_BOOTSTRAP=DO_NOT_RERUN
-    REAL_INVENTORY_MUTATIONS_ENABLED=false
+## 8. Initial production inventory bootstrap — accepted
 
-External operator workbook был проверен; guarded one-shot bootstrap создал location + opening RECEIPT, прошли counts/quantity, zero drift, health и verified backup. Workbook/data identifiers не публикуются. Для regular warehouse mutation API требуется самостоятельное go-live решение.
+```text
+INITIAL_PRODUCTION_BOOTSTRAP=PASS
+POST_IMPORT_RECONCILIATION=ZERO_DRIFT
+POST_IMPORT_BACKUP=PASS
+TELEGRAM_VISUAL_ACCEPTANCE=PASS
+INITIAL_PRODUCTION_BOOTSTRAP=DO_NOT_RERUN
+REAL_INVENTORY_MUTATIONS_ENABLED=false
+```
+
+Внешний операторский workbook прошёл проверку, защищённый one-shot bootstrap создал локацию и opening RECEIPT. Были проверены counts/quantity, zero drift, health, off-VM backup и реальный Telegram display. Сами workbook/data identifiers не публикуются. Повторный initial bootstrap запрещён. Обычные Warehouse mutation API требуют отдельного go-live решения, а не запуска уже выполненного импортного CLI.
+
+## 9. Порядок реакции на неисправность
+
+Сначала установить точный контур и изменение: baseline image/HEAD, Alembic, health, workers и время последнего успешного backup. При проблемах авторизации проверить серверную сессию и роли; при сообщении об остатке — read-only reconciliation и журнал; при `DEAD` — lease/attempts и состояние внешнего Gateway; при ошибке готовности БД — PostgreSQL и сети. Не исправлять проблему изменением production `.env`, прямым SQL UPDATE проекций или открытием mutation gate без отдельного решения.
+
+Если необходимы миграции, смена Cloudflare origin, ротация OWNER или восстановление, остановить рутинную диагностику и перейти к соответствующему согласованному runbook. CP-07–12 остаются открытыми до фактических production evidence, независимо от локальных тестов и этой документации. Статусы и доказательства — в [AUDIT_0_12_REMEDIATION.md](AUDIT_0_12_REMEDIATION.md).

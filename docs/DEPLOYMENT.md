@@ -90,13 +90,24 @@ Tunnel token является секретом и не хранится в Git �
 
 Cloudflare передаёт исходную схему запроса в `X-Forwarded-Proto`, а IP посетителя — в `CF-Connecting-IP`.
 
-Nginx нормализует эти значения и передаёт backend `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Real-IP` и `X-Forwarded-For`.
+**Текущее состояние production:** Tunnel подключается к `http://localhost:8080`. В прежней реализации Nginx принимал `CF-Connecting-IP` без проверки доверенного источника. Эта конфигурация требует исправления; локальная реализация CP-07 пока не развёрнута.
+
+**Подготовленная реализация CP-07:**
+
+- TCP `:8080` не доверяет входящим `CF-Connecting-IP` и `X-Forwarded-Proto`.
+- Unix-сокет `/run/dc-inventory/ingress.sock` принимает `CF-Connecting-IP` через `real_ip_header` с `set_real_ip_from unix:`.
+- Доступ к Unix-сокету ограничивается правами родительского каталога.
+- Nginx передаёт backend нормализованные `X-Forwarded-Proto`, `X-Forwarded-Host`, `X-Real-IP` и `X-Forwarded-For`.
+
+Фактическое переключение Cloudflare Tunnel и web-образа должно выполняться согласованно. До переключения схема production остаётся прежней. Порядок проверки и отката приведён в `docs/CP07_HTTP_SOCKET_MIGRATION.md`.
 
 Nginx также выставляет `Strict-Transport-Security: max-age=31536000` на всех public response scopes. Публичный клиент получает этот header через Cloudflare HTTPS. `includeSubDomains` и `preload` намеренно не включены без отдельного доменного инварианта.
 
 Uvicorn доверяет proxy headers, потому что production backend не публикуется на host и доступен только через внутреннюю application-сеть.
 
-Nginx применяет rate limiting после нормализации `CF-Connecting-IP`: общий API ограничен до 30 запросов/с на клиента с burst 60; `POST /api/auth/telegram` и `POST /api/access-requests` дополнительно ограничены до 10 запросов/мин с burst 5. Telegram webhook вынесен в отдельный лимит 50 запросов/с с burst 100, чтобы Telegram delivery burst не конкурировал с пользовательским API. Превышение ingress-лимита возвращает HTTP `429`.
+Лимиты Nginx: общий API — 30 запросов/с с burst 60; `POST /api/auth/telegram` и `POST /api/access-requests` — 10 запросов/мин с burst 5; Telegram webhook — отдельные 50 запросов/с с burst 100. Превышение лимита возвращает HTTP `429`.
+
+В подготовленной реализации CP-07 ключ лимита строится по `$remote_addr`. На доверенном Unix-входе значение нормализуется из `CF-Connecting-IP`, а на TCP-входе используется адрес непосредственного источника. Поэтому **нельзя разворачивать новый web-образ, сохранив прежний маршрут Tunnel через TCP**: публичные пользователи могут попасть в общий лимит.
 
 ## Runtime resource limits
 

@@ -352,6 +352,30 @@ Further optimization requires production-representative measurements.
 
 Status: `OPEN`
 
+Frontend:
+- Исправления сохранены в коммите `d22301cc3fb08a3a6e1bffaff2ac31b9cac178e2`.
+- Локальные проверки frontend завершены: 148 тестов, lint, typecheck и build — PASS.
+
+HTTP:
+- Реализованы отдельные TCP- и Unix-входы Nginx.
+- TCP не доверяет `CF-Connecting-IP` и входящему `X-Forwarded-Proto`.
+- Unix-вход использует `real_ip_header CF-Connecting-IP` и `set_real_ip_from unix:`.
+- Локальная сборка и `nginx -t` — PASS.
+- TCP: смена заявленного IP не обходит rate limit — PASS.
+- Unix: лимит одного клиента и изоляция второго клиента — PASS.
+- Передача нормализованных IP и схемы в backend — PASS.
+- Доступ к сокету: посторонний пользователь отклонён, разрешённая группа допущена — PASS.
+
+Ограничения:
+- Первоначальный тест выявил доступность сокета `0666` через каталог `0755`.
+- Защита проверена после установки прав каталога `0750`.
+- Фактические UID/GID, права bind mount и доступ пользователя `cloudflared` на production не проверены.
+- Production по-прежнему использует Tunnel origin `http://localhost:8080`.
+- Новый web-образ нельзя разворачивать с прежним TCP-маршрутом Tunnel: публичные клиенты могут разделить один rate-limit bucket.
+
+Локальная реализация проверена. Production migration остаётся OPEN.
+Процедура и результаты: `docs/CP07_HTTP_SOCKET_MIGRATION.md`.
+
 ### CP-08 — Async outbox / email / Telegram launch
 
 Status: `OPEN`

@@ -46,6 +46,15 @@ def valid_manifest():
 
 
 class RecoveryValidationTests(unittest.TestCase):
+    def test_application_artifacts_have_stable_backend_web_order(self):
+        manifest = valid_manifest()
+        backend, web = manifest_module.application_artifacts(manifest)
+        self.assertEqual(backend, manifest["runtime"]["backend"])
+        self.assertEqual(web, manifest["runtime"]["web"])
+        manifest["runtime"]["web"]["image_id"] = "invalid"
+        with self.assertRaisesRegex(ValueError, "web image ID"):
+            manifest_module.application_artifacts(manifest)
+
     def test_valid_and_legacy_runtime_manifests(self):
         manifest = valid_manifest()
         self.assertIs(manifest_module.validate_manifest(manifest, MANIFEST_KEY, PREFIX), manifest)

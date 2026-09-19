@@ -23,6 +23,14 @@ def _runtime_image(runtime: dict[str, Any], service: str) -> dict[str, str]:
     return {"image_id": image_id, "source_revision": revision}
 
 
+def application_artifacts(manifest: dict[str, Any]) -> tuple[dict[str, str], dict[str, str]]:
+    """Return the validated backend and web image provenance."""
+    runtime = manifest.get("runtime")
+    if not isinstance(runtime, dict):
+        raise ValueError("backup manifest has no runtime provenance")
+    return _runtime_image(runtime, "backend"), _runtime_image(runtime, "web")
+
+
 def validate_manifest(manifest: object, manifest_key: str, prefix: str) -> dict[str, Any]:
     if not isinstance(manifest, dict):
         raise ValueError("backup manifest is not an object")
@@ -58,8 +66,7 @@ def validate_manifest(manifest: object, manifest_key: str, prefix: str) -> dict[
     runtime = manifest.get("runtime")
     if not isinstance(runtime, dict):
         raise ValueError("backup manifest has no runtime provenance")
-    backend = _runtime_image(runtime, "backend")
-    _runtime_image(runtime, "web")
+    backend, _web = application_artifacts(manifest)
     for service in ("telegram_worker", "maintenance_worker"):
         if _runtime_image(runtime, service) != backend:
             raise ValueError(f"{service} runtime does not match backend")

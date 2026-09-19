@@ -513,7 +513,27 @@ Production acceptance остаётся OPEN: восстановление approv
 
 ### CP-12 — Maintainability
 
-Status: `OPEN`
+Status: `OPEN` — локальное исправление проверено; общий аудит и production acceptance ещё не завершены.
+
+Проверено: дублирование извлечения provenance backend/web из restore
+manifest, обработка ошибок и существующие recovery contracts.
+
+Исправлено:
+- Четыре независимых Python-вызова для извлечения image IDs и revision
+  заменены одним вызовом общего helper `application_artifacts()`.
+- Helper повторно использует валидацию provenance из CP-11.
+- Путь к helper определяется через явно переданный `ROOT`, а не текущий каталог.
+- Добавлены проверки порядка backend/web и отказа при неверном image ID.
+
+Проверки: recovery validation unittest, recovery runbook contract,
+CP-01 restore-session contract, runtime provenance contract,
+`bash -n`, Python syntax и `git diff --check` — PASS.
+
+Ограничения: полный production restore и S3 acceptance остаются
+открытыми в CP-11. Общий documentation freshness gate ранее выявил
+устаревший Alembic head в README.md; это предмет CP-13.
+
+Production не изменён. Push не выполнялся.
 
 ### CP-13 — Documentation
 

@@ -376,43 +376,22 @@ docker exec "$RESTORE_PG" \
     SELECT 'movements=' || count(*) FROM movements;
     SELECT 'movement_lines=' || count(*) FROM movement_lines;
   "
-BACKEND_IMAGE_ID="$(
-    python3 -c '
-import json
-import sys
-from pathlib import Path
-manifest = json.loads(Path(sys.argv[1]).read_text())
-print(manifest["runtime"]["backend"]["image_id"])
-' "$WORK_DIR/selected.manifest.json"
-)"
-WEB_IMAGE_ID="$(
-    python3 -c '
-import json
-import sys
-from pathlib import Path
-manifest = json.loads(Path(sys.argv[1]).read_text())
-print(manifest["runtime"]["web"]["image_id"])
-' "$WORK_DIR/selected.manifest.json"
-)"
-BACKEND_REVISION="$(
-    python3 -c '
+RUNTIME_ARTIFACTS="$(
+  python3 - "$WORK_DIR/selected.manifest.json" "$ROOT" <<'PYARTIFACTS'
 import json
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(sys.argv[2]) / "ops/recovery"))
+from validate_manifest import application_artifacts
+
 manifest = json.loads(Path(sys.argv[1]).read_text())
-print(manifest["runtime"]["backend"]["source_revision"])
-' "$WORK_DIR/selected.manifest.json"
+backend, web = application_artifacts(manifest)
+print(backend["image_id"], web["image_id"],
+      backend["source_revision"], web["source_revision"])
+PYARTIFACTS
 )"
-WEB_REVISION="$(
-    python3 -c '
-import json
-import sys
-from pathlib import Path
-manifest = json.loads(Path(sys.argv[1]).read_text())
-print(manifest["runtime"]["web"]["source_revision"])
-' "$WORK_DIR/selected.manifest.json"
-)"
+read -r BACKEND_IMAGE_ID WEB_IMAGE_ID BACKEND_REVISION WEB_REVISION <<< "$RUNTIME_ARTIFACTS"
 
 docker image inspect "$BACKEND_IMAGE_ID" >/dev/null
 docker image inspect "$WEB_IMAGE_ID" >/dev/null

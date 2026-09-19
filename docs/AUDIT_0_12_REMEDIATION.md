@@ -380,6 +380,35 @@ HTTP:
 
 Status: `OPEN`
 
+Локально исправлено:
+- Telegram start welcome: актуальность `claim_token` проверяется до изменения состояния чата.
+- Фиксация outbox и обновление состояния чата выполняются в одной транзакции.
+- Добавлена PostgreSQL-регрессия: устаревший worker не перезаписывает `last_welcome_message_id`, актуальный worker завершает задачу.
+
+Проверки:
+- Миграции на изолированной PostgreSQL — PASS.
+- Новая регрессия — PASS.
+- Telegram PostgreSQL — 9/9 PASS.
+- Email PostgreSQL — 9/9 PASS.
+- Email config — 7/7 PASS.
+- Worker/unit — 43/43 PASS.
+- Telegram Gateway — 7/7 PASS.
+- Контракт доставки и Ruff — PASS.
+- Временные PostgreSQL-контейнеры удалены.
+
+Email:
+- `finalize_email()` проверяет `claim_token` перед изменением записи.
+- Дополнительное исправление email worker не потребовалось.
+- При потере подтверждения Microsoft Graph возможна повторная отправка.
+- Exactly-once для внешней доставки Telegram и email не заявляется.
+
+Остаётся OPEN:
+- Проверка реальной конфигурации шлюзов и секретов.
+- Контролируемый запуск workers в production.
+- Проверка фактической доставки и мониторинга.
+
+Production не изменён. Push не выполнялся.
+
 ### CP-09 — DB permissions / operational transaction safety
 
 Status: `OPEN`

@@ -212,14 +212,17 @@ async def _finalize_start_welcome_success(
     message_id: int,
 ) -> bool:
     async with AsyncSession(engine, expire_on_commit=False) as db, db.begin():
-        is_current = await _record_welcome_if_current_in_session(
+        # Verify claim ownership before modifying chat state.
+        # Both changes commit or roll back in the same transaction.
+        if not await mark_notification_sent(db, claim):
+            return False
+
+        return await _record_welcome_if_current_in_session(
             db,
             chat_id=chat_id,
             update_id=update_id,
             message_id=message_id,
         )
-        await mark_notification_sent(db, claim)
-        return is_current
 
 
 async def _finalize_success(

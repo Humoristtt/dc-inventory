@@ -1,11 +1,15 @@
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.catalog.models import Item
-from app.modules.identity.policy import Capability
+from app.modules.identity.enums import UserRole
+from app.modules.identity.policy import Capability, has_capability
 from app.modules.procurement import service as procurement_service
+from app.modules.procurement.schemas import CorrectionRequest
 from app.modules.procurement.service import (
     ProcurementError,
     manager_accept,
@@ -14,6 +18,7 @@ from tests.test_procurement_postgres import (
     expected,
     seed_procurement,
 )
+from tests.warehouse_helpers import actor
 
 pytestmark = pytest.mark.asyncio
 
@@ -66,9 +71,9 @@ async def test_cp04_actor_capability_is_rechecked_after_request_serialization(
     capability_checks_after_serialization = 0
 
     original_lock = procurement_service._lock_and_validate_expected
-    original_has_capability = procurement_service.has_capability
+    original_has_capability = has_capability
 
-    async def wrapped_lock(*args, **kwargs):
+    async def wrapped_lock(*args: Any, **kwargs: Any) -> Any:
         nonlocal serialized
 
         result = await original_lock(
@@ -80,9 +85,9 @@ async def test_cp04_actor_capability_is_rechecked_after_request_serialization(
         return result
 
     def capability_after_serialization(
-        role,
-        capability,
-    ):
+        role: UserRole,
+        capability: Capability,
+    ) -> bool:
         nonlocal capability_checks_after_serialization
 
         if serialized and capability == Capability.PROCUREMENT_MANAGE:
@@ -135,11 +140,7 @@ async def test_cp04_revision_required_initiator_cannot_be_blocked(
         UserAccessStatus,
         UserRole,
     )
-    from tests.test_cp01_cross_domain_regressions import (
-        actor,
-        create_existing_request,
-        settings,
-    )
+    from tests.test_cp01_cross_domain_regressions import create_existing_request, settings
 
     db = warehouse_db
 
@@ -157,7 +158,7 @@ async def test_cp04_revision_required_initiator_cannot_be_blocked(
     record = await procurement_service.return_for_correction(
         db,
         record.request.id,
-        procurement_service.CorrectionRequest(
+        CorrectionRequest(
             expected_state_version=(record.request.state_version),
             expected_revision_id=(record.request.current_revision_id),
             client_request_id=(f"cp04-access-lifecycle-{record.request.id}"),

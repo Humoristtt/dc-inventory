@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
 from app.modules.catalog.models import Item
-from app.modules.catalog.schemas import ItemPatch
+from app.modules.catalog.schemas import ItemCreate, ItemPatch
 from app.modules.catalog.service import create_item, update_item
 from app.modules.identity.enums import (
     AccessRequestStatus,
@@ -20,9 +20,10 @@ from app.modules.identity.enums import (
 from app.modules.identity.models import (
     AccessRequest,
     TelegramIdentity,
+    User,
 )
 from app.modules.inventory.enums import MovementType
-from app.modules.inventory.models import Movement
+from app.modules.inventory.models import Location, Movement
 from app.modules.inventory.schemas import (
     LocationCreate,
     MovementCreate,
@@ -51,6 +52,7 @@ from app.modules.procurement.schemas import (
 )
 from app.modules.procurement.service import (
     ProcurementConflictError,
+    ProcurementRecord,
     bind_line,
     complete_acceptance,
     create_and_bind_line,
@@ -73,8 +75,8 @@ def settings() -> Settings:
     return Settings(app_env="test")
 
 
-def expected(record: object, key: str) -> ExpectedStateMutation:
-    request = record.request  # type: ignore[attr-defined]
+def expected(record: ProcurementRecord, key: str) -> ExpectedStateMutation:
+    request = record.request
     return ExpectedStateMutation(
         expected_state_version=request.state_version,
         expected_revision_id=request.current_revision_id,
@@ -86,7 +88,7 @@ async def create_existing_procurement(
     db: AsyncSession,
     *,
     quantity: int = 2,
-) -> tuple[object, object, object, uuid.UUID, object, object]:
+) -> tuple[User, User, User, uuid.UUID, Location, ProcurementRecord]:
     initiator, _ = await actor(
         db,
         UserRole.ADMIN,
@@ -143,7 +145,7 @@ async def create_existing_procurement(
 
 async def create_proposed_procurement(
     db: AsyncSession,
-) -> tuple[object, object, object, object, object]:
+) -> tuple[User, User, User, ItemCreate, ProcurementRecord]:
     initiator, _ = await actor(
         db,
         UserRole.ADMIN,
@@ -188,13 +190,13 @@ async def create_proposed_procurement(
 
 async def move_to_acceptance(
     db: AsyncSession,
-    record: object,
+    record: ProcurementRecord,
     *,
     manager_id: uuid.UUID,
-) -> object:
+) -> ProcurementRecord:
     record = await manager_accept(
         db,
-        record.request.id,  # type: ignore[attr-defined]
+        record.request.id,
         expected(
             record,
             f"cp01-manager-accept-{uuid.uuid4().hex}",
@@ -204,7 +206,7 @@ async def move_to_acceptance(
 
     record = await transfer_to_acceptance(
         db,
-        record.request.id,  # type: ignore[attr-defined]
+        record.request.id,
         expected(
             record,
             f"cp01-transfer-{uuid.uuid4().hex}",
@@ -214,7 +216,7 @@ async def move_to_acceptance(
     )
 
     assert (
-        record.request.status  # type: ignore[attr-defined]
+        record.request.status
         == ProcurementStatus.AWAITING_ACCEPTANCE
     )
 

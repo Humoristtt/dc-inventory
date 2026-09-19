@@ -2,12 +2,14 @@ import uuid
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from decimal import Decimal
+from typing import Literal, cast
 
 import pytest
 from sqlalchemy import event, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import Settings
+from app.modules.auth.service import AuthenticatedContext
 from app.modules.catalog.models import Item, Manufacturer
 from app.modules.catalog.schemas import ItemCreate
 from app.modules.catalog.service import (
@@ -177,6 +179,7 @@ async def prepare_line_query_counts(
 ) -> dict[int, int]:
     counts: dict[int, int] = {}
 
+    template: ExistingItemLineCreate | ProposedItemLineCreate
     if mode == "existing":
         template = ExistingItemLineCreate(
             line_type=ProcurementLineType.EXISTING_ITEM,
@@ -266,16 +269,17 @@ async def test_prepare_lines_500_distinct_existing_items(
 
     assert len(set(item_ids)) == 500
 
-    signatures = dict(
-        (
+    signatures: dict[uuid.UUID, str] = {
+        candidate_id: signature
+        for candidate_id, signature in (
             await db.execute(
                 select(
                     Item.id,
                     Item.identity_signature,
                 ).where(Item.id.in_(item_ids))
             )
-        ).all()
-    )
+        ).tuples().all()
+    }
 
     assert len(signatures) == 500
 
@@ -311,12 +315,12 @@ async def test_prepare_lines_500_distinct_existing_items(
         assert [row.line_no for row in rows] == list(range(1, size + 1))
 
         for row in rows:
-            item_id = row.catalog_item_id
-            assert item_id is not None
+            row_item_id = row.catalog_item_id
+            assert row_item_id is not None
 
-            assert row.expected_identity_signature == signatures[item_id]
+            assert row.expected_identity_signature == signatures[row_item_id]
 
-            assert row.display_snapshot["attributes"]["color"] == expected_colors[item_id]
+            assert row.display_snapshot["attributes"]["color"] == expected_colors[row_item_id]
 
     print(
         f"CP06_DISTINCT_EXISTING_COUNTS={counts}",
@@ -601,7 +605,7 @@ async def test_procurement_summary_three_views_and_pagination(
     assert history_expected == [completed_id]
 
     async def check_page(
-        view: str,
+        view: Literal["my", "active", "history"],
         limit: int,
         offset: int,
         expected_ids: list[uuid.UUID],
@@ -610,7 +614,11 @@ async def test_procurement_summary_three_views_and_pagination(
 
         response = Response()
 
-        approved = SimpleNamespace(user=SimpleNamespace(id=manager_a_id))
+        # Direct handler test: authentication dependencies are tested separately.
+        approved = cast(
+            AuthenticatedContext,
+            SimpleNamespace(user=SimpleNamespace(id=manager_a_id)),
+        )
 
         async with captured_statements(db) as statements:
             result = await get_requests(

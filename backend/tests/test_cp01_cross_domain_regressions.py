@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import uuid
 from contextlib import suppress
+from decimal import Decimal
 
 import pytest
 from sqlalchemy import select
@@ -13,8 +14,10 @@ from sqlalchemy.ext.asyncio import (
 
 from app.core.config import Settings
 from app.modules.catalog.enums import ItemStatus
+from app.modules.catalog.models import Item
 from app.modules.catalog.service import (
     create_item,
+    load_attributes_for_items,
     set_item_archived,
 )
 from app.modules.identity.admin_service import (
@@ -39,6 +42,7 @@ from app.modules.procurement.enums import (
     ProcurementLineType,
     ProcurementStatus,
 )
+from app.modules.procurement.models import ProcurementRequest
 from app.modules.procurement.notifications import (
     enqueue_procurement_notifications,
 )
@@ -48,6 +52,7 @@ from app.modules.procurement.schemas import (
     ProcurementRequestCreate,
 )
 from app.modules.procurement.service import (
+    ProcurementRecord,
     create_request,
     return_for_correction,
 )
@@ -64,7 +69,7 @@ async def create_existing_request(
     db: AsyncSession,
     *,
     initiator_role: UserRole = UserRole.ADMIN,
-) -> tuple[User, User, uuid.UUID, object]:
+) -> tuple[User, User, uuid.UUID, ProcurementRecord]:
     initiator, _ = await actor(
         db,
         initiator_role,
@@ -185,7 +190,7 @@ async def test_cp01_revision_required_initiator_cannot_be_left_without_create_ca
         )
 
     request = await db.get(
-        procurement_service.ProcurementRequest,
+        ProcurementRequest,
         record.request.id,
     )
     assert request is not None
@@ -247,12 +252,12 @@ async def test_cp01_archive_and_procurement_snapshot_are_serialized(
         snapshot_loaded = asyncio.Event()
         allow_creation_to_continue = asyncio.Event()
 
-        original_load_attributes_for_items = procurement_service.load_attributes_for_items
+        original_load_attributes_for_items = load_attributes_for_items
 
         async def paused_load_attributes_for_items(
             db: AsyncSession,
             candidate_item_ids: list[uuid.UUID],
-        ):
+        ) -> dict[uuid.UUID, dict[str, str | int | Decimal | bool]]:
             attributes = await original_load_attributes_for_items(
                 db,
                 candidate_item_ids,
@@ -334,7 +339,7 @@ async def test_cp01_archive_and_procurement_snapshot_are_serialized(
 
         async with AsyncSession(engine) as verify_db:
             item = await verify_db.get(
-                procurement_service.Item,
+                Item,
                 item_id,
             )
             assert item is not None

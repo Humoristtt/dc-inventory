@@ -299,7 +299,7 @@ Evidence:
 
 ### CP-06 — Performance
 
-Status: `OPEN`
+Status: `CLOSED`
 
 #### CP-06.1 — Procurement query scalability
 
@@ -325,9 +325,28 @@ Verified:
 
 #### CP-06.2 — Catalog stock, facets and pagination
 
-Status: `OPEN`.
-Next: read-only discovery, reproducible performance tests,
-targeted remediation and full regression.
+Status: `CLOSED`.
+
+Acceptance tests: `3718f64aa267788125e4523dae7285663a979182`.
+
+Verified for `optical_patch_cord` on a disposable PostgreSQL database:
+- Catalog list: 3 SELECT for 1, 100 and 500 matching items.
+- Full facets: 10 SELECT for 1, 100 and 500 matching items.
+- Single availability facet: 1 SELECT.
+- Stock quantities, IN_STOCK filtering, deterministic pagination,
+  facet value pagination and counts verified.
+- Diagnostic observation for 500 items: 66.1 ms total facet processing;
+  42.5 ms measured around SQL driver calls in one run. This is not
+  a production performance guarantee.
+- Focused Catalog regression: 23 passed.
+- Full backend: 539 passed, 1 skipped.
+- Zero-to-head PostgreSQL migration and Ruff checks: PASS.
+- Disposable database removed; production code unchanged.
+
+The original six-SELECT target was provisional and not supported
+by a measured performance requirement. The accepted query-count
+contract is specific to this category and its current facet schema.
+Further optimization requires production-representative measurements.
 
 ### CP-07 — Frontend architecture / HTTP hardening
 

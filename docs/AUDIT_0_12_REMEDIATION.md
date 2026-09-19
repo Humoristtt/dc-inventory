@@ -301,6 +301,34 @@ Evidence:
 
 Status: `OPEN`
 
+#### CP-06.1 — Procurement query scalability
+
+Status: `CLOSED`.
+
+Implementation: `be97d3f8c2f98b0106161cab294b75bcd759eb91`.
+Acceptance tests: `dbea4953f2d0c77d57079e19a7485134b11c06f1`.
+
+Verified:
+- Procurement summary: 3 SELECT, no history-table reads.
+- Existing items: 2 SELECT for 1/100/500 distinct Item IDs.
+- Mixed proposed items: 3 SELECT for 1/100/500 lines.
+- Views `my`, `active`, `history`: filtering, ordering, pagination,
+  serialization and revision metadata verified.
+- Negative cases: missing/archived items, invalid attributes and
+  error precedence verified.
+- CP-06 tests: 11 passed.
+- Focused regression: 56 passed.
+- Full backend: 538 passed, 1 skipped.
+- Zero-to-head PostgreSQL migration: PASS.
+- Ruff and diff checks: PASS.
+- Disposable database removed; production unchanged.
+
+#### CP-06.2 — Catalog stock, facets and pagination
+
+Status: `OPEN`.
+Next: read-only discovery, reproducible performance tests,
+targeted remediation and full regression.
+
 ### CP-07 — Frontend architecture / HTTP hardening
 
 Status: `OPEN`

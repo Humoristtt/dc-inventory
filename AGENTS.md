@@ -1,175 +1,67 @@
-# Spikatel Inventory — Codex project instructions
+# Правила инженерной работы над Spikatel Inventory
 
-## Project role
+Этот файл задаёт рабочие ограничения для автоматизированного помощника и разработчика, который меняет репозиторий. Он не заменяет [архитектуру](docs/ARCHITECTURE.md), [план работ](docs/ROADMAP.md), [инструкцию разработки](docs/DEVELOPMENT.md), [производительность frontend](docs/FRONTEND_PERFORMANCE.md) и [контракт ролей и закупок](docs/RBAC_PROCUREMENT.md).
 
-Work as a senior production-minded engineer on Spikatel Inventory.
+## 1. Подход к разработке
 
-Prefer simple, explicit, maintainable solutions over speculative abstractions.
-Preserve existing architecture and conventions unless a real requirement justifies a change.
+Работать как инженер, отвечающий за безопасность production и сопровождаемость системы. Выбирать простые и явно проверяемые решения вместо абстракций без подтверждённой необходимости. Сохранять существующую архитектуру и соглашения, пока реальное требование не обосновывает изменение.
 
-The canonical development roadmap is `docs/ROADMAP.md`.
-Architecture decisions are documented in `docs/ARCHITECTURE.md`.
-Development workflow is documented in `docs/DEVELOPMENT.md`.
-Frontend startup/navigation performance decisions are documented in
-`docs/FRONTEND_PERFORMANCE.md`.
-Current RBAC/procurement product and architecture contract is documented in
-`docs/RBAC_PROCUREMENT.md`.
+Перед реализацией очередного этапа читать профильный документ и непосредственно связанный исходный код. Не перечитывать весь репозиторий перед каждой небольшой правкой.
 
-Before implementing a new stage, read only the relevant sections of those documents
-and the directly related source files. Do not repeatedly reread the whole repository.
+## 2. Границы окружений и полномочий
 
-## Environment boundary
+Разработка ведётся в локальном репозитории на Mac. Production VM **не является** средой разработки. Без отдельного явного указания пользователя запрещено:
 
-Development happens in the local repository on the Mac.
+- подключаться к production по SSH;
+- развёртывать приложение или выполнять production-миграции;
+- менять production `.env`, Cloudflare или Telegram webhook;
+- выполнять push, merge, создавать PR или автоматически создавать коммит.
 
-Production VM is NOT a development environment.
+Работать в текущем репозитории и рабочем дереве; выходить за их пределы только по явному требованию задачи. Разрешение на изменение документации или исходников **не** означает разрешение на deployment и снятие защитных флагов.
 
-Do not:
-- SSH to production unless explicitly instructed by the user;
-- deploy to production;
-- modify production `.env`;
-- modify Cloudflare configuration;
-- modify Telegram webhook configuration;
-- push, merge, or create a PR unless explicitly instructed;
-- commit automatically unless explicitly instructed.
+## 3. Git и история
 
-Work only inside the current repository/worktree unless the task explicitly requires otherwise.
+Использовать текущую ветку; не создавать и не переключать ветки без явной команды. Не переписывать общую историю и не применять amend без отдельного разрешения. Перед записью в Git проверить текущие HEAD, ветку и изменённые файлы. По завершении сообщать, что изменено, какие проверки действительно выполнены, текущее состояние Git, оставшиеся ограничения и следующий конкретный шаг.
 
-## Git
+## 4. Границы задачи
 
-Use the current working branch.
-Do not create or switch branches unless explicitly instructed.
+Изменять только объём запрошенного этапа. Не добавлять сопутствующие рефакторинги ради эстетики. Если найдена посторонняя проблема, исправлять её в текущей задаче только при подтверждённом блокере P0/P1; остальные фиксировать как отдельные замечания. Не добавлять сервисы, библиотеки, Redis, очереди, поисковые движки или инфраструктуру без предметной необходимости.
 
-Never rewrite existing shared history.
-Do not amend existing commits unless explicitly instructed.
+## 5. Архитектурные правила
 
-At the end of implementation, leave changes in the working tree and report:
-- files changed;
-- tests/checks performed;
-- git status;
-- blockers;
-- recommended next step.
+Сохранять модульный монолит с PostgreSQL как каноническим хранилищем. Использовать принятые в проекте FastAPI routers и dependencies, SQLAlchemy 2 async, общую декларативную базу и naming convention, Alembic, авторизацию и параметры конфигурации. Новые ORM-модели регистрировать в центральном реестре Alembic.
 
-## Scope discipline
+Не создавать параллельные механизмы авторизации, заявок на доступ, Telegram, outbox, работы с БД или конфигурацией. Критические инварианты по возможности обеспечивать и на уровне PostgreSQL, а не только в интерфейсе или Pydantic.
 
-Implement only the requested roadmap stage.
+## 6. Миграции и данные
 
-Do not silently expand scope into future stages.
-Do not add unrelated refactors just because nearby code could be improved.
+Проверять autogenerated Alembic вручную. Миграции должны быть детерминированными: не импортировать в историческую миграцию изменяемые runtime-константы. Явно определять constraints, foreign keys, indexes и безопасный порядок downgrade. Не переписывать старые миграции для удобства новой функции; создавать следующую миграцию. Не выполнять миграции на production без отдельного разрешения.
 
-If an unrelated issue is found:
-- fix it only if it is a real P0/P1 blocker for the current work;
-- otherwise mention it in the final report and leave the code unchanged.
+Любой тест, меняющий БД, запускать только на явно созданной изолированной БД. Не включать `REAL_INVENTORY_MUTATIONS_ENABLED` на общей или рабочей БД ради тестов.
 
-Do not add new services, frameworks, dependencies, Redis, queues, search engines,
-or infrastructure unless the current requirement genuinely needs them.
+## 7. Политика проверок: без лишних полных прогонов
 
-## Architecture
+Текущий `main` принимается как рабочая отправная точка новой feature-ветки. Не запускать весь набор тестов до разработки только ради повтора исходной приёмки. Рабочий порядок:
 
-Preserve the modular-monolith structure.
+1. Один раз изучить относящиеся к задаче код и документацию.
+2. Выполнить одну целостную правку.
+3. Запустить профильные проверки.
+4. При падении исправить причину и повторить **только** упавшую профильную проверку.
+5. После завершения всех связанных правок выполнить один полный затронутый gate.
+6. После разрешённого push/PR использовать GitHub CI как общий gate репозитория.
 
-PostgreSQL is the canonical data store.
+Не повторять `pytest`, Ruff, mypy, frontend suite, Docker runtime smoke, Telegram/Cloudflare smoke, upgrade/downgrade или весь аудит после каждого абзаца документации. Если финальный gate выявил ошибку, исправить конкретную причину, проверить её адресно и один раз повторить нужный финальный gate. Результат прежнего прогона нельзя выдавать за проверку нового коммита.
 
-Use the existing:
-- FastAPI routing style;
-- SQLAlchemy 2 async patterns;
-- common SQLAlchemy declarative base and naming convention;
-- Alembic migration conventions;
-- authorization dependencies;
-- configuration patterns;
-- testing conventions.
+## 8. Документация
 
-Register new ORM models through the existing central model registry used by Alembic.
+Документы должны соответствовать **фактически прочитанному** коду и миграциям. При предметном изменении синхронизировать `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/HISTORY.md` и документ соответствующего модуля, когда изменение действительно затрагивает их ответственность. Не дублировать полный технический контракт в нескольких файлах; использовать ссылки на каноническое описание.
 
-Do not duplicate auth, access-control, Telegram, notification, database,
-or configuration mechanisms that already exist.
+Не отмечать этап завершённым только потому, что написан код или создан коммит. Закрытие требует предусмотренной приёмки. Не заявлять проверку production, внешнего источника или безопасности, если её не проводили. Исторические свидетельства сохранять как датированные записи, а не превращать старые значения в актуальный operational state.
 
-Critical invariants should be enforced in PostgreSQL where practical,
-not only in frontend or Pydantic validation.
+## 9. Секреты и безопасность
 
-## Database and migrations
+Не печатать и не коммитить пароли, ключи, токены, cookies, `.env`, Telegram bot/webhook/gateway secrets, реальные инвентарные наборы или дампы БД. Не ослаблять аутентификацию или разграничение прав ради удобства теста. Frontend не является границей безопасности: каждый защищённый endpoint обязан применять серверную политику авторизации.
 
-Review generated/autogenerated migrations manually.
+## 10. Отчёт по завершении
 
-Migrations must be deterministic.
-Do not import mutable runtime constants into historical Alembic migrations.
-
-Use explicit constraints, foreign keys, indexes, and downgrade ordering.
-
-Do not change old migrations merely to make a new feature easier.
-Add a new migration.
-
-Do not run migrations against production.
-
-## Testing policy — avoid redundant verification
-
-The current `main` is assumed healthy at the start of a new feature branch.
-
-Do NOT run the full existing test suite before implementation just to establish a baseline.
-
-Use this sequence:
-
-1. Inspect relevant code/docs once.
-2. Implement one coherent chunk.
-3. Run focused checks for the changed area.
-4. If a check fails, fix the cause and rerun that focused check only.
-5. Continue with the next coherent chunk.
-6. Run one full affected/backend gate when the implementation is complete.
-7. Let GitHub CI provide the final repository-wide gate after push/PR.
-
-Do not repeatedly run:
-- full pytest after every edit;
-- full Ruff after every edit;
-- full mypy after every edit;
-- frontend checks when frontend was not changed;
-- Docker production-shaped runtime smoke when runtime/Compose was not changed;
-- Telegram live smoke for unrelated backend/domain work;
-- Cloudflare checks for unrelated work;
-- repeated migration upgrade/downgrade cycles after every edit;
-- repeated git hygiene checks;
-- repeated whole-repository audits.
-
-If the final full gate finds a failure:
-1. fix the specific failure;
-2. rerun the failed/focused check;
-3. after it passes, rerun the relevant final gate once.
-
-Do not enter an endless "one more full check just in case" loop.
-
-## Documentation
-
-Keep documentation synchronized with actual implementation.
-
-Update `docs/ROADMAP.md`, `docs/ARCHITECTURE.md`, `docs/HISTORY.md`,
-and feature-specific canonical docs when the change materially affects them.
-
-Do not mark a roadmap stage DONE merely because code was written.
-Only mark it DONE when its stated acceptance criteria are actually satisfied.
-
-Do not claim external data or production behavior was verified unless it was actually verified.
-
-## Security
-
-Never print or commit secrets, tokens, cookies, private keys, production passwords,
-Telegram bot tokens, webhook secrets, gateway secrets, or `.env` contents.
-
-Do not weaken authentication/authorization for convenience.
-
-Frontend checks are not a security boundary.
-Protected backend endpoints must enforce the existing authorization policy.
-
-## Final response
-
-Keep the final report concise and useful.
-
-Include:
-1. STATUS: COMPLETE / PARTIAL / BLOCKED
-2. implemented changes
-3. migrations/API/domain changes
-4. tests/checks actually run and their results
-5. files changed
-6. unresolved P0/P1 blockers
-7. git status
-8. recommended next step
-
-Do not dump enormous raw logs unless specifically requested.
+Кратко указать статус `COMPLETE`, `PARTIAL` или `BLOCKED`; выполненные изменения; затронутые миграции/API/домены; реально запущенные проверки и их результаты; изменённые файлы; открытые блокеры P0/P1; состояние Git и следующий шаг. Не публиковать огромные необработанные логи без запроса.

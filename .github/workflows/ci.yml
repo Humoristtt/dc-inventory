@@ -158,6 +158,10 @@ jobs:
           python3 ops/tests/test_release_artifacts.py
           python3 ops/tests/test_provenance_behavior.py
 
+      - name: Approved release/runtime identity regression
+        shell: bash
+        run: python3 ops/tests/test_release_runtime_match.py
+
       - name: Stage 15 S3 lifecycle prefix contract
         shell: bash
         run: python3 ops/tests/test_s3_lifecycle_prefix.py

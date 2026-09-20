@@ -49,6 +49,12 @@ ops/release/build_release.py --env-file <approved-env-file> --output <new-output
 
 Он требует чистый checkout, полный Git SHA, свободные release tags и валидные immutable IDs/revision labels backend/web/postgres; публикует `release.json` и `release.env` только после успешной проверки всех компонентов. При ошибке незавершённый output directory удаляется, но созданные Docker tags могут остаться: сначала установить их владельца, **не** удалять чужие образы автоматически. Builder ничего не развёртывает.
 
+### Обязательная сверка релиза при CP-16
+
+После отдельно разрешённого развёртывания собрать фактический runtime provenance через `ops/backup/runtime_provenance.py`. До приёмки выполнить `python3 ops/release/verify_release_runtime.py --release-manifest APPROVED_RELEASE_JSON --runtime-provenance RESTRICTED_RUNTIME_JSON`.
+
+Манифест `release.json` должен быть утверждён заранее и храниться независимо от работающих контейнеров. Обязательный результат — `RELEASE_RUNTIME_MATCH=PASS`: точные image ID и revisions backend/web/PostgreSQL, соответствие workers и checkout SHA. При несовпадении остановить приёмку; не пересобирать образы и не подменять манифест. Source-only синхронизация с другим checkout SHA требует отдельной проверки и разрешения: verifier не допускает это расхождение.
+
 Альтернативная ручная сборка **в рамках утверждённого runtime release**, а не документационной синхронизации:
 
 ```bash

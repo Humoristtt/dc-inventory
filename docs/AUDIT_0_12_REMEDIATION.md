@@ -9,6 +9,8 @@ the master ledger is explicitly accepted as the remediation source of truth.
 
 ## Global state
 
+Порядок работ по результатам 12 аудитов: [MASTER_REMEDIATION_PLAN.md](MASTER_REMEDIATION_PLAN.md). Статусы и evidence выполнения фиксируются в этом журнале.
+
 - Project remediation status: `OPEN`
 - Remediation branch: `remediation/audit-0-12`
 - Original source baseline:

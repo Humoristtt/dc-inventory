@@ -33,6 +33,7 @@
 | [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md) | Специальная одновременная смена Cloudflare Tunnel и web на Unix socket: UID/GID, bind mount, проверки и rollback |
 | [ROADMAP.md](ROADMAP.md) | Текущая последовательность работ и отличие локального PASS от production acceptance |
 | [AUDIT_0_12_REMEDIATION.md](AUDIT_0_12_REMEDIATION.md) | Подробный непрерывный журнал CP-00–18, коммиты, тесты, открытые условия; не переписывать историю чекпойнтов краткой сводкой |
+| [MASTER_REMEDIATION_PLAN.md](MASTER_REMEDIATION_PLAN.md) | Сводный порядок устранения замечаний 12 аудитов; фактические результаты и evidence — в CP-журнале |
 | [CP13_DOCUMENTATION_AUDIT.md](CP13_DOCUMENTATION_AUDIT.md) | Объём текущего аудита, найденные несоответствия, результаты/ограничения проверки |
 
 Для production нельзя подменять [DEPLOYMENT](DEPLOYMENT.md) общими командами из [DEVELOPMENT](DEVELOPMENT.md). Для DR нельзя считать исторически успешный Stage15B доказательством нового реального восстановления после CP-11.

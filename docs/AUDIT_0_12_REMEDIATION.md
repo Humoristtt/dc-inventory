@@ -537,7 +537,27 @@ Production не изменён. Push не выполнялся.
 
 ### CP-13 — Documentation
 
-Status: `OPEN`
+Status: `CLOSED` — локальная документационная приёмка 20.09.2026.
+
+Контрольный коммит исправления контрактов:
+
+`7d43286ce2991215b11021fa893b633e212f274d`
+
+Подтверждено:
+
+- проверен итоговый набор из 23 tracked Markdown;
+- карта документации: 23 Markdown, 22 уникальные цели — PASS;
+- `test_docs_freshness.py` — PASS;
+- `test_docs_structure.py` — PASS;
+- `test_notification_delivery_contract.py` — PASS;
+- `test_recovery_runbook_contract.py` — PASS;
+- `git diff --check` — PASS;
+- исправлены устаревшие текстовые проверки без изменения прикладного кода;
+- production, миграции, S3 и Telegram не изменялись.
+
+Область закрытия: документация и локальные контракты.
+Полный CI на итоговом коммите, CP-15 и production acceptance не объявляются
+завершёнными этим результатом.
 
 ### CP-14 — Real isolated full-stack acceptance
 

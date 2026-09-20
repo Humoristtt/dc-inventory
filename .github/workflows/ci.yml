@@ -166,6 +166,10 @@ jobs:
         shell: bash
         run: python3 ops/tests/test_docs_freshness.py
 
+      - name: Documentation structure contract
+        shell: bash
+        run: python3 ops/tests/test_docs_structure.py
+
       - name: Notification delivery contract
         shell: bash
         run: python3 ops/tests/test_notification_delivery_contract.py

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 import ast
+import re
 from pathlib import Path
 
 
@@ -26,6 +27,19 @@ def forbid(name: str, value: str) -> None:
     if value in content(name):
         raise RuntimeError(
             f"{name}: stale current-state assertion {value!r}"
+        )
+
+
+def require_heading(name: str, heading: str) -> None:
+    """Проверить заголовок H2 независимо от номера раздела."""
+    pattern = (
+        rf"^##[ \t]+(?:\d+[A-Za-z]?\.[ \t]+)?"
+        rf"{re.escape(heading)}[ \t]*$"
+    )
+
+    if re.search(pattern, content(name), re.MULTILINE) is None:
+        raise RuntimeError(
+            f"{name}: missing current-state heading {heading!r}"
         )
 
 
@@ -194,14 +208,14 @@ require(
     "Повторный initial bootstrap запрещён.",
 )
 
-require(
+require_heading(
     "docs/DEPLOYMENT.md",
-    "## Initial production inventory bootstrap",
+    "Initial production inventory bootstrap",
 )
 
-require(
+require_heading(
     "docs/OPERATIONS.md",
-    "## Initial production inventory bootstrap — accepted",
+    "Initial production inventory bootstrap — accepted",
 )
 
 require(

@@ -25,12 +25,15 @@ gateway = (
 ).read_text()
 
 assert "at-least-once" in operations
-assert (
-    "Exactly-once Telegram delivery не заявляется"
-    in operations
+assert any(
+    "Telegram" in paragraph
+    and "at-least-once" in paragraph
+    and "exactly-once" in paragraph
+    and "потере ответа внешнего провайдера" in paragraph
+    for paragraph in operations.split("\n\n")
 )
 assert (
-    "duplicate enqueue"
+    "Dedupe key предотвращает дублирование outbox intent"
     in operations
 )
 

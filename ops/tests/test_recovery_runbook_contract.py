@@ -74,7 +74,8 @@ for forbidden in (
 
 assert "ops/recovery/rehearse_restore.sh" in doc
 assert "production cutover" in doc.lower()
-assert "exact backend image" in doc.lower()
+assert "из manifest получить immutable backend/web image ids" in doc.lower()
+assert "запустить точный доступный backend image" in doc.lower()
 assert "/app/scripts/reconcile_inventory_projections.sql" in doc
 
 print("AUD_06_RECOVERY_RUNBOOK_CONTRACT=PASS")

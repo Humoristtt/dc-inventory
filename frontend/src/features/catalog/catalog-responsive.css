@@ -1,0 +1,129 @@
+/* Catalog-specific responsive composition; the visual palette stays in the
+ * canonical design system and existing catalog stylesheet.
+ */
+
+.catalog-page__body {
+  container-type: inline-size;
+}
+
+/* Width is that of the catalog content, not the physical display. */
+@container (max-width: 559px) {
+  .category-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 560px) and (max-width: 999px) {
+  .category-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 1000px) {
+  .category-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 1160px) {
+  .equipment-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
+@container (max-width: 619px) {
+  .result-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .result-toolbar__actions {
+    width: 100%;
+    max-width: none;
+    justify-content: flex-start;
+  }
+
+  .quick-sort {
+    flex: 1 1 100%;
+  }
+}
+
+@media (max-width: 1099px) {
+  /* Prevent automatic focus zoom on iOS without changing the search surface. */
+  .search-field input {
+    font-size: 16px;
+  }
+}
+
+@media (pointer: coarse) {
+  .tool-button {
+    min-height: 44px;
+  }
+
+  .search-field__clear {
+    width: 44px;
+    height: 44px;
+    flex-basis: 44px;
+  }
+
+  .filter-sheet .filter-option {
+    min-height: 48px;
+  }
+
+  .filter-sheet .filter-option__label {
+    font-size: 14px;
+    line-height: 1.35;
+  }
+
+  .filter-sheet .range-filter input {
+    min-height: 48px;
+    height: 48px;
+    font-size: 16px;
+  }
+
+  .sort-option {
+    min-height: 48px;
+  }
+
+  .sort-option span {
+    font-size: 14px;
+  }
+}
+
+/* Modal content must scroll independently of the always-visible actions. */
+.sheet__body {
+  min-height: 0;
+}
+
+.sheet,
+.filter-sheet {
+  max-height: min(
+    calc(100dvh - var(--safe-area-top) - var(--safe-area-bottom) - 12px),
+    760px
+  );
+}
+
+@media (max-width: 679px) {
+  .sheet,
+  .filter-sheet {
+    max-height: calc(
+      100dvh - var(--safe-area-top) - var(--safe-area-bottom) - 8px
+    );
+  }
+}
+
+@media (max-width: 359px) {
+  .category-tile {
+    padding-inline: 12px;
+  }
+
+  .category-tile strong {
+    font-size: 15px;
+  }
+
+  .detail-hero {
+    grid-template-columns: 72px minmax(0, 1fr);
+    gap: 10px;
+  }
+}

@@ -148,6 +148,12 @@ jobs:
         shell: bash
         run: python3 ops/tests/test_stage15_backup_contract.py
 
+      - name: Stage 15 versioned backup and restore regressions
+        shell: bash
+        run: |
+          python3 -B ops/tests/test_stage15_version_ids.py
+          python3 -B ops/tests/test_stage15_restore_versions.py
+
       - name: Stage 15 runtime provenance contract
         shell: bash
         run: python3 ops/tests/test_runtime_provenance_contract.py

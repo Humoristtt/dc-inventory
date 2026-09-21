@@ -78,4 +78,14 @@ assert "из manifest получить immutable backend/web image ids" in doc.l
 assert "запустить точный доступный backend image" in doc.lower()
 assert "/app/scripts/reconcile_inventory_projections.sql" in doc
 
+for needle in (
+    'VersionId=manifest_version',
+    'VersionId=dump_version',
+    'ExtraArgs={"VersionId": manifest_version}',
+    'ExtraArgs={"VersionId": dump_version}',
+    'state["dump_sha256"]',
+    'manifest_dump_version != state_dump_version',
+):
+    assert needle in source, needle
+
 print("AUD_06_RECOVERY_RUNBOOK_CONTRACT=PASS")

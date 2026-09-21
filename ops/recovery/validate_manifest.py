@@ -63,6 +63,15 @@ def validate_manifest(manifest: object, manifest_key: str, prefix: str) -> dict[
     if type(size) is not int or size <= 0:
         raise ValueError("invalid backup dump size")
 
+    version_id = artifact.get("version_id")
+    if version_id is not None and (
+        not isinstance(version_id, str)
+        or not version_id
+        or version_id == "null"
+        or version_id.strip() != version_id
+    ):
+        raise ValueError("invalid backup dump VersionId")
+
     runtime = manifest.get("runtime")
     if not isinstance(runtime, dict):
         raise ValueError("backup manifest has no runtime provenance")

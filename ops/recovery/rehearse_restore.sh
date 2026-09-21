@@ -140,7 +140,8 @@ python3 - \
   "$ENV_FILE" \
   "$MANIFEST_KEY" \
   "$WORK_DIR" \
-  "$PRODUCTION_CHECKOUT_SHA" <<'PY'
+  "$PRODUCTION_CHECKOUT_SHA" \
+  "$STATE" <<'PY'
 import importlib.util
 import json
 import sys
@@ -150,6 +151,9 @@ env_path = Path(sys.argv[2])
 manifest_key = sys.argv[3]
 work_dir = Path(sys.argv[4])
 production_checkout_sha = sys.argv[5]
+state = json.loads(Path(sys.argv[6]).read_text(encoding="utf-8"))
+if state.get("schema_version") != 2 or state.get("state") != "success":
+    raise RuntimeError("Invalid selected backup state")
 sys.path.insert(0, str(helper_path.parent))
 sys.path.insert(0, str(helper_path.parent.parent / "recovery"))
 from validate_manifest import validate_manifest
@@ -169,15 +173,47 @@ if not manifest_key.startswith(prefix):
     raise RuntimeError(
         "manifest is outside configured prefix"
     )
+def require_version_id(value):
+    if (
+        not isinstance(value, str)
+        or not value
+        or value == "null"
+        or value.strip() != value
+    ):
+        raise RuntimeError("Invalid or missing S3 VersionId")
+    return value
+
+
+manifest_version = state.get("manifest_version_id")
+state_dump_version = state.get("dump_version_id")
+
+if (manifest_version is None) != (state_dump_version is None):
+    raise RuntimeError("Incomplete backup version provenance")
+
+if manifest_version is None:
+    # Legacy state: resolve the current version exactly once.
+    current = client.head_object(
+        Bucket=bucket,
+        Key=manifest_key,
+    )
+    manifest_version = current.get("VersionId")
+
+manifest_version = require_version_id(manifest_version)
+
+manifest_head = client.head_object(
+    Bucket=bucket,
+    Key=manifest_key,
+    VersionId=manifest_version,
+)
+if manifest_head.get("VersionId") not in (None, manifest_version):
+    raise RuntimeError("Manifest HEAD returned another version")
+
 manifest_path = work_dir / "selected.manifest.json"
 client.download_file(
     bucket,
     manifest_key,
     str(manifest_path),
-)
-manifest_head = client.head_object(
-    Bucket=bucket,
-    Key=manifest_key,
+    ExtraArgs={"VersionId": manifest_version},
 )
 expected_manifest_sha = (
     manifest_head.get("Metadata", {}).get("sha256")
@@ -194,6 +230,15 @@ if (
         "manifest checksum mismatch"
     )
 manifest = validate_manifest(json.loads(manifest_path.read_text()), manifest_key, prefix)
+
+if (
+    state["manifest_key"] != manifest_key
+    or state["dump_key"] != manifest["artifact"]["key"]
+    or state["dump_sha256"] != manifest["artifact"]["sha256"]
+    or state["dump_size_bytes"] != manifest["artifact"]["size_bytes"]
+    or state["runtime"] != manifest["runtime"]
+):
+    raise RuntimeError("Backup state and manifest provenance mismatch")
 
 manifest_checkout_sha = manifest.get("production_checkout_sha")
 
@@ -214,15 +259,33 @@ if not dump_key.startswith(prefix):
     raise RuntimeError(
         "dump is outside configured prefix"
     )
+manifest_dump_version = manifest["artifact"].get("version_id")
+
+if state_dump_version is not None:
+    if manifest_dump_version != state_dump_version:
+        raise RuntimeError("Manifest and state dump VersionIds differ")
+    dump_version = require_version_id(state_dump_version)
+elif manifest_dump_version is not None:
+    dump_version = require_version_id(manifest_dump_version)
+else:
+    # Legacy manifest: pin current dump once, then verify its SHA-256.
+    current = client.head_object(Bucket=bucket, Key=dump_key)
+    dump_version = require_version_id(current.get("VersionId"))
+
+dump_head = client.head_object(
+    Bucket=bucket,
+    Key=dump_key,
+    VersionId=dump_version,
+)
+if dump_head.get("VersionId") not in (None, dump_version):
+    raise RuntimeError("Dump HEAD returned another version")
+
 dump_path = work_dir / "selected.dump"
 client.download_file(
     bucket,
     dump_key,
     str(dump_path),
-)
-dump_head = client.head_object(
-    Bucket=bucket,
-    Key=dump_key,
+    ExtraArgs={"VersionId": dump_version},
 )
 if (
     dump_head.get("Metadata", {}).get("sha256")
@@ -239,10 +302,14 @@ if dump_head.get("ContentLength") != manifest["artifact"]["size_bytes"]:
     raise RuntimeError("dump remote size does not match manifest")
 if dump_path.stat().st_size != manifest["artifact"]["size_bytes"]:
     raise RuntimeError("downloaded dump size does not match manifest")
-for key in (manifest_key, dump_key):
+for key, version in (
+    (manifest_key, manifest_version),
+    (dump_key, dump_version),
+):
     retention = client.get_object_retention(
         Bucket=bucket,
         Key=key,
+        VersionId=version,
     ).get("Retention", {})
     if retention.get("Mode") != "GOVERNANCE":
         raise RuntimeError(

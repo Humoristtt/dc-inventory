@@ -5,27 +5,27 @@
 }
 
 @container (max-width: 519px) {
-  .more-grid {
+  .more-page__body .more-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
 @container (min-width: 520px) {
-  .more-grid {
+  .more-page__body .more-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 /* Three fields must not compete for a single narrow tablet row. */
 @container (max-width: 759px) {
-  .admin-users__filters {
+  .admin-users-page__body .admin-users__filters {
     grid-template-columns: minmax(0, 1fr);
     align-items: stretch;
   }
 }
 
 @container (min-width: 760px) {
-  .admin-users__filters {
+  .admin-users-page__body .admin-users__filters {
     grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
     align-items: end;
   }

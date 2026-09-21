@@ -9,20 +9,20 @@
 }
 
 @container (max-width: 599px) {
-  .procurement-overview,
-  .procurement-fields {
+  .procurement-page__body .procurement-overview,
+  .procurement-page__body .procurement-fields {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .procurement-actions,
-  .procurement-line-actions,
-  .procurement-add-row {
+  .procurement-page__body .procurement-actions,
+  .procurement-page__body .procurement-line-actions,
+  .procurement-page__body .procurement-add-row {
     min-width: 0;
     flex-wrap: wrap;
   }
 
-  .procurement-lines > li,
-  .procurement-lines--detail > li {
+  .procurement-page__body .procurement-lines > li,
+  .procurement-page__body .procurement-lines--detail > li {
     min-width: 0;
     flex-wrap: wrap;
     overflow-wrap: anywhere;
@@ -30,18 +30,18 @@
 }
 
 @container (min-width: 600px) {
-  .procurement-overview {
+  .procurement-page__body .procurement-overview {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @container (min-width: 1150px) {
-  .procurement-overview {
+  .procurement-page__body .procurement-overview {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 
-.procurement-dialog {
+.procurement-dialog-backdrop .procurement-dialog {
   min-width: 0;
   min-height: 0;
   max-height: calc(

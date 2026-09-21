@@ -6,6 +6,7 @@
 
 .app-shell__content {
   width: min(100%, var(--app-shell-width));
+  min-width: 0;
   min-height: 100vh;
   min-height: 100dvh;
   margin: 0 auto;
@@ -58,7 +59,7 @@
   flex-direction: column;
   gap: 4px;
   color: rgb(255 255 255 / 56%);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 680;
   line-height: 1;
   text-decoration: none;
@@ -90,6 +91,23 @@
   line-height: 1;
 }
 
+/* Reduced vertical chrome for a short desktop/Telegram window. The content
+ * padding and navigation both use the same variable, preserving clearance.
+ */
+@media (max-height: 540px) and (pointer: fine) {
+  .app-shell {
+    --bottom-nav-height: 56px;
+  }
+
+  .bottom-nav__item {
+    gap: 2px;
+  }
+
+  .bottom-nav__icon {
+    min-height: 19px;
+    font-size: 17px;
+  }
+}
 
 .route-status {
   padding: 2rem;

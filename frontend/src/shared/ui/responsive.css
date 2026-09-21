@@ -1,0 +1,68 @@
+/* Responsive extension of the canonical shared UI primitives.
+ * Feature-specific layout remains in each feature stylesheet.
+ * Sizes follow input capability and available space, not device names.
+ */
+
+@media (pointer: coarse) {
+  .icon-button {
+    width: 48px;
+    height: 48px;
+    flex-basis: 48px;
+  }
+
+  .telegram-fullscreen-button {
+    min-height: 48px;
+  }
+}
+
+@media (max-width: 520px) {
+  /* Preserve the fullscreen action on a narrow Telegram Desktop window.
+   * Its accessible name and title remain available when text is hidden.
+   */
+  .telegram-fullscreen-button {
+    width: 44px;
+    min-width: 44px;
+    padding-inline: 0;
+  }
+
+  .telegram-fullscreen-button span {
+    display: none;
+  }
+
+  .ds-page-header__toolbar {
+    gap: 8px;
+  }
+
+  .ds-page-header__actions {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 359px) {
+  .compact-brand__logo {
+    width: 100px;
+  }
+
+  .ds-page-header__heading-row {
+    column-gap: 8px;
+  }
+
+  .ds-page-header__title h1 {
+    font-size: clamp(30px, 9vw, 52px);
+  }
+}
+
+@media (max-height: 540px) and (pointer: fine) {
+  .ds-page-header {
+    padding-top: calc(var(--safe-area-top) + 12px);
+    padding-bottom: 16px;
+  }
+
+  .ds-page-header__heading-row {
+    margin-top: 16px;
+  }
+
+  .ds-page-header__content {
+    margin-top: 12px;
+  }
+}

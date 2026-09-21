@@ -1,55 +1,38 @@
-/* Inventory layout follows the available content width and viewport height. */
-.mine-page__body {
-  container-type: inline-size;
-}
-
-@container (max-width: 559px) {
-  .mine-page__body .holdings-list,
-  .mine-page__body .inventory-columns {
+/* Active inventory pages reuse the catalog content container. Movement filters
+ * respond to that actual container, not the physical display size.
+ */
+@container (max-width: 639px) {
+  .catalog-page__body .history-filters {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-@container (min-width: 560px) and (max-width: 1099px) {
-  .mine-page__body .holdings-list,
-  .mine-page__body .inventory-columns {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@container (min-width: 1100px) {
-  .mine-page__body .holdings-list {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .mine-page__body .inventory-columns {
+@container (min-width: 640px) {
+  .catalog-page__body .history-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 679px) {
-  /* Movement filters need space for real labels and input values. */
+  /* Safe fallback on clients without container-query support. */
   .app-shell .history-filters {
     grid-template-columns: minmax(0, 1fr);
   }
 }
 
-.position-list span,
-.position-list small,
-.holding-card > p,
-.holding-card li,
-.holding-card__link {
+.movement-entry,
+.movement-entry header {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.catalog-page .position-list span,
+.catalog-page .position-list small,
+.catalog-page .position-list strong,
+.catalog-page .inventory-list-empty,
+.catalog-page .inventory-empty p {
   font-size: var(--font-meta);
   line-height: 1.4;
-}
-
-.position-list strong {
-  font-size: var(--font-meta);
-}
-
-.inventory-list-empty,
-.inventory-empty p {
-  font-size: var(--font-meta);
 }
 
 /* The editor must remain fully usable with a short Telegram window. */
@@ -66,6 +49,12 @@
       calc(100dvh - var(--safe-area-top) - var(--safe-area-bottom) - 48px),
       760px
     );
+  }
+}
+
+@media (max-width: 359px) {
+  .warehouse-actions > .button {
+    flex: 1 1 100%;
   }
 }
 

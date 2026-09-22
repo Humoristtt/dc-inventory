@@ -150,6 +150,60 @@ test("catalog uses content width rather than a fixed device-size layout", async 
   }
 });
 
+test("wide desktop menu stays at the bottom with a full-width background", async ({ page }, testInfo) => {
+  test.skip(
+    testInfo.project.name !== "desktop-admin",
+    "Desktop viewport geometry acceptance",
+  );
+
+  await prepareApp(page);
+  await page.goto("/catalog");
+  await expect(page.locator(".category-grid")).toBeVisible();
+
+  for (const width of [1280, 1920, 2560]) {
+    await page.setViewportSize({ width, height: 900 });
+
+    const geometry = await page.evaluate(() => {
+      const content = document.querySelector<HTMLElement>(".app-shell__content");
+      const nav = document.querySelector<HTMLElement>(".bottom-nav");
+      const links = document.querySelector<HTMLElement>(".bottom-nav__inner");
+      if (content === null || nav === null || links === null) return null;
+
+      const contentRect = content.getBoundingClientRect();
+      const navRect = nav.getBoundingClientRect();
+      const linksRect = links.getBoundingClientRect();
+      return {
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        contentLeft: contentRect.left,
+        contentRight: contentRect.right,
+        navLeft: navRect.left,
+        navRight: navRect.right,
+        navBottom: navRect.bottom,
+        navHeight: navRect.height,
+        linksLeft: linksRect.left,
+        linksRight: linksRect.right,
+        paddingBottom: Number.parseFloat(getComputedStyle(content).paddingBottom),
+        position: getComputedStyle(nav).position,
+      };
+    });
+
+    expect(geometry).not.toBeNull();
+    if (geometry === null) throw new Error("Desktop navigation geometry unavailable");
+
+    expect(geometry.position).toBe("fixed");
+    expect(Math.abs(geometry.navBottom - geometry.viewportHeight)).toBeLessThanOrEqual(2);
+    expect(Math.abs(geometry.contentLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.contentRight - geometry.viewportWidth)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.navLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.navRight - geometry.viewportWidth)).toBeLessThanOrEqual(1);
+    expect(geometry.paddingBottom).toBeGreaterThanOrEqual(geometry.navHeight);
+    expect(Math.abs(geometry.linksLeft - (geometry.viewportWidth - geometry.linksRight)))
+      .toBeLessThanOrEqual(2);
+    await expectNoHorizontalOverflow(page);
+  }
+});
+
 test("touch filters retain usable targets and fit a short viewport", async ({ page }, testInfo) => {
   test.skip(
     !["android-like", "iphone-webkit"].includes(testInfo.project.name),

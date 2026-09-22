@@ -130,7 +130,7 @@ test("admin user cards are legible, styled and responsive", async ({ page }, tes
     expect(metrics.blockBackground).not.toBe("rgb(255, 0, 0)");
     expect(metrics.documentWidth).toBeLessThanOrEqual(metrics.viewportWidth + 1);
 
-    if (width >= 1920) {
+    if (width >= 1280) {
       expect(Math.abs(metrics.first.top - metrics.second.top)).toBeLessThanOrEqual(2);
       expect(metrics.second.left).toBeGreaterThan(metrics.first.right);
     } else {

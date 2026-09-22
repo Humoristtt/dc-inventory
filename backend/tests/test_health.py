@@ -75,8 +75,13 @@ async def test_readiness_checks_schema_even_when_tables_are_empty() -> None:
     engine = MagicMock()
     connection = AsyncMock()
     engine.connect.return_value.__aenter__.return_value = connection
+    connection.execute.return_value = MagicMock()
+    connection.execute.return_value.scalar_one.return_value = True
     await ensure_database_ready(engine)
-    query = str(connection.execute.call_args.args[0])
+    assert connection.execute.call_count == 2
+    query = "\n".join(
+        str(call.args[0]) for call in connection.execute.call_args_list
+    )
     assert "WHERE false" in query
     assert "m.journal_seq" in query and "s.expires_at" in query
     assert "m.custody_user_id" in query
@@ -104,6 +109,16 @@ async def test_readiness_checks_schema_even_when_tables_are_empty() -> None:
     assert "pe.event_type" in query
     assert "public.email_outbox eo" in query
     assert "eo.status" in query
+    assert "prl.expected_identity_signature" in query
+    assert "public.procurement_revision_lines prl" in query
+    assert "pg_catalog.pg_trigger" in query
+    assert "pg_catalog.to_regprocedure" in query
+    assert "trg_items_validate_identity" in query
+    assert "trg_procurement_revision_lines_append_only" in query
+    connection.execute.return_value.scalar_one.return_value = False
+    with pytest.raises(DatabaseUnavailableError):
+        await ensure_database_ready(engine)
+    connection.execute.return_value.scalar_one.return_value = True
     connection.execute.side_effect = ProgrammingError("sql", {}, Exception("missing column"))
     with pytest.raises(DatabaseUnavailableError):
         await ensure_database_ready(engine)

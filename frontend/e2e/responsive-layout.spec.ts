@@ -140,17 +140,20 @@ test("catalog uses content width rather than a fixed device-size layout", async 
     await expectNoHorizontalOverflow(page);
 
     const fitsNavigation = await page.evaluate(() => {
-      const shell = document.querySelector<HTMLElement>(".app-shell__content");
-      const nav = document.querySelector<HTMLElement>(".bottom-nav__inner");
-      if (shell === null || nav === null) return false;
-      return Number.parseFloat(getComputedStyle(shell).paddingBottom)
-        >= nav.getBoundingClientRect().height;
+      const content = document.querySelector<HTMLElement>(".app-shell__content");
+      const nav = document.querySelector<HTMLElement>(".bottom-nav");
+      if (content === null || nav === null) return false;
+      const body = content.getBoundingClientRect();
+      const footer = nav.getBoundingClientRect();
+      return window.innerWidth >= 1200
+        ? Math.abs(body.bottom - footer.top) <= 2
+        : Number.parseFloat(getComputedStyle(content).paddingBottom) >= footer.height;
     });
     expect(fitsNavigation).toBe(true);
   }
 });
 
-test("wide desktop menu stays at the bottom with a full-width background", async ({ page }, testInfo) => {
+test("wide desktop menu occupies a separate bottom row and never covers cards", async ({ page }, testInfo) => {
   test.skip(
     testInfo.project.name !== "desktop-admin",
     "Desktop viewport geometry acceptance",
@@ -162,6 +165,12 @@ test("wide desktop menu stays at the bottom with a full-width background", async
 
   for (const width of [1280, 1920, 2560]) {
     await page.setViewportSize({ width, height: 900 });
+    await page.locator(".catalog-page__body").evaluate((body) => {
+      (body as HTMLElement).style.minHeight = "1800px";
+    });
+    await page.locator(".app-shell__content").evaluate((content) => {
+      content.scrollTop = 500;
+    });
 
     const geometry = await page.evaluate(() => {
       const content = document.querySelector<HTMLElement>(".app-shell__content");
@@ -177,31 +186,40 @@ test("wide desktop menu stays at the bottom with a full-width background", async
         viewportHeight: window.innerHeight,
         contentLeft: contentRect.left,
         contentRight: contentRect.right,
+        contentBottom: contentRect.bottom,
         navLeft: navRect.left,
         navRight: navRect.right,
+        navTop: navRect.top,
         navBottom: navRect.bottom,
-        navHeight: navRect.height,
         linksLeft: linksRect.left,
         linksRight: linksRect.right,
-        paddingBottom: Number.parseFloat(getComputedStyle(content).paddingBottom),
+        scrollTop: content.scrollTop,
         position: getComputedStyle(nav).position,
+        background: getComputedStyle(nav).backgroundColor,
       };
     });
 
     expect(geometry).not.toBeNull();
     if (geometry === null) throw new Error("Desktop navigation geometry unavailable");
 
-    expect(geometry.position).toBe("fixed");
+    expect(geometry.position).toBe("relative");
+    expect(geometry.scrollTop).toBeGreaterThan(0);
+    expect(geometry.background).toBe("rgb(7, 6, 4)");
+    expect(Math.abs(geometry.contentBottom - geometry.navTop)).toBeLessThanOrEqual(2);
     expect(Math.abs(geometry.navBottom - geometry.viewportHeight)).toBeLessThanOrEqual(2);
     expect(Math.abs(geometry.contentLeft)).toBeLessThanOrEqual(1);
     expect(Math.abs(geometry.contentRight - geometry.viewportWidth)).toBeLessThanOrEqual(1);
     expect(Math.abs(geometry.navLeft)).toBeLessThanOrEqual(1);
     expect(Math.abs(geometry.navRight - geometry.viewportWidth)).toBeLessThanOrEqual(1);
-    expect(geometry.paddingBottom).toBeGreaterThanOrEqual(geometry.navHeight);
     expect(Math.abs(geometry.linksLeft - (geometry.viewportWidth - geometry.linksRight)))
       .toBeLessThanOrEqual(2);
     await expectNoHorizontalOverflow(page);
   }
+
+  await page.getByRole("link", { name: "Ещё" }).click();
+  await expect(page).toHaveURL(/\/more$/);
+  await expect.poll(() => page.locator(".app-shell__content").evaluate((content) => content.scrollTop))
+    .toBe(0);
 });
 
 test("touch filters retain usable targets and fit a short viewport", async ({ page }, testInfo) => {

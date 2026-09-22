@@ -13,19 +13,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.modules.catalog.service import create_item
 from app.modules.identity.enums import UserAccessStatus, UserRole
+from app.modules.identity.models import User
 from app.modules.inventory.enums import MovementType
+from app.modules.inventory.models import Location
 from app.modules.inventory.schemas import LocationCreate, MovementCreate, MovementLineCreate
 from app.modules.inventory.service import create_location, create_movement
 from app.modules.procurement.enums import ProcurementLineType, ProcurementStatus
 from app.modules.procurement.models import ProcurementRequest, ProcurementRevisionLine
 from app.modules.procurement.schemas import ExistingItemLineCreate, ProcurementRequestCreate
-from app.modules.procurement.service import create_request
+from app.modules.procurement.service import ProcurementRecord, create_request
 from tests.warehouse_helpers import actor, cable_payload
 
 pytestmark = pytest.mark.asyncio
 
 
-async def _create_procurement(db: AsyncSession):
+async def _create_procurement(
+    db: AsyncSession,
+) -> tuple[User, uuid.UUID, Location, ProcurementRecord]:
     initiator, _ = await actor(db, UserRole.ADMIN, UserAccessStatus.APPROVED)
     manager, _ = await actor(db, UserRole.MANAGER, UserAccessStatus.APPROVED)
     senior, _ = await actor(db, UserRole.SENIOR_ENGINEER, UserAccessStatus.APPROVED)

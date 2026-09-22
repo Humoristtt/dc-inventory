@@ -91,25 +91,43 @@
   line-height: 1;
 }
 
-/* Desktop retains a bottom navigation, not a detached floating dock or a
- * toolbar above the header. The dark footer spans the viewport, while links
- * remain centered. Content already reserves its height for the last row.
+/* On wide screens the footer owns a separate viewport row. Only the content
+ * scrolls, ending above the navigation instead of sliding behind it. The
+ * mobile shell remains unchanged and continues to use the document scroll.
  */
 @media (min-width: 1200px) {
+  .app-shell {
+    display: flex;
+    height: 100dvh;
+    min-height: 0;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .app-shell__content {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    padding-bottom: 18px;
+    box-shadow: none;
+  }
+
   .bottom-nav {
-    position: fixed;
+    position: relative;
     top: auto;
-    right: 0;
-    bottom: 0;
-    left: 0;
+    right: auto;
+    bottom: auto;
+    left: auto;
     width: 100%;
+    flex: 0 0 auto;
     margin: 0;
     padding:
       0 max(var(--safe-area-right), var(--page-inline))
       var(--safe-area-bottom)
       max(var(--safe-area-left), var(--page-inline));
     border-top: 1px solid rgb(255 255 255 / 12%);
-    background: rgb(0 0 0 / 96%);
+    background: #070604;
     pointer-events: auto;
   }
 

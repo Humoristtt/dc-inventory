@@ -152,6 +152,6 @@ async def test_a9_rejects_unreconstructable_historical_identity_and_rolls_back(
                     """
                 )
             )
-            assert trigger_enabled in {"O", "A"}
+            assert trigger_enabled in {b"O", b"A", "O", "A"}
     finally:
         await engine.dispose()

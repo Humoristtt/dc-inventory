@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Link, Outlet, useLocation } from "react-router-dom";
 
 import { useAuthState } from "../features/auth/useAuthState";
@@ -32,7 +33,18 @@ function isActive(pathname: string, target: string): boolean {
 export function ApplicationShell() {
   const auth = useAuthState();
   const location = useLocation();
+  const contentRef = useRef<HTMLDivElement>(null);
   useTelegramNavigation();
+
+  // Desktop scroll lives inside the content row to keep the footer from
+  // covering cards. A new route must start at its own top, not at the previous
+  // page's scroll position; mobile continues to use window scrolling.
+  useEffect(() => {
+    if (contentRef.current !== null) {
+      contentRef.current.scrollTop = 0;
+      contentRef.current.scrollLeft = 0;
+    }
+  }, [location.pathname]);
 
   const canReadMovements = hasAnyCapability(
     auth.data?.user,
@@ -51,7 +63,7 @@ export function ApplicationShell() {
 
   return (
     <div className="app-shell">
-      <div className="app-shell__content">
+      <div className="app-shell__content" ref={contentRef}>
         <RouteContent resetKey={location.pathname}>
           <Outlet />
         </RouteContent>

@@ -51,6 +51,7 @@ from app.modules.procurement.service import (
     ProcurementNotFoundError,
     ProcurementRecord,
     ProcurementServiceUnavailableError,
+    ProcurementSummaryRecord,
     available_actions,
     bind_line,
     complete_acceptance,
@@ -104,7 +105,10 @@ def _raise_db_error(error: DBAPIError) -> NoReturn:
     ) from error
 
 
-def _name(record: ProcurementRecord, user_id: UUID) -> UserSummaryOut:
+def _name(
+    record: ProcurementRecord | ProcurementSummaryRecord,
+    user_id: UUID,
+) -> UserSummaryOut:
     return UserSummaryOut(id=user_id, display_name=record.display_names.get(user_id, str(user_id)))
 
 
@@ -152,7 +156,9 @@ def _event_out(record: ProcurementRecord, event: ProcurementEvent) -> Procuremen
     )
 
 
-def _summary(record: ProcurementRecord) -> ProcurementRequestSummaryOut:
+def _summary(
+    record: ProcurementRecord | ProcurementSummaryRecord,
+) -> ProcurementRequestSummaryOut:
     request = record.request
     revision = record.current_revision
     return ProcurementRequestSummaryOut(
@@ -209,10 +215,16 @@ async def get_managers(
     response: Response,
     db: DbSession,
     _approved: ProcurementRead,
+    q: Annotated[str | None, Query(max_length=255)] = None,
     limit: Annotated[int, Query(ge=1, le=200)] = 100,
     offset: Annotated[int, Query(ge=0)] = 0,
 ) -> ProcurementManagerPageOut:
-    users, total, names = await list_managers(db, limit=limit, offset=offset)
+    users, total, names = await list_managers(
+        db,
+        query=q,
+        limit=limit,
+        offset=offset,
+    )
     response.headers["Cache-Control"] = "no-store"
     return ProcurementManagerPageOut(
         items=[UserSummaryOut(id=user.id, display_name=names[user.id]) for user in users],

@@ -10,16 +10,21 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.sql.base import ExecutableOption
 
 from app.core.config import Settings
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Item
 from app.modules.catalog.schemas import ItemCreate
-from app.modules.catalog.service import create_item, get_item_record, validate_item_create_payload
+from app.modules.catalog.service import (
+    create_item,
+    load_attributes_for_items,
+    load_item_create_validation_context,
+    validate_item_create_payload,
+)
 from app.modules.identity.enums import UserAccessStatus, UserRole
 from app.modules.identity.models import TelegramIdentity, User
 from app.modules.identity.policy import Capability, has_capability
@@ -105,8 +110,15 @@ class ProcurementRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class ProcurementSummaryRecord:
+    request: ProcurementRequest
+    current_revision: ProcurementRevision
+    display_names: dict[uuid.UUID, str]
+
+
+@dataclass(frozen=True, slots=True)
 class ProcurementPage:
-    items: list[ProcurementRecord]
+    items: list[ProcurementSummaryRecord]
     total: int
 
 
@@ -167,22 +179,69 @@ async def _validate_manager(db: AsyncSession, user_id: uuid.UUID) -> User:
 
 
 async def list_managers(
-    db: AsyncSession, *, limit: int, offset: int
+    db: AsyncSession,
+    *,
+    query: str | None = None,
+    limit: int,
+    offset: int,
 ) -> tuple[list[User], int, dict[uuid.UUID, str]]:
-    filters = [User.role == UserRole.MANAGER, User.access_status == UserAccessStatus.APPROVED]
-    total = int(await db.scalar(select(func.count(User.id)).where(*filters)) or 0)
+    filters = [
+        User.role == UserRole.MANAGER,
+        User.access_status == UserAccessStatus.APPROVED,
+    ]
+
+    user_query = select(User)
+    count_query = select(func.count(User.id)).select_from(User)
+
+    search = " ".join(query.split()) if query else ""
+
+    if search:
+        username_search = search.removeprefix("@") or search
+        search_pattern = f"%{search}%"
+        username_pattern = f"%{username_search}%"
+
+        identity_filter = or_(
+            TelegramIdentity.username.ilike(username_pattern),
+            TelegramIdentity.first_name.ilike(search_pattern),
+            TelegramIdentity.last_name.ilike(search_pattern),
+            func.concat_ws(
+                " ",
+                TelegramIdentity.first_name,
+                TelegramIdentity.last_name,
+            ).ilike(search_pattern),
+        )
+
+        user_query = user_query.outerjoin(
+            TelegramIdentity,
+            TelegramIdentity.user_id == User.id,
+        )
+        count_query = count_query.outerjoin(
+            TelegramIdentity,
+            TelegramIdentity.user_id == User.id,
+        )
+        filters.append(identity_filter)
+
+    total = int(await db.scalar(count_query.where(*filters)) or 0)
+
     users = list(
         (
             await db.scalars(
-                select(User)
-                .where(*filters)
-                .order_by(User.created_at, User.id)
+                user_query.where(*filters)
+                .order_by(
+                    User.created_at,
+                    User.id,
+                )
                 .limit(limit)
                 .offset(offset)
             )
         ).all()
     )
-    names = await _display_names(db, {user.id for user in users})
+
+    names = await _display_names(
+        db,
+        {user.id for user in users},
+    )
+
     return users, total, names
 
 
@@ -204,44 +263,89 @@ async def _prepare_lines(
     payloads: Sequence[ProcurementLineCreate],
     revision_id: uuid.UUID,
 ) -> list[ProcurementRevisionLine]:
+    cp04_existing_item_ids = sorted(
+        {
+            source_line.item_id
+            for source_line in payloads
+            if isinstance(
+                source_line,
+                ExistingItemLineCreate,
+            )
+        },
+        key=str,
+    )
+
+    cp04_locked_items: dict[uuid.UUID, Item] = {}
+
+    if cp04_existing_item_ids:
+        cp04_locked_rows = list(
+            (
+                await db.scalars(
+                    select(Item)
+                    .where(Item.id.in_(cp04_existing_item_ids))
+                    .options(joinedload(Item.category), joinedload(Item.manufacturer))
+                    .order_by(Item.id)
+                    .with_for_update(of=Item)
+                )
+            ).all()
+        )
+        cp04_locked_items = {item.id: item for item in cp04_locked_rows}
+
+    existing_attributes = await load_attributes_for_items(
+        db,
+        [item.id for item in cp04_locked_items.values()],
+    )
+    proposed_payloads = [
+        ItemCreate(
+            category_key=payload.category_key,
+            manufacturer_id=payload.manufacturer_id,
+            name=payload.name,
+            model=payload.model,
+            attributes=payload.attributes,
+        )
+        for payload in payloads
+        if isinstance(payload, ProposedItemLineCreate)
+    ]
+    proposed_validation = await load_item_create_validation_context(db, proposed_payloads)
+
     rows: list[ProcurementRevisionLine] = []
+    proposed_index = 0
     for line_no, payload in enumerate(payloads, 1):
         snapshot: dict[str, object]
         catalog_item_id: uuid.UUID | None
+        expected_identity_signature: str
         if isinstance(payload, ExistingItemLineCreate):
-            record = await get_item_record(db, payload.item_id)
-            if record.item.status != ItemStatus.ACTIVE:
+            item = cp04_locked_items.get(payload.item_id)
+            if item is None:
+                raise ProcurementConflictError(
+                    "catalog item not found",
+                    code="catalog_item_not_found",
+                )
+            if item.status != ItemStatus.ACTIVE:
                 raise ProcurementConflictError(
                     "archived item cannot be procured", code="catalog_item_archived"
                 )
             snapshot = {
-                "category_key": record.category.key,
-                "category_name": record.category.display_name,
+                "category_key": item.category.key,
+                "category_name": item.category.display_name,
                 "manufacturer_id": (
-                    str(record.manufacturer.id) if record.manufacturer is not None else None
+                    str(item.manufacturer.id) if item.manufacturer is not None else None
                 ),
                 "manufacturer_name": (
-                    record.manufacturer.name if record.manufacturer is not None else None
+                    item.manufacturer.name if item.manufacturer is not None else None
                 ),
-                "name": record.item.name,
-                "model": record.item.model,
+                "name": item.name,
+                "model": item.model,
                 "attributes": {
                     key: str(value) if isinstance(value, Decimal) else value
-                    for key, value in record.attributes.items()
+                    for key, value in existing_attributes[item.id].items()
                 },
             }
-            catalog_item_id = record.item.id
+            catalog_item_id = item.id
+            expected_identity_signature = item.identity_signature
         elif isinstance(payload, ProposedItemLineCreate):
-            validated = await validate_item_create_payload(
-                db,
-                ItemCreate(
-                    category_key=payload.category_key,
-                    manufacturer_id=payload.manufacturer_id,
-                    name=payload.name,
-                    model=payload.model,
-                    attributes=payload.attributes,
-                ),
-            )
+            validated = proposed_validation.validate(proposed_payloads[proposed_index])
+            proposed_index += 1
             snapshot = {
                 "category_key": validated.category.key,
                 "category_name": validated.category.display_name,
@@ -259,6 +363,7 @@ async def _prepare_lines(
                 },
             }
             catalog_item_id = None
+            expected_identity_signature = validated.identity_signature
         else:  # pragma: no cover - discriminated schema closes this branch
             raise ProcurementValidationError("unsupported procurement line")
         rows.append(
@@ -269,9 +374,11 @@ async def _prepare_lines(
                 line_type=payload.line_type,
                 catalog_item_id=catalog_item_id,
                 display_snapshot=snapshot,
+                expected_identity_signature=expected_identity_signature,
                 quantity=payload.quantity,
             )
         )
+
     return rows
 
 
@@ -341,6 +448,12 @@ async def create_request(
     actor_user_id: uuid.UUID,
     settings: Settings,
 ) -> ProcurementRecord:
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_CREATE,),
+    )
+
     request_key = _normalize_client_request_id(payload.client_request_id)
     fingerprint = _payload_fingerprint(payload)
     await _advisory_lock(db, "procurement-create", actor_user_id, request_key)
@@ -460,32 +573,70 @@ async def list_requests(
     else:
         raise ProcurementValidationError("unknown procurement view", code="view_invalid")
     total = int(await db.scalar(select(func.count(ProcurementRequest.id)).where(*filters)) or 0)
-    requests = list(
-        (
-            await db.scalars(
-                select(ProcurementRequest)
-                .where(*filters)
-                .options(*_record_options())
-                .order_by(ProcurementRequest.created_at.desc(), ProcurementRequest.id.desc())
-                .limit(limit)
-                .offset(offset)
+    rows = (
+        await db.execute(
+            select(ProcurementRequest, ProcurementRevision)
+            .join(
+                ProcurementRevision,
+                ProcurementRevision.id == ProcurementRequest.current_revision_id,
             )
+            .where(*filters)
+            .order_by(ProcurementRequest.created_at.desc(), ProcurementRequest.id.desc())
+            .limit(limit)
+            .offset(offset)
         )
-        .unique()
-        .all()
-    )
-    user_ids: set[uuid.UUID] = set()
-    for request in requests:
-        user_ids.update((request.initiator_user_id, request.assigned_manager_user_id))
-        user_ids.update(revision.submitted_by_user_id for revision in request.revisions)
-        user_ids.update(event.actor_user_id for event in request.events)
+    ).all()
+    user_ids = {
+        user_id
+        for request, _revision in rows
+        for user_id in (request.initiator_user_id, request.assigned_manager_user_id)
+    }
     names = await _display_names(db, user_ids)
     return ProcurementPage(
         items=[
-            ProcurementRecord(row, list(row.revisions), list(row.events), names) for row in requests
+            ProcurementSummaryRecord(
+                request=request,
+                current_revision=revision,
+                display_names=names,
+            )
+            for request, revision in rows
         ],
         total=total,
     )
+
+
+async def _lock_and_require_actor_capabilities(
+    db: AsyncSession,
+    *,
+    actor_user_id: uuid.UUID,
+    capabilities: tuple[Capability, ...],
+) -> None:
+    from app.modules.identity.enums import (
+        UserAccessStatus,
+    )
+    from app.modules.identity.models import User
+
+    actor = await db.scalar(
+        select(User)
+        .where(User.id == actor_user_id)
+        .with_for_update()
+        .execution_options(
+            populate_existing=True,
+        )
+    )
+
+    if (
+        actor is None
+        or actor.access_status != UserAccessStatus.APPROVED
+        or any(
+            not has_capability(
+                actor.role,
+                capability,
+            )
+            for capability in capabilities
+        )
+    ):
+        raise ProcurementForbiddenError("required procurement capability is no longer available")
 
 
 async def _lock_and_validate_expected(
@@ -553,6 +704,12 @@ async def manager_accept(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_MANAGE,),
+    )
+
     if replay is not None:
         return record
     previous = _set_status(record.request, ProcurementStatus.PURCHASING)
@@ -597,6 +754,12 @@ async def return_for_correction(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_MANAGE,),
+    )
+
     if replay is not None:
         return record
     _require_status(
@@ -649,6 +812,12 @@ async def submit_revision(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_CREATE,),
+    )
+
     if replay is not None:
         return record
     if record.request.initiator_user_id != actor_user_id:
@@ -709,6 +878,12 @@ async def _change_assignment(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_MANAGE,),
+    )
+
     if replay is not None:
         return record
     if record.request.status not in ACTIVE_PROCUREMENT_STATUSES:
@@ -799,6 +974,12 @@ async def transfer_to_acceptance(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_MANAGE,),
+    )
+
     if replay is not None:
         return record
     previous = _set_status(record.request, ProcurementStatus.AWAITING_ACCEPTANCE)
@@ -839,6 +1020,12 @@ async def bind_line(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_ACCEPT,),
+    )
+
     if replay is not None:
         return record
     if record.request.status == ProcurementStatus.COMPLETED:
@@ -864,6 +1051,12 @@ async def bind_line(
         raise ProcurementConflictError(
             "archived item cannot be bound", code="catalog_item_archived"
         )
+    if item.identity_signature != line.expected_identity_signature:
+        raise ProcurementConflictError(
+            "catalog item identity does not match approved procurement line",
+            code="item_identity_mismatch",
+        )
+
     db.add(
         ProcurementLineCatalogBinding(
             revision_line_id=line.id,
@@ -899,6 +1092,15 @@ async def create_and_bind_line(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(
+            Capability.PROCUREMENT_ACCEPT,
+            Capability.CATALOG_MANAGE,
+        ),
+    )
+
     if replay is not None:
         return record
     if record.request.status == ProcurementStatus.COMPLETED:
@@ -917,6 +1119,17 @@ async def create_and_bind_line(
         raise ProcurementValidationError("existing item line is already bound")
     if line.binding is not None:
         raise ProcurementConflictError("proposed line is already bound", code="line_already_bound")
+
+    validated_item = await validate_item_create_payload(
+        db,
+        payload.item,
+    )
+
+    if validated_item.identity_signature != line.expected_identity_signature:
+        raise ProcurementConflictError(
+            "created catalog identity does not match approved procurement line",
+            code="item_identity_mismatch",
+        )
 
     item_id = await create_item(db, payload.item)
     db.add(
@@ -955,6 +1168,12 @@ async def report_discrepancy(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_ACCEPT,),
+    )
+
     if replay is not None:
         return record
     _require_status(record.request, ProcurementStatus.AWAITING_ACCEPTANCE)
@@ -1002,9 +1221,69 @@ async def complete_acceptance(
     record, key, fingerprint, replay = await _lock_and_validate_expected(
         db, request_id, payload, actor_user_id=actor_user_id
     )
+    await _lock_and_require_actor_capabilities(
+        db,
+        actor_user_id=actor_user_id,
+        capabilities=(Capability.PROCUREMENT_ACCEPT,),
+    )
+
     if replay is not None:
         return record
     _require_status(record.request, ProcurementStatus.AWAITING_ACCEPTANCE)
+    cp04_acceptance_item_ids = sorted(
+        {
+            item_id
+            for line in record.current_revision.lines
+            if (item_id := _bound_item_id(line)) is not None
+        },
+        key=str,
+    )
+
+    cp04_acceptance_items: dict[
+        uuid.UUID,
+        Item,
+    ] = {}
+
+    if cp04_acceptance_item_ids:
+        cp04_acceptance_rows = list(
+            (
+                await db.scalars(
+                    select(Item)
+                    .where(Item.id.in_(cp04_acceptance_item_ids))
+                    .order_by(Item.id)
+                    .with_for_update()
+                )
+            ).all()
+        )
+
+        cp04_acceptance_items = {item.id: item for item in cp04_acceptance_rows}
+
+    if len(cp04_acceptance_items) != len(cp04_acceptance_item_ids):
+        raise ProcurementConflictError(
+            "catalog item no longer exists",
+            code="catalog_item_not_found",
+        )
+
+    for line in record.current_revision.lines:
+        item_id = _bound_item_id(line)
+
+        if item_id is None:
+            continue
+
+        item = cp04_acceptance_items[item_id]
+
+        if item.status != ItemStatus.ACTIVE:
+            raise ProcurementConflictError(
+                "archived item cannot be accepted",
+                code="catalog_item_archived",
+            )
+
+        if item.identity_signature != line.expected_identity_signature:
+            raise ProcurementConflictError(
+                "catalog item identity changed after procurement approval",
+                code="item_identity_mismatch",
+            )
+
     quantities: defaultdict[uuid.UUID, int] = defaultdict(int)
     for line in record.current_revision.lines:
         item_id = _bound_item_id(line)

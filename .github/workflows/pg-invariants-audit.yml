@@ -5,6 +5,7 @@ on:
     paths:
       - "backend/migrations/versions/**"
       - "backend/tests/test_e5_procurement_invariants_postgres.py"
+      - "backend/tests/test_cp02_identity_db_invariants.py"
       - ".github/workflows/pg-invariants-audit.yml"
   workflow_dispatch:
 
@@ -54,6 +55,9 @@ jobs:
           alembic upgrade head
           alembic check
           alembic current
-      - name: Execute procurement and invariant PostgreSQL regressions
+      - name: Execute procurement and identity PostgreSQL regressions
         working-directory: backend
-        run: pytest -q tests/test_e5_procurement_invariants_postgres.py tests/test_procurement_postgres.py
+        run: |
+          pytest -q tests/test_e5_procurement_invariants_postgres.py \
+            tests/test_cp02_identity_db_invariants.py \
+            tests/test_procurement_postgres.py

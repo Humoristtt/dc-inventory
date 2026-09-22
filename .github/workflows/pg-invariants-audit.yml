@@ -4,10 +4,12 @@ on:
   pull_request:
     paths:
       - "backend/migrations/versions/**"
+      - "backend/app/modules/catalog/normalization.py"
       - "backend/tests/test_e5_procurement_invariants_postgres.py"
       - "backend/tests/test_cp02_identity_db_invariants.py"
       - "backend/tests/test_f6_existing_owner_upgrade_postgres.py"
       - "backend/tests/test_f7_catalog_custody_postgres.py"
+      - "backend/tests/test_f8_catalog_identity_postgres.py"
       - ".github/workflows/pg-invariants-audit.yml"
   workflow_dispatch:
 
@@ -64,4 +66,5 @@ jobs:
             tests/test_cp02_identity_db_invariants.py \
             tests/test_f6_existing_owner_upgrade_postgres.py \
             tests/test_f7_catalog_custody_postgres.py \
+            tests/test_f8_catalog_identity_postgres.py \
             tests/test_procurement_postgres.py

@@ -91,49 +91,41 @@
   line-height: 1;
 }
 
-/* On wide screens the mobile bottom dock must not cover the catalog. Put
- * navigation into normal document flow above the header, with a sticky top
- * position. The branded cards, typography and header remain unchanged.
+/* Desktop retains a bottom navigation, not a detached floating dock or a
+ * toolbar above the header. The dark footer spans the viewport, while links
+ * remain centered. Content already reserves its height for the last row.
  */
 @media (min-width: 1200px) {
-  .app-shell {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .app-shell__content {
-    order: 1;
-    flex: 1 0 auto;
-  }
-
   .bottom-nav {
-    position: sticky;
-    top: 0;
-    right: auto;
-    bottom: auto;
-    left: auto;
-    order: 0;
-    width: min(100%, var(--app-shell-width));
-    margin-inline: auto;
-    padding: 0 max(var(--safe-area-right), var(--page-inline))
-      0 max(var(--safe-area-left), var(--page-inline));
-    background: #0d0c09;
+    position: fixed;
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    margin: 0;
+    padding:
+      0 max(var(--safe-area-right), var(--page-inline))
+      var(--safe-area-bottom)
+      max(var(--safe-area-left), var(--page-inline));
+    border-top: 1px solid rgb(255 255 255 / 12%);
+    background: rgb(0 0 0 / 96%);
     pointer-events: auto;
   }
 
   .bottom-nav__inner {
-    display: flex;
-    width: min(100%, 860px);
-    min-height: 56px;
-    margin-right: 0;
-    margin-left: auto;
-    border-radius: 0 0 16px 16px;
-    box-shadow: 0 8px 22px rgb(0 0 0 / 14%);
+    display: grid;
+    width: min(100%, 960px);
+    min-height: var(--bottom-nav-height);
+    margin: 0 auto;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    box-shadow: none;
   }
 
   .bottom-nav__item {
-    flex: 1 1 0;
-    min-height: 56px;
+    min-height: var(--bottom-nav-height);
     flex-direction: row;
     gap: 9px;
     font-size: 13px;

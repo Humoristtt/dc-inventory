@@ -33,6 +33,22 @@ def normalize_reach(value: str) -> int:
     return int(max(metres))
 
 
+def decimal_identity_text(value: Decimal) -> str:
+    """Return an exact context-independent decimal identity string."""
+    if not value.is_finite():
+        raise ValueError("decimal identity requires a finite value")
+
+    result = format(value, "f")
+
+    if "." in result:
+        result = result.rstrip("0").rstrip(".")
+
+    if result in {"", "-0"}:
+        return "0"
+
+    return result
+
+
 def item_signature(
     category_key: str,
     manufacturer: str | None,
@@ -43,7 +59,7 @@ def item_signature(
         key: (
             identity_text(value)
             if isinstance(value, str)
-            else str(value.normalize())
+            else decimal_identity_text(value)
             if isinstance(value, Decimal)
             else value
         )

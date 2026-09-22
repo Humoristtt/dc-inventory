@@ -10,6 +10,12 @@ on:
       - "backend/tests/test_f6_existing_owner_upgrade_postgres.py"
       - "backend/tests/test_f7_catalog_custody_postgres.py"
       - "backend/tests/test_f8_catalog_identity_postgres.py"
+      - "backend/tests/test_cp04_historical_migration_postgres.py"
+      - "backend/tests/test_a9_negative_migration_postgres.py"
+      - "backend/tests/test_a9_procurement_binding_postgres.py"
+      - "backend/tests/test_warehouse_migration_postgres.py"
+      - "backend/app/modules/procurement/models.py"
+      - "backend/app/modules/procurement/service.py"
       - ".github/workflows/pg-invariants-audit.yml"
   workflow_dispatch:
 
@@ -67,4 +73,7 @@ jobs:
             tests/test_f6_existing_owner_upgrade_postgres.py \
             tests/test_f7_catalog_custody_postgres.py \
             tests/test_f8_catalog_identity_postgres.py \
-            tests/test_procurement_postgres.py
+            tests/test_procurement_postgres.py \
+            tests/test_cp04_historical_migration_postgres.py \
+            tests/test_a9_negative_migration_postgres.py \
+            tests/test_a9_procurement_binding_postgres.py

@@ -195,6 +195,10 @@ class ProcurementRevisionLine(Base):
             "(line_type = 'PROPOSED_ITEM' AND catalog_item_id IS NULL)",
             name="catalog_item_shape",
         ),
+        CheckConstraint(
+            "expected_identity_signature ~ '^[0-9a-f]{64}$'",
+            name="expected_identity_sig_len",
+        ),
         Index("ix_procurement_revision_lines_revision", "revision_id", "line_no"),
         Index("ix_procurement_revision_lines_catalog_item", "catalog_item_id"),
     )
@@ -221,6 +225,7 @@ class ProcurementRevisionLine(Base):
         Uuid(as_uuid=True), ForeignKey("items.id", ondelete="RESTRICT")
     )
     display_snapshot: Mapped[dict[str, Any]] = mapped_column(JSONB, nullable=False)
+    expected_identity_signature: Mapped[str] = mapped_column(String(64), nullable=False)
     quantity: Mapped[int] = mapped_column(BigInteger, nullable=False)
 
     revision: Mapped[ProcurementRevision] = relationship(back_populates="lines")

@@ -18,6 +18,7 @@ from sqlalchemy.sql.base import ExecutableOption
 from app.core.config import Settings
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Item
+from app.modules.catalog.normalization import item_signature
 from app.modules.catalog.schemas import ItemCreate
 from app.modules.catalog.service import create_item, get_item_record, validate_item_create_payload
 from app.modules.identity.enums import UserAccessStatus, UserRole
@@ -204,10 +205,26 @@ async def _prepare_lines(
     payloads: Sequence[ProcurementLineCreate],
     revision_id: uuid.UUID,
 ) -> list[ProcurementRevisionLine]:
+    # Prevent a concurrent catalog update between the Item read and its EAV snapshot.
+    existing_item_ids = {
+        payload.item_id for payload in payloads if isinstance(payload, ExistingItemLineCreate)
+    }
+    if existing_item_ids:
+        (
+            await db.scalars(
+                select(Item)
+                .where(Item.id.in_(existing_item_ids))
+                .order_by(Item.id)
+                .with_for_update()
+                .execution_options(populate_existing=True)
+            )
+        ).all()
+
     rows: list[ProcurementRevisionLine] = []
     for line_no, payload in enumerate(payloads, 1):
         snapshot: dict[str, object]
         catalog_item_id: uuid.UUID | None
+        expected_identity_signature: str
         if isinstance(payload, ExistingItemLineCreate):
             record = await get_item_record(db, payload.item_id)
             if record.item.status != ItemStatus.ACTIVE:
@@ -231,6 +248,7 @@ async def _prepare_lines(
                 },
             }
             catalog_item_id = record.item.id
+            expected_identity_signature = record.item.identity_signature
         elif isinstance(payload, ProposedItemLineCreate):
             validated = await validate_item_create_payload(
                 db,
@@ -259,6 +277,12 @@ async def _prepare_lines(
                 },
             }
             catalog_item_id = None
+            expected_identity_signature = item_signature(
+                validated.category.key,
+                validated.manufacturer.name if validated.manufacturer is not None else None,
+                validated.model,
+                validated.attributes,
+            )
         else:  # pragma: no cover - discriminated schema closes this branch
             raise ProcurementValidationError("unsupported procurement line")
         rows.append(
@@ -269,6 +293,7 @@ async def _prepare_lines(
                 line_type=payload.line_type,
                 catalog_item_id=catalog_item_id,
                 display_snapshot=snapshot,
+                expected_identity_signature=expected_identity_signature,
                 quantity=payload.quantity,
             )
         )
@@ -864,6 +889,11 @@ async def bind_line(
         raise ProcurementConflictError(
             "archived item cannot be bound", code="catalog_item_archived"
         )
+    if item.identity_signature != line.expected_identity_signature:
+        raise ProcurementConflictError(
+            "catalog item identity does not match approved procurement line",
+            code="item_identity_mismatch",
+        )
     db.add(
         ProcurementLineCatalogBinding(
             revision_line_id=line.id,
@@ -919,6 +949,12 @@ async def create_and_bind_line(
         raise ProcurementConflictError("proposed line is already bound", code="line_already_bound")
 
     item_id = await create_item(db, payload.item)
+    item = await db.get(Item, item_id)
+    if item is None or item.identity_signature != line.expected_identity_signature:
+        raise ProcurementConflictError(
+            "created item identity does not match approved procurement line",
+            code="item_identity_mismatch",
+        )
     db.add(
         ProcurementLineCatalogBinding(
             revision_line_id=line.id,
@@ -1015,6 +1051,26 @@ async def complete_acceptance(
         quantities[item_id] += line.quantity
         if quantities[item_id] > 2**53 - 1:
             raise ProcurementValidationError("aggregated item quantity is too large")
+
+    # Lock in a stable order and enforce the original approved identity at receipt.
+    catalog_items = (
+        await db.scalars(
+            select(Item)
+            .where(Item.id.in_(quantities))
+            .order_by(Item.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+    ).all()
+    signatures = {item.id: item.identity_signature for item in catalog_items}
+    for line in record.current_revision.lines:
+        item_id = _bound_item_id(line)
+        if item_id is None or signatures.get(item_id) != line.expected_identity_signature:
+            raise ProcurementConflictError(
+                "catalog item identity no longer matches approved procurement line",
+                code="item_identity_mismatch",
+            )
+
     movement = await create_movement(
         db,
         MovementCreate(

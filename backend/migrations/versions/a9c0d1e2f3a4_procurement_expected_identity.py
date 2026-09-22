@@ -18,11 +18,7 @@ depends_on = None
 def upgrade() -> None:
     op.add_column(
         "procurement_revision_lines",
-        sa.Column(
-            "expected_identity_signature",
-            sa.String(length=64),
-            nullable=True,
-        ),
+        sa.Column("expected_identity_signature", sa.String(length=64), nullable=True),
     )
     op.execute(
         """
@@ -31,30 +27,19 @@ def upgrade() -> None:
         """
     )
 
+    # The update of historical immutable rows is migration-only and remains
+    # within PostgreSQL's transactional DDL. A failed backfill restores the
+    # original trigger state and drops the newly added column on rollback.
     op.execute(
         """
         ALTER TABLE procurement_revision_lines
-        DISABLE TRIGGER
-        trg_procurement_revision_lines_append_only
+        DISABLE TRIGGER trg_procurement_revision_lines_append_only
         """
     )
 
-    op.execute(
-        """
-        UPDATE procurement_revision_lines
-        SET expected_identity_signature =
-            display_snapshot ->> 'identity_signature'
-        WHERE expected_identity_signature IS NULL
-          AND display_snapshot ? 'identity_signature'
-          AND char_length(
-              display_snapshot ->> 'identity_signature'
-          ) = 64
-          AND (
-              display_snapshot ->> 'identity_signature'
-          ) ~ '^[0-9a-f]{64}$'
-        """
-    )
-
+    # Never trust a digest embedded in a historical display_snapshot by itself.
+    # Reconstruct every signature from independently validated snapshot fields,
+    # then reject missing or contradictory embedded digests below.
     op.execute(
         """
         WITH snapshot_lines AS (
@@ -65,12 +50,8 @@ def upgrade() -> None:
                 category.key AS category_key
             FROM procurement_revision_lines AS line
             JOIN categories AS category
-              ON category.key =
-                 line.display_snapshot ->> 'category_key'
-            WHERE line.expected_identity_signature IS NULL
-              AND jsonb_typeof(
-                  line.display_snapshot -> 'attributes'
-              ) = 'object'
+              ON category.key = line.display_snapshot ->> 'category_key'
+            WHERE jsonb_typeof(line.display_snapshot -> 'attributes') = 'object'
         ),
         attribute_parts AS (
             SELECT
@@ -79,16 +60,11 @@ def upgrade() -> None:
                 count(attribute.id) AS known_count,
                 bool_and(
                     CASE attribute.data_type
-                        WHEN 'TEXT'
-                            THEN jsonb_typeof(entry.value) = 'string'
-                        WHEN 'ENUM'
-                            THEN jsonb_typeof(entry.value) = 'string'
-                        WHEN 'INTEGER'
-                            THEN jsonb_typeof(entry.value) = 'number'
-                        WHEN 'DECIMAL'
-                            THEN jsonb_typeof(entry.value) = 'string'
-                        WHEN 'BOOLEAN'
-                            THEN jsonb_typeof(entry.value) = 'boolean'
+                        WHEN 'TEXT' THEN jsonb_typeof(entry.value) = 'string'
+                        WHEN 'ENUM' THEN jsonb_typeof(entry.value) = 'string'
+                        WHEN 'INTEGER' THEN jsonb_typeof(entry.value) = 'number'
+                        WHEN 'DECIMAL' THEN jsonb_typeof(entry.value) = 'string'
+                        WHEN 'BOOLEAN' THEN jsonb_typeof(entry.value) = 'boolean'
                         ELSE false
                     END
                 ) AS valid_values,
@@ -97,50 +73,32 @@ def upgrade() -> None:
                     || ':'
                     || CASE attribute.data_type
                         WHEN 'TEXT' THEN
-                            CASE
-                                WHEN jsonb_typeof(entry.value) = 'string'
+                            CASE WHEN jsonb_typeof(entry.value) = 'string'
                                 THEN to_json(
-                                    catalog_identity_text(
-                                        entry.value #>> '{}'
-                                    )
+                                    catalog_identity_text(entry.value #>> '{}')
                                 )::text
                             END
                         WHEN 'ENUM' THEN
-                            CASE
-                                WHEN jsonb_typeof(entry.value) = 'string'
+                            CASE WHEN jsonb_typeof(entry.value) = 'string'
                                 THEN to_json(
-                                    catalog_identity_text(
-                                        entry.value #>> '{}'
-                                    )
+                                    catalog_identity_text(entry.value #>> '{}')
                                 )::text
                             END
                         WHEN 'INTEGER' THEN
-                            CASE
-                                WHEN jsonb_typeof(entry.value) = 'number'
-                                THEN (
-                                    (
-                                        entry.value #>> '{}'
-                                    )::bigint
-                                )::text
+                            CASE WHEN jsonb_typeof(entry.value) = 'number'
+                                THEN ((entry.value #>> '{}')::bigint)::text
                             END
                         WHEN 'DECIMAL' THEN
-                            CASE
-                                WHEN jsonb_typeof(entry.value) = 'string'
+                            CASE WHEN jsonb_typeof(entry.value) = 'string'
                                 THEN to_json(
                                     catalog_decimal_identity(
-                                        (
-                                            entry.value #>> '{}'
-                                        )::numeric
+                                        (entry.value #>> '{}')::numeric
                                     )
                                 )::text
                             END
                         WHEN 'BOOLEAN' THEN
-                            CASE
-                                WHEN jsonb_typeof(entry.value) = 'boolean'
-                                THEN CASE
-                                    WHEN (
-                                        entry.value #>> '{}'
-                                    )::boolean
+                            CASE WHEN jsonb_typeof(entry.value) = 'boolean'
+                                THEN CASE WHEN (entry.value #>> '{}')::boolean
                                     THEN 'true'
                                     ELSE 'false'
                                 END
@@ -165,15 +123,12 @@ def upgrade() -> None:
                     sha256(
                         convert_to(
                             '['
-                            || to_json(
-                                snapshot.category_key
-                            )::text
+                            || to_json(snapshot.category_key)::text
                             || ','
                             || to_json(
                                 catalog_identity_text(
                                     coalesce(
-                                        snapshot.display_snapshot
-                                            ->> 'manufacturer_name',
+                                        snapshot.display_snapshot ->> 'manufacturer_name',
                                         ''
                                     )
                                 )
@@ -181,18 +136,11 @@ def upgrade() -> None:
                             || ','
                             || to_json(
                                 catalog_identity_text(
-                                    coalesce(
-                                        snapshot.display_snapshot
-                                            ->> 'model',
-                                        ''
-                                    )
+                                    coalesce(snapshot.display_snapshot ->> 'model', '')
                                 )
                             )::text
                             || ',{'
-                            || coalesce(
-                                parts.attributes_json,
-                                ''
-                            )
+                            || coalesce(parts.attributes_json, '')
                             || '}]',
                             'UTF8'
                         )
@@ -202,29 +150,18 @@ def upgrade() -> None:
             FROM snapshot_lines AS snapshot
             LEFT JOIN attribute_parts AS parts
               ON parts.line_id = snapshot.line_id
-            WHERE coalesce(
-                parts.supplied_count,
-                0
-            ) = coalesce(
-                parts.known_count,
-                0
-            )
-              AND coalesce(
-                  parts.valid_values,
-                  true
-              )
+            WHERE coalesce(parts.supplied_count, 0) =
+                  coalesce(parts.known_count, 0)
+              AND coalesce(parts.valid_values, true)
         )
         UPDATE procurement_revision_lines AS line
-        SET expected_identity_signature =
-            reconstructed.identity_signature
+        SET expected_identity_signature = reconstructed.identity_signature
         FROM reconstructed
         WHERE reconstructed.line_id = line.id
-          AND line.expected_identity_signature IS NULL
         """
     )
 
     connection = op.get_bind()
-
     unresolved = int(
         connection.execute(
             sa.text(
@@ -232,6 +169,15 @@ def upgrade() -> None:
                 SELECT count(*)
                 FROM procurement_revision_lines
                 WHERE expected_identity_signature IS NULL
+                   OR (
+                       display_snapshot ? 'identity_signature'
+                       AND (
+                           jsonb_typeof(display_snapshot -> 'identity_signature')
+                               IS DISTINCT FROM 'string'
+                           OR display_snapshot ->> 'identity_signature'
+                               IS DISTINCT FROM expected_identity_signature
+                       )
+                   )
                 """
             )
         ).scalar_one()
@@ -252,7 +198,6 @@ def upgrade() -> None:
         existing_type=sa.String(length=64),
         nullable=False,
     )
-
     op.create_check_constraint(
         op.f("ck_procurement_revision_lines_expected_identity_sig_len"),
         "procurement_revision_lines",
@@ -261,8 +206,7 @@ def upgrade() -> None:
     op.execute(
         """
         ALTER TABLE procurement_revision_lines
-        ENABLE TRIGGER
-        trg_procurement_revision_lines_append_only
+        ENABLE TRIGGER trg_procurement_revision_lines_append_only
         """
     )
 
@@ -273,8 +217,4 @@ def downgrade() -> None:
         "procurement_revision_lines",
         type_="check",
     )
-
-    op.drop_column(
-        "procurement_revision_lines",
-        "expected_identity_signature",
-    )
+    op.drop_column("procurement_revision_lines", "expected_identity_signature")

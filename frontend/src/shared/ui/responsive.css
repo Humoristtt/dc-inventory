@@ -61,3 +61,44 @@
     margin-top: 12px;
   }
 }
+
+/* An empty back slot must not reserve the grid's first column and gap.
+ * Keep the slot in the DOM for the shared PageHeader structure, but lay out
+ * the title on the same inline edge as its search field and the page body.
+ */
+.ds-page-header__heading-row--no-back {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "title actions";
+}
+
+.ds-page-header__heading-row--no-back .ds-page-header__back-slot,
+.ds-page-header__heading-row--no-actions .ds-page-header__actions {
+  display: none;
+}
+
+.ds-page-header__heading-row--no-back.ds-page-header__heading-row--no-actions {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "title";
+}
+
+.ds-page-header__heading-row--no-actions:not(.ds-page-header__heading-row--no-back) {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "back title";
+}
+
+@media (max-width: 679px) {
+  .ds-page-header__heading-row--no-back:not(.ds-page-header__heading-row--no-actions) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "title" "actions";
+  }
+}
+
+/* Feature bodies use --page-inline at desktop sizes. The PageHeader previously
+ * forced 34px instead of the shared token, offsetting the entire header by 6px.
+ */
+@media (min-width: 1100px) {
+  .ds-page-header {
+    padding-right: max(var(--page-inline), var(--safe-area-right));
+    padding-left: max(var(--page-inline), var(--safe-area-left));
+  }
+}

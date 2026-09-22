@@ -73,3 +73,11 @@ jobs:
             tests/test_cp04_historical_migration_postgres.py \
             tests/test_a9_invalid_historical_snapshot_postgres.py \
             tests/test_procurement_postgres.py
+      - name: SFP destructive downgrade safety
+        working-directory: backend
+        env:
+          RUN_SFP_DOWNGRADE_POSTGRES: "1"
+        run: pytest -q tests/test_sfp_migration_downgrade_postgres.py
+      - name: Complete backend suite independent of documentation freshness
+        working-directory: backend
+        run: pytest -q

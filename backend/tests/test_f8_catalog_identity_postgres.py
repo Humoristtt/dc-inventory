@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from decimal import Decimal
 
 import pytest
@@ -63,7 +64,7 @@ async def test_f8_nfkc_identity_normalization_matches_postgres(
     assert actual == identity_text(raw) == "foo strasse"
 
 
-async def _assert_signatures_match(db: AsyncSession, item_id: object) -> None:
+async def _assert_signatures_match(db: AsyncSession, item_id: uuid.UUID) -> None:
     record = await get_item_record(db, item_id)
     expected = item_signature(
         record.category.key,

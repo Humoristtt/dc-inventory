@@ -26,6 +26,10 @@ import {
   preloadApplicationRoutes,
 } from "./routeModules";
 import "../features/catalog/catalog.css";
+import "../features/catalog/catalog-responsive.css";
+import "../features/inventory/inventory-responsive.css";
+import "../features/admin/access-admin-responsive.css";
+import "../features/procurement/procurement-responsive.css";
 
 const CategoryPage = lazy(loadCategoryPage);
 const CatalogLandingPage = lazy(loadCatalogLandingPage);

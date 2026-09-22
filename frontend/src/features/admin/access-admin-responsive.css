@@ -1,0 +1,320 @@
+/* Responsive composition for the More and user administration pages. */
+.more-page__body,
+.admin-users-page__body {
+  container-type: inline-size;
+}
+
+@container (max-width: 519px) {
+  .more-page__body .more-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (min-width: 520px) {
+  .more-page__body .more-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 759px) {
+  .admin-users-page__body .admin-users__filters {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
+}
+
+@container (min-width: 760px) {
+  .admin-users-page__body .admin-users__filters {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+    align-items: end;
+  }
+}
+
+/* Make the main administration list a collection of manageable objects,
+ * rather than one extremely wide blank card per row on desktop. */
+.admin-users-page__body .admin-users__list {
+  gap: 16px;
+}
+
+@container (min-width: 1180px) {
+  .admin-users-page__body .admin-users__list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: stretch;
+  }
+}
+
+.admin-users-page__body .admin-user-card {
+  min-width: 0;
+  align-content: start;
+  gap: 16px;
+  padding: clamp(18px, 2vw, 26px);
+  border: 1px solid #e2ddd0;
+  border-radius: var(--radius-card);
+  background: linear-gradient(155deg, #fffefa 0%, #fff 70%);
+  box-shadow: 0 8px 26px rgb(34 21 0 / 5%);
+}
+
+.admin-users-page__body .admin-user-card__heading {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 13px;
+}
+
+/* A brand-colored identity glyph, not a misleading portrait or fake initials. */
+.admin-users-page__body .admin-user-card__heading::before {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 15px;
+  background: #13110d;
+  color: var(--color-acid);
+  content: "@";
+  font-size: 24px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.admin-users-page__body .admin-user-card__heading > div {
+  min-width: 0;
+}
+
+.admin-users-page__body .admin-user-card h2 {
+  margin: 0;
+  font-size: clamp(17px, 1.25vw, 21px);
+  font-weight: 790;
+  letter-spacing: -0.035em;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.admin-users-page__body .admin-user-card__heading p {
+  margin: 6px 0 0;
+  color: #70695d;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.admin-users-page__body .admin-user-card__status {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 13px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.2;
+  text-align: center;
+  white-space: normal;
+}
+
+.admin-users-page__body .admin-user-card__status::before {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 7px;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
+
+.admin-users-page__body .admin-user-card__status--approved {
+  border-color: #cceac5;
+  background: #eaf7e2;
+  color: #29542a;
+}
+
+.admin-users-page__body .admin-user-card__status--blocked {
+  border-color: #e7d6cd;
+  background: #f5ece6;
+  color: #70483b;
+}
+
+.admin-users-page__body .admin-user-card__status--rejected {
+  border-color: #e6d2cc;
+  background: #f8efeb;
+  color: #794d42;
+}
+
+.admin-users-page__body .admin-user-card__status--pending {
+  border-color: #ebdda5;
+  background: #fff5d3;
+  color: #6b5413;
+}
+
+.admin-users-page__body .admin-user-card__meta {
+  display: block;
+  min-width: 0;
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid #f0ebdf;
+  border-radius: 12px;
+  background: #f8f6ef;
+  color: #4c463d;
+  font-size: 14px;
+  font-weight: 610;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+/* Retain native select keyboard, accessibility and OS picker behavior;
+ * style its closed appearance to match the existing form design system. */
+.admin-users-page__body .admin-user-card > label {
+  display: grid;
+  min-width: 0;
+  gap: 9px;
+  color: #5a5348;
+  font-size: 12px;
+  font-weight: 760;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.admin-users-page__body .admin-user-card > label select {
+  width: min(100%, 390px);
+  min-width: 0;
+  min-height: var(--form-control-height);
+  padding: 0 45px 0 16px;
+  appearance: none;
+  border: 1px solid #d8d2c4;
+  border-radius: var(--form-control-radius);
+  outline-offset: 3px;
+  background-color: #fff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7 5 5 5-5' stroke='%23201c16' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 15px center;
+  background-size: 18px;
+  box-shadow: 0 2px 6px rgb(26 17 0 / 3%);
+  color: var(--color-ink);
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: normal;
+  line-height: 1.3;
+  text-transform: none;
+}
+
+.admin-users-page__body .admin-user-card > label select:hover:not(:disabled) {
+  border-color: #a99c7e;
+}
+
+.admin-users-page__body .admin-user-card > label select:focus-visible {
+  border-color: var(--color-brand-primary);
+  outline: 2px solid rgb(254 170 19 / 55%);
+}
+
+.admin-users-page__body .admin-user-card > label select:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.admin-users-page__body .admin-user-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid #ece6d9;
+}
+
+.admin-users-page__body .admin-user-card__actions > .button {
+  min-height: 48px;
+  padding-inline: 17px;
+  border-radius: 13px;
+  font-size: 14px;
+  font-weight: 740;
+}
+
+/* Blocking/rejection requires confirmation but should not look like a
+ * destructive database wipe. The existing behavior and confirmation remain. */
+.admin-users-page__body .admin-user-card__actions > .button--danger {
+  border-color: #dbc0b3;
+  background: #fbf1ea;
+  color: #714334;
+}
+
+.admin-users-page__body .admin-user-card__actions > .button--danger:hover:not(:disabled) {
+  border-color: #b68a78;
+  background: #f5e5db;
+}
+
+.admin-users-page__body .admin-user-card__actions > .button--ghost {
+  border-color: #ded8ca;
+  background: #fff;
+  color: var(--color-ink);
+}
+
+.admin-users-page__body .admin-user-card__actions > .button--ghost:hover:not(:disabled) {
+  border-color: #b8a98c;
+  background: #faf7ef;
+}
+
+.admin-users-page__body .admin-user-history {
+  min-width: 0;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid #e9e2d4;
+  border-radius: 14px;
+  background: #faf8f2;
+}
+
+.admin-users-page__body .admin-user-history__event {
+  padding: 12px 14px;
+  border: 1px solid #ede6d9;
+  border-radius: 11px;
+  background: #fff;
+}
+
+.admin-users-page__body .admin-user-history__event strong {
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.admin-users-page__body .admin-user-history__event span {
+  color: #61594e;
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+@container (max-width: 560px) {
+  .admin-users-page__body .admin-user-card__heading {
+    grid-template-columns: 44px minmax(0, 1fr);
+    align-items: start;
+  }
+
+  .admin-users-page__body .admin-user-card__heading::before {
+    width: 44px;
+    height: 44px;
+  }
+
+  .admin-users-page__body .admin-user-card__status {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .admin-users-page__body .admin-user-card > label select {
+    width: 100%;
+  }
+
+  .admin-users-page__body .admin-user-card__actions > .button {
+    flex: 1 1 min(100%, 148px);
+  }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .admin-users-page__body .admin-user-card {
+    transition: border-color 160ms ease, box-shadow 160ms ease;
+  }
+
+  .admin-users-page__body .admin-user-card:hover {
+    border-color: #d3c5a7;
+    box-shadow: 0 12px 32px rgb(34 21 0 / 8%);
+  }
+}

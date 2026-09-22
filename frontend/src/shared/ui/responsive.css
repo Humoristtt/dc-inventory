@@ -1,0 +1,104 @@
+/* Responsive extension of shared UI primitives. Feature layout is owned by
+ * feature stylesheets; this file only adapts the reusable PageHeader/control.
+ */
+
+@media (pointer: coarse) {
+  .icon-button {
+    width: 48px;
+    height: 48px;
+    flex-basis: 48px;
+  }
+
+  .ds-page-header__toolbar > button {
+    min-height: 48px;
+  }
+}
+
+@media (max-width: 520px) {
+  /* The toolbar's sole button is the optional fullscreen action. Its aria-label
+   * and title remain available when its visible text is hidden.
+   */
+  .ds-page-header__toolbar > button {
+    width: 44px;
+    min-width: 44px;
+    padding-inline: 0;
+  }
+
+  .ds-page-header__toolbar > button span {
+    display: none;
+  }
+
+  .ds-page-header__toolbar {
+    gap: 8px;
+  }
+
+  .ds-page-header__actions {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 359px) {
+  .ds-page-header__heading-row {
+    column-gap: 8px;
+  }
+
+  .ds-page-header__title h1 {
+    font-size: clamp(30px, 9vw, 52px);
+  }
+}
+
+@media (max-height: 540px) and (pointer: fine) {
+  .ds-page-header {
+    padding-top: calc(var(--safe-area-top) + 12px);
+    padding-bottom: 16px;
+  }
+
+  .ds-page-header__heading-row {
+    margin-top: 16px;
+  }
+
+  .ds-page-header__content {
+    margin-top: 12px;
+  }
+}
+
+/* An empty back slot must not reserve the grid's first column and gap.
+ * Keep the slot in the DOM for the shared PageHeader structure, but lay out
+ * the title on the same inline edge as its search field and the page body.
+ */
+.ds-page-header__heading-row--no-back {
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "title actions";
+}
+
+.ds-page-header__heading-row--no-back .ds-page-header__back-slot,
+.ds-page-header__heading-row--no-actions .ds-page-header__actions {
+  display: none;
+}
+
+.ds-page-header__heading-row--no-back.ds-page-header__heading-row--no-actions {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas: "title";
+}
+
+.ds-page-header__heading-row--no-actions:not(.ds-page-header__heading-row--no-back) {
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "back title";
+}
+
+@media (max-width: 679px) {
+  .ds-page-header__heading-row--no-back:not(.ds-page-header__heading-row--no-actions) {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas: "title" "actions";
+  }
+}
+
+/* Feature bodies use --page-inline at desktop sizes. The PageHeader previously
+ * forced 34px instead of the shared token, offsetting the entire header by 6px.
+ */
+@media (min-width: 1100px) {
+  .ds-page-header {
+    padding-right: max(var(--page-inline), var(--safe-area-right));
+    padding-left: max(var(--page-inline), var(--safe-area-left));
+  }
+}

@@ -1,0 +1,65 @@
+/* Active inventory pages reuse the catalog content container. Movement filters
+ * respond to that actual container, not the physical display size.
+ */
+@container (max-width: 639px) {
+  .catalog-page__body .history-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@container (min-width: 640px) {
+  .catalog-page__body .history-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 679px) {
+  /* Safe fallback on clients without container-query support. */
+  .app-shell .history-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.movement-entry,
+.movement-entry header {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.catalog-page .position-list span,
+.catalog-page .position-list small,
+.catalog-page .position-list strong,
+.catalog-page .inventory-list-empty,
+.catalog-page .inventory-empty p {
+  font-size: var(--font-meta);
+  line-height: 1.4;
+}
+
+/* The editor must remain fully usable with a short Telegram window. */
+.location-editor-backdrop .location-editor {
+  min-height: 0;
+  max-height: calc(
+    100dvh - var(--safe-area-top) - var(--safe-area-bottom) - 12px
+  );
+}
+
+@media (min-width: 680px) {
+  .location-editor-backdrop .location-editor {
+    max-height: min(
+      calc(100dvh - var(--safe-area-top) - var(--safe-area-bottom) - 48px),
+      760px
+    );
+  }
+}
+
+@media (max-width: 359px) {
+  .warehouse-actions > .button {
+    flex: 1 1 100%;
+  }
+}
+
+@media (pointer: coarse) {
+  .position-list li {
+    min-height: 44px;
+  }
+}

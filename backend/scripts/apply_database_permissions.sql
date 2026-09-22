@@ -290,6 +290,15 @@ SELECT format(
 \gexec
 
 
+-- Account reset can detach identities and remove pending access requests.
+-- Immutable users/audit/warehouse/procurement rows remain undeletable.
+SELECT format(
+    'GRANT DELETE ON TABLE telegram_identities, access_requests TO %I',
+    :'runtime_user'
+)
+\gexec
+
+
 -- Administrative user lifecycle and role history are append-only.
 SELECT format(
     'GRANT SELECT, INSERT ON TABLE user_access_events, user_role_events TO %I',

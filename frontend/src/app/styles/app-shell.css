@@ -91,9 +91,11 @@
   line-height: 1;
 }
 
-/* On wide screens the footer owns a separate viewport row. Only the content
- * scrolls, ending above the navigation instead of sliding behind it. The
- * mobile shell remains unchanged and continues to use the document scroll.
+/* Telegram Desktop's native back/close controls occupy the top corners.
+ * Keep the scroll viewport below that chrome so a scrolled search field cannot
+ * sit underneath native buttons. The footer occupies its own row below the
+ * scroll viewport, preventing equipment cards from sliding behind the menu.
+ * Narrow/mobile layouts retain their original document scrolling.
  */
 @media (min-width: 1200px) {
   .app-shell {
@@ -102,6 +104,7 @@
     min-height: 0;
     flex-direction: column;
     overflow: hidden;
+    padding-top: max(48px, var(--safe-area-top));
   }
 
   .app-shell__content {

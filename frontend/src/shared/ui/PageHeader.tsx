@@ -28,6 +28,12 @@ export function PageHeader({
   onBack,
   title,
 }: PageHeaderProps) {
+  const headingRowClasses = [
+    "ds-page-header__heading-row",
+    !onBack && "ds-page-header__heading-row--no-back",
+    !actions && "ds-page-header__heading-row--no-actions",
+  ].filter(Boolean).join(" ");
+
   return (
     <header
       className="ds-page-header"
@@ -42,7 +48,7 @@ export function PageHeader({
         <TelegramFullscreenButton />
       </div>
 
-      <div className="ds-page-header__heading-row">
+      <div className={headingRowClasses}>
         <div className="ds-page-header__back-slot">
           {onBack ? (
             <button

@@ -12,6 +12,7 @@ on:
       - "backend/tests/test_f7_catalog_custody_postgres.py"
       - "backend/tests/test_f8_catalog_identity_postgres.py"
       - "backend/tests/test_cp04_historical_migration_postgres.py"
+      - "backend/tests/test_a9_invalid_historical_snapshot_postgres.py"
       - ".github/workflows/pg-invariants-audit.yml"
   workflow_dispatch:
 
@@ -70,4 +71,5 @@ jobs:
             tests/test_f7_catalog_custody_postgres.py \
             tests/test_f8_catalog_identity_postgres.py \
             tests/test_cp04_historical_migration_postgres.py \
+            tests/test_a9_invalid_historical_snapshot_postgres.py \
             tests/test_procurement_postgres.py

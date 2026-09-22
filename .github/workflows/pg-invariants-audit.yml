@@ -7,6 +7,7 @@ on:
       - "backend/tests/test_e5_procurement_invariants_postgres.py"
       - "backend/tests/test_cp02_identity_db_invariants.py"
       - "backend/tests/test_f6_existing_owner_upgrade_postgres.py"
+      - "backend/tests/test_f7_catalog_custody_postgres.py"
       - ".github/workflows/pg-invariants-audit.yml"
   workflow_dispatch:
 
@@ -56,10 +57,11 @@ jobs:
           alembic upgrade head
           alembic check
           alembic current
-      - name: Execute procurement and identity PostgreSQL regressions
+      - name: Execute procurement, identity, catalog and custody regressions
         working-directory: backend
         run: |
           pytest -q tests/test_e5_procurement_invariants_postgres.py \
             tests/test_cp02_identity_db_invariants.py \
             tests/test_f6_existing_owner_upgrade_postgres.py \
+            tests/test_f7_catalog_custody_postgres.py \
             tests/test_procurement_postgres.py

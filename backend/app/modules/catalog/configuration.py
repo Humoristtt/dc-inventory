@@ -108,6 +108,7 @@ LEAVES = {
         "HDD",
         (
             *DRIVE_ATTRIBUTES,
+            Attribute("interface_speed", "Скорость интерфейса"),
             Attribute("rpm", "Скорость вращения", data_type="INTEGER", unit="RPM"),
             Attribute("type", "Тип"),
         ),

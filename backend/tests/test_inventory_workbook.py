@@ -15,6 +15,7 @@ def synthetic_workbook(
     *,
     invalid: bool = False,
     current_layout: bool = False,
+    misplaced_splitter_header: bool = False,
 ) -> Path:
     ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
     rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -41,7 +42,6 @@ def synthetic_workbook(
                 if invalid:
                     rows[1][6] = "1.5"
             if current_layout and name == "Оптические сплиттеры  делители":
-                rows[0][0] = ""
                 rows += [
                     [
                         "Оптический сплиттер/coupler",
@@ -53,10 +53,14 @@ def synthetic_workbook(
                         "1 COM → 2 OUT",
                         "15",
                     ],
-                    [],
-                    [],
-                    ["", "", "Тип"],
                 ]
+                if misplaced_splitter_header:
+                    rows[0][0] = ""
+                    rows += [
+                        [],
+                        [],
+                        ["", "", "Тип"],
+                    ]
             if current_layout and name == "Ethernet патч-корды":
                 rows += [
                     [
@@ -108,7 +112,7 @@ def test_explicit_drive_type_overrides_sheet_label() -> None:
                 "Synthetic HDD",
                 "2.5",
                 "SAS",
-                "1 TB",
+                "1 ТБ",
                 "10 000 RPM",
                 "Enterprise HDD",
                 "2",
@@ -159,7 +163,7 @@ def test_ethernet_patch_cord_normalization() -> None:
     assert "1.5 м" in item.name
 
 
-def test_current_workbook_layout_repairs_known_splitter_header(
+def test_current_workbook_layout_is_accepted(
     tmp_path: Path,
 ) -> None:
     result = read_workbook(
@@ -180,10 +184,90 @@ def test_current_workbook_layout_repairs_known_splitter_header(
         "ethernet_patch_cord",
         "optical_splitter",
     }
-    assert any(
-        "restored known misplaced Тип header" in warning
-        for warning in result.warnings
+
+
+def test_misplaced_splitter_header_is_rejected(
+    tmp_path: Path,
+) -> None:
+    result = read_workbook(
+        synthetic_workbook(
+            tmp_path / "misplaced-splitter-header.xlsx",
+            current_layout=True,
+            misplaced_splitter_header=True,
+        )
     )
+
+    assert any(
+        "Оптические сплиттеры  делители: headers differ"
+        in error
+        for error in result.errors
+    )
+
+
+def test_zero_quantity_is_incremental_import_only() -> None:
+    row = dict(
+        zip(
+            SHEETS["Ethernet патч-корды"],
+            [
+                "Cat.5e",
+                "RJ-45",
+                "RJ-45",
+                "1 м",
+                "UTP",
+                "Серый",
+                "0",
+            ],
+            strict=True,
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="quantity must be a positive integer",
+    ):
+        normalize_row(
+            "Ethernet патч-корды",
+            row,
+            "synthetic",
+        )
+
+    item = normalize_row(
+        "Ethernet патч-корды",
+        row,
+        "synthetic",
+        allow_zero_quantity=True,
+    )
+
+    assert item.quantity == 0
+
+
+def test_drive_column_misalignment_is_rejected() -> None:
+    row = dict(
+        zip(
+            SHEETS["SSD  Накопители"],
+            [
+                "Seagate",
+                "Exos 7E10 ST4000NM025B",
+                "4 ТБ",
+                "3.5″",
+                "SAS 12 Гбит/с",
+                "7200 RPM",
+                "Enterprise HDD",
+                "2",
+            ],
+            strict=True,
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="unsupported drive form factor",
+    ):
+        normalize_row(
+            "SSD  Накопители",
+            row,
+            "synthetic",
+        )
 
 
 @pytest.mark.parametrize(

@@ -598,7 +598,15 @@ async def import_inventory(
                 attributes=item.attributes,
             ),
         )
-        lines.append(MovementLineCreate(item_id=item_id, quantity=item.quantity))
+        if item.quantity > 0:
+            lines.append(
+                MovementLineCreate(
+                    item_id=item_id,
+                    quantity=item.quantity,
+                )
+            )
+    if not lines:
+        raise ValueError("bootstrap workbook contains no positive stock quantity")
     movement = await create_movement(
         db,
         MovementCreate(

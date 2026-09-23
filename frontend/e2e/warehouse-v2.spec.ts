@@ -610,20 +610,26 @@ test(
 );
 
 
-test("ENGINEER browses hierarchy, retains server filters, and uses Telegram back", async ({page})=>{
+test("ENGINEER browses hierarchy, retains Ethernet speed filters, and uses Telegram back", async ({page})=>{
   await installTelegramMock(page); const api=await installApiMock(page,"ENGINEER");
   await page.goto("/catalog/new?category=transceiver_ethernet");
   await expect(page).toHaveURL(/\/catalog$/);
   await page.getByRole("link",{name:/Трансиверы/}).click();
   await page.getByRole("link",{name:"Ethernet",exact:true}).click();
-  await page.getByRole("button",{name:"Фильтры"}).click();
-  await page.getByLabel("В наличии",{exact:true}).check();
-  await page.getByRole("button",{name:"Применить"}).click();
-  await expect(page).toHaveURL(/availability=IN_STOCK/);
+  await page.getByRole("button",{name:"10",exact:true}).click();
   await expect.poll(
-    () => api.requests.some(
-      url => url.includes("category=transceiver_ethernet")
-        && url.includes("availability=IN_STOCK"),
+    () => page.evaluate(() =>
+      new URL(window.location.href)
+        .searchParams
+        .getAll("filter"),
+    ),
+  ).toContain("speed:eq:10 Гбит/с");
+  await expect.poll(
+    () => api.requests.some((requestUrl) =>
+      new URL(requestUrl, "https://mock.local")
+        .searchParams
+        .getAll("filter")
+        .includes("speed:eq:10 Гбит/с"),
     ),
   ).toBe(true);
   await page.getByRole("heading",{name:/TEST-10G/}).click();
@@ -631,7 +637,13 @@ test("ENGINEER browses hierarchy, retains server filters, and uses Telegram back
   await expect(page.getByText(location.name,{exact:true})).toBeVisible();
   await expect(page.getByRole("button",{name:"Переместить"})).toBeVisible();
   await page.evaluate(()=>{(window as unknown as {__stage8Telegram:{callback:(()=>void)|null}}).__stage8Telegram.callback?.();});
-  await expect(page).toHaveURL(/\/catalog\/transceiver_ethernet\?.*availability=IN_STOCK/);
+  await expect.poll(
+    () => page.evaluate(() =>
+      new URL(window.location.href)
+        .searchParams
+        .getAll("filter"),
+    ),
+  ).toContain("speed:eq:10 Гбит/с");
   await assertNoHorizontalOverflow(page);await assertBottomNavigationClearance(page);
 });
 
@@ -694,7 +706,7 @@ test("catalog failure supports retry",async({page})=>{
   await expect(page.getByRole("link",{name:/Трансиверы/})).toBeVisible();
 });
 test(
-  "desktop UX uses windowed expanded viewport, responsive shell and internal Escape",
+  "desktop UX uses windowed expanded viewport and responsive Ethernet controls",
   async ({ page }, testInfo) => {
     test.skip(
       ![
@@ -883,41 +895,47 @@ test(
       () => page.evaluate(() => window.scrollY),
     ).toBe(0);
 
+    const resetFiltersButton = page.getByRole(
+      "button",
+      { name: "Сбросить фильтры" },
+    );
+
+    await expect(resetFiltersButton).toBeVisible();
+    await expect(resetFiltersButton).toBeDisabled();
+    await expect(
+      page.getByRole(
+        "button",
+        { name: "Фильтры", exact: true },
+      ),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole(
+        "button",
+        { name: "Ещё", exact: true },
+      ),
+    ).toHaveCount(0);
+
+    for (const speed of ["100", "40", "25", "10"]) {
+      await expect(
+        page.getByRole(
+          "button",
+          { name: speed, exact: true },
+        ),
+      ).toBeVisible();
+    }
+
     if (
       testInfo.project.name === "desktop-standard"
       || testInfo.project.name === "desktop-ultrawide"
     ) {
-      const toolbarFontSize = await page
-        .getByRole("button", { name: "Фильтры" })
-        .evaluate(
-          (element) => Number.parseFloat(
-            getComputedStyle(element).fontSize,
-          ),
-        );
+      const toolbarFontSize = await resetFiltersButton.evaluate(
+        (element) => Number.parseFloat(
+          getComputedStyle(element).fontSize,
+        ),
+      );
 
       expect(toolbarFontSize).toBeGreaterThanOrEqual(13);
     }
-
-    await page.getByRole(
-      "button",
-      { name: "Фильтры" },
-    ).click();
-
-    await expect(
-      page.getByRole(
-        "dialog",
-        { name: "Фильтры" },
-      ),
-    ).toBeVisible();
-
-    await page.keyboard.press("Escape");
-
-    await expect(
-      page.getByRole(
-        "dialog",
-        { name: "Фильтры" },
-      ),
-    ).toHaveCount(0);
 
     await expect(page).toHaveURL(/\/catalog\/transceiver_ethernet/);
 

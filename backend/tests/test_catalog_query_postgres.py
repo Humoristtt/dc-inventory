@@ -60,10 +60,21 @@ async def test_hierarchy_long_range_and_shared_family_facets(
     marker = uuid.uuid4().hex
     short = await transceiver(db, marker, "до 300 м")
     boundary = await transceiver(db, marker, "до 2 км")
-    far = await transceiver(db, marker, "до 10 км", "transceiver_fc")
+    far_ethernet = await transceiver(db, marker, "до 10 км")
+    far_fc = await transceiver(
+        db,
+        marker,
+        "до 10 км",
+        "transceiver_fc",
+    )
     spec = await build_catalog_query_spec(db, q=marker, category_key="transceivers")
     page = await query_catalog_items(db, spec, limit=20, offset=0)
-    assert {r.record.item.id for r in page.items} == {short, boundary, far}
+    assert {r.record.item.id for r in page.items} == {
+        short,
+        boundary,
+        far_ethernet,
+        far_fc,
+    }
 
     ordinary_spec = await build_catalog_query_spec(
         db,
@@ -80,6 +91,22 @@ async def test_hierarchy_long_range_and_shared_family_facets(
         record.record.item.id
         for record in ordinary_page.items
     } == {short}
+
+    fc_spec = await build_catalog_query_spec(
+        db,
+        q=marker,
+        category_key="transceiver_fc",
+    )
+    fc_page = await query_catalog_items(
+        db,
+        fc_spec,
+        limit=20,
+        offset=0,
+    )
+    assert {
+        record.record.item.id
+        for record in fc_page.items
+    } == {far_fc}
 
     scope = await equipment_scope(
         db,
@@ -102,15 +129,22 @@ async def test_hierarchy_long_range_and_shared_family_facets(
         db, q=marker, category_key="transceivers", long_range=True
     )
     page = await query_catalog_items(db, spec, limit=20, offset=0)
-    assert {r.record.item.id for r in page.items} == {boundary, far}
-    facets = {f.key: f for f in await query_catalog_facets(db, spec)}
+    assert {
+        r.record.item.id
+        for r in page.items
+    } == {boundary, far_ethernet}
+    facets = {
+        f.key: f
+        for f in await query_catalog_facets(db, spec)
+    }
     assert "speed" not in facets and "connector" not in facets
-    assert facets["reach_m"].minimum == 2000 and facets["reach_m"].maximum == 10000
+    assert facets["reach_m"].minimum == 2000
+    assert facets["reach_m"].maximum == 10000
     # Family filter resolves matching metadata for both children.
     spec = await build_catalog_query_spec(
         db, q=marker, category_key="transceivers", filter_expressions=["reach_m:gte:2000"]
     )
-    assert (await query_catalog_items(db, spec, limit=20, offset=0)).total == 2
+    assert (await query_catalog_items(db, spec, limit=20, offset=0)).total == 3
 
 
 async def test_rj45_transceivers_are_split_from_optical_ethernet(

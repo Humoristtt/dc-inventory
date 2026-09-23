@@ -11,6 +11,7 @@ import {
   getCatalogCategory,
   getCatalogItems,
   getCatalogManufacturers,
+  type CatalogItemListEntry,
 } from "../../shared/api/catalog";
 import type { ProcurementLineInput } from "../../shared/api/procurement";
 
@@ -40,6 +41,100 @@ function lineLabel(line: ProcurementLineInput): string {
   return [line.name, line.model].filter(Boolean).join(" · ");
 }
 
+function normalizeSearch(value: string): string {
+  return value
+    .normalize("NFKC")
+    .toLocaleLowerCase("ru")
+    .replaceAll("ё", "е")
+    .replace(/[^a-zа-я0-9]+/giu, " ")
+    .trim();
+}
+
+function editDistance(left: string, right: string): number {
+  if (!left.length) return right.length;
+  if (!right.length) return left.length;
+
+  let previous = Array.from(
+    { length: right.length + 1 },
+    (_, index) => index,
+  );
+
+  for (let row = 1; row <= left.length; row += 1) {
+    const current = [row];
+
+    for (let column = 1; column <= right.length; column += 1) {
+      const substitution =
+        previous[column - 1]
+        + (left[row - 1] === right[column - 1] ? 0 : 1);
+
+      current[column] = Math.min(
+        current[column - 1] + 1,
+        previous[column] + 1,
+        substitution,
+      );
+    }
+
+    previous = current;
+  }
+
+  return previous[right.length];
+}
+
+function tokenSimilarity(query: string, candidate: string): number {
+  if (!query || !candidate) return 0;
+  if (candidate === query) return 1;
+  if (candidate.startsWith(query)) return 0.96;
+  if (candidate.includes(query)) return 0.9;
+  if (query.includes(candidate) && candidate.length >= 3) return 0.82;
+
+  const distance = editDistance(query, candidate);
+  const longest = Math.max(query.length, candidate.length);
+  return longest ? 1 - distance / longest : 0;
+}
+
+function fuzzyScore(item: CatalogItemListEntry, rawQuery: string): number {
+  const query = normalizeSearch(rawQuery);
+  if (!query) return 1;
+
+  const queryTokens = query.split(" ").filter(Boolean);
+  const searchable = normalizeSearch(
+    [
+      item.category.display_name,
+      item.manufacturer?.name,
+      item.name,
+      item.model,
+      ...Object.values(item.attributes).map(String),
+    ]
+      .filter(Boolean)
+      .join(" "),
+  );
+  const candidateTokens = searchable.split(" ").filter(Boolean);
+
+  if (searchable.includes(query)) return 2;
+
+  const scores = queryTokens.map((queryToken) =>
+    Math.max(
+      0,
+      ...candidateTokens.map((candidateToken) =>
+        tokenSimilarity(queryToken, candidateToken),
+      ),
+    ),
+  );
+
+  return scores.reduce((sum, score) => sum + score, 0) / scores.length;
+}
+
+function catalogItemLabel(item: CatalogItemListEntry): string {
+  return [
+    item.category.display_name,
+    item.manufacturer?.name,
+    item.name,
+    item.model,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
+
 type Props = {
   lines: ProcurementLineInput[];
   onChange: (lines: ProcurementLineInput[]) => void;
@@ -50,6 +145,7 @@ export function LineComposer({ lines, onChange }: Props) {
     "EXISTING_ITEM",
   );
   const [search, setSearch] = useState("");
+  const [catalogCategory, setCatalogCategory] = useState("");
   const [existingItemId, setExistingItemId] = useState("");
   const [qty, setQty] = useState("1");
   const [category, setCategory] = useState("");
@@ -69,6 +165,28 @@ export function LineComposer({ lines, onChange }: Props) {
     const all = categories.data ?? [];
     const parents = new Set(all.map((entry) => entry.parent_id).filter(Boolean));
     return all.filter((entry) => !parents.has(entry.id));
+  }, [categories.data]);
+
+  const categoryGroups = useMemo(() => {
+    const all = categories.data ?? [];
+    const families = all
+      .filter((entry) => entry.parent_id === null)
+      .sort(
+        (left, right) =>
+          left.sort_order - right.sort_order
+          || left.display_name.localeCompare(right.display_name, "ru"),
+      );
+
+    return families.map((family) => ({
+      family,
+      children: all
+        .filter((entry) => entry.parent_id === family.id)
+        .sort(
+          (left, right) =>
+            left.sort_order - right.sort_order
+            || left.display_name.localeCompare(right.display_name, "ru"),
+        ),
+    }));
   }, [categories.data]);
   const schema = useQuery({
     queryKey: ["catalog", "category", category],
@@ -114,18 +232,53 @@ export function LineComposer({ lines, onChange }: Props) {
     )
     ?? [];
 
-  const items = useInfiniteQuery({
+  const browseItems = useInfiniteQuery({
+    queryKey: [
+      "catalog",
+      "procurement-browse",
+      catalogCategory,
+    ],
+    queryFn: ({ pageParam, signal }) =>
+      getCatalogItems(
+        {
+          category: catalogCategory || undefined,
+          limit: 100,
+          offset: pageParam,
+          sort: "name",
+          order: "asc",
+        },
+        signal,
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => {
+      const nextOffset =
+        lastPage.offset
+        + lastPage.items.length;
+
+      return nextOffset < lastPage.total
+        ? nextOffset
+        : undefined;
+    },
+    enabled: mode === "EXISTING_ITEM",
+    staleTime: 60_000,
+  });
+
+  const searchItems = useInfiniteQuery({
     queryKey: [
       "catalog",
       "procurement-search",
+      catalogCategory,
       search,
     ],
     queryFn: ({ pageParam, signal }) =>
       getCatalogItems(
         {
           q: search,
+          category: catalogCategory || undefined,
           limit: 20,
           offset: pageParam,
+          sort: "relevance",
+          order: "desc",
         },
         signal,
       ),
@@ -144,11 +297,62 @@ export function LineComposer({ lines, onChange }: Props) {
       && search.trim().length >= 2,
   });
 
-  const itemOptions =
-    items.data?.pages.flatMap(
+  const browseOptions =
+    browseItems.data?.pages.flatMap(
       (page) => page.items,
     )
     ?? [];
+
+  const serverSearchOptions =
+    searchItems.data?.pages.flatMap(
+      (page) => page.items,
+    )
+    ?? [];
+
+  const itemOptions = useMemo(() => {
+    const query = search.trim();
+
+    if (query.length < 2) {
+      return browseOptions;
+    }
+
+    const seen = new Set(
+      serverSearchOptions.map((item) => item.id),
+    );
+
+    const fuzzy = browseOptions
+      .map((item) => ({
+        item,
+        score: fuzzyScore(item, query),
+      }))
+      .filter(({ item, score }) =>
+        !seen.has(item.id) && score >= 0.42,
+      )
+      .sort(
+        (left, right) =>
+          right.score - left.score
+          || catalogItemLabel(left.item).localeCompare(
+            catalogItemLabel(right.item),
+            "ru",
+          ),
+      )
+      .map(({ item }) => item);
+
+    return [
+      ...serverSearchOptions,
+      ...fuzzy,
+    ];
+  }, [
+    browseOptions,
+    search,
+    serverSearchOptions,
+  ]);
+
+  const activeItemsQuery =
+    search.trim().length >= 2
+      ? searchItems
+      : browseItems;
+
 
   const add = () => {
     if (lines.length >= MAX_PROCUREMENT_LINES) {
@@ -262,8 +466,37 @@ export function LineComposer({ lines, onChange }: Props) {
       {mode === "EXISTING_ITEM" ? (
         <div className="procurement-fields">
           <label>
+            Категория
+            <select
+              value={catalogCategory}
+              onChange={(event) => {
+                setCatalogCategory(event.target.value);
+                setExistingItemId("");
+              }}
+            >
+              <option value="">Все категории и подкатегории</option>
+              {categoryGroups.map(({ family, children }) => (
+                <optgroup key={family.id} label={family.display_name}>
+                  <option value={family.key}>
+                    Все: {family.display_name}
+                  </option>
+                  {children.map((entry) => (
+                    <option key={entry.id} value={entry.key}>
+                      {entry.display_name}
+                    </option>
+                  ))}
+                </optgroup>
+              ))}
+            </select>
+          </label>
+
+          <label>
             Поиск по каталогу
             <input
+              autoCapitalize="none"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck={false}
               value={search}
               onChange={(event) => {
                 setSearch(event.target.value);
@@ -271,42 +504,49 @@ export function LineComposer({ lines, onChange }: Props) {
               }}
             />
           </label>
+
           <label>
             Позиция
             <select
               value={existingItemId}
               onChange={(event) => setExistingItemId(event.target.value)}
             >
-              <option value="">Выберите</option>
+              <option value="">
+                {browseItems.isPending
+                  ? "Загружаем каталог…"
+                  : "Выберите"}
+              </option>
               {itemOptions.map((item) => (
                 <option
                   key={item.id}
                   value={item.id}
                 >
-                  {[
-                    item.manufacturer?.name,
-                    item.name,
-                    item.model,
-                  ]
-                    .filter(Boolean)
-                    .join(" · ")}
+                  {catalogItemLabel(item)}
                 </option>
               ))}
             </select>
           </label>
 
-          {items.hasNextPage ? (
+          {search.trim().length >= 2
+            && !searchItems.isFetching
+            && itemOptions.length === 0 ? (
+              <p className="empty-state">
+                Совпадений и похожих позиций не найдено.
+              </p>
+            ) : null}
+
+          {activeItemsQuery.hasNextPage ? (
             <button
               className="button button--load-more"
               disabled={
-                items.isFetchingNextPage
+                activeItemsQuery.isFetchingNextPage
               }
               onClick={() =>
-                void items.fetchNextPage()
+                void activeItemsQuery.fetchNextPage()
               }
               type="button"
             >
-              {items.isFetchingNextPage
+              {activeItemsQuery.isFetchingNextPage
                 ? "Загружаем…"
                 : "Показать ещё"}
             </button>

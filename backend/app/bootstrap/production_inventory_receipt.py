@@ -324,6 +324,11 @@ async def apply_inventory_receipt(
             "created_manufacturers": 0,
             "reused_manufacturers": plan.existing_manufacturers,
             "receipt_quantity": validation.source_quantity,
+            "zero_stock_items": sum(
+                1
+                for item in validation.items
+                if item.quantity == 0
+            ),
             "projection_drift_rows": 0,
         }
 

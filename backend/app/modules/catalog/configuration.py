@@ -19,6 +19,10 @@ class Attribute:
 FAMILIES = {
     "transceivers": ("Трансиверы", "SFP, SFP+, SFP28, XFP и QSFP для Ethernet и Fibre Channel."),
     "optics": ("Оптика", "Оптические патч-корды, MPO/LC-кабели и сплиттеры."),
+    "copper_cabling": (
+        "Медные кабели",
+        "Ethernet-патч-корды и другие медные сетевые соединения.",
+    ),
     "network_adapters": ("Сетевые адаптеры", "Сетевые карты Ethernet и адаптеры Fibre Channel."),
     "storage": ("Накопители", "Твердотельные SSD и жёсткие диски HDD."),
     "memory": ("Оперативная память", "Модули серверной оперативной памяти."),
@@ -74,6 +78,18 @@ LEAVES = {
             Attribute("connector", "Разъёмы"),
             Attribute("split_ratio", "Деление"),
             Attribute("construction", "Исполнение"),
+        ),
+    ),
+    "ethernet_patch_cord": (
+        "copper_cabling",
+        "Ethernet патч-корды",
+        (
+            Attribute("cable_category", "Категория"),
+            Attribute("connector_a", "Разъём A"),
+            Attribute("connector_b", "Разъём B"),
+            Attribute("length_m", "Длина", data_type="DECIMAL", unit="м"),
+            Attribute("shielding", "Экранирование"),
+            Attribute("color", "Цвет"),
         ),
     ),
     "network_ethernet": ("network_adapters", "Ethernet", NETWORK_ATTRIBUTES),
@@ -139,6 +155,10 @@ LEAF_DESCRIPTIONS = {
         "с различными типами разъёмов."
     ),
     "optical_splitter": "Оптические сплиттеры и делители для распределения оптического сигнала.",
+    "ethernet_patch_cord": (
+        "Медные Ethernet-патч-корды с учётом категории, длины, "
+        "экранирования, разъёмов и цвета."
+    ),
     "network_ethernet": "Сетевые Ethernet-адаптеры и многопортовые NIC.",
     "network_fc": "HBA-адаптеры для подключения серверов к Fibre Channel SAN.",
     "ssd": "Твердотельные накопители SATA, SAS и NVMe.",

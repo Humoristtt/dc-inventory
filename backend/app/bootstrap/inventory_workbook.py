@@ -79,6 +79,7 @@ SHEETS: dict[str, tuple[str, ...]] = {
         "Интерфейс",
         "Объём",
         "Скорость интерфейса",
+        "Скорость вращения",
         "Тип",
         "Количество",
     ),
@@ -272,7 +273,7 @@ def normalize_row(
         ):
             raise ValueError("unsupported drive form factor")
         if not re.fullmatch(
-            r"(?:SATA|SAS|NVMe)(?:\s+.*)?",
+            r"(?:SATA|SAS|NVMe)",
             row["Интерфейс"],
         ):
             raise ValueError("unsupported drive interface")
@@ -281,22 +282,35 @@ def normalize_row(
             row["Объём"],
         ):
             raise ValueError("unsupported drive capacity")
-        category = "ssd" if row["Тип"] == "Enterprise SSD" else "hdd"
-        if (
-            category == "ssd"
-            and not re.fullmatch(
-                r"\d+(?:[.,]\d+)?\s*Гбит/с",
-                row["Скорость интерфейса"],
-            )
+        if not re.fullmatch(
+            r"\d+(?:[.,]\d+)?\s*Гбит/с",
+            row["Скорость интерфейса"],
         ):
-            raise ValueError("unsupported SSD interface speed")
-        keys = (
-            "form_factor",
-            "interface",
-            "capacity",
-            "interface_speed" if category == "ssd" else "rpm",
-            "type",
-        )
+            raise ValueError("unsupported drive interface speed")
+        category = "ssd" if row["Тип"] == "Enterprise SSD" else "hdd"
+        if category == "ssd":
+            if row["Скорость вращения"] not in {"—", "-", "–"}:
+                raise ValueError("SSD rotation speed must be empty marker")
+            keys = (
+                "form_factor",
+                "interface",
+                "capacity",
+                "interface_speed",
+                "type",
+            )
+        else:
+            if not re.fullmatch(
+                r"[\d ]+\s*RPM",
+                row["Скорость вращения"],
+            ):
+                raise ValueError("HDD speed must be RPM")
+            keys = (
+                "form_factor",
+                "interface",
+                "capacity",
+                "rpm",
+                "type",
+            )
     elif sheet == "Ethernet патч-корды":
         category = "ethernet_patch_cord"
         keys = (
@@ -316,7 +330,29 @@ def normalize_row(
             "Оптические сплиттеры  делители": "optical_splitter",
         }[sheet]
         keys = tuple(a.key for a in LEAVES[category][2])
-    headers = [h for h in SHEETS[sheet] if h not in {"Производитель", "Модель", "Количество"}]
+    headers = [
+        h
+        for h in SHEETS[sheet]
+        if h not in {"Производитель", "Модель", "Количество"}
+    ]
+    if sheet == "SSD  Накопители":
+        headers = (
+            [
+                "Форм-фактор",
+                "Интерфейс",
+                "Объём",
+                "Скорость интерфейса",
+                "Тип",
+            ]
+            if category == "ssd"
+            else [
+                "Форм-фактор",
+                "Интерфейс",
+                "Объём",
+                "Скорость вращения",
+                "Тип",
+            ]
+        )
     attributes: dict[str, str | int | Decimal | bool] = {}
     for key, header in zip(keys, headers, strict=True):
         value = row.get(header, "")

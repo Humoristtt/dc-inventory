@@ -448,7 +448,7 @@ async def apply_inventory_receipt(
         catalog_item = items_by_signature.get(equipment.signature)
 
         if catalog_item is None:
-            manufacturer = (
+            equipment_manufacturer = (
                 manufacturers[identity_text(equipment.manufacturer)]
                 if equipment.manufacturer
                 else None
@@ -458,8 +458,8 @@ async def apply_inventory_receipt(
                 ItemCreate(
                     category_key=equipment.category,
                     manufacturer_id=(
-                        manufacturer.id
-                        if manufacturer is not None
+                        equipment_manufacturer.id
+                        if equipment_manufacturer is not None
                         else None
                     ),
                     name=equipment.name,

@@ -89,6 +89,17 @@ export function useCatalogUrlState(
             );
           }
 
+          if (
+            currentParams.get(
+              "rj45",
+            ) === "true"
+          ) {
+            next.set(
+              "rj45",
+              "true",
+            );
+          }
+
           return next;
         },
         options,

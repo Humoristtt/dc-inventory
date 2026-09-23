@@ -119,7 +119,7 @@ async def _existing_import(
     *,
     request_id: str,
     location_id: UUID,
-    expected_items: int,
+    expected_lines: int,
     expected_quantity: int,
 ) -> Movement | None:
     movements = list(
@@ -144,7 +144,7 @@ async def _existing_import(
     if (
         movement.movement_type != MovementType.RECEIPT
         or movement.destination_location_id != location_id
-        or movement.line_count != expected_items
+        or movement.line_count != expected_lines
     ):
         raise ValueError(
             "existing workbook receipt conflicts with the requested import"
@@ -187,7 +187,11 @@ async def _plan(
         db,
         request_id=request_id,
         location_id=context.location.id,
-        expected_items=len(validation.items),
+        expected_lines=sum(
+            1
+            for item in validation.items
+            if item.quantity > 0
+        ),
         expected_quantity=validation.source_quantity,
     )
 
@@ -420,11 +424,17 @@ async def apply_inventory_receipt(
         if catalog_item.status != ItemStatus.ACTIVE:
             raise ValueError("archived item cannot receive new stock")
 
-        lines.append(
-            MovementLineCreate(
-                item_id=catalog_item.id,
-                quantity=equipment.quantity,
+        if equipment.quantity > 0:
+            lines.append(
+                MovementLineCreate(
+                    item_id=catalog_item.id,
+                    quantity=equipment.quantity,
+                )
             )
+
+    if not lines:
+        raise ValueError(
+            "workbook contains no positive stock quantity to receive"
         )
 
     stock_before = int(
@@ -481,7 +491,7 @@ async def apply_inventory_receipt(
         for line in movement_result.record.lines
     )
     if (
-        movement.line_count != len(validation.items)
+        movement.line_count != len(lines)
         or movement_quantity != validation.source_quantity
     ):
         raise ValueError(
@@ -510,6 +520,11 @@ async def apply_inventory_receipt(
         "stock_before": stock_before,
         "stock_after": stock_after,
         "receipt_quantity": movement_quantity,
+        "zero_stock_items": sum(
+            1
+            for item in validation.items
+            if item.quantity == 0
+        ),
         "projection_drift_rows": 0,
     }
 
@@ -536,7 +551,10 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
             f"source SHA-256 mismatch: {actual_hash} != {expected_hash}"
         )
 
-    validation = read_workbook(source)
+    validation = read_workbook(
+        source,
+        allow_zero_quantity=True,
+    )
     assert_validation_contract(
         validation,
         expected_rows=int(args.expected_rows),

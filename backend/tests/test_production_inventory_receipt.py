@@ -114,6 +114,10 @@ async def test_incremental_receipt_creates_stock_and_replays_by_source(
             assert dry_run.existing_movement_id is None
             assert dry_run.existing_items == 0
             assert dry_run.new_items == 2
+            assert dry_run.current_quantity == 0
+            assert dry_run.desired_quantity == 7
+            assert dry_run.receipt_quantity == 7
+            assert dry_run.negative_delta_items == 0
 
             first = await apply_inventory_receipt(
                 db,
@@ -137,6 +141,21 @@ async def test_incremental_receipt_creates_stock_and_replays_by_source(
             expire_on_commit=False,
         ) as db, db.begin():
             second_actor, _ = await actor(db)
+
+            reconciled = await plan_inventory_receipt(
+                db,
+                validation,
+                target=str(location_id),
+                actor_user_id=second_actor.id,
+                source_hash="b" * 64,
+            )
+
+            assert reconciled.existing_items == 2
+            assert reconciled.new_items == 0
+            assert reconciled.current_quantity == 7
+            assert reconciled.desired_quantity == 7
+            assert reconciled.receipt_quantity == 0
+            assert reconciled.negative_delta_items == 0
 
             replay = await apply_inventory_receipt(
                 db,

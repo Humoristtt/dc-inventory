@@ -16,6 +16,7 @@ def synthetic_workbook(
     invalid: bool = False,
     current_layout: bool = False,
     misplaced_splitter_header: bool = False,
+    zero_unique_quantity: bool = False,
 ) -> Path:
     ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
     rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
@@ -35,9 +36,17 @@ def synthetic_workbook(
             rows = [list(headers)]
             if name == "Оптические патч-корды":
                 rows[0][-1] = ""  # Real format allows an explicitly mapped, unnamed H column.
+                quantities = [
+                    ("4", "Blue"),
+                    ("20", " blue "),
+                    (
+                        "0" if zero_unique_quantity else "2",
+                        "Pearlescent",
+                    ),
+                ]
                 rows += [
                     ["MMF", "OM4", "LC/UPC", "LC/UPC", "5 м", "Duplex", q, c]
-                    for q, c in [("4", "Blue"), ("20", " blue "), ("2", "Pearlescent")]
+                    for q, c in quantities
                 ]
                 if invalid:
                     rows[1][6] = "1.5"
@@ -101,6 +110,35 @@ def test_fractional_quantity_and_missing_workbook_fail(tmp_path: Path) -> None:
     assert read_workbook(tmp_path / "missing.xlsx").errors == [
         "DATA_IMPORT_BLOCKED_SOURCE_FILE_MISSING"
     ]
+
+
+def test_read_workbook_zero_stock_requires_explicit_opt_in(
+    tmp_path: Path,
+) -> None:
+    path = synthetic_workbook(
+        tmp_path / "zero-stock.xlsx",
+        zero_unique_quantity=True,
+    )
+
+    blocked = read_workbook(path)
+    assert any(
+        "quantity must be a positive integer" in error
+        for error in blocked.errors
+    )
+
+    accepted = read_workbook(
+        path,
+        allow_zero_quantity=True,
+    )
+    assert not accepted.errors
+    assert accepted.raw_rows == 3
+    assert accepted.source_quantity == 24
+    assert len(accepted.items) == 2
+    assert sum(
+        1
+        for item in accepted.items
+        if item.quantity == 0
+    ) == 1
 
 
 def test_explicit_drive_type_overrides_sheet_label() -> None:

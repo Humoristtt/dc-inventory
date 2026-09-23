@@ -145,7 +145,6 @@ export function CategoryPage() {
     },
     enabled:
       ethernetSpeedView
-      && categoryKey !== ""
       && !categoryQuery.isError,
     staleTime: 60_000,
   });

@@ -44,6 +44,12 @@ import {
   SortSheet,
 } from "../../features/catalog/SortSheet";
 import { useCatalogItems } from "../../features/catalog/useCatalogItems";
+import {
+  applySpeedBucket,
+  ETHERNET_SPEED_BUCKETS,
+  isSpeedBucketSelected,
+  speedFacetValuesForBucket,
+} from "../../features/catalog/transceiverFilters";
 import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
 import { PageHeader } from "../../shared/ui";
@@ -65,6 +71,13 @@ export function CategoryPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
   const location = useLocation();
+  const viewParams = new URLSearchParams(
+    location.search,
+  );
+  const longRange =
+    viewParams.get("long_range") === "true";
+  const rj45 =
+    viewParams.get("rj45") === "true";
   const navigateBack = useInternalBackNavigation();
   const telegramOwnsBack = webApp?.BackButton !== undefined;
   const categoryQuery = useQuery({
@@ -73,7 +86,6 @@ export function CategoryPage() {
     enabled: categoryKey !== "",
     staleTime: 5 * 60_000,
   });
-  const longRange = new URLSearchParams(location.search).get("long_range") === "true";
   const hierarchy = useQuery({
     queryKey: ["catalog", "categories"],
     queryFn: ({ signal }) => getCatalogCategories(signal),
@@ -83,8 +95,14 @@ export function CategoryPage() {
     (entry) => entry.key === categoryKey,
   );
   const categoryData = categoryQuery.data ?? categorySummary;
-  const family = categoryData?.parent_id === null && !longRange;
-  const categoryShapeKnown = longRange || categoryData !== undefined;
+  const family =
+    categoryData?.parent_id === null
+    && !longRange
+    && !rj45;
+  const categoryShapeKnown =
+    longRange
+    || rj45
+    || categoryData !== undefined;
   const children = hierarchy.data?.filter(
     (child) => child.parent_id === categoryData?.id,
   ) ?? [];
@@ -93,7 +111,42 @@ export function CategoryPage() {
   const catalogQuery = {
     ...toCatalogQuery(viewState, categoryKey),
     longRange,
+    rj45,
   };
+  const ethernetSpeedView =
+    categoryKey === "transceiver_ethernet"
+    && !longRange
+    && !rj45;
+  const speedFacetQueryBase = {
+    ...catalogQuery,
+    filters: catalogQuery.filters?.filter(
+      (filter) => filter.key !== "speed",
+    ),
+  };
+  const speedFacetQuery = useQuery({
+    queryKey: [
+      "catalog",
+      "ethernet-speed-buckets",
+      catalogQueryCacheKey(speedFacetQueryBase),
+    ],
+    queryFn: async ({ signal }) => {
+      const page = await getCatalogFacetPage(
+        speedFacetQueryBase,
+        {
+          facet: "speed",
+          limit: 100,
+        },
+        signal,
+      );
+      return page.facets.find(
+        (facet) => facet.key === "speed",
+      );
+    },
+    enabled:
+      ethernetSpeedView
+      && !categoryQuery.isError,
+    staleTime: 60_000,
+  });
   const itemsQuery = useCatalogItems(
     catalogQuery,
     categoryKey !== ""
@@ -108,7 +161,14 @@ export function CategoryPage() {
     queryFn: ({ signal }) => getCatalogFacets(catalogQuery, signal),
     enabled: filtersOpen && categoryKey !== "",
   });
-  const filtersCount = activeFilterCount(viewState);
+  const speedFilterCount = viewState.filters.filter(
+    (filter) =>
+      filter.key === "speed"
+      && filter.operator === "eq",
+  ).length;
+  const filtersCount =
+    activeFilterCount(viewState)
+    - Math.max(0, speedFilterCount - 1);
   const quickSortChoices = quickSortOptions(
     categoryKey,
     longRange,
@@ -130,7 +190,7 @@ export function CategoryPage() {
       left: 0,
       behavior: "auto",
     });
-  }, [categoryKey, longRange]);
+  }, [categoryKey, longRange, rj45]);
 
   useEffect(() => {
     if (familyId === undefined) {
@@ -170,7 +230,11 @@ export function CategoryPage() {
     <main className="catalog-page category-page">
       <PageHeader
         backLabel="Назад в каталог"
-        description={categoryData?.description}
+        description={
+          rj45
+            ? "Медные SFP/SFP+ трансиверы с разъёмом RJ-45."
+            : categoryData?.description
+        }
         kicker="Категория"
         onBack={
           !telegramOwnsBack
@@ -178,9 +242,11 @@ export function CategoryPage() {
             : undefined
         }
         title={
-          longRange
-            ? "Дальние трансиверы"
-            : categoryData?.display_name
+          rj45
+            ? "RJ-45 SFP"
+            : longRange
+              ? "Дальние трансиверы"
+              : categoryData?.display_name
               ?? "Оборудование"
         }
       >
@@ -208,7 +274,20 @@ export function CategoryPage() {
 
         {categoryShapeKnown && family ? <div className="category-grid">
           {children.map(child => <Link key={child.id} className="category-tile" to={`/catalog/${child.key}`}><strong>{child.display_name}</strong>{child.description ? <p>{child.description}</p> : null}<i aria-hidden="true">↗</i></Link>)}
-          {categoryKey === "transceivers" ? <Link className="category-tile" to="/catalog/transceivers?long_range=true"><strong>Дальние</strong><p>Дальность от 2 км.</p><i aria-hidden="true">↗</i></Link> : null}
+          {categoryKey === "transceivers" ? (
+            <>
+              <Link className="category-tile" to="/catalog/transceiver_ethernet?rj45=true">
+                <strong>RJ-45 SFP</strong>
+                <p>Медные SFP/SFP+ трансиверы с разъёмом RJ-45.</p>
+                <i aria-hidden="true">↗</i>
+              </Link>
+              <Link className="category-tile" to="/catalog/transceivers?long_range=true">
+                <strong>Дальние</strong>
+                <p>Дальность от 2 км.</p>
+                <i aria-hidden="true">↗</i>
+              </Link>
+            </>
+          ) : null}
         </div> : null}
         {categoryShapeKnown && !categoryQuery.isError && !family ? (
           <section aria-labelledby="category-items-title" className="catalog-section">
@@ -220,6 +299,60 @@ export function CategoryPage() {
                 </h2>
               </div>
               <div className="result-toolbar__actions">
+                {ethernetSpeedView ? (
+                  <div
+                    aria-label="Скорость Ethernet-трансивера"
+                    className="transceiver-speed-filter"
+                    role="group"
+                  >
+                    {ETHERNET_SPEED_BUCKETS.map((bucket) => {
+                      const values =
+                        speedFacetValuesForBucket(
+                          speedFacetQuery.data,
+                          bucket,
+                        );
+                      const selected =
+                        isSpeedBucketSelected(
+                          viewState.filters,
+                          values,
+                        );
+
+                      return (
+                        <button
+                          aria-pressed={selected}
+                          className={
+                            selected
+                              ? "tool-button transceiver-speed-filter__button quick-sort__button--active"
+                              : "tool-button transceiver-speed-filter__button"
+                          }
+                          disabled={
+                            speedFacetQuery.isPending
+                            || values.length === 0
+                          }
+                          key={bucket}
+                          onClick={() => {
+                            const current =
+                              catalogFiltersFromViewState(
+                                viewState,
+                              );
+                            updateFilters({
+                              ...current,
+                              filters: applySpeedBucket(
+                                current.filters,
+                                values,
+                                { clear: selected },
+                              ),
+                            });
+                          }}
+                          type="button"
+                        >
+                          {bucket}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
                 <button
                   className={
                     filtersCount > 0
@@ -345,7 +478,13 @@ export function CategoryPage() {
           active={catalogFiltersFromViewState(viewState)}
           attributes={categoryQuery.data?.attributes ?? []}
           error={facetsQuery.isError}
-          facets={facetsQuery.data?.facets ?? []}
+          facets={
+            (facetsQuery.data?.facets ?? []).filter(
+              (facet) =>
+                !ethernetSpeedView
+                || facet.key !== "speed",
+            )
+          }
           loading={facetsQuery.isPending}
           onApply={(next) => {
             updateFilters(next);

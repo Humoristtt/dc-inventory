@@ -1024,6 +1024,20 @@
   gap: 6px;
 }
 
+.transceiver-speed-filter {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 1 auto;
+  flex-wrap: nowrap;
+  gap: 4px;
+}
+
+.transceiver-speed-filter__button {
+  min-width: 44px;
+  padding-inline: 9px;
+  justify-content: center;
+}
+
 .quick-sort__button {
   background: var(--color-surface);
 }

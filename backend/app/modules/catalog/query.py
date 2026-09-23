@@ -333,7 +333,7 @@ def long_range_predicate() -> ColumnElement[bool]:
         .join(CategoryAttribute, CategoryAttribute.id == ItemAttributeValue.category_attribute_id)
         .join(Category, Category.id == CategoryAttribute.category_id)
         .where(
-            Category.key.in_(TRANSCEIVER_LEAF_KEYS),
+            Category.key == "transceiver_ethernet",
             CategoryAttribute.key == "reach_m",
             ItemAttributeValue.integer_value >= 2000,
         )
@@ -393,8 +393,6 @@ async def equipment_scope(
                 ~rj45_transceiver_predicate(),
             ]
         )
-    elif key in TRANSCEIVER_LEAF_KEYS:
-        predicates.append(~long_range_predicate())
     return predicates
 
 
@@ -809,8 +807,6 @@ def _item_predicates(
                 ~rj45_transceiver_predicate(),
             ]
         )
-    elif spec.category_key in TRANSCEIVER_LEAF_KEYS:
-        predicates.append(~long_range_predicate())
     if spec.manufacturer_ids and "manufacturer" not in exclude:
         predicates.append(Item.manufacturer_id.in_(spec.manufacturer_ids))
     if spec.availability != Availability.ANY and "availability" not in exclude:

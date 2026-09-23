@@ -55,12 +55,6 @@ MAX_SEARCH_TOKENS = 12
 MAX_QUERY_VALUES = 50
 MAX_FILTER_EXPRESSION_LENGTH = 2048
 
-TRANSCEIVER_LEAF_KEYS = frozenset({
-    "transceiver_ethernet",
-    "transceiver_fc",
-})
-
-
 @dataclass(frozen=True, slots=True)
 class AttributeFilter:
     attribute_id: uuid.UUID

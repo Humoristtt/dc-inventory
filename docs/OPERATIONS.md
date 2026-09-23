@@ -2,11 +2,11 @@
 
 Этот документ — рабочая карта сопровождения: какие сервисы ожидаются, как проверить их состояние и когда остановить опасную операцию. Пошаговый выпуск выполняется только по [DEPLOYMENT.md](DEPLOYMENT.md), изолированное восстановление — по [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md), правила склада — по [WAREHOUSE_DOMAIN.md](WAREHOUSE_DOMAIN.md). Записи ниже **не означают**, что сервер проверен в момент чтения файла.
 
-Актуализация документа: 19.09.2026. Последняя документированная production-проверка checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`, Alembic `c3d4e5f6a7b8`; source head `a9c0d1e2f3a4` относится к более новой ветке, а не к запущенной БД. Перед CP-16 повторно сверить все значения и конфигурацию на VM.
+Актуализация документа: 19.09.2026. Последняя документированная production-проверка checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`, Alembic `c3d4e5f6a7b8`; source head `b0c1d2e3f4a5` относится к более новой ветке, а не к запущенной БД. Перед CP-16 повторно сверить все значения и конфигурацию на VM.
 
 ```text
 ALEMBIC_HEAD=c3d4e5f6a7b8
-SOURCE_ALEMBIC_HEAD=a9c0d1e2f3a4
+SOURCE_ALEMBIC_HEAD=b0c1d2e3f4a5
 RBAC_CUTOVER=PASS
 PROCUREMENT_DEPLOYMENT=PASS
 REAL_INVENTORY_MUTATIONS_ENABLED=false

@@ -145,12 +145,18 @@ async def bootstrap_transaction(
 
     after = await warehouse_counts(db)
 
+    stocked_items = sum(
+        1
+        for item in validation.items
+        if item.quantity > 0
+    )
+
     expected_after = {
         "locations": 1,
         "items": expected_items,
         "movements": 1,
-        "movement_lines": expected_items,
-        "stock_balances": expected_items,
+        "movement_lines": stocked_items,
+        "stock_balances": stocked_items,
     }
 
     for name, expected in expected_after.items():
@@ -192,10 +198,10 @@ async def bootstrap_transaction(
     if movement.destination_location_id != location.id:
         raise ValueError("bootstrap receipt destination mismatch")
 
-    if movement.line_count != expected_items:
+    if movement.line_count != stocked_items:
         raise ValueError(
             f"bootstrap movement line_count mismatch: "
-            f"{movement.line_count} != {expected_items}"
+            f"{movement.line_count} != {stocked_items}"
         )
 
     drift = (await db.execute(text(RECONCILIATION_SQL))).all()
@@ -246,7 +252,10 @@ async def run_production_bootstrap(args: argparse.Namespace) -> dict[str, object
             f"source SHA-256 mismatch: {actual_sha256} != {expected_sha256}"
         )
 
-    validation = read_workbook(source)
+    validation = read_workbook(
+        source,
+        allow_zero_quantity=True,
+    )
 
     assert_validation_contract(
         validation,

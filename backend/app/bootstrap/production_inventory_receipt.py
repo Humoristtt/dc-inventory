@@ -18,7 +18,7 @@ from sqlalchemy import String, cast, func, or_, select, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from app.bootstrap.inventory_workbook import Equipment, Validation, read_workbook
+from app.bootstrap.inventory_workbook import Validation, read_workbook
 from app.bootstrap.production_inventory import (
     RECONCILIATION_SQL,
     assert_production_runtime,

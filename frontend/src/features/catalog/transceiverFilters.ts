@@ -102,10 +102,12 @@ export function applySpeedBucket(
 
   return [
     ...remaining,
-    ...values.map((value) => ({
-      key: "speed",
-      operator: "eq" as const,
-      value,
-    })),
+    ...values.map(
+      (value): CatalogAttributeFilter => ({
+        key: "speed",
+        operator: "eq",
+        value,
+      }),
+    ),
   ];
 }

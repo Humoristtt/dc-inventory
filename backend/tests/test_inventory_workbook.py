@@ -10,7 +10,12 @@ from app.bootstrap.inventory_workbook import SHEETS, normalize_row, read_workboo
 from app.modules.catalog.normalization import item_signature, normalize_reach
 
 
-def synthetic_workbook(path: Path, *, invalid: bool = False) -> Path:
+def synthetic_workbook(
+    path: Path,
+    *,
+    invalid: bool = False,
+    current_layout: bool = False,
+) -> Path:
     ns = "http://schemas.openxmlformats.org/spreadsheetml/2006/main"
     rel = "http://schemas.openxmlformats.org/officeDocument/2006/relationships"
     workbook = Element("workbook", xmlns=ns)
@@ -35,6 +40,35 @@ def synthetic_workbook(path: Path, *, invalid: bool = False) -> Path:
                 ]
                 if invalid:
                     rows[1][6] = "1.5"
+            if current_layout and name == "Оптические сплиттеры  делители":
+                rows[0][0] = ""
+                rows += [
+                    [
+                        "Оптический сплиттер/coupler",
+                        "1×2",
+                        "SMF",
+                        "1310/1550 нм",
+                        "LC/UPC",
+                        "50/50",
+                        "1 COM → 2 OUT",
+                        "15",
+                    ],
+                    [],
+                    [],
+                    ["", "", "Тип"],
+                ]
+            if current_layout and name == "Ethernet патч-корды":
+                rows += [
+                    [
+                        "Cat.5e",
+                        "RJ-45",
+                        "RJ-45",
+                        "1,5 м",
+                        "UTP",
+                        "Серый",
+                        "7",
+                    ]
+                ]
             for number, values in enumerate(rows, 1):
                 row = SubElement(data, "row", r=str(number))
                 for col, value in enumerate(values):
@@ -50,7 +84,7 @@ def synthetic_workbook(path: Path, *, invalid: bool = False) -> Path:
 def test_read_workbook_aggregates_normalized_identity_and_optional_color(tmp_path: Path) -> None:
     result = read_workbook(synthetic_workbook(tmp_path / "synthetic.xlsx"))
     assert not result.errors
-    assert len(result.sheets) == 8 and result.raw_rows == 3
+    assert len(result.sheets) == 9 and result.raw_rows == 3
     assert result.source_quantity == 26 and len(result.items) == 2
     assert sorted(item.quantity for item in result.items) == [2, 24]
     duplicates = cast(list[object], result.report()["duplicates"])
@@ -84,6 +118,72 @@ def test_explicit_drive_type_overrides_sheet_label() -> None:
     )
     item = normalize_row("SSD  Накопители", row, "synthetic")
     assert item.category == "hdd" and item.attributes["rpm"] == 10000
+
+
+def test_ethernet_patch_cord_normalization() -> None:
+    row = dict(
+        zip(
+            SHEETS["Ethernet патч-корды"],
+            [
+                "Cat.5e",
+                "RJ-45",
+                "RJ-45",
+                "1,5 м",
+                "UTP",
+                "Серый",
+                "7",
+            ],
+            strict=True,
+        )
+    )
+
+    item = normalize_row(
+        "Ethernet патч-корды",
+        row,
+        "synthetic",
+    )
+
+    assert item.category == "ethernet_patch_cord"
+    assert item.manufacturer is None
+    assert item.model is None
+    assert item.quantity == 7
+    assert item.attributes == {
+        "cable_category": "Cat.5e",
+        "connector_a": "RJ-45",
+        "connector_b": "RJ-45",
+        "length_m": Decimal("1.5"),
+        "shielding": "UTP",
+        "color": "Серый",
+    }
+    assert "Cat.5e" in item.name
+    assert "1.5 м" in item.name
+
+
+def test_current_workbook_layout_repairs_known_splitter_header(
+    tmp_path: Path,
+) -> None:
+    result = read_workbook(
+        synthetic_workbook(
+            tmp_path / "current-layout.xlsx",
+            current_layout=True,
+        )
+    )
+
+    assert not result.errors
+    assert result.raw_rows == 5
+    assert result.source_quantity == 48
+    assert len(result.items) == 4
+    assert {
+        item.category
+        for item in result.items
+    } >= {
+        "ethernet_patch_cord",
+        "optical_splitter",
+    }
+    assert any(
+        "restored known misplaced Тип header" in warning
+        for warning in result.warnings
+    )
 
 
 @pytest.mark.parametrize(

@@ -45,10 +45,10 @@ import {
 } from "../../features/catalog/SortSheet";
 import { useCatalogItems } from "../../features/catalog/useCatalogItems";
 import {
-  applySpeedBucket,
   ETHERNET_SPEED_BUCKETS,
   isSpeedBucketSelected,
   speedFacetValuesForBucket,
+  toggleSpeedBucket,
 } from "../../features/catalog/transceiverFilters";
 import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
@@ -337,10 +337,10 @@ export function CategoryPage() {
                               );
                             updateFilters({
                               ...current,
-                              filters: applySpeedBucket(
+                              filters: toggleSpeedBucket(
                                 current.filters,
-                                values,
-                                { clear: selected },
+                                speedFacetQuery.data,
+                                bucket,
                               ),
                             });
                           }}
@@ -353,20 +353,31 @@ export function CategoryPage() {
                   </div>
                 ) : null}
 
-                <button
-                  className={
-                    filtersCount > 0
-                      ? "tool-button tool-button--active"
-                      : "tool-button"
-                  }
-                  onClick={() => setFiltersOpen(true)}
-                  type="button"
-                >
-                  Фильтры
-                  {filtersCount > 0 ? (
-                    <span>{filtersCount}</span>
-                  ) : null}
-                </button>
+                {ethernetSpeedView ? (
+                  <button
+                    className="tool-button"
+                    disabled={filtersCount === 0}
+                    onClick={clearAllFilters}
+                    type="button"
+                  >
+                    Сбросить фильтры
+                  </button>
+                ) : (
+                  <button
+                    className={
+                      filtersCount > 0
+                        ? "tool-button tool-button--active"
+                        : "tool-button"
+                    }
+                    onClick={() => setFiltersOpen(true)}
+                    type="button"
+                  >
+                    Фильтры
+                    {filtersCount > 0 ? (
+                      <span>{filtersCount}</span>
+                    ) : null}
+                  </button>
+                )}
 
                 <div
                   aria-label="Быстрая сортировка"
@@ -407,22 +418,24 @@ export function CategoryPage() {
                     );
                   })}
 
-                  <button
-                    aria-label="Другие варианты сортировки"
-                    aria-pressed={!quickSortHasSelection}
-                    className={
-                      !quickSortHasSelection
-                        ? "tool-button quick-sort__more quick-sort__button--active"
-                        : "tool-button quick-sort__more"
-                    }
-                    onClick={() => setSortOpen(true)}
-                    type="button"
-                  >
-                    {quickSortHasSelection
-                      ? "Ещё"
-                      : sortLabel(viewState)}
-                    <span aria-hidden="true">•••</span>
-                  </button>
+                  {!ethernetSpeedView ? (
+                    <button
+                      aria-label="Другие варианты сортировки"
+                      aria-pressed={!quickSortHasSelection}
+                      className={
+                        !quickSortHasSelection
+                          ? "tool-button quick-sort__more quick-sort__button--active"
+                          : "tool-button quick-sort__more"
+                      }
+                      onClick={() => setSortOpen(true)}
+                      type="button"
+                    >
+                      {quickSortHasSelection
+                        ? "Ещё"
+                        : sortLabel(viewState)}
+                      <span aria-hidden="true">•••</span>
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>

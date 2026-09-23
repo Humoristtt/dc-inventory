@@ -5,8 +5,8 @@ import type {
   CatalogFacet,
 } from "../../shared/api/catalog";
 import {
-  applySpeedBucket,
   isSpeedBucketSelected,
+  toggleSpeedBucket,
   speedFacetCountForBucket,
   speedFacetValuesForBucket,
 } from "./transceiverFilters";
@@ -62,51 +62,139 @@ describe("Ethernet transceiver speed buckets", () => {
     ).toEqual(["40 Гбит/с"]);
   });
 
-  it("replaces raw speed filters while preserving unrelated filters", () => {
-    const current: CatalogAttributeFilter[] = [
+  it("allows selecting several speed buckets at once", () => {
+    const base: CatalogAttributeFilter[] = [
       {
         key: "connector",
         operator: "eq",
         value: "LC",
       },
-      {
-        key: "speed",
-        operator: "eq",
-        value: "40 Гбит/с",
-      },
     ];
-    const values = speedFacetValuesForBucket(
+
+    const with25 = toggleSpeedBucket(
+      base,
       facet,
       25,
     );
-    const next = applySpeedBucket(
-      current,
-      values,
-      { clear: false },
+    const with25And10 = toggleSpeedBucket(
+      with25,
+      facet,
+      10,
+    );
+    const withThree = toggleSpeedBucket(
+      with25And10,
+      facet,
+      40,
+    );
+    const all = toggleSpeedBucket(
+      withThree,
+      facet,
+      100,
     );
 
-    expect(next).toEqual([
-      {
-        key: "connector",
-        operator: "eq",
-        value: "LC",
-      },
-      {
-        key: "speed",
-        operator: "eq",
-        value: "25 Гбит/с",
-      },
-      {
-        key: "speed",
-        operator: "eq",
-        value: "10/25 Гбит/с",
-      },
-    ]);
     expect(
       isSpeedBucketSelected(
-        next,
-        values,
+        all,
+        speedFacetValuesForBucket(
+          facet,
+          100,
+        ),
       ),
     ).toBe(true);
+    expect(
+      isSpeedBucketSelected(
+        all,
+        speedFacetValuesForBucket(
+          facet,
+          40,
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      isSpeedBucketSelected(
+        all,
+        speedFacetValuesForBucket(
+          facet,
+          25,
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      isSpeedBucketSelected(
+        all,
+        speedFacetValuesForBucket(
+          facet,
+          10,
+        ),
+      ),
+    ).toBe(true);
+
+    expect(
+      all
+        .filter(
+          (filter) =>
+            filter.key === "speed",
+        )
+        .map((filter) => filter.value),
+    ).toEqual([
+      "10 Гбит/с",
+      "10/25 Гбит/с",
+      "100 Гбит/с",
+      "25 Гбит/с",
+      "40 Гбит/с",
+    ]);
+
+    expect(all[0]).toEqual(base[0]);
+  });
+
+  it("keeps the shared 10/25 value when one overlapping bucket is disabled", () => {
+    let filters: CatalogAttributeFilter[] = [];
+
+    filters = toggleSpeedBucket(
+      filters,
+      facet,
+      25,
+    );
+    filters = toggleSpeedBucket(
+      filters,
+      facet,
+      10,
+    );
+    filters = toggleSpeedBucket(
+      filters,
+      facet,
+      10,
+    );
+
+    expect(
+      filters
+        .filter(
+          (filter) =>
+            filter.key === "speed",
+        )
+        .map((filter) => filter.value),
+    ).toEqual([
+      "10/25 Гбит/с",
+      "25 Гбит/с",
+    ]);
+
+    expect(
+      isSpeedBucketSelected(
+        filters,
+        speedFacetValuesForBucket(
+          facet,
+          25,
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      isSpeedBucketSelected(
+        filters,
+        speedFacetValuesForBucket(
+          facet,
+          10,
+        ),
+      ),
+    ).toBe(false);
   });
 });

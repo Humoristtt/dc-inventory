@@ -454,7 +454,7 @@ it(
       "option",
       {
         name:
-          "Vendor · Needle 000 · N000",
+          "Ethernet transceivers · Vendor · Needle 000 · N000",
       },
     );
 
@@ -540,7 +540,7 @@ it(
       "option",
       {
         name:
-          "Vendor · Alpha · A1",
+          "Ethernet transceivers · Vendor · Alpha · A1",
       },
     );
 
@@ -566,7 +566,7 @@ it(
       "option",
       {
         name:
-          "Vendor · Beta · B1",
+          "Ethernet transceivers · Vendor · Beta · B1",
       },
     );
 

@@ -138,6 +138,55 @@ async def test_ethernet_patch_cord_catalog_migration(
                 ),
             ]
 
+            hdd_attributes = (
+                await db.execute(
+                    text(
+                        """
+                        SELECT
+                            key,
+                            label,
+                            data_type,
+                            unit,
+                            required,
+                            sort_order
+                        FROM category_attributes
+                        WHERE category_id = (
+                            SELECT id
+                            FROM categories
+                            WHERE key = 'hdd'
+                        )
+                        ORDER BY sort_order, key
+                        """
+                    )
+                )
+            ).all()
+
+            assert [
+                tuple(attribute)
+                for attribute in hdd_attributes
+            ] == [
+                ("form_factor", "Форм-фактор", "TEXT", None, True, 0),
+                ("interface", "Интерфейс", "TEXT", None, True, 1),
+                ("capacity", "Объём", "TEXT", None, True, 2),
+                (
+                    "interface_speed",
+                    "Скорость интерфейса",
+                    "TEXT",
+                    None,
+                    True,
+                    3,
+                ),
+                (
+                    "rpm",
+                    "Скорость вращения",
+                    "INTEGER",
+                    "RPM",
+                    True,
+                    4,
+                ),
+                ("type", "Тип", "TEXT", None, True, 5),
+            ]
+
         alembic(
             migration_database,
             "downgrade",
@@ -154,6 +203,21 @@ async def test_ethernet_patch_cord_catalog_migration(
                         'ethernet_patch_cord',
                         'copper_cabling'
                     )
+                    """
+                )
+            ) == 0
+
+            assert await db.scalar(
+                text(
+                    """
+                    SELECT count(*)
+                    FROM category_attributes
+                    WHERE category_id = (
+                        SELECT id
+                        FROM categories
+                        WHERE key = 'hdd'
+                    )
+                      AND key = 'interface_speed'
                     """
                 )
             ) == 0

@@ -59,6 +59,20 @@ export function speedFacetCountForBucket(
     );
 }
 
+function selectedSpeedValues(
+  filters: readonly CatalogAttributeFilter[],
+): Set<string> {
+  return new Set(
+    filters
+      .filter(
+        (filter) =>
+          filter.key === "speed"
+          && filter.operator === "eq",
+      )
+      .map((filter) => filter.value),
+  );
+}
+
 export function isSpeedBucketSelected(
   filters: readonly CatalogAttributeFilter[],
   values: readonly string[],
@@ -67,46 +81,72 @@ export function isSpeedBucketSelected(
     return false;
   }
 
-  const selected = filters
-    .filter(
-      (filter) =>
-        filter.key === "speed"
-        && filter.operator === "eq",
-    )
-    .map((filter) => filter.value)
-    .sort();
+  const selected = selectedSpeedValues(filters);
 
-  const expected = [...values].sort();
-
-  return (
-    selected.length === expected.length
-    && selected.every(
-      (value, index) => value === expected[index],
-    )
+  return values.every((value) =>
+    selected.has(value),
   );
 }
 
-export function applySpeedBucket(
+export function toggleSpeedBucket(
   filters: readonly CatalogAttributeFilter[],
-  values: readonly string[],
-  { clear }: { clear: boolean },
+  facet: CatalogFacet | undefined,
+  bucket: EthernetSpeedBucket,
 ): CatalogAttributeFilter[] {
   const remaining = filters.filter(
     (filter) => filter.key !== "speed",
   );
+  const currentValues =
+    selectedSpeedValues(filters);
 
-  if (clear) {
-    return remaining;
+  const selectedBuckets = new Set(
+    ETHERNET_SPEED_BUCKETS.filter(
+      (candidate) => {
+        const values =
+          speedFacetValuesForBucket(
+            facet,
+            candidate,
+          );
+
+        return (
+          values.length > 0
+          && values.every((value) =>
+            currentValues.has(value),
+          )
+        );
+      },
+    ),
+  );
+
+  if (selectedBuckets.has(bucket)) {
+    selectedBuckets.delete(bucket);
+  } else {
+    selectedBuckets.add(bucket);
+  }
+
+  const nextValues = new Set<string>();
+
+  for (const selectedBucket of selectedBuckets) {
+    for (const value of speedFacetValuesForBucket(
+      facet,
+      selectedBucket,
+    )) {
+      nextValues.add(value);
+    }
   }
 
   return [
     ...remaining,
-    ...values.map(
-      (value): CatalogAttributeFilter => ({
-        key: "speed",
-        operator: "eq",
-        value,
-      }),
-    ),
+    ...[...nextValues]
+      .sort((left, right) =>
+        left.localeCompare(right, "ru"),
+      )
+      .map(
+        (value): CatalogAttributeFilter => ({
+          key: "speed",
+          operator: "eq",
+          value,
+        }),
+      ),
   ];
 }

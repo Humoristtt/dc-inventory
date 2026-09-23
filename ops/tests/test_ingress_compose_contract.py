@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate local and explicit Unix ingress Compose configurations."""
+"""Validate base local TCP and production Unix ingress Compose contracts."""
 
 import json
 import os
@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[2]
 SOCKET_DIR = "/run/dc-inventory"
 
 
-def render(*, unix: bool, directory: str | None = None):
+def render(*, production: bool, directory: str | None = None):
     command = [
         "docker",
         "compose",
@@ -22,7 +22,7 @@ def render(*, unix: bool, directory: str | None = None):
         "compose.yaml",
     ]
 
-    if unix:
+    if production:
         command.extend(["-f", "compose.ingress-unix.yaml"])
 
     command.extend(["config", "--format", "json"])
@@ -59,8 +59,8 @@ def render(*, unix: bool, directory: str | None = None):
 
 
 class IngressComposeTests(unittest.TestCase):
-    def test_default_web_has_writable_private_socket_directory(self):
-        result = render(unix=False)
+    def test_base_web_has_local_tcp_and_private_socket_directory(self):
+        result = render(production=False)
         self.assertEqual(result.returncode, 0, "base Compose config failed")
 
         web = json.loads(result.stdout)["services"]["web"]
@@ -94,24 +94,24 @@ class IngressComposeTests(unittest.TestCase):
         )
         self.assertEqual(ports[0].get("target"), 8080)
 
-    def test_unix_override_requires_explicit_host_directory(self):
-        result = render(unix=True)
+    def test_production_override_requires_explicit_host_directory(self):
+        result = render(production=True)
         self.assertNotEqual(result.returncode, 0)
 
-    def test_unix_override_replaces_tmpfs_and_removes_tcp_port(self):
+    def test_production_override_replaces_tmpfs_and_removes_tcp_port(self):
         with tempfile.TemporaryDirectory() as temporary:
             directory = Path(temporary).resolve()
             directory.chmod(0o750)
 
             result = render(
-                unix=True,
+                production=True,
                 directory=str(directory),
             )
 
             self.assertEqual(
                 result.returncode,
                 0,
-                "Unix override Compose config failed",
+                "Production ingress Compose config failed",
             )
 
             web = json.loads(result.stdout)["services"]["web"]

@@ -168,6 +168,14 @@ jobs:
         shell: bash
         run: python3 -B ops/tests/test_cp07_compose_ingress_contract.py
 
+      - name: Host direct-ingress contract
+        shell: bash
+        run: |
+          python3 -B ops/tests/test_host_ingress_contract.py
+          python3 -m py_compile ops/host_ingress/verify.py
+          sh -n ops/host_ingress/apply.sh
+          sh -n ops/host_ingress/certbot/reload-nginx
+
       - name: Approved release/runtime identity regression
         shell: bash
         run: python3 ops/tests/test_release_runtime_match.py

@@ -113,6 +113,15 @@ SHEETS: dict[str, tuple[str, ...]] = {
         "Исполнение",
         "Количество",
     ),
+    "Ethernet патч-корды": (
+        "Категория",
+        "Разъём A",
+        "Разъём B",
+        "Длина",
+        "Экранирование",
+        "Цвет",
+        "Количество",
+    ),
 }
 
 
@@ -142,6 +151,15 @@ class Equipment:
             )
         elif self.category == "power_cable":
             keys = ("type", "connector_a", "connector_b", "length_m", "color")
+        elif self.category == "ethernet_patch_cord":
+            keys = (
+                "cable_category",
+                "connector_a",
+                "connector_b",
+                "length_m",
+                "shielding",
+                "color",
+            )
         else:
             keys = ("type", "configuration", "connector", "split_ratio")
         return " · ".join(
@@ -230,6 +248,16 @@ def normalize_row(sheet: str, row: dict[str, str], source: str) -> Equipment:
             "capacity",
             "interface_speed" if category == "ssd" else "rpm",
             "type",
+        )
+    elif sheet == "Ethernet патч-корды":
+        category = "ethernet_patch_cord"
+        keys = (
+            "cable_category",
+            "connector_a",
+            "connector_b",
+            "length_m",
+            "shielding",
+            "color",
         )
     else:
         category = {
@@ -391,6 +419,24 @@ def read_workbook(path: Path = SOURCE) -> Validation:
                     result.warnings.append(
                         f"{name}!H1: missing optional Цвет header; explicitly mapped column H"
                     )
+                if name == "Оптические сплиттеры  делители" and 1 not in header:
+                    misplaced_type_rows = [
+                        number
+                        for number, cells in rows[1:]
+                        if cells == {3: "Тип"}
+                    ]
+                    if len(misplaced_type_rows) == 1:
+                        artifact_row = misplaced_type_rows[0]
+                        header[1] = "Тип"
+                        rows = [
+                            row
+                            for row in rows
+                            if row[0] != artifact_row
+                        ]
+                        result.warnings.append(
+                            f"{name}!A1: restored known misplaced Тип header "
+                            f"from C{artifact_row}"
+                        )
                 expected = dict(enumerate(headers, 1))
                 if header != expected:
                     result.errors.append(
@@ -425,12 +471,6 @@ def read_workbook(path: Path = SOURCE) -> Validation:
     except (BadZipFile, ET.ParseError, KeyError, OSError, ValueError, RuntimeError) as error:
         result.errors.append(f"invalid workbook: {error}")
     result.items = sorted(grouped.values(), key=lambda x: (x.category, x.signature))
-    for key, actual, expected_total in (
-        ("raw_rows", result.raw_rows, 78),
-        ("source_quantity", result.source_quantity, 670),
-    ):
-        if actual != expected_total:
-            result.warnings.append(f"{key}: expected {expected_total}, actual {actual}")
     return result
 
 

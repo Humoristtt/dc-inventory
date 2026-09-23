@@ -308,6 +308,7 @@ def normalize_row(
                 "form_factor",
                 "interface",
                 "capacity",
+                "interface_speed",
                 "rpm",
                 "type",
             )

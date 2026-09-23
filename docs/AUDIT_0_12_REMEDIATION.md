@@ -596,6 +596,23 @@ Exit marker: `CP14_FINAL_GATE=PASS`
 
 Status: `OPEN`
 
+Локальный checkpoint, 21.09.2026:
+
+- CP-07: Compose contract — 3/3 PASS; разрешённый Unix-клиент —
+  HTTP 200, посторонний — EACCES.
+- Default TCP — только 127.0.0.1; Unix override сохраняет
+  read-only root filesystem и удаляет TCP-публикацию.
+- Repository data policy и Stage15 security policy — PASS.
+- Release/runtime identity — 9/9 PASS.
+- Release artifacts — 7/7 PASS.
+- Documentation structure/freshness и git diff --check — PASS.
+- CP15_LOCAL_PATCH_GATE=PASS.
+
+Это локальная проверка незакоммиченного пакета. Полный GitHub CI на
+данной версии не запускался. Production host bind, фактические права
+cloudflared, cutover/rollback и эксплуатационная приёмка CP-07–12
+не выполнены. CP-15 остаётся OPEN.
+
 ### CP-16 — Controlled production deployment
 
 Status: `OPEN`

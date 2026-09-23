@@ -399,6 +399,7 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+      - /run/dc-inventory:mode=0750,uid=101,gid=101,size=1m
     cap_drop:
       - ALL
     security_opt:

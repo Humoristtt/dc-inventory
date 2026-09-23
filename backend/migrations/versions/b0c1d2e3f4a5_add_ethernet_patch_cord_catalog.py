@@ -183,6 +183,7 @@ def upgrade() -> None:
                 id,
                 key,
                 display_name,
+                description,
                 parent_id,
                 sort_order,
                 is_system
@@ -191,6 +192,7 @@ def upgrade() -> None:
                 :id,
                 :key,
                 :display_name,
+                :description,
                 :parent_id,
                 :sort_order,
                 true
@@ -201,6 +203,10 @@ def upgrade() -> None:
             "id": LEAF_ID,
             "key": LEAF_KEY,
             "display_name": "Ethernet патч-корды",
+            "description": (
+                "Медные Ethernet-патч-корды с учётом категории, длины, "
+                "экранирования, разъёмов и цвета."
+            ),
             "parent_id": FAMILY_ID,
             "sort_order": 11,
         },

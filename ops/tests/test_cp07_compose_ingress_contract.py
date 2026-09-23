@@ -136,7 +136,9 @@ class IngressComposeTests(unittest.TestCase):
             self.assertEqual(mount["type"], "bind")
             self.assertEqual(mount["source"], str(directory))
             self.assertFalse(mount.get("read_only", False))
-            self.assertFalse(mount["bind"]["create_host_path"])
+            self.assertFalse(
+                mount.get("bind", {}).get("create_host_path", False)
+            )
 
 
 if __name__ == "__main__":

@@ -48,7 +48,6 @@ import {
   applySpeedBucket,
   ETHERNET_SPEED_BUCKETS,
   isSpeedBucketSelected,
-  speedFacetCountForBucket,
   speedFacetValuesForBucket,
 } from "../../features/catalog/transceiverFilters";
 import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
@@ -292,74 +291,6 @@ export function CategoryPage() {
         </div> : null}
         {categoryShapeKnown && !categoryQuery.isError && !family ? (
           <section aria-labelledby="category-items-title" className="catalog-section">
-            {ethernetSpeedView ? (
-              <div className="result-toolbar">
-                <div>
-                  <span className="section-kicker">Скорость</span>
-                  <h2>Гбит/с</h2>
-                </div>
-                <div
-                  aria-label="Скорость Ethernet-трансивера"
-                  className="quick-sort"
-                  role="group"
-                >
-                  {ETHERNET_SPEED_BUCKETS.map((bucket) => {
-                    const values =
-                      speedFacetValuesForBucket(
-                        speedFacetQuery.data,
-                        bucket,
-                      );
-                    const count =
-                      speedFacetCountForBucket(
-                        speedFacetQuery.data,
-                        bucket,
-                      );
-                    const selected =
-                      isSpeedBucketSelected(
-                        viewState.filters,
-                        values,
-                      );
-
-                    return (
-                      <button
-                        aria-pressed={selected}
-                        className={
-                          selected
-                            ? "tool-button quick-sort__button quick-sort__button--active"
-                            : "tool-button quick-sort__button"
-                        }
-                        disabled={
-                          speedFacetQuery.isPending
-                          || count === 0
-                        }
-                        key={bucket}
-                        onClick={() => {
-                          const current =
-                            catalogFiltersFromViewState(
-                              viewState,
-                            );
-                          updateFilters({
-                            ...current,
-                            filters: applySpeedBucket(
-                              current.filters,
-                              values,
-                              { clear: selected },
-                            ),
-                          });
-                        }}
-                        type="button"
-                      >
-                        {bucket}
-                        {count > 0 ? (
-                          <span>{count}</span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
-
             <div className="result-toolbar">
               <div>
                 <span className="section-kicker">Подходящие позиции</span>
@@ -368,6 +299,60 @@ export function CategoryPage() {
                 </h2>
               </div>
               <div className="result-toolbar__actions">
+                {ethernetSpeedView ? (
+                  <div
+                    aria-label="Скорость Ethernet-трансивера"
+                    className="transceiver-speed-filter"
+                    role="group"
+                  >
+                    {ETHERNET_SPEED_BUCKETS.map((bucket) => {
+                      const values =
+                        speedFacetValuesForBucket(
+                          speedFacetQuery.data,
+                          bucket,
+                        );
+                      const selected =
+                        isSpeedBucketSelected(
+                          viewState.filters,
+                          values,
+                        );
+
+                      return (
+                        <button
+                          aria-pressed={selected}
+                          className={
+                            selected
+                              ? "tool-button transceiver-speed-filter__button quick-sort__button--active"
+                              : "tool-button transceiver-speed-filter__button"
+                          }
+                          disabled={
+                            speedFacetQuery.isPending
+                            || values.length === 0
+                          }
+                          key={bucket}
+                          onClick={() => {
+                            const current =
+                              catalogFiltersFromViewState(
+                                viewState,
+                              );
+                            updateFilters({
+                              ...current,
+                              filters: applySpeedBucket(
+                                current.filters,
+                                values,
+                                { clear: selected },
+                              ),
+                            });
+                          }}
+                          type="button"
+                        >
+                          {bucket}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : null}
+
                 <button
                   className={
                     filtersCount > 0

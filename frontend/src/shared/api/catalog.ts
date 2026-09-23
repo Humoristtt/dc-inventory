@@ -176,6 +176,7 @@ export type CatalogQuery = {
   q?: string;
   category?: string;
   longRange?: boolean;
+  rj45?: boolean;
   status?: ItemStatus;
   manufacturerIds?: readonly string[];
   availability?: Availability;
@@ -225,6 +226,7 @@ export function encodeCatalogQuery(
     params.set("category", query.category);
   }
   if (query.longRange) params.set("long_range", "true");
+  if (query.rj45) params.set("rj45", "true");
   if (query.status) {
     params.set("status", query.status);
   }

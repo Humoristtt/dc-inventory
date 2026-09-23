@@ -108,13 +108,19 @@ describe("production web hardening", () => {
 });
 
 describe("production API rate limiting", () => {
-  it("trusts forwarded client IP only on the Unix socket", () => {
+  it("trusts only the host-normalized client IP on the Unix socket", () => {
     expect(nginxConfig).toContain("set_real_ip_from unix:;");
     expect(nginxConfig).toContain(
+      "real_ip_header X-Real-IP;",
+    );
+    expect(nginxConfig).not.toContain(
       "real_ip_header CF-Connecting-IP;",
     );
     expect(nginxServerInclude).toContain(
       "proxy_set_header X-Real-IP $remote_addr;",
+    );
+    expect(nginxServerInclude).toContain(
+      "proxy_set_header X-Forwarded-For $remote_addr;",
     );
   });
 

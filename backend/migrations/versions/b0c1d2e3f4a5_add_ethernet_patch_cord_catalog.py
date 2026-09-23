@@ -1,4 +1,4 @@
-"""Add the Ethernet patch-cord catalog schema.
+"""Extend the workbook-backed catalog schema.
 
 Revision ID: b0c1d2e3f4a5
 Revises: a9c0d1e2f3a4
@@ -20,6 +20,7 @@ depends_on: str | Sequence[str] | None = None
 
 FAMILY_KEY = "copper_cabling"
 LEAF_KEY = "ethernet_patch_cord"
+HDD_LEAF_KEY = "hdd"
 
 FAMILY_ID = str(
     uuid5(
@@ -33,6 +34,12 @@ LEAF_ID = str(
         "spikatel:category:" + LEAF_KEY,
     )
 )
+HDD_LEAF_ID = str(
+    uuid5(
+        NAMESPACE_URL,
+        "spikatel:category:" + HDD_LEAF_KEY,
+    )
+)
 
 ATTRIBUTES = (
     ("cable_category", "Категория", "TEXT", None, True),
@@ -44,17 +51,97 @@ ATTRIBUTES = (
 )
 
 
-def _attribute_id(key: str) -> str:
+def _attribute_id(category_key: str, key: str) -> str:
     return str(
         uuid5(
             NAMESPACE_URL,
-            "spikatel:attribute:" + LEAF_KEY + ":" + key,
+            "spikatel:attribute:" + category_key + ":" + key,
         )
     )
 
 
 def upgrade() -> None:
     connection = op.get_bind()
+
+    hdd_items = connection.scalar(
+        sa.text(
+            """
+            SELECT count(*)
+            FROM items
+            WHERE category_id = CAST(:category_id AS uuid)
+            """
+        ),
+        {"category_id": HDD_LEAF_ID},
+    )
+    if hdd_items:
+        raise RuntimeError(
+            "cannot add required HDD interface_speed while HDD catalog "
+            "items already exist; explicit backfill is required"
+        )
+
+    connection.execute(
+        sa.text(
+            """
+            UPDATE category_attributes
+            SET sort_order = sort_order + 1
+            WHERE category_id = CAST(:category_id AS uuid)
+              AND sort_order >= 3
+            """
+        ),
+        {"category_id": HDD_LEAF_ID},
+    )
+
+    connection.execute(
+        sa.text(
+            """
+            INSERT INTO category_attributes (
+                id,
+                category_id,
+                key,
+                label,
+                data_type,
+                unit,
+                required,
+                filterable,
+                searchable,
+                card_visible,
+                detail_visible,
+                table_visible,
+                excel_visible,
+                sort_order,
+                filter_type,
+                validation_metadata,
+                is_system
+            )
+            VALUES (
+                :id,
+                CAST(:category_id AS uuid),
+                'interface_speed',
+                'Скорость интерфейса',
+                'TEXT',
+                NULL,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                true,
+                3,
+                'EXACT',
+                CAST(:validation_metadata AS jsonb),
+                true
+            )
+            """
+        ),
+        {
+            "id": _attribute_id(HDD_LEAF_KEY, "interface_speed"),
+            "category_id": HDD_LEAF_ID,
+            "validation_metadata": json.dumps(
+                {"max_length": 2000}
+            ),
+        },
+    )
 
     connection.execute(
         sa.text(
@@ -179,7 +266,7 @@ def upgrade() -> None:
                 """
             ),
             {
-                "id": _attribute_id(key),
+                "id": _attribute_id(LEAF_KEY, key),
                 "category_id": LEAF_ID,
                 "key": key,
                 "label": label,
@@ -195,6 +282,48 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     connection = op.get_bind()
+
+    hdd_items = connection.scalar(
+        sa.text(
+            """
+            SELECT count(*)
+            FROM items
+            WHERE category_id = CAST(:category_id AS uuid)
+            """
+        ),
+        {"category_id": HDD_LEAF_ID},
+    )
+    if hdd_items:
+        raise RuntimeError(
+            "cannot remove HDD interface_speed while HDD catalog "
+            "items exist"
+        )
+
+    connection.execute(
+        sa.text(
+            """
+            DELETE FROM category_attributes
+            WHERE id = CAST(:attribute_id AS uuid)
+            """
+        ),
+        {
+            "attribute_id": _attribute_id(
+                HDD_LEAF_KEY,
+                "interface_speed",
+            )
+        },
+    )
+    connection.execute(
+        sa.text(
+            """
+            UPDATE category_attributes
+            SET sort_order = sort_order - 1
+            WHERE category_id = CAST(:category_id AS uuid)
+              AND sort_order >= 4
+            """
+        ),
+        {"category_id": HDD_LEAF_ID},
+    )
 
     item_count = connection.scalar(
         sa.text(

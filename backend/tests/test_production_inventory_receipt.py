@@ -24,7 +24,7 @@ pytestmark = pytest.mark.asyncio
 
 
 def validation_fixture() -> Validation:
-    row = dict(
+    stocked_row = dict(
         zip(
             SHEETS["Ethernet патч-корды"],
             [
@@ -39,17 +39,41 @@ def validation_fixture() -> Validation:
             strict=True,
         )
     )
-    item = normalize_row(
-        "Ethernet патч-корды",
-        row,
-        "Ethernet патч-корды!2",
+    zero_stock_row = dict(
+        zip(
+            SHEETS["Ethernet патч-корды"],
+            [
+                "Cat.6",
+                "RJ-45",
+                "RJ-45",
+                "3 м",
+                "UTP",
+                "Серый",
+                "0",
+            ],
+            strict=True,
+        )
     )
+    items = [
+        normalize_row(
+            "Ethernet патч-корды",
+            stocked_row,
+            "Ethernet патч-корды!2",
+            allow_zero_quantity=True,
+        ),
+        normalize_row(
+            "Ethernet патч-корды",
+            zero_stock_row,
+            "Ethernet патч-корды!3",
+            allow_zero_quantity=True,
+        ),
+    ]
     return Validation(
         path=Path("synthetic-incremental.xlsx"),
         sheets=["Ethernet патч-корды"],
-        raw_rows=1,
+        raw_rows=2,
         source_quantity=7,
-        items=[item],
+        items=items,
     )
 
 
@@ -89,7 +113,7 @@ async def test_incremental_receipt_creates_stock_and_replays_by_source(
 
             assert dry_run.existing_movement_id is None
             assert dry_run.existing_items == 0
-            assert dry_run.new_items == 1
+            assert dry_run.new_items == 2
 
             first = await apply_inventory_receipt(
                 db,
@@ -102,9 +126,10 @@ async def test_incremental_receipt_creates_stock_and_replays_by_source(
 
             assert first["state"] == "success"
             assert first["replayed"] is False
-            assert first["created_items"] == 1
+            assert first["created_items"] == 2
             assert first["reused_items"] == 0
             assert first["receipt_quantity"] == 7
+            assert first["zero_stock_items"] == 1
             assert first["projection_drift_rows"] == 0
 
         async with AsyncSession(
@@ -125,12 +150,14 @@ async def test_incremental_receipt_creates_stock_and_replays_by_source(
             assert replay["state"] == "already_applied"
             assert replay["replayed"] is True
             assert replay["created_items"] == 0
+            assert replay["reused_items"] == 2
             assert replay["receipt_quantity"] == 7
+            assert replay["zero_stock_items"] == 1
 
         async with AsyncSession(engine) as db:
             assert await db.scalar(
                 select(func.count()).select_from(Item)
-            ) == 1
+            ) == 2
             assert await db.scalar(
                 select(func.count()).select_from(Movement)
             ) == 1

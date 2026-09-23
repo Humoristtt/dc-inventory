@@ -350,6 +350,7 @@ def normalize_row(
                 "Форм-фактор",
                 "Интерфейс",
                 "Объём",
+                "Скорость интерфейса",
                 "Скорость вращения",
                 "Тип",
             ]
@@ -522,7 +523,10 @@ def read_workbook(
                     result.raw_rows += 1
                     row = {label: cells.get(index, "") for index, label in expected.items()}
                     try:
-                        result.source_quantity += _positive_integer(row["Количество"])
+                        result.source_quantity += _quantity_integer(
+                            row["Количество"],
+                            allow_zero=allow_zero_quantity,
+                        )
                         if set(cells) - set(expected):
                             raise ValueError("unmapped nonempty columns")
                         missing = [

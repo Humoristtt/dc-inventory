@@ -341,13 +341,13 @@ def long_range_predicate() -> ColumnElement[bool]:
 
 
 def rj45_transceiver_predicate() -> ColumnElement[bool]:
-    normalized_connector = func.lower(
-        func.regexp_replace(
+    normalized_connector = func.regexp_replace(
+        func.lower(
             ItemAttributeValue.text_value,
-            r"[^a-z0-9]+",
-            "",
-            "g",
-        )
+        ),
+        r"[^a-z0-9]+",
+        "",
+        "g",
     )
     return Item.id.in_(
         select(ItemAttributeValue.item_id)

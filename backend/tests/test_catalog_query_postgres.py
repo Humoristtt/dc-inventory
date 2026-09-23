@@ -24,6 +24,7 @@ async def transceiver(
     reach: str,
     category: str = "transceiver_ethernet",
     speed: str = "10 Гбит/с",
+    connector: str = "LC",
     manufacturer_name: str | None = None,
     model: str | None = None,
 ) -> uuid.UUID:
@@ -45,8 +46,8 @@ async def transceiver(
                 "wavelength": "1310 нм",
                 "reach": reach,
                 "form_factor": "SFP+",
-                "fiber": "SMF",
-                "connector": "LC",
+                "fiber": "Медь" if connector.replace("-", "").upper() == "RJ45" else "SMF",
+                "connector": connector,
             },
         ),
     )
@@ -110,6 +111,98 @@ async def test_hierarchy_long_range_and_shared_family_facets(
         db, q=marker, category_key="transceivers", filter_expressions=["reach_m:gte:2000"]
     )
     assert (await query_catalog_items(db, spec, limit=20, offset=0)).total == 2
+
+
+async def test_rj45_transceivers_are_split_from_optical_ethernet(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    marker = uuid.uuid4().hex
+
+    optical = await transceiver(
+        db,
+        marker,
+        "до 300 м",
+        connector="LC",
+    )
+    copper = await transceiver(
+        db,
+        marker,
+        "до 100 м",
+        connector="RJ-45",
+    )
+
+    ordinary_spec = await build_catalog_query_spec(
+        db,
+        q=marker,
+        category_key="transceiver_ethernet",
+    )
+    ordinary_page = await query_catalog_items(
+        db,
+        ordinary_spec,
+        limit=20,
+        offset=0,
+    )
+    assert {
+        record.record.item.id
+        for record in ordinary_page.items
+    } == {optical}
+
+    rj45_spec = await build_catalog_query_spec(
+        db,
+        q=marker,
+        category_key="transceiver_ethernet",
+        rj45=True,
+    )
+    rj45_page = await query_catalog_items(
+        db,
+        rj45_spec,
+        limit=20,
+        offset=0,
+    )
+    assert {
+        record.record.item.id
+        for record in rj45_page.items
+    } == {copper}
+
+    scope = await equipment_scope(
+        db,
+        "transceiver_ethernet",
+        False,
+        rj45=True,
+    )
+    scoped_ids = set(
+        (
+            await db.scalars(
+                select(Item.id).where(
+                    *scope,
+                    Item.name == marker,
+                )
+            )
+        ).all()
+    )
+    assert scoped_ids == {copper}
+
+    with pytest.raises(
+        CatalogValidationError,
+        match="rj45",
+    ):
+        await build_catalog_query_spec(
+            db,
+            category_key="transceivers",
+            rj45=True,
+        )
+
+    with pytest.raises(
+        CatalogValidationError,
+        match="cannot be combined",
+    ):
+        await build_catalog_query_spec(
+            db,
+            category_key="transceiver_ethernet",
+            long_range=True,
+            rj45=True,
+        )
 
 
 async def test_transceiver_speed_sort_is_numeric(

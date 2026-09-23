@@ -216,11 +216,36 @@ def _positive_integer(value: str) -> int:
         or number != number.to_integral_value()
         or not 0 < number <= 2**53 - 1
     ):
-        raise ValueError("quantity must be a positive integer within the supported range")
+        raise ValueError("value must be a positive integer within the supported range")
     return int(number)
 
 
-def normalize_row(sheet: str, row: dict[str, str], source: str) -> Equipment:
+def _quantity_integer(
+    value: str,
+    *,
+    allow_zero: bool,
+) -> int:
+    number = Decimal(value)
+    lower_bound = 0 if allow_zero else 1
+    if (
+        not number.is_finite()
+        or number != number.to_integral_value()
+        or not lower_bound <= number <= 2**53 - 1
+    ):
+        qualifier = "non-negative" if allow_zero else "positive"
+        raise ValueError(
+            f"quantity must be a {qualifier} integer within the supported range"
+        )
+    return int(number)
+
+
+def normalize_row(
+    sheet: str,
+    row: dict[str, str],
+    source: str,
+    *,
+    allow_zero_quantity: bool = False,
+) -> Equipment:
     keys: tuple[str, ...]
     manufacturer, model = row.get("Производитель"), row.get("Модель")
     if sheet == "SFP модули":
@@ -241,7 +266,30 @@ def normalize_row(sheet: str, row: dict[str, str], source: str) -> Equipment:
     elif sheet == "SSD  Накопители":
         if row["Тип"] not in {"Enterprise SSD", "Enterprise HDD"}:
             raise ValueError("unknown drive type")
+        if not re.fullmatch(
+            r"(?:2[.,]5|3[.,]5)\s*[″\"]?|M\.2|U\.[23]",
+            row["Форм-фактор"],
+        ):
+            raise ValueError("unsupported drive form factor")
+        if not re.fullmatch(
+            r"(?:SATA|SAS|NVMe)(?:\s+.*)?",
+            row["Интерфейс"],
+        ):
+            raise ValueError("unsupported drive interface")
+        if not re.fullmatch(
+            r"\d+(?:[.,]\d+)?\s*(?:ГБ|ТБ)",
+            row["Объём"],
+        ):
+            raise ValueError("unsupported drive capacity")
         category = "ssd" if row["Тип"] == "Enterprise SSD" else "hdd"
+        if (
+            category == "ssd"
+            and not re.fullmatch(
+                r"\d+(?:[.,]\d+)?\s*Гбит/с",
+                row["Скорость интерфейса"],
+            )
+        ):
+            raise ValueError("unsupported SSD interface speed")
         keys = (
             "form_factor",
             "interface",
@@ -302,7 +350,10 @@ def normalize_row(sheet: str, row: dict[str, str], source: str) -> Equipment:
         manufacturer,
         model,
         attributes,
-        _positive_integer(row["Количество"]),
+        _quantity_integer(
+            row["Количество"],
+            allow_zero=allow_zero_quantity,
+        ),
         item_signature(category, manufacturer, model, attributes),
         [source],
     )
@@ -338,7 +389,11 @@ def _read_xml(archive: ZipFile, member: str) -> ET.Element:
     return root
 
 
-def read_workbook(path: Path = SOURCE) -> Validation:
+def read_workbook(
+    path: Path = SOURCE,
+    *,
+    allow_zero_quantity: bool = False,
+) -> Validation:
     result = Validation(path.expanduser().resolve())
     if not path.exists():
         result.errors.append("DATA_IMPORT_BLOCKED_SOURCE_FILE_MISSING")
@@ -419,24 +474,6 @@ def read_workbook(path: Path = SOURCE) -> Validation:
                     result.warnings.append(
                         f"{name}!H1: missing optional Цвет header; explicitly mapped column H"
                     )
-                if name == "Оптические сплиттеры  делители" and 1 not in header:
-                    misplaced_type_rows = [
-                        number
-                        for number, cells in rows[1:]
-                        if cells == {3: "Тип"}
-                    ]
-                    if len(misplaced_type_rows) == 1:
-                        artifact_row = misplaced_type_rows[0]
-                        header[1] = "Тип"
-                        rows = [
-                            row
-                            for row in rows
-                            if row[0] != artifact_row
-                        ]
-                        result.warnings.append(
-                            f"{name}!A1: restored known misplaced Тип header "
-                            f"from C{artifact_row}"
-                        )
                 expected = dict(enumerate(headers, 1))
                 if header != expected:
                     result.errors.append(
@@ -458,7 +495,12 @@ def read_workbook(path: Path = SOURCE) -> Validation:
                         ]
                         if missing:
                             raise ValueError(f"blank required fields: {missing}")
-                        item = normalize_row(name, row, source)
+                        item = normalize_row(
+                            name,
+                            row,
+                            source,
+                            allow_zero_quantity=allow_zero_quantity,
+                        )
                         if item.signature in grouped:
                             grouped[item.signature].quantity += item.quantity
                             grouped[item.signature].sources.append(source)

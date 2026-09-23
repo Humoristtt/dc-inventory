@@ -130,10 +130,20 @@ export async function procurementRequest<T>(
 
 export function getProcurementRequests(
   view: "my" | "active" | "history",
+  page: {
+    limit: number;
+    offset: number;
+  },
   signal?: AbortSignal,
 ) {
+  const params = new URLSearchParams({
+    view,
+    limit: String(page.limit),
+    offset: String(page.offset),
+  });
+
   return procurementRequest<ProcurementPage>(
-    `/api/procurement/requests?view=${view}&limit=30&offset=0`,
+    `/api/procurement/requests?${params.toString()}`,
     undefined,
     signal,
   );
@@ -147,9 +157,31 @@ export function getProcurementRequest(id: string, signal?: AbortSignal) {
   );
 }
 
-export function getProcurementManagers(signal?: AbortSignal) {
+export function getProcurementManagers(
+  {
+    q,
+    limit = 50,
+    offset = 0,
+  }: {
+    q?: string;
+    limit?: number;
+    offset?: number;
+  } = {},
+  signal?: AbortSignal,
+) {
+  const params = new URLSearchParams({
+    limit: String(limit),
+    offset: String(offset),
+  });
+
+  const search = q?.trim();
+
+  if (search) {
+    params.set("q", search);
+  }
+
   return procurementRequest<ManagerPage>(
-    "/api/procurement/managers?limit=200&offset=0",
+    `/api/procurement/managers?${params.toString()}`,
     undefined,
     signal,
   );

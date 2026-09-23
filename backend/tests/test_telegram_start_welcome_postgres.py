@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import uuid
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -10,7 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from app.core.config import Settings
 from app.modules.notifications import worker
 from app.modules.notifications.models import NotificationOutbox
-from app.modules.notifications.service import notification_dedupe_key
+from app.modules.notifications.service import (
+    ClaimedNotification,
+    notification_dedupe_key,
+)
 from app.modules.telegram_bot.models import (
     START_WELCOME_DEDUPE_PREFIX,
     TelegramChatState,
@@ -294,3 +298,135 @@ async def test_latest_start_wins_worker_state_guard() -> None:
             await _cleanup(db, chat_id=chat_id, dedupe_keys=keys)
     finally:
         await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_stale_claim_cannot_overwrite_welcome_state() -> None:
+    """A reclaimed outbox row must reject the previous worker's result."""
+    engine = create_async_engine(DATABASE_URL, pool_pre_ping=True)
+
+    chat_id = 7_990_000_004
+    update_id = 2_147_100_004
+    key = f"{START_WELCOME_DEDUPE_PREFIX}{update_id}:{chat_id}"
+
+    outbox_id = uuid.uuid4()
+    old_token = uuid.uuid4()
+    current_token = uuid.uuid4()
+
+    assert old_token != current_token
+
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            await _cleanup(
+                db,
+                chat_id=chat_id,
+                dedupe_keys=[key],
+            )
+
+            db.add(
+                TelegramChatState(
+                    chat_id=chat_id,
+                    latest_start_update_id=update_id,
+                )
+            )
+
+            db.add(
+                NotificationOutbox(
+                    id=outbox_id,
+                    method="sendMessage",
+                    payload={
+                        "chat_id": chat_id,
+                        "text": "welcome",
+                    },
+                    dedupe_key=key,
+                    status="PENDING",
+                    attempts=2,
+                    claimed_at=datetime.now(UTC),
+                    claim_token=current_token,
+                )
+            )
+
+            await db.commit()
+
+        stale_claim = ClaimedNotification(
+            id=outbox_id,
+            claim_token=old_token,
+            method="sendMessage",
+            payload={"chat_id": chat_id, "text": "welcome"},
+            dedupe_key=key,
+            attempts=1,
+        )
+
+        current_claim = ClaimedNotification(
+            id=outbox_id,
+            claim_token=current_token,
+            method="sendMessage",
+            payload={"chat_id": chat_id, "text": "welcome"},
+            dedupe_key=key,
+            attempts=2,
+        )
+
+        # Worker A finished its external send after worker B reclaimed
+        # the same outbox row. A must not update chat state.
+        assert (
+            await worker._finalize_start_welcome_success(
+                engine,
+                stale_claim,
+                chat_id=chat_id,
+                update_id=update_id,
+                message_id=777,
+            )
+            is False
+        )
+
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            state = await db.get(TelegramChatState, chat_id)
+            row = await db.get(NotificationOutbox, outbox_id)
+
+            assert state is not None
+            assert row is not None
+
+            assert state.last_welcome_message_id is None
+            assert state.last_welcome_sent_at is None
+
+            assert row.status == "PENDING"
+            assert row.claim_token == current_token
+            assert row.sent_at is None
+
+        # Only worker B, which owns the current claim, may finalize.
+        assert (
+            await worker._finalize_start_welcome_success(
+                engine,
+                current_claim,
+                chat_id=chat_id,
+                update_id=update_id,
+                message_id=888,
+            )
+            is True
+        )
+
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            state = await db.get(TelegramChatState, chat_id)
+            row = await db.get(NotificationOutbox, outbox_id)
+
+            assert state is not None
+            assert row is not None
+
+            assert state.last_welcome_message_id == 888
+            assert state.last_welcome_sent_at is not None
+
+            assert row.status == "SENT"
+            assert row.claim_token is None
+            assert row.claimed_at is None
+            assert row.sent_at is not None
+
+    finally:
+        try:
+            async with AsyncSession(engine) as db:
+                await _cleanup(
+                    db,
+                    chat_id=chat_id,
+                    dedupe_keys=[key],
+                )
+        finally:
+            await engine.dispose()

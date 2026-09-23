@@ -148,6 +148,12 @@ jobs:
         shell: bash
         run: python3 ops/tests/test_stage15_backup_contract.py
 
+      - name: Stage 15 versioned backup and restore regressions
+        shell: bash
+        run: |
+          python3 -B ops/tests/test_stage15_version_ids.py
+          python3 -B ops/tests/test_stage15_restore_versions.py
+
       - name: Stage 15 runtime provenance contract
         shell: bash
         run: python3 ops/tests/test_runtime_provenance_contract.py
@@ -158,6 +164,14 @@ jobs:
           python3 ops/tests/test_release_artifacts.py
           python3 ops/tests/test_provenance_behavior.py
 
+      - name: CP-07 Compose ingress contract
+        shell: bash
+        run: python3 -B ops/tests/test_cp07_compose_ingress_contract.py
+
+      - name: Approved release/runtime identity regression
+        shell: bash
+        run: python3 ops/tests/test_release_runtime_match.py
+
       - name: Stage 15 S3 lifecycle prefix contract
         shell: bash
         run: python3 ops/tests/test_s3_lifecycle_prefix.py
@@ -165,6 +179,10 @@ jobs:
       - name: Documentation freshness contract
         shell: bash
         run: python3 ops/tests/test_docs_freshness.py
+
+      - name: Documentation structure contract
+        shell: bash
+        run: python3 ops/tests/test_docs_structure.py
 
       - name: Notification delivery contract
         shell: bash
@@ -184,7 +202,10 @@ jobs:
 
       - name: Stage 15 recovery runbook contract
         shell: bash
-        run: python3 ops/tests/test_recovery_runbook_contract.py
+        run: |
+          python3 ops/tests/test_recovery_runbook_contract.py
+          python3 ops/tests/test_recovery_validation.py
+          python3 ops/tests/test_cp01_restore_session_invalidation.py
 
       - name: Stage 15 worker runtime contract
         shell: bash

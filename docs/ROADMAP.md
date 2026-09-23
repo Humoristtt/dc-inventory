@@ -1,309 +1,95 @@
-# План разработки Spikatel Inventory
+# Состояние проекта и порядок дальнейших работ
 
-Канонический roadmap после перехода на Warehouse Domain V2.
+Документ фиксирует последовательность работ, а не заменяет технические требования или журнал проверок. Дата сверки: 19.09.2026. Текущий исходный код — ветка `remediation/audit-0-12` после коммита `38d1b19`. Для описания устройства системы используем [архитектуру](ARCHITECTURE.md), для технических подробностей исправлений — [журнал CP-00–18](AUDIT_0_12_REMEDIATION.md), для истории предыдущих выпусков — [HISTORY.md](HISTORY.md).
 
-Статусы:
+## 1. Разделяем исходники и работающую систему
 
-- [x] завершено;
-- [~] текущая приёмка;
-- [ ] будущая работа.
+| Контур | Подтверждённое состояние | Что означает |
+|---|---|---|
+| Исходный код | Source migration head `a9c0d1e2f3a4`; CP-14 закрыт, CP-15 открыт | Код, миграции и локальные проверки доступны в remediation-ветке, но это не свидетельство развёртывания. |
+| Production | Последняя документированная проверка checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`, Alembic `c3d4e5f6a7b8` | Фактический текущий SHA, схема, образы и конфигурация требуют новой проверки перед CP-16. |
+| Складские изменения | `REAL_INVENTORY_MUTATIONS_ENABLED=false` по последнему production evidence | Обычные мутации закрыты. Ранее выполненный одноразовый импорт не означал снятие этой защиты. |
 
-Последнее обновление: 2026-09-12.
+Git push, изменение документации и синхронизация checkout не меняют запущенные контейнеры. Локальный PASS нельзя переносить на production. CP-16 требует отдельного разрешённого окна, резервной копии, планов отката и проверки конфигурации.
 
-## 1. Базовая платформа
+## 2. Реализованная основа
 
-- [x] Telegram Mini App.
-- [x] FastAPI backend.
-- [x] PostgreSQL.
-- [x] Docker Compose production-shaped runtime.
-- [x] Cloudflare / HTTPS production path.
-- [x] Telegram initData server-side validation.
-- [x] HttpOnly server session.
-- [x] Historical ADMIN / USER access model на accepted production baseline; source RBAC уже five-role capability-based.
-- [x] Access request approve/reject через Telegram.
-- [x] Transactional notification outbox.
-- [x] Fail-closed mutation gate.
+- [x] Telegram Mini App, React/TypeScript, FastAPI, PostgreSQL, Docker Compose, Cloudflare Tunnel и Telegram Gateway.
+- [x] Проверка Telegram `initData` сервером, HttpOnly-сессии, lifecycle заявок на доступ и capability-based RBAC.
+- [x] Роли `ENGINEER`, `SENIOR_ENGINEER`, `MANAGER`, `ADMIN`, `OWNER` в исходниках и последнем подтверждённом production baseline.
+- [x] Production RBAC maintenance cutover.
+- [x] PostgreSQL outbox для Telegram и опционального Microsoft Graph email; внешняя доставка at-least-once.
+- [x] Разделённые учётные записи PostgreSQL для миграций, backend, Telegram, email и maintenance в конфигурации текущего исходного кода.
 
-## 2. Warehouse Domain V2
+Роли, разрешения и жизненный цикл закупки определены в [RBAC_PROCUREMENT.md](RBAC_PROCUREMENT.md). Внешнюю доставку нельзя считать exactly-once при потере ответа шлюза.
 
-- [x] Quantity-only inventory.
-- [x] Удалена active physical-unit model.
-- [x] Удалена legacy physical-unit holder model.
-- [x] Actor операции отделён от custody пользователя.
-- [x] UserItemCustodyBalance = User × Item × positive quantity.
-- [x] ENGINEER / SENIOR_ENGINEER RETURN ограничен фактическим custody balance.
-- [x] StockBalance = Item × Location × quantity.
-- [x] Zero balances не хранятся.
-- [x] Negative stock запрещён.
-- [x] Location first-class entity.
-- [x] WAREHOUSE / DATACENTER location types.
-- [x] Location archive запрещён при наличии stock.
-- [x] Immutable movement journal.
-- [x] RECEIPT.
-- [x] ISSUE.
-- [x] RETURN.
-- [x] TRANSFER.
-- [x] WRITE_OFF.
-- [x] CORRECTION.
-- [x] REVERSAL.
-- [x] Idempotent mutation API.
-- [x] PostgreSQL concurrency locking.
-- [x] Read-only projection reconciliation.
+## 3. Каталог и склад
 
-## 3. Permissions
+- [x] Каталог с фиксированной иерархией family → leaf и версионированными схемами атрибутов; поиск, фильтры, фасеты и отображение остатков по локациям.
+- [x] Количественный Warehouse Domain V2 без действующего учёта serial/WWN конкретных экземпляров.
+- [x] `StockBalance = Item × StorageLocation × positive quantity`; `UserItemCustodyBalance = User × Item × positive quantity`.
+- [x] Неизменяемый журнал RECEIPT, ISSUE, RETURN, TRANSFER, WRITE_OFF, CORRECTION, REVERSAL; атомарное обновление остатков и custody.
+- [x] Идемпотентность движений, сериализация конфликтующих операций и read-only сверка проекций по журналу.
+- [x] Защита итогового RECEIPT закупки от обычного складского CORRECTION/REVERSAL реализована в исходниках; новые DB-инварианты ещё требуют production cutover.
 
-ENGINEER:
+Warehouse Domain V2 развёрнут и принят ранее. Initial bootstrap завершён и повторно не запускается. Его результат подтверждался сверкой остатков и внешней резервной копией. Разрешение обычных складских операций — отдельное решение, не часть повторного импорта. Точные инварианты — [WAREHOUSE_DOMAIN.md](WAREHOUSE_DOMAIN.md), атрибуты каталога — [CATALOG_SCHEMA.md](CATALOG_SCHEMA.md).
 
-- [x] Browse/search/filter catalog.
-- [x] Read stock / locations.
-- [x] Read own actor history.
-- [x] ISSUE / RETURN / RECEIPT / TRANSFER.
+## 4. Закупки и пользовательские сценарии
 
-SENIOR_ENGINEER:
+- [x] Закупки с неизменяемыми редакциями и событиями, назначением менеджера, циклом корректировок и расхождениями без изменения склада.
+- [x] При финальной технической приёмке создаётся один Warehouse RECEIPT в общей транзакции с завершением закупки.
+- [x] Локально проверены исправления идентичности закупочных позиций, пагинации, поиска и повторной отправки с постоянным `client_request_id`.
+- [x] CP-14: изолированный браузерный сценарий с реальными HTTP API и PostgreSQL, подписанным синтетическим Telegram `initData`, проверкой RBAC, склада, закупок и reconciliation.
+- [ ] Реальная приёмка актуального выпуска через Telegram Mini App после CP-16.
+- [ ] Включение и проверка Microsoft Graph email в production — только с утверждёнными секретами и отдельным профилем.
 
-- [x] ENGINEER warehouse operations.
-- [x] Common movement journal / employee filter.
-- [x] Catalog create/edit/archive.
+В рамках CP-14 зафиксированы backend `540 passed, 1 skipped`, frontend `150 passed`, Playwright `2 passed`. SFP downgrade safety относится к отдельному CI gate. Эти результаты относятся к локальному изолированному контуру, не к production.
 
-MANAGER:
+## 5. Исправления Audit 0–12 и предрелизная работа
 
-- [x] Catalog / stock / locations read-only.
-- [x] Warehouse mutations denied.
-- [x] Movement journal denied.
+| Этап | Состояние | Следующее действие |
+|---|---|---|
+| CP-00–CP-06 | Закрытые локальные технические этапы по журналу | Не изменять без воспроизведённой регрессии. |
+| CP-07 | OPEN | Проверить права Unix socket, UID/GID и совместно переключить web/Tunnel в production. |
+| CP-08 | OPEN | Проверить реальные Telegram/Graph delivery, конфигурацию и worker lifecycle. |
+| CP-09 | OPEN | Выполнить контролируемое применение PostgreSQL permissions и проверить legacy sessions. |
+| CP-10 | OPEN | Подтвердить provenance реальных образов и release artifacts на целевом сервере. |
+| CP-11 | OPEN | Выполнить восстановление настоящей резервной копии и внешней конфигурации по runbook. |
+| CP-12 | OPEN | Завершить независимый обзор сопровождаемости и production acceptance. |
+| CP-13 | CLOSED — локальная проверка 20.09.2026 | 23 Markdown сверены; четыре документационных контракта PASS, исправления тестов зафиксированы в `7d43286`. Production acceptance не входит в закрытие. |
+| CP-14 | CLOSED | Изолированная full-stack приёмка пройдена, см. коммит `3f549d5`. |
+| CP-15 | OPEN, выполняется | Проверить исходники, документы, безопасность и эксплуатационные риски тремя проходами. |
+| CP-16 | OPEN | Выпуск только после согласования и закрытия предрелизных блокеров. |
+| CP-17 | OPEN | Ручная проверка настоящего Telegram Mini App после выпуска. |
+| CP-18 | OPEN | Новый независимый аудит двенадцати разделов по итоговому коду и документации. |
 
-ADMIN / OWNER:
+В CP-15 выявлен и исправлен порядок проверки одноразовой PostgreSQL: проверка топологии и случайного маркера выполняется **до** Alembic. Коммит `38d1b19`; после исправления — два Playwright-теста, zero-drift reconciliation и удаление одноразовой БД. Это закрывает конкретный локальный дефект runner, **не** весь CP-15.
 
-- [x] Common movement journal / employee filter.
-- [x] Location administration.
-- [x] Catalog administration.
-- [x] RECEIPT / ISSUE / RETURN / TRANSFER.
-- [x] WRITE_OFF / CORRECTION / REVERSAL.
+## 6. Порядок завершения текущего цикла
 
-## 4. Catalog V2
+1. Сверить все Markdown с исходниками и реальными статусами; устранить дубли и расхождения, сохранив уникальные исторические доказательства. Не менять статусы CP-07–CP-12 без production evidence.
+2. Провести оставшиеся проходы CP-15, зафиксировать найденные дефекты и их исправления; отдельно проверить CI и критичные эксплуатационные сценарии.
+3. После итоговой редакции документации выполнить запланированные повторные проверки двенадцати разделов; результат каждого раздела фиксировать с конкретным SHA и датой, не подменяя ими CP-16/17.
+4. Только после явного согласования переходить к CP-16: определить approved SHA, подтвердить CI, свежую off-VM backup, совместимость миграций и планы отката; отдельно согласовать CP-07 Tunnel/web cutover.
+5. После развёртывания выполнить CP-17 и затем CP-18. Открытые production-зависимости закрывать только по фактическим результатам.
 
-- [x] Fixed family → leaf hierarchy.
-- [x] Трансиверы / Ethernet.
-- [x] Трансиверы / Fibre Channel.
-- [x] Оптика / Оптические патч-корды.
-- [x] Оптика / Сплиттеры и делители.
-- [x] Сетевые адаптеры / Ethernet.
-- [x] Сетевые адаптеры / Fibre Channel.
-- [x] Накопители / SSD.
-- [x] Накопители / HDD.
-- [x] Оперативная память.
-- [x] PCIe-адаптеры.
-- [x] Кабели питания.
-- [x] Только leaf category содержит Items.
-- [x] Дальние — derived scope, не category.
-- [x] Reach normalization.
-- [x] Dynamic scoped facets.
-- [x] Single-value facet dimension скрывается.
-- [x] Optional patch-cord color.
-- [x] Admin item create/edit/archive UX.
-
-## 5. Warehouse UI
-
-- [x] Family/leaf navigation.
-- [x] Search.
-- [x] Dynamic filters.
-- [x] Item detail.
-- [x] Total stock.
-- [x] Stock breakdown по location.
-- [x] ENGINEER / SENIOR_ENGINEER Взять / Вернуть.
-- [x] ENGINEER / SENIOR_ENGINEER Переместить / Приход.
-- [x] ADMIN / OWNER Списать.
-- [x] Movement journal capability-aware.
-- [x] Employee filter только для movement.read_all.
-- [x] Category/location/type filters.
-- [x] Period presets 7d / 30d / 3m / year / all.
-- [x] 3 месяца default.
-
-## 6. Archived lifecycle
-
-- [x] Archived Item запрещает RECEIPT.
-- [x] Archived Item запрещает ISSUE.
-- [x] Archived Item допускает RETURN.
-- [x] Archived Item допускает TRANSFER.
-- [x] Archived Item допускает WRITE_OFF.
-- [x] Archived Item допускает CORRECTION.
-- [x] Archived Item допускает REVERSAL.
-
-## 7. Initial inventory bootstrap
-
-- [x] Workbook parser.
-- [x] Quantity normalization.
-- [x] Duplicate identity aggregation.
-- [x] Patch-cord optional color mapping.
-- [x] Explicit SSD/HDD classification.
-- [x] Dry-run.
-- [x] Opening RECEIPT.
-- [x] Double-import protection.
-- [x] Authoritative workbook хранится вне repository.
-
-## 8. Telegram inventory notifications
-
-- [x] Configured notification recipient получает notification на ISSUE.
-- [x] Notification создаётся transactional с movement.
-- [x] Idempotent replay не создаёт duplicate notification.
-- [x] RETURN не создаёт ISSUE notification.
-
-## 9. Production acceptance Warehouse V2
-
-- [x] Backend PostgreSQL tests.
-- [x] Ruff.
-- [x] mypy.
-- [x] Frontend typecheck.
-- [x] Frontend lint.
-- [x] Frontend unit tests.
-- [x] Frontend build.
-- [x] Warehouse synthetic browser E2E.
-- [x] Frontend → API → PostgreSQL fullstack CI acceptance.
-- [x] Projection reconciliation zero drift.
-- [x] Warehouse Domain V2 merge/deploy.
-- [x] Responsive/mobile/desktop warehouse UI acceptance.
-- [x] Header/fullscreen/Escape remediation.
-- [x] Desktop form consistency and smart suggestions.
-- [x] Current running production migration head `c3d4e5f6a7b8`.
-- [x] External authoritative workbook contract.
-- [x] Fail-closed production one-shot bootstrap path.
-- [x] Empty-domain production preflight.
-- [x] Fresh verified pre-import off-VM backup.
-- [x] Initial production inventory bootstrap.
-- [x] Post-import DB/count/quantity verification.
-- [x] Post-import projection reconciliation zero drift.
-- [x] Fresh verified post-import off-VM backup.
-- [x] Real Telegram visual acceptance.
+Команды развёртывания, восстановления и критерии остановки не копируем в roadmap: их владельцы — [DEPLOYMENT.md](DEPLOYMENT.md), [OPERATIONS.md](OPERATIONS.md), [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md) и [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md).
 
 ## 10. Accepted clean baseline
-
-Предыдущий Warehouse/UX/design-system cycle завершён.
 
 Accepted production/runtime golden baseline перед новым feature cycle:
 
 `1242f56c131d0f8c470e05cbaf209c48a37e85a4`
 
-Подтверждено:
+Историческая приёмка предыдущего цикла, не результат текущего CP-15:
 
-- [x] Warehouse Domain V2 production acceptance;
-- [x] frontend performance pass;
-- [x] typography/form consistency;
-- [x] shared frontend design-system refactor;
-- [x] catalog speed sorting / strict long-range scope;
-- [x] post-PR60 Telegram UX remediation;
 - [x] required CI;
-- [x] production cutover;
-- [x] real Telegram desktop acceptance;
-- [x] fresh verified production backup;
-- [x] production Docker/release cleanup;
-- [x] Mac project Docker cleanup;
-- [x] GitHub cleanup до единственной `main`;
+- [x] Warehouse V2/UX/design-system production acceptance;
+- [x] real Telegram desktop acceptance и fresh verified production backup;
 - [x] local/source/runtime golden-state verification.
 
-Новый feature branch начинается от этого exact baseline.
+Более позднее документированное production evidence — checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`, схема `c3d4e5f6a7b8`. Его актуальность на момент будущего деплоя проверяется отдельно.
 
-Документационные и feature commits после baseline не являются production state
-до отдельного merge/deploy/provenance acceptance.
+## 11. Работы вне текущего цикла
 
-Regular warehouse mutation gate на accepted production baseline:
-
-`REAL_INVENTORY_MUTATIONS_ENABLED=false`
-
-Initial bootstrap завершён и повторно не запускается.
-
-## 11. RBAC foundation — PRODUCTION CUTOVER COMPLETE / AUDIT REMEDIATION
-
-Canonical contract:
-
-`docs/RBAC_PROCUREMENT.md`
-
-- [~] RBAC foundation развёрнут в production; source проходит Audit #2 remediation и последующие full audits.
-- [x] Product role model согласована.
-- [x] Capability model согласована.
-- [x] Existing-role migration contract реализован.
-- [x] OWNER singleton/recovery invariant реализован.
-- [x] Добавлены ENGINEER / SENIOR_ENGINEER / MANAGER / ADMIN / OWNER.
-- [x] Migration USER -> ENGINEER.
-- [x] Runtime reconciliation configured recovery identity -> OWNER.
-- [x] Оставшиеся ADMIN сохраняются как ADMIN.
-- [x] Backend capability policy.
-- [x] Audited role transitions.
-- [x] ADMIN не может назначать ADMIN/OWNER.
-- [x] OWNER может назначать ADMIN.
-- [x] OWNER защищён от normal role/access mutation.
-- [x] Warehouse authorization синхронизирован.
-- [x] Catalog authorization синхронизирован.
-- [x] Role-aware frontend navigation/actions.
-- [x] PostgreSQL integration acceptance.
-- [x] Frontend unit/browser acceptance.
-- [x] Full CI acceptance.
-- [x] Source migration head `d4e5f6a7b8c9`.
-- [x] Production RBAC maintenance cutover.
-
-## 12. Procurement domain
-
-После устойчивого RBAC foundation:
-
-- [x] Отдельный backend module `procurement`.
-- [x] ProcurementRequest.
-- [x] Immutable ProcurementRevision.
-- [x] Existing-item и proposed-item lines.
-- [x] Assigned Manager как responsibility, не ACL.
-- [x] Любой MANAGER может работать с любой активной закупкой.
-- [x] `Взять на себя`.
-- [x] `Передать менеджеру`.
-- [x] `Ожидает менеджера`.
-- [x] `Требует корректировки`.
-- [x] Mandatory correction comment.
-- [x] Structured manager alternative proposal.
-- [x] New revision после корректировки.
-- [x] `В закупке`.
-- [x] `На приёмке`.
-- [x] `Есть расхождения` без stock mutation.
-- [x] Создание catalog Item из proposed line только технической ролью.
-- [x] Receiving location selection.
-- [x] Double confirmation final acceptance.
-- [x] Atomic Warehouse RECEIPT.
-- [x] Exactly-one procurement -> receipt linkage.
-- [x] `Выполнена`.
-- [x] Immutable event/audit trail.
-- [x] Concurrency/state-transition protection.
-- [x] Telegram notifications + Mini App deep links.
-- [x] PostgreSQL integration acceptance.
-- [x] Role-specific browser E2E.
-- [x] Procurement schema `c3d4e5f6a7b8` deployed in production.
-- [~] Source `d4e5f6a7b8c9` audit remediation implemented; full regression and
-  production deployment are still pending.
-- [~] Full CI acceptance for the remediation source.
-- [ ] Real Telegram Procurement acceptance for the current release.
-
-## 13. Procurement email delivery
-
-Source implementation готова, production delivery пока намеренно выключен:
-
-- [x] Microsoft Graph application client implementation.
-- [x] OAuth credentials через secret boundary.
-- [x] To / CC policy.
-- [x] HTML/text procurement message.
-- [x] Async delivery через durable email outbox/worker semantics.
-- [x] Retry/dead-letter behavior.
-- [x] Email failure не откатывает business transaction.
-- [x] API fail-closed при `EMAIL_DELIVERY_ENABLED=false` или неполной Graph config.
-- [x] Отдельная least-privilege DB identity для email worker.
-- [x] Optional email-worker отражён в backup/recovery runtime provenance.
-- [ ] Production Graph credentials + `EMAIL_DELIVERY_ENABLED=true` + profile `email`.
-- [ ] Production live email acceptance.
-
-## 14. Future product work
-
-Не входит в текущий feature cycle без отдельного решения:
-
-- partial procurement acceptance;
-- supplier directory;
-- invoices / OCR;
-- ERP/accounting integration;
-- dynamic custom roles;
-- attachment storage;
-- procurement price analytics.
-
-Исторические решения и завершённые промежуточные изменения хранятся в
-`docs/HISTORY.md`, а не размножаются как незакрытые текущие пункты roadmap.
+Без отдельного решения не добавляем частичную приёмку закупок, каталог поставщиков, счета/OCR, ERP, аналитику цен, динамические роли или учёт отдельных serial/WWN экземпляров. Новые функции не должны блокировать завершение уже определённого remediation cycle.

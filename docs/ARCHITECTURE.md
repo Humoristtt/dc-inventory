@@ -1,317 +1,87 @@
-# Architecture
+# Архитектура Spikatel Inventory
 
-## System
+Система — модульный монолит: один FastAPI backend обслуживает Telegram Mini App, каталог, склад, пользователей и закупки; PostgreSQL хранит предметные данные и транзакционный журнал. Отдельные процессы выполняют отправку уведомлений и ограниченное техническое обслуживание. Этот документ отвечает на вопрос **как устроена система и где проходят границы доверия**. Команды локального запуска — в [DEVELOPMENT.md](DEVELOPMENT.md), выпуска — в [DEPLOYMENT.md](DEPLOYMENT.md), восстановления — в [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md).
 
-Spikatel Inventory — Telegram Mini App.
+## 1. Компоненты и запрос пользователя
 
-Основной путь:
+```text
+Telegram WebView / браузер
+          │ HTTPS
+          ▼
+Cloudflare Tunnel
+          │
+          ▼
+Nginx (статический React + reverse proxy + rate limits)
+          │ /api/*
+          ▼
+FastAPI → auth/access/identity → catalog/inventory/procurement
+          │                          │
+          └──────────── SQLAlchemy async ──────────→ PostgreSQL
+                                                       │
+                                             transactional outbox
+                                                       │
+                                      Telegram / email workers
+                                                       │
+                                  Cloudflare Gateway / Microsoft Graph
+```
 
-Telegram → HTTPS / Cloudflare → nginx → FastAPI → PostgreSQL
+`backend/app/main.py` создаёт FastAPI-приложение, проверяет production-конфигурацию, подключает `TrustedHostMiddleware`, регистрирует маршруты через `backend/app/api/router.py` и на время жизни приложения открывает async SQLAlchemy engine. Маршруты распределены между `auth`, `access`, административным `identity`, `catalog`, `inventory`, `procurement`, `telegram_bot` и `health`. В production Swagger/OpenAPI endpoints отключены. Для доступа снаружи backend не публикует host port: его вызывает только внутренний Nginx.
 
-Backend modules:
+Frontend построен на React/TypeScript/Vite. Он получает JSON через API; прямых подключений к PostgreSQL не имеет. Внешний интерфейс не является источником истины ни для ролей, ни для доступного количества. Postgres 18 развёрнут отдельным сервисом Docker Compose. Alembic управляет схемой, а отдельный шаг `db-permissions` применяет least-privilege права runtime identities после миграции.
 
-- auth / identity;
-- access;
-- catalog;
-- inventory;
-- notifications;
-- telegram_bot;
-- maintenance.
+## 2. Аутентификация и авторизация
 
-## Catalog
+При входе клиент передаёт Telegram `initData` в `/api/auth/telegram`. Backend сверяет криптографическую подпись и срок действия, связывает TelegramIdentity с User и выдаёт серверную сессию через HttpOnly cookie. При последующих запросах backend проверяет сессию, статус доступа и capability. Статус `PENDING`/`APPROVED`/`REJECTED`/`BLOCKED` хранится отдельно от роли; скрытие кнопки в React не даёт доступ к API.
 
-Каталог использует фиксированную hierarchy family → leaf.
+Source roles: `ENGINEER`, `SENIOR_ENGINEER`, `MANAGER`, `ADMIN`, `OWNER`. Список capabilities задаёт серверная политика, а не числовое сравнение ролей: MANAGER — отдельная предметная ветка. OWNER — единственная recovery-identity, не назначаемая обычным API. Изменения доступа и ролей имеют транзакционный audit; custody и доступ сотрудника согласованы блокировками PostgreSQL. Полная матрица и порядок смены OWNER — в [RBAC_PROCUREMENT.md](RBAC_PROCUREMENT.md).
 
-Item является номенклатурной позицией.
-Технические поля зависят от leaf category.
-Search/facets выполняются backend и scoped текущим universe.
+## 3. Каталог: номенклатура, не экземпляры
 
-CatalogQuerySpec carries request-scoped category IDs and attribute definitions.
-Preparation reads category metadata once; facets reuse it without global caching.
-Availability filters/facets use indexed stock existence checks (nonnegative
-quantities), while item list quantities retain the stock aggregate.
+`Category` образует фиксированную и версионированную иерархию family → leaf. `Item` относится только к листу и содержит технические характеристики из типизированных EAV-записей. Нормализация имени, модели и сигнатуры позиции защищена на уровне приложения и PostgreSQL; изменение схемы категорий требует миграции. Технические характеристики и каноническая сигнатура **не** равны текущему количеству.
 
-Frontend catalog URL state uses category-aware implicit sort defaults.
-Transceiver scopes (`transceivers`, `transceiver_ethernet`,
-`transceiver_fc`) default to `available desc`; ordinary categories default to
-`name asc`. URL parsing and serialization receive the same contextual default:
-absence of `sort`/`order` means that default, while an explicit non-default
-selection remains round-trip stable. Quick-sort controls modify this same
-server-side catalog query state; no separate client-side sorting model exists.
+Поиск, выборка и фасеты работают в контексте выбранной категории, поисковой строки и производной области. `CatalogQuerySpec` содержит параметры отбора и metadata; сервер выполняет сортировку/пагинацию, а наличие на складе получает из складских проекций. Frontend не предполагает, что первая страница API содержит весь каталог. Для трансиверов производная область «Дальние» основана на нормализованной дальности, не является отдельной категорией. Поля и правила идентификации — в [CATALOG_SCHEMA.md](CATALOG_SCHEMA.md).
 
-Compound `reach` formatting is presentation-only: card/detail rendering may
-replace human-readable `/` or `;` separators with middle dots, while the stored
-attribute value and backend catalog contract remain unchanged.
+## 4. Склад: журнал и проекции
 
-## Frontend design system
+История изменений хранится в неизменяемых `Movement` и `MovementLine`. Актуальное состояние выводится транзакционно в двух проекциях:
 
-Нормативный визуальный контракт и ownership rules находятся в `docs/FRONTEND_DESIGN_SYSTEM.md`. Этот файл является источником истины для shared headers, buttons, form controls, typography и responsive UI primitives. Feature CSS не является design-system boundary.
-
-Frontend typography and form geometry use shared CSS design tokens rather than
-page-local arbitrary sizes.
-
-The typography scale defines common roles for kicker/meta/secondary/body/control/
-emphasis/card-title/section-title/page-title text. Equipment cards, item detail
-and catalog forms consume these roles so readability changes can be tuned from
-one contract instead of diverging per page.
-
-Single-line form controls share one responsive geometry contract:
-
-- mobile/default: `52px`;
-- tablet (`>=680px`): `56px`;
-- desktop (`>=1100px`): `60px`.
-
-Input, select, combobox and equivalent single-line controls are expected to use
-the same height, font size, horizontal padding and radius at a given breakpoint.
-Textarea uses a separate shared minimum-height token.
-
-The current product workflow is desktop-first for visual acceptance: desktop is
-tuned first while the responsive tablet/mobile contract remains functional.
-Tablet/mobile visual polish is intentionally deferred until the desktop feature
-set is complete; responsive behavior is not removed or replaced by a fixed
-desktop-only layout.
-
-Desktop content remains centered and width-bounded rather than stretching
-indefinitely on ultrawide displays. Browser acceptance covers compact desktop,
-`1920x1080` and ultrawide desktop viewports. Vertical content continues to use
-normal document scrolling / viewport-bounded dialogs instead of scaling UI to
-fill screen height.
-
-Catalog detail and equipment create/edit pages share the same branded
-toolbar/kicker/page-title header hierarchy. Section titles are intentionally
-smaller than page titles, while field labels and values remain readable enough
-to avoid the previous oversized-heading/small-data contrast.
-
-## Frontend startup
-
-React renders the access shell immediately. SDK loading runs independently of
-cookie-session lookup; Telegram authentication waits for SDK completion after
-an unauthenticated response. The auth exchange stays shared across StrictMode
-remounts. BackButton/fullscreen controls subscribe to delayed SDK availability.
-
-The module for the current pathname starts loading in parallel with startup
-authentication. After the approved application mounts, the small fixed route
-set is warmed in the background. Routes remain dynamic imports and outside the
-initial JS import graph; the production bundle contract continues to enforce
-that boundary.
-
-`RouteContent` provides the accessible Suspense/error recovery boundary without
-being remounted solely because the pathname changed. Navigation changes reset a
-failed route boundary.
-
-Catalog navigation uses cached family/leaf hierarchy metadata to start
-independent leaf-item loading without waiting for category-detail completion.
-A visible family page prefetches only its child leaf metadata. Item navigation
-can paint from the catalog-list payload as React Query placeholder data while
-the canonical item endpoint revalidates in the background.
-
-Authenticated query data remains in-memory only; persistent browser query
-storage is not part of the MVP.
-
-Detailed rationale and acceptance are canonical in
-`docs/FRONTEND_PERFORMANCE.md`.
-
-## Warehouse
-
-Источник истины — immutable movement journal.
-
-Current projection:
-
+```text
 stock_balances(Item, Location, quantity)
-
 user_item_custody_balances(User, Item, quantity)
+```
 
-`actor_user_id` фиксирует исполнителя операции, а `custody_user_id` — пользователя,
-физически ответственного за оборудование. ENGINEER / SENIOR_ENGINEER
-ISSUE/RETURN изменяют custody; ADMIN / OWNER ISSUE/RETURN остаются
-административными движениями склада без custody.
+`actor_user_id` означает исполнителя операции; `custody_user_id` — сотрудника, за которым числится агрегированное количество. Выдача/возврат ENGINEER или SENIOR_ENGINEER изменяет его custody; административные движения ADMIN/OWNER не создают персональную ответственность автоматически. Нельзя получить отрицательный остаток/custody, а нулевые строки не сохраняются. Активного жизненного цикла отдельного serial/WWN оборудования нет.
 
-Movement types:
+Запись операции идёт в одной транзакции: нормализация `client_request_id` → advisory lock и проверка idempotent replay/fingerprint → блокировка затронутого движения, пользователя, локаций, Item и balance rows в согласованном порядке → запись Movement/lines, пересчёт stock/custody и запись notification outbox → COMMIT. Совпадающий повтор запроса возвращает исходное движение, несовместимые данные — conflict; любая ошибка откатывает все предметные записи. Движения поддерживают RECEIPT, ISSUE, RETURN, TRANSFER, WRITE_OFF, CORRECTION, REVERSAL с различными правилами. Финальный procurement RECEIPT нельзя отменить обычным CORRECTION/REVERSAL.
 
-- RECEIPT;
-- ISSUE;
-- RETURN;
-- TRANSFER;
-- WRITE_OFF;
-- CORRECTION;
-- REVERSAL.
+Журнал читается через серверный MVCC snapshot и HMAC-подписанный opaque cursor, связанный с пользователем и фильтрами. Клиент не получает права задавать произвольные внутренние `snapshot_at` или `before_journal_seq`. Read-only `backend/scripts/reconcile_inventory_projections.sql` пересчитывает stock/custody по журналу; нулевое число строк результата означает отсутствие найденного дрейфа. Полный контракт — [WAREHOUSE_DOMAIN.md](WAREHOUSE_DOMAIN.md).
 
-MovementLine хранит Item snapshot и positive quantity.
+## 5. Закупки: отдельный жизненный цикл
 
-## Transaction model
+`ProcurementRequest` хранит текущий статус, активную immutable revision, позиции и историю immutable events. Назначенный Manager отвечает за заявку, но это не ACL: допущенные MANAGER могут работать с активными заявками в рамках общей серверной политики. Предложенная позиция не создаёт Item автоматически. Согласование, возврат на корректировку, выбор менеджера, расхождения и передача на приёмку не меняют склад.
 
-Создание movement выполняется одной PostgreSQL transaction:
+При окончательной технической приёмке сервер блокирует закупку, повторно проверяет статус, текущую revision, связи позиций с Item и локацию; в **той же транзакции** создаёт один Warehouse RECEIPT, связывает `final_movement_id`, записывает событие/уведомления и переводит заявку в `COMPLETED`. Уникальность финальной операции и неизменяемость истории защищены также DB-инвариантами текущих миграций. Partial acceptance текущая версия не предусматривает. Подробности — [RBAC_PROCUREMENT.md](RBAC_PROCUREMENT.md).
 
-1. normalize client_request_id;
-2. advisory-lock idempotency key;
-3. проверить replay/fingerprint;
-4. lock original movement при необходимости;
-5. lock locations;
-6. lock Items;
-7. batch-lock StockBalance ordered by (item_id, location_id);
-8. batch-lock UserItemCustodyBalance ordered by item_id;
-9. insert Movement header and apply stock/custody deltas;
-10. insert immutable MovementLine rows and enqueue transactional outbox effects;
-11. commit.
+## 6. Уведомления и внешние границы
 
-Negative stock/custody запрещён. Zero balance rows удаляются. REVERSAL наследует
-custody исходного movement; CORRECTION custody-bearing movement запрещён fail-closed.
+API не вызывает Telegram Bot API или Microsoft Graph в середине складской/закупочной транзакции. Вместо этого он записывает intent в PostgreSQL outbox с детерминированным dedupe key. Отдельный worker забирает сообщение по lease/claim, отправляет и фиксирует результат либо retry/DEAD. `/start` welcome проверяет актуальность claim token до изменения состояния чата и сохраняет результат в согласованной БД-транзакции.
 
-## Idempotency
+Входящие Telegram updates проходят webhook secret и dedupe. Исходящие запросы Telegram worker направляет в Cloudflare Worker Gateway по HTTPS; Bot API token находится в отдельной доверенной границе. Email worker опционален, использует Microsoft Graph и отдельные права PostgreSQL; `EMAIL_DELIVERY_ENABLED=false` по умолчанию. Внешняя отправка **at-least-once**: outbox исключает дублирование намерений при replay, но при потерянном подтверждении Gateway/Graph возможно повторное внешнее сообщение. Exactly-once для такой границы не заявляется.
 
-Scope:
+## 7. Frontend: скорость не меняет доверие
 
-actor_user_id + client_request_id
+React access shell появляется без ожидания загрузки Telegram SDK. Проверка cookie-сессии и загрузка route chunk могут идти параллельно; unauthenticated Telegram auth exchange требует корректного контекста SDK. После APPROVED прогреваются несколько фиксированных lazy-маршрутов. Список каталога может загружаться параллельно метаданным leaf, а карточка Item сначала отображает placeholder из списка и затем перепроверяется каноническим endpoint. Query cache — только в памяти. Это оптимизация порядка запросов, а не обход access gate. Визуальные компоненты принадлежат `shared/ui`; детали — в [FRONTEND_DESIGN_SYSTEM.md](FRONTEND_DESIGN_SYSTEM.md) и [FRONTEND_PERFORMANCE.md](FRONTEND_PERFORMANCE.md).
 
-Fingerprint включает custody context. Replay одинакового payload возвращает
-существующий Movement.
-Другой payload под тем же ключом возвращает conflict.
+## 8. Ingress и сетевое доверие
 
-## Notifications
+В текущем исходном `frontend/nginx.conf` разделены недоверенный TCP `:8080` и доверенный Unix `/run/dc-inventory/ingress.sock`. На TCP Nginx не принимает чужие IP/proto headers как истину. На Unix использует `set_real_ip_from unix:` и `real_ip_header CF-Connecting-IP`, нормализует адрес для per-client rate limit и передаёт backend HTTPS-схему. Доверие к Unix-входу требует ограниченного host-каталога и проверенных UID/GID; права только самого socket недостаточны.
 
-Telegram delivery использует PostgreSQL transactional outbox.
+По последней документированной production-проверке Cloudflare Tunnel всё ещё направлен на `http://localhost:8080`. Развёртывание нового web-образа с этим старым origin запрещено: клиенты могут разделить один rate-limit bucket. CP-07 production migration остаётся открытой; совместное переключение, реальные права и rollback описаны в [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md).
 
-ISSUE notification создаётся до commit warehouse transaction.
+## 9. Безопасность данных, provenance и восстановление
 
-Outbox имеет deterministic dedupe key.
-Delivery worker выполняет retry/DEAD lifecycle независимо от warehouse request.
+Образы содержат label `org.opencontainers.image.revision`. Проверка runtime provenance сравнивает заявленный checkout SHA с реальным HEAD и отдельно считывает immutable image ID/revision из **образа**, а не только из контейнерных labels. Документационный source-only sync может изменить Git HEAD без пересборки image при неизменном runtime source/контексте сборки. `ops/release/build_release.py` публикует release artifacts только после проверки полного набора. Git push не мигрирует БД и не разворачивает образы.
 
-TELEGRAM_DELIVERY_GUARANTEE=AT_LEAST_ONCE_NOT_EXACTLY_ONCE
+Initial production inventory был выполнен один раз через `app.bootstrap.production_inventory`: внешний workbook, closed gate, пустой Warehouse domain, существующий APPROVED ADMIN, одна транзакция создания локации и opening RECEIPT, контроль counts и zero-drift до COMMIT. Повторный bootstrap запрещён. Обычная граница — `REAL_INVENTORY_MUTATIONS_ENABLED`. Production default остаётся `false`.
 
-### Duplicate delivery window
-
-Transactional outbox гарантирует сохранность notification intent, но внешний
-Telegram Bot API не предоставляет системе атомарный commit вместе с локальным
-delivery-state update. Если Telegram принял сообщение, а worker завершился до
-фиксации успешной доставки в PostgreSQL, notification может быть отправлена повторно
-после retry.
-
-Поэтому delivery semantics — at-least-once, а не exactly-once. Dedupe key
-защищает от повторного создания одного и того же outbox intent внутри системы,
-но не превращает внешний Bot API delivery в exactly-once transport.
-
-## Runtime provenance
-
-Application image фиксирует source revision в OCI metadata:
-
-`org.opencontainers.image.revision`
-
-Git checkout на production VM и revision реально запущенного container image
-являются разными operational facts. Runtime provenance проверяется по metadata
-образа, а не выводится только из состояния checkout.
-
-## Authorization / RBAC
-
-Current feature-cycle contract:
-
-`docs/RBAC_PROCUREMENT.md`
-
-Source roles:
-
-- ENGINEER;
-- SENIOR_ENGINEER;
-- MANAGER;
-- ADMIN;
-- OWNER.
-
-Role хранится на User.
-
-Capabilities вычисляются backend policy и являются authorization boundary.
-Frontend visibility не заменяет backend authorization.
-
-Role hierarchy не моделируется простым числовым `role >= ...`, потому что
-MANAGER является отдельной бизнес-веткой, а не уровнем складской иерархии.
-
-OWNER является singleton recovery role, привязанной к configured recovery
-Telegram identity.
-
-ADMIN может назначать ENGINEER / SENIOR_ENGINEER / MANAGER, но не ADMIN/OWNER.
-OWNER может назначать ADMIN. OWNER нельзя изменять обычным role/access API.
-
-Migration `a1b2c3d4e5f6` реализует five-role RBAC, а production RBAC
-maintenance cutover уже принят. Current running production schema находится
-на `c3d4e5f6a7b8`, source head — `d4e5f6a7b8c9`; runtime использует ENGINEER /
-SENIOR_ENGINEER / MANAGER / ADMIN / OWNER.
-
-## Procurement architecture
-
-Procurement реализуется отдельным modular-monolith module и не встраивается в
-catalog/inventory models.
-
-Главный invariant:
-
-procurement status не является warehouse stock mutation.
-
-Procurement использует immutable revisions и immutable event trail.
-
-Assigned Manager является business responsibility, а не authorization ACL.
-Любой MANAGER может выполнять допустимые actions, при этом event хранит
-фактического actor.
-
-Final acceptance выполняется атомарно:
-
-Procurement row lock
--> validate active revision
--> validate catalog bindings/location
--> create immutable Warehouse RECEIPT
--> link movement
--> complete procurement
--> enqueue notifications
--> commit.
-
-Discrepancy path не создаёт movement и не меняет stock.
-
-Первый procurement implementation не поддерживает partial acceptance.
-
-Подробный state machine, role matrix и acceptance criteria находятся в
-`docs/RBAC_PROCUREMENT.md`.
-
-## Safety gate
-
-Regular warehouse mutation API защищён:
-
-`REAL_INVENTORY_MUTATIONS_ENABLED`
-
-Production default остаётся `false`.
-
-Initial production inventory bootstrap использует отдельный one-shot CLI
-boundary и намеренно требует, чтобы regular mutation gate оставался закрытым.
-
-Таким образом initial load не является обходом или включением normal mutation
-API.
-
-## Reconciliation
-
-Projection consistency проверяется:
-
-backend/scripts/reconcile_inventory_projections.sql
-
-Zero returned rows означает, что stock и custody projections совпадают с journal.
-
-## Bootstrap
-
-Authoritative initial workbook находится вне repository.
-
-Bootstrap architecture состоит из двух boundaries:
-
-1. `app.bootstrap.inventory_workbook`
-   - читает и валидирует workbook;
-   - нормализует Item identity;
-   - агрегирует deterministic duplicates;
-   - создаёт opening RECEIPT через warehouse service;
-   - защищается от populated catalog/journal.
-
-2. `app.bootstrap.production_inventory`
-   - production-only guarded one-shot entry point;
-   - требует production Docker PostgreSQL boundary;
-   - требует закрытый regular mutation gate;
-   - проверяет source SHA/count contract;
-   - проверяет empty warehouse domain;
-   - создаёт location + inventory атомарно;
-   - проверяет resulting counts/quantities;
-   - выполняет canonical projection reconciliation до commit;
-   - fail-closed откатывает transaction при любой ошибке.
-
-Initial production bootstrap принят 2026-09-08.
-
-Повторный initial bootstrap в текущую production DB запрещён.
+Восстановление проводится по manifest, проверенному dump и точному application artifact в изолированной БД. SQL сверки должен соответствовать restored schema и извлекаться из exact backend image backup, а не из произвольно более нового checkout. CP-11 real S3 rehearsal, права БД CP-09, provenance CP-10 и реальная delivery CP-08 требуют отдельных production-подтверждений. Текущий source head — `a9c0d1e2f3a4`, последний документированный production head — `c3d4e5f6a7b8`; изменение документации не меняет эту разницу. Статусы и доказательства — [AUDIT_0_12_REMEDIATION.md](AUDIT_0_12_REMEDIATION.md).

@@ -10,6 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.modules.identity.enums import UserAccessStatus, UserRole
 from app.modules.identity.models import TelegramIdentity, User
+from app.modules.identity.policy import (
+    Capability,
+    has_capability,
+)
 from app.modules.notifications.service import enqueue_telegram_call, notification_dedupe_key
 from app.modules.procurement.models import ProcurementRevisionLine
 
@@ -47,7 +51,7 @@ async def telegram_user_ids_for_users(
         return {}
     rows = (
         await db.execute(
-            select(TelegramIdentity.user_id, TelegramIdentity.telegram_user_id)
+            select(TelegramIdentity.user_id, TelegramIdentity.telegram_user_id, User.role)
             .join(User, User.id == TelegramIdentity.user_id)
             .where(
                 TelegramIdentity.user_id.in_(unique),
@@ -55,7 +59,14 @@ async def telegram_user_ids_for_users(
             )
         )
     ).all()
-    return {user_id: telegram_user_id for user_id, telegram_user_id in rows}
+    return {
+        user_id: telegram_user_id
+        for user_id, telegram_user_id, role in rows
+        if has_capability(
+            role,
+            Capability.PROCUREMENT_READ,
+        )
+    }
 
 
 async def technical_recipient_user_ids(db: AsyncSession) -> set[uuid.UUID]:

@@ -33,6 +33,11 @@ class Settings(BaseSettings):
 
     telegram_bot_token: SecretStr | None = None
     telegram_init_data_max_age_seconds: int = Field(default=300, ge=30, le=3600)
+    access_callback_ttl_seconds: int = Field(
+        default=900,
+        ge=60,
+        le=86_400,
+    )
     # Legacy external key retained for deployment compatibility.
     # Semantically this identifies the singleton recovery OWNER.
     admin_telegram_user_id: int | None = Field(default=None, gt=0, le=2**52)

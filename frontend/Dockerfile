@@ -19,6 +19,11 @@ RUN test -n "$APP_REVISION" \
 LABEL org.opencontainers.image.revision="${APP_REVISION}"
 
 COPY nginx.conf /etc/nginx/nginx.conf
+COPY nginx-server.inc /etc/nginx/server-common.inc
+
+RUN mkdir -p /run/dc-inventory \
+    && chown nginx:nginx /run/dc-inventory \
+    && chmod 0750 /run/dc-inventory
 COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
 
 USER nginx

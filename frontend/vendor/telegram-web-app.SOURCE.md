@@ -1,31 +1,20 @@
-# Telegram Web App SDK provenance
+# Происхождение локальной копии Telegram Web App SDK
 
-Vendored runtime asset:
+Этот файл фиксирует происхождение **внешнего JavaScript-артефакта**, включённого в frontend. Он не является инструкцией по загрузке новой версии и не подтверждает, что тот же артефакт работает в production в момент чтения.
 
-    public/vendor/telegram/telegram-web-app.js
+| Параметр | Зафиксированное значение |
+|---|---|
+| Файл в приложении | `public/vendor/telegram/telegram-web-app.js` |
+| Исходный upstream URL | `https://telegram.org/js/telegram-web-app.js?63` |
+| Дата получения | `2026-09-02` |
+| Upstream `Last-Modified` | `Tue, 14 Jul 2026 09:31:36 GMT` |
+| Upstream `Content-Type` | `application/javascript` |
+| Upstream `Content-Length` | `116510` байт |
+| Проверенный размер локальной копии | `116510` байт |
+| SHA-256 локального артефакта | `3549138a7934039fe7dfd1291a4ee739bd2b705a614308053a8b08a87d85c451` |
 
-Upstream URL:
+## Правила использования и обновления
 
-    https://telegram.org/js/telegram-web-app.js?63
+Production frontend загружает SDK с **собственного origin** приложения, а не обращается к `telegram.org` при каждом запуске. Это делает доставку интерфейса независимой от доступности внешнего CDN в момент открытия Mini App.
 
-Retrieved:
-
-    2026-09-02
-
-Upstream response metadata observed during retrieval:
-
-    Last-Modified: Tue, 14 Jul 2026 09:31:36 GMT
-    Content-Type: application/javascript
-    Content-Length: 116510
-
-Reviewed artifact:
-
-    SHA-256: 3549138a7934039fe7dfd1291a4ee739bd2b705a614308053a8b08a87d85c451
-    Size: 116510 bytes
-
-Runtime policy:
-
-- production frontend must load this SDK from the application's own origin;
-- production runtime must not depend on telegram.org for SDK delivery;
-- updating this file requires an explicit upstream fetch, sanity review,
-  new SHA-256, frontend test/build verification and production smoke test.
+При обновлении vendored JS необходимо отдельно получить артефакт от официального upstream, проверить источник и содержимое, заново записать размер и SHA-256, выполнить frontend test/build и реальную Telegram-проверку после согласованного выпуска. Не менять только URL, версию или хеш в документации без замены и проверки самого файла. Предыдущие provenance-значения относятся к загрузке 02.09.2026.

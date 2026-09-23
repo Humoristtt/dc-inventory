@@ -306,6 +306,8 @@ PY
 
 echo "[INFO] Uploading verified backup to S3"
 
+VERSIONS_FILE="${WORK_DIR}/verified-versions.json"
+
 python3 "${S3_HELPER}" \
     upload \
     --env "${ENV_FILE}" \
@@ -313,7 +315,10 @@ python3 "${S3_HELPER}" \
     --manifest "${MANIFEST_FILE}" \
     --dump-key "${DUMP_KEY}" \
     --manifest-key "${MANIFEST_KEY}" \
-    --dump-sha256 "${DB_SHA256}"
+    --dump-sha256 "${DB_SHA256}" \
+    --versions-output "${VERSIONS_FILE}"
+
+test -s "${VERSIONS_FILE}"
 
 VERIFIED_AT_UTC="$(
     date -u '+%Y-%m-%dT%H:%M:%SZ'
@@ -329,7 +334,8 @@ python3 - \
     "${DUMP_KEY}" \
     "${MANIFEST_KEY}" \
     "${DB_SHA256}" \
-    "${DB_SIZE}" <<'PY'
+    "${DB_SIZE}" \
+    "${VERSIONS_FILE}" <<'PY'
 import json
 import os
 import sys
@@ -344,6 +350,18 @@ if provenance.get("schema_version") != 1:
         "unsupported runtime provenance schema"
     )
 
+versions = json.loads(
+    Path(sys.argv[11]).read_text(encoding="utf-8")
+)
+for field in ("dump_version_id", "manifest_version_id"):
+    value = versions.get(field)
+    if (
+        not isinstance(value, str)
+        or not value
+        or value == "null"
+    ):
+        raise RuntimeError(f"Missing verified S3 {field}")
+
 payload = {
     "schema_version": 2,
     "state": "success",
@@ -354,6 +372,8 @@ payload = {
     "alembic_head": sys.argv[6],
     "dump_key": sys.argv[7],
     "manifest_key": sys.argv[8],
+    "dump_version_id": versions["dump_version_id"],
+    "manifest_version_id": versions["manifest_version_id"],
     "dump_sha256": sys.argv[9],
     "dump_size_bytes": int(sys.argv[10]),
 }

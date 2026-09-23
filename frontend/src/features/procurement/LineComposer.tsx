@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
 import { AttributeControl } from "../catalog/AttributeControl";
@@ -54,6 +54,7 @@ export function LineComposer({ lines, onChange }: Props) {
   const [qty, setQty] = useState("1");
   const [category, setCategory] = useState("");
   const [manufacturerId, setManufacturerId] = useState("");
+  const [manufacturerSearch, setManufacturerSearch] = useState("");
   const [name, setName] = useState("");
   const [model, setModel] = useState("");
   const [attributes, setAttributes] = useState<AttributeDraft>({});
@@ -75,18 +76,79 @@ export function LineComposer({ lines, onChange }: Props) {
     enabled: Boolean(category),
     staleTime: 5 * 60_000,
   });
-  const manufacturers = useQuery({
-    queryKey: ["catalog", "manufacturers", "procurement"],
-    queryFn: ({ signal }) =>
-      getCatalogManufacturers({ limit: 200, offset: 0 }, signal),
+  const manufacturers = useInfiniteQuery({
+    queryKey: [
+      "catalog",
+      "manufacturers",
+      "procurement",
+      manufacturerSearch,
+    ],
+    queryFn: ({ pageParam, signal }) =>
+      getCatalogManufacturers(
+        {
+          q: manufacturerSearch,
+          limit: 50,
+          offset: pageParam,
+        },
+        signal,
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => {
+      const nextOffset =
+        lastPage.offset
+        + lastPage.items.length;
+
+      return nextOffset < lastPage.total
+        ? nextOffset
+        : undefined;
+    },
+    enabled:
+      mode === "PROPOSED_ITEM"
+      && manufactured.has(category),
     staleTime: 5 * 60_000,
   });
-  const items = useQuery({
-    queryKey: ["catalog", "procurement-search", search],
-    queryFn: ({ signal }) =>
-      getCatalogItems({ q: search, limit: 20, offset: 0 }, signal),
-    enabled: search.trim().length >= 2,
+
+  const manufacturerOptions =
+    manufacturers.data?.pages.flatMap(
+      (page) => page.items,
+    )
+    ?? [];
+
+  const items = useInfiniteQuery({
+    queryKey: [
+      "catalog",
+      "procurement-search",
+      search,
+    ],
+    queryFn: ({ pageParam, signal }) =>
+      getCatalogItems(
+        {
+          q: search,
+          limit: 20,
+          offset: pageParam,
+        },
+        signal,
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => {
+      const nextOffset =
+        lastPage.offset
+        + lastPage.items.length;
+
+      return nextOffset < lastPage.total
+        ? nextOffset
+        : undefined;
+    },
+    enabled:
+      mode === "EXISTING_ITEM"
+      && search.trim().length >= 2,
   });
+
+  const itemOptions =
+    items.data?.pages.flatMap(
+      (page) => page.items,
+    )
+    ?? [];
 
   const add = () => {
     if (lines.length >= MAX_PROCUREMENT_LINES) {
@@ -103,7 +165,7 @@ export function LineComposer({ lines, onChange }: Props) {
         setError("Выберите позицию каталога.");
         return;
       }
-      const selectedItem = items.data?.items.find(
+      const selectedItem = itemOptions.find(
         (item) => item.id === existingItemId,
       );
       const displayName = selectedItem
@@ -201,7 +263,13 @@ export function LineComposer({ lines, onChange }: Props) {
         <div className="procurement-fields">
           <label>
             Поиск по каталогу
-            <input value={search} onChange={(event) => setSearch(event.target.value)} />
+            <input
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setExistingItemId("");
+              }}
+            />
           </label>
           <label>
             Позиция
@@ -210,15 +278,39 @@ export function LineComposer({ lines, onChange }: Props) {
               onChange={(event) => setExistingItemId(event.target.value)}
             >
               <option value="">Выберите</option>
-              {(items.data?.items ?? []).map((item) => (
-                <option key={item.id} value={item.id}>
-                  {[item.manufacturer?.name, item.name, item.model]
+              {itemOptions.map((item) => (
+                <option
+                  key={item.id}
+                  value={item.id}
+                >
+                  {[
+                    item.manufacturer?.name,
+                    item.name,
+                    item.model,
+                  ]
                     .filter(Boolean)
                     .join(" · ")}
                 </option>
               ))}
             </select>
           </label>
+
+          {items.hasNextPage ? (
+            <button
+              className="button button--load-more"
+              disabled={
+                items.isFetchingNextPage
+              }
+              onClick={() =>
+                void items.fetchNextPage()
+              }
+              type="button"
+            >
+              {items.isFetchingNextPage
+                ? "Загружаем…"
+                : "Показать ещё"}
+            </button>
+          ) : null}
         </div>
       ) : (
         <div className="procurement-fields">
@@ -228,6 +320,8 @@ export function LineComposer({ lines, onChange }: Props) {
               value={category}
               onChange={(event) => {
                 setCategory(event.target.value);
+                setManufacturerId("");
+                setManufacturerSearch("");
                 setAttributes({});
               }}
             >
@@ -240,20 +334,62 @@ export function LineComposer({ lines, onChange }: Props) {
             </select>
           </label>
           {manufactured.has(category) ? (
-            <label>
-              Производитель
-              <select
-                value={manufacturerId}
-                onChange={(event) => setManufacturerId(event.target.value)}
-              >
-                <option value="">Выберите</option>
-                {(manufacturers.data?.items ?? []).map((entry) => (
-                  <option key={entry.id} value={entry.id}>
-                    {entry.name}
+            <>
+              <label>
+                Поиск производителя
+                <input
+                  value={manufacturerSearch}
+                  onChange={(event) => {
+                    setManufacturerSearch(
+                      event.target.value,
+                    );
+                    setManufacturerId("");
+                  }}
+                />
+              </label>
+
+              <label>
+                Производитель
+                <select
+                  value={manufacturerId}
+                  onChange={(event) =>
+                    setManufacturerId(
+                      event.target.value,
+                    )}
+                >
+                  <option value="">
+                    Выберите
                   </option>
-                ))}
-              </select>
-            </label>
+                  {manufacturerOptions.map(
+                    (entry) => (
+                      <option
+                        key={entry.id}
+                        value={entry.id}
+                      >
+                        {entry.name}
+                      </option>
+                    ),
+                  )}
+                </select>
+              </label>
+
+              {manufacturers.hasNextPage ? (
+                <button
+                  className="button button--load-more"
+                  disabled={
+                    manufacturers.isFetchingNextPage
+                  }
+                  onClick={() =>
+                    void manufacturers.fetchNextPage()
+                  }
+                  type="button"
+                >
+                  {manufacturers.isFetchingNextPage
+                    ? "Загружаем производителей…"
+                    : "Показать ещё производителей"}
+                </button>
+              ) : null}
+            </>
           ) : null}
           <label>
             Название

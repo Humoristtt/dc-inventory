@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import json
+import secrets
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -28,7 +30,7 @@ REQUIRED_ENV = {
 def load_env(path: Path) -> dict[str, str]:
     values: dict[str, str] = {}
 
-    for raw_line in path.read_text().splitlines():
+    for line_number, raw_line in enumerate(path.read_text().splitlines(), start=1):
         line = raw_line.strip()
         if not line:
             continue
@@ -36,7 +38,7 @@ def load_env(path: Path) -> dict[str, str]:
         key, separator, value = line.partition("=")
 
         if not separator:
-            raise RuntimeError(f"Invalid env line for key {key!r}")
+            raise RuntimeError(f"Invalid env line {line_number}")
 
         values[key] = value
 
@@ -219,11 +221,28 @@ def verify_object(
     key: str,
     source: Path,
     expected_sha256: str,
-) -> None:
-    head = client.head_object(
+    expected_upload_nonce: str,
+) -> str:
+    current = client.head_object(
         Bucket=bucket,
         Key=key,
     )
+    version_id = current.get("VersionId")
+
+    if (
+        not isinstance(version_id, str)
+        or not version_id
+        or version_id == "null"
+    ):
+        raise RuntimeError("Uploaded S3 object has no usable VersionId")
+
+    head = client.head_object(
+        Bucket=bucket,
+        Key=key,
+        VersionId=version_id,
+    )
+    if head.get("VersionId") not in (None, version_id):
+        raise RuntimeError("S3 HEAD returned an unexpected version")
 
     local_size = source.stat().st_size
     remote_size = head["ContentLength"]
@@ -234,10 +253,13 @@ def verify_object(
             f"{remote_size} != {local_size}"
         )
 
-    remote_sha256 = head.get(
-        "Metadata",
-        {},
-    ).get("sha256")
+    metadata = head.get("Metadata", {})
+    remote_sha256 = metadata.get("sha256")
+
+    if metadata.get("upload_nonce") != expected_upload_nonce:
+        raise RuntimeError(
+            "S3 version does not belong to this upload"
+        )
 
     if remote_sha256 != expected_sha256:
         raise RuntimeError(
@@ -247,7 +269,11 @@ def verify_object(
     response = client.get_object(
         Bucket=bucket,
         Key=key,
+        VersionId=version_id,
     )
+    if response.get("VersionId") not in (None, version_id):
+        response["Body"].close()
+        raise RuntimeError("S3 GET returned an unexpected version")
 
     body = response["Body"]
     digest = hashlib.sha256()
@@ -274,6 +300,7 @@ def verify_object(
     retention = client.get_object_retention(
         Bucket=bucket,
         Key=key,
+        VersionId=version_id,
     ).get("Retention", {})
 
     if retention.get("Mode") != "GOVERNANCE":
@@ -306,6 +333,7 @@ def verify_object(
         f"sha256={expected_sha256} "
         f"retain_until={retain_until.isoformat()}"
     )
+    return version_id
 
 
 def upload_object(
@@ -316,7 +344,9 @@ def upload_object(
     source: Path,
     sha256: str,
     content_type: str,
-) -> None:
+) -> str:
+    upload_nonce = secrets.token_hex(16)
+
     client.upload_file(
         str(source),
         bucket,
@@ -325,16 +355,18 @@ def upload_object(
             "ContentType": content_type,
             "Metadata": {
                 "sha256": sha256,
+                "upload_nonce": upload_nonce,
             },
         },
     )
 
-    verify_object(
+    return verify_object(
         client,
         bucket=bucket,
         key=key,
         source=source,
         expected_sha256=sha256,
+        expected_upload_nonce=upload_nonce,
     )
 
 
@@ -373,9 +405,7 @@ def command_upload(args: argparse.Namespace) -> None:
             "Local dump SHA-256 changed before upload"
         )
 
-    manifest_sha256 = sha256_file(args.manifest)
-
-    upload_object(
+    dump_version_id = upload_object(
         client,
         bucket=bucket,
         key=args.dump_key,
@@ -384,7 +414,32 @@ def command_upload(args: argparse.Namespace) -> None:
         content_type="application/octet-stream",
     )
 
-    upload_object(
+    # The dump VersionId exists only after the dump has been uploaded.
+    # Persist it inside the manifest before uploading that manifest.
+    manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+    artifact = manifest["artifact"]
+
+    if (
+        artifact["key"] != args.dump_key
+        or artifact["sha256"] != args.dump_sha256
+        or artifact["size_bytes"] != args.dump.stat().st_size
+    ):
+        raise RuntimeError("Manifest does not match the verified dump")
+
+    if "version_id" in artifact:
+        raise RuntimeError("Manifest already contains a dump VersionId")
+
+    artifact["version_id"] = dump_version_id
+
+    args.manifest.write_text(
+        json.dumps(manifest, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    args.manifest.chmod(0o600)
+
+    manifest_sha256 = sha256_file(args.manifest)
+
+    manifest_version_id = upload_object(
         client,
         bucket=bucket,
         key=args.manifest_key,
@@ -393,6 +448,22 @@ def command_upload(args: argparse.Namespace) -> None:
         content_type="application/json",
     )
 
+    versions = {
+        "dump_version_id": dump_version_id,
+        "manifest_version_id": manifest_version_id,
+    }
+
+    temporary = args.versions_output.with_name(
+        args.versions_output.name + ".tmp"
+    )
+    temporary.write_text(
+        json.dumps(versions, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    temporary.chmod(0o600)
+    temporary.replace(args.versions_output)
+
+    print("S3_VERSION_IDS=RECORDED")
     print("STAGE15A_REMOTE_VERIFICATION=PASS")
 
 
@@ -442,6 +513,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     upload.add_argument(
         "--dump-sha256",
+        required=True,
+    )
+    upload.add_argument(
+        "--versions-output",
+        type=Path,
         required=True,
     )
     upload.set_defaults(func=command_upload)

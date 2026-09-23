@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
 
@@ -19,6 +19,7 @@ export function ProcurementCreatePage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [manager, setManager] = useState("");
+  const [managerSearch, setManagerSearch] = useState("");
   const [comment, setComment] = useState("");
   const [lines, setLines] = useState<ProcurementLineInput[]>([]);
   const submissionIntentRef = useRef<{
@@ -26,11 +27,39 @@ export function ProcurementCreatePage() {
     clientRequestId: string;
   } | null>(null);
   const canCreate = hasCapability(auth.data?.user, "procurement.create");
-  const managers = useQuery({
-    queryKey: ["procurement", "managers"],
-    queryFn: ({ signal }) => getProcurementManagers(signal),
+  const managers = useInfiniteQuery({
+    queryKey: [
+      "procurement",
+      "managers",
+      managerSearch,
+    ],
+    queryFn: ({ pageParam, signal }) =>
+      getProcurementManagers(
+        {
+          q: managerSearch,
+          limit: 50,
+          offset: pageParam,
+        },
+        signal,
+      ),
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => {
+      const nextOffset =
+        lastPage.offset
+        + lastPage.items.length;
+
+      return nextOffset < lastPage.total
+        ? nextOffset
+        : undefined;
+    },
     enabled: !auth.isPending && canCreate,
   });
+
+  const managerOptions =
+    managers.data?.pages.flatMap(
+      (page) => page.items,
+    )
+    ?? [];
   const mutation = useMutation({
     mutationFn: () => {
       const submission = {
@@ -46,15 +75,21 @@ export function ProcurementCreatePage() {
             : line,
         ),
       };
+
       const fingerprint = JSON.stringify(submission);
       let intent = submissionIntentRef.current;
-      if (intent === null || intent.fingerprint !== fingerprint) {
+
+      if (
+        intent === null
+        || intent.fingerprint !== fingerprint
+      ) {
         intent = {
           fingerprint,
           clientRequestId: crypto.randomUUID(),
         };
         submissionIntentRef.current = intent;
       }
+
       return createProcurementRequest({
         ...submission,
         client_request_id: intent.clientRequestId,
@@ -85,16 +120,59 @@ export function ProcurementCreatePage() {
         <section className="detail-panel procurement-fields">
           <h2>Ответственный</h2>
           <label>
+            Поиск менеджера
+            <input
+              value={managerSearch}
+              onChange={(event) => {
+                setManagerSearch(
+                  event.target.value,
+                );
+                setManager("");
+              }}
+            />
+          </label>
+
+          <label>
             Менеджер
-            <select value={manager} onChange={(event) => setManager(event.target.value)}>
-              <option value="">Выберите менеджера</option>
-              {(managers.data?.items ?? []).map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {entry.display_name}
-                </option>
-              ))}
+            <select
+              value={manager}
+              onChange={(event) =>
+                setManager(
+                  event.target.value,
+                )}
+            >
+              <option value="">
+                Выберите менеджера
+              </option>
+              {managerOptions.map(
+                (entry) => (
+                  <option
+                    key={entry.id}
+                    value={entry.id}
+                  >
+                    {entry.display_name}
+                  </option>
+                ),
+              )}
             </select>
           </label>
+
+          {managers.hasNextPage ? (
+            <button
+              className="button button--load-more"
+              disabled={
+                managers.isFetchingNextPage
+              }
+              onClick={() =>
+                void managers.fetchNextPage()
+              }
+              type="button"
+            >
+              {managers.isFetchingNextPage
+                ? "Загружаем менеджеров…"
+                : "Показать ещё менеджеров"}
+            </button>
+          ) : null}
           <label>
             Общий комментарий
             <textarea

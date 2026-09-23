@@ -1,250 +1,129 @@
-# Disaster Recovery Runbook — Spikatel Inventory
+# Восстановление из резервной копии: проверка и границы аварийного переключения
 
-## Scope
+Этот runbook описывает проверку **реальной внесерверной копии PostgreSQL** в изолированной среде. По умолчанию выполняем *репетицию восстановления*, а не изменение production. Исполняемый сценарий — `ops/recovery/rehearse_restore.sh`. Он реализует проверки, но не даёт разрешения на восстановление поверх работающего сервера. Порядок обычного выпуска — в [DEPLOYMENT.md](DEPLOYMENT.md), действующие операционные сведения — в [OPERATIONS.md](OPERATIONS.md).
 
-Canonical procedure for restoring a verified off-VM PostgreSQL backup into an
-isolated PostgreSQL 18 environment.
+**Статус на 19.09.2026:** исторический Stage15B restore принят. CP-11 локально проверил новую защиту manifest, одноразового окружения, provenance и сессий, но повторный rehearsal с настоящим production S3-артефактом и восстановлением внешней конфигурации после CP-11 **не выполнен**. Этот документ не превращает локальный результат в production acceptance.
 
-The default procedure is a rehearsal. It must not modify the production
-PostgreSQL volume or production runtime.
+## 1. Неизменяемые ограничения безопасности
 
-## Safety invariants
+Во время репетиции нельзя подключать production PostgreSQL volume к тестовым контейнерам, публиковать порт восстановленного PostgreSQL на host, выполнять `docker compose down -v` на production, удалять/перезаписывать проверенные S3-объекты, обходить Object Lock GOVERNANCE, выполнять разрушительный Alembic downgrade, импортировать/удалять складские данные, менять рабочую конфигурацию или включать обычные складские мутации.
 
-During rehearsal:
+По последней документированной проверке действует `REAL_INVENTORY_MUTATIONS_ENABLED=false`. Реальный incident/cutover допускается **только по отдельному решению** с собственными условиями остановки и отката. Тестирование восстановления не должно менять рабочие контейнеры, тома или сетевые настройки.
 
-- production PostgreSQL volume is never mounted;
-- restore PostgreSQL has no host-published port;
-- `docker compose down -v` is forbidden on production;
-- verified S3 objects are never deleted or overwritten;
-- Governance retention is never bypassed;
-- destructive Alembic downgrade is forbidden;
-- rehearsal does not import, delete or mutate production inventory;
-- production runtime configuration is not changed;
-- regular mutation gate is not opened as part of recovery rehearsal.
+## 2. Исходные сведения и артефакт
 
-Current normal production policy:
+Типовая production-разметка для сверки перед репетицией:
 
-    REAL_INVENTORY_MUTATIONS_ENABLED=false
+```text
+ROOT=/opt/dc-inventory
+STATE=/var/lib/dc-inventory-backup/last-success.json
+ENV_FILE=/etc/dc-inventory/stage15-backup.env
+```
 
-A production incident/cutover may change runtime state only through a separate
-explicit incident/change decision. This rehearsal runbook does not authorize it.
+Проверить читаемость state/env без вывода секретов, записать фактический `git rev-parse HEAD`, состояние рабочего дерева, immutable IDs работающих контейнеров и HTTP-коды `/api/health/live`/`ready`. Не предполагать, что checkout совпадает с revision запущенного image после допустимого source-only sync.
 
-## Prerequisites
+Из `last-success.json` и manifest выбрать конкретную копию и записать ключи dump/manifest, SHA-256, размер, версию Alembic, checkout SHA, IDs и revision labels backend/web и связанных работников. Новый артефакт ожидается по schema-v2 контракту; старые manifest обрабатываются только документированным совместимым путём валидатора, а не принудительным исправлением metadata вручную.
 
-Production:
+`production_checkout_sha` указывает состояние Git **на момент backup**. Более поздний документационный коммит сам по себе не делает архив непригодным. Совместимость доказывают точный runtime artifact и схема из manifest, а не совпадение с текущим исходным HEAD.
 
-    ROOT=/opt/dc-inventory
-    STATE=/var/lib/dc-inventory-backup/last-success.json
-    ENV_FILE=/etc/dc-inventory/stage15-backup.env
+## 2A. Закрепление версий объектов S3
 
-Verify:
+Новые резервные копии сохраняют в `last-success.json` два идентификатора:
 
-    test -r "$STATE"
-    test -r "$ENV_FILE"
-    cd "$ROOT"
-    test -z "$(git status --porcelain)"
-    git rev-parse HEAD
+- `manifest_version_id` — версия manifest;
+- `dump_version_id` — версия PostgreSQL dump.
 
-Record current production container IDs and `/api/health/live` +
-`/api/health/ready` before rehearsal.
+Внутри manifest дополнительно сохраняется `artifact.version_id` для dump.
+Версия самого manifest хранится отдельно: StorageGRID присваивает её
+только после загрузки объекта.
 
-## 1. Select verified artifact
+При восстановлении конкретные VersionId обязательны для HEAD,
+скачивания и проверки Object Lock retention. Версия dump в backup-state
+должна совпадать с версией в manifest. Перед восстановлением обязательно
+проверяются SHA-256 и размер скачанного архива.
 
-Read `last-success.json` and record:
+Если сохранённая версия недоступна или не соответствует ожидаемой,
+операция завершается ошибкой. Автоматический переход на текущую
+версию S3-объекта запрещён.
 
-- manifest key;
-- dump key;
-- SHA-256;
-- Alembic head;
-- production checkout SHA;
-- backend/web runtime provenance.
+Для старых backup без сохранённых VersionId текущая версия manifest
+определяется однократно. Версия dump берётся из manifest, если она
+там указана; иначе определяется однократно через HEAD. После выбора
+все операции используют только закреплённые версии.
 
-Final Stage15 recovery acceptance requires manifest schema v2.
+Legacy-режим не гарантирует доступ к произвольной исторической версии.
 
-`production_checkout_sha` in the manifest is immutable provenance metadata for
-the moment the backup was created. A later source-only/documentation commit
-does not invalidate the database artifact. Recovery compatibility is proven
-against the exact backend/web image IDs and source revisions recorded in the
-manifest; a checkout mismatch is recorded as evidence, not treated as an
-automatic restore failure.
+`last-success.json` находится на production VM. Для восстановления
+после полной потери ВМ требуется отдельно сохранить вне неё указатель
+на конкретные версии объектов. Эта задача остаётся открытой до
+реализации и отдельной проверки.
 
-## 2. Download and verify
+## 3. Проверка удалённой и локальной копии
 
-Use the configured StorageGRID endpoint, bucket and `S3_PREFIX`.
+Скачать выбранные dump и manifest из утверждённых StorageGRID endpoint/bucket/prefix без изменения S3-объектов. До восстановления проверить: ожидаемые application/type/custom archive; принадлежность ключей одному backup; расположение под допустимым префиксом; непротиворечивые checkout/runtime image provenance и Alembic head; совпадение SHA-256 metadata, manifest и скачанного файла; совпадение размера в байтах в manifest, удалённом объекте и локальном файле; ожидаемую retention и существование артефакта. Любое расхождение — **ABORT**, а не предупреждение.
 
-The selected manifest and dump must:
+Для списка содержимого использовать `pg_restore --list` из закреплённого PostgreSQL 18 image:
 
-- exist under the configured backup prefix;
-- match remote SHA-256 metadata;
-- match locally calculated SHA-256 after download;
-- have GOVERNANCE retention;
-- match manifest artifact metadata.
+```text
+postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+```
 
-Any mismatch is `ABORT`.
+Проверка формата архива не является восстановлением: она не доказывает возможность открыть БД, совместимость приложения или сохранность складских проекций.
 
-## 3. Validate PostgreSQL archive
+## 4. Изолированное окружение и восстановление
 
-Use the pinned PostgreSQL 18 image:
+Создать только новые одноразовые ресурсы с уникальным именем вида `dc-inventory-restore-<UTC_RUN_ID>-<random>`: внутреннюю Docker-сеть, том, PostgreSQL-контейнер без `-p` и временные файлы в закрытом каталоге. Проверить, что mount list **не содержит** production `postgres_data`. Сценарий учитывает только реально созданные им ресурсы, поэтому ошибка раннего этапа не должна удалять одноимённый чужой ресурс.
 
-    postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+Пароли одноразовой БД генерируются для каждого запуска и передаются через временные env-файлы режима `0600`, не через аргументы Docker и не в logs. Исполняемый процесс сначала проверяет manifest и окружение; затем восстанавливает архив в пустую БД через `pg_restore --no-owner --no-acl` с контролируемым exit code.
 
-Run:
+**Сессии после restore:** до запуска любого application image отозвать **все активные восстановленные auth sessions** в изолированной БД и проверить, что активных записей не осталось. Если таблица сессий отсутствует или SQL несовместим со схемой — ABORT. Сам backup и рабочие сессии production не изменяются.
 
-    pg_restore --list SELECTED.dump
+## 5. Целостность восстановленной БД
 
-Failure is `ABORT`.
+Проверить `SELECT version_num FROM alembic_version;`: результат должен совпадать с manifest. Должны присутствовать ожидаемые таблицы, критичные constraints/indexes/triggers и читаемые важные таблицы. Не используем заранее придуманное количество строк: оно зависит от времени выбранной копии и сверяется с относящимися к ней evidence.
 
-## 4. Create isolated restore environment
+Production now contains real warehouse data — это исторически подтверждённая граница: нулевые pre-data counts больше не являются корректной универсальной предпосылкой. Наличие immutable Movement/MovementLine и корректность stock/custody подтверждает восстановление конкретного снимка, а не фиксированные числа из Stage 15.
 
-Create resources with a unique prefix:
+## 6. Reconciliation только по точной версии схемы
 
-    dc-inventory-restore-<UTC_RUN_ID>
+SQL сверки берём из **того самого immutable backend image**, чей ID/revision указан в выбранном manifest:
 
-Required resources:
+```text
+/app/scripts/reconcile_inventory_projections.sql
+```
 
-- one internal Docker network;
-- one temporary Docker volume;
-- one PostgreSQL 18 container;
-- no `-p` host-port publication.
+Нельзя использовать файл `backend/scripts/reconcile_inventory_projections.sql` из более нового checkout вслепую: запрос может ссылаться на объекты, отсутствующие в восстановленной схеме. Перед извлечением SQL проверить image revision по manifest. Запустить сверку только для чтения; результат **ноль строк**. Любая строка дрейфа складских или custody-проекций — блокер целостности, не разрешение на автоматический rebuild.
 
-Production `postgres_data` must not appear in restore mounts.
+## 7. Проверка совместимости приложения
 
-## 5. Restore
+Из manifest получить immutable backend/web image IDs и source revisions; backend-family workers должны соответствовать зафиксированному artifact. Запустить точный доступный backend image против **изолированной** БД без публикации на host, проверить `/api/health/ready` и затем остановить. При отсутствии требуемого immutable artifact зафиксировать `APPLICATION_ARTIFACT_MISSING` и запретить production cutover. Нельзя подменять его новым образом только потому, что он уже есть в checkout.
 
-Restore into an empty database with:
+Репетиция не доказывает работоспособность Cloudflare, Telegram, Graph или production-секретов: тестовые значения и изолированная БД специально отделены от внешней инфраструктуры.
 
-    pg_restore       --no-owner       --no-acl       --dbname=<isolated-db>       SELECTED.dump
+## 8. Доказательства и завершение
 
-The restore command must finish with exit code 0.
+Сохранить время начала/окончания UTC; конкретные dump/manifest keys и schema version; SHA-256 и размер; checkout и image provenance; Alembic head; проверенные counts/invariants; результат reconciliation; работоспособность точного backend image; IDs и health production до/после; результат cleanup и причину каждого ABORT.
 
-## 6. Verify database
+После сохранения доказательств удалить **только созданные этим запуском** application/PostgreSQL контейнеры, том, сеть и временные скачанные файлы. Сверить уникальный префикс и список созданных ресурсов перед каждым удалением. При ошибке cleanup сохранить имена оставшихся ресурсов и прекратить дальнейшие действия; не запускать массовый `docker prune`. Повторно проверить неизменность production IDs и health.
 
-Required checks:
+## 10A. Guarded command-level rehearsal — защищённый запуск
 
-    SELECT version_num FROM alembic_version;
+Канонический исполняемый сценарий:
 
-Verify canonical tables, constraints and critical row counts.
+```text
+ops/recovery/rehearse_restore.sh
+```
 
-Production now contains real warehouse data, therefore zero pre-data counts are
-no longer a valid current invariant.
+После отдельного согласования, получения утверждённого релиза и проверки prerequisites оператор может запустить:
 
-Do not hard-code operational row counts in this runbook.
+```bash
+sudo -n bash ops/recovery/rehearse_restore.sh
+```
 
-For a selected artifact:
+Сценарий должен fail-closed проверять S3 manifest/hash/retention, PostgreSQL 18 restore, schema, правильный SQL reconciliation, точный image, отзыв восстановленных сессий, cleanup и неизменность рабочего runtime. **В рамках редактирования документации этот скрипт не запускаем.** Успех синтетического локального восстановления в CP-11 не означает успех повторного восстановления настоящего S3-объекта.
 
-- restored Alembic head must equal manifest expectation;
-- restored critical row counts must be internally readable/consistent;
-- when comparing with the source production checkpoint, counts must match the
-  corresponding backup evidence;
-- immutable movement journal must remain present;
-- stock projection integrity is decided by canonical reconciliation, not by
-  guessed static counts.
+## 11. Production cutover boundary — отдельное решение
 
-## 7. Projection reconciliation
+Эта инструкция **не** разрешает и не выполняет аварийное переключение. Перед настоящим cutover требуется одобренное incident/change решение, закрытый mutation gate, свежая проверенная canonical backup, PASS проверки выбранного артефакта и изолированной репетиции, доступный точный application artifact, согласованный порядок миграции/forward-fix, проверка целевых томов и конфигурации, заранее записанные ABORT criteria, затем health PASS и `ZERO_DRIFT` после переключения.
 
-Projection reconciliation is schema-version-bound.
-
-The rehearsal must use the reconciliation SQL shipped inside the **exact backend
-image** recorded in the selected backup manifest:
-
-    /app/scripts/reconcile_inventory_projections.sql
-
-It must not use `backend/scripts/reconcile_inventory_projections.sql` from the
-current production checkout. The current checkout may be newer than the
-restored Alembic head, and a newer reconciliation query may reference schema
-objects that did not exist when the backup was created.
-
-The immutable backend image revision is verified against the manifest before
-the reconciliation SQL is extracted.
-
-Required result:
-
-    zero rows
-
-Any returned drift row is a data-integrity blocker.
-
-## 8. Application compatibility
-
-From manifest schema v2 read:
-
-- backend immutable image ID;
-- backend source revision;
-- web immutable image ID;
-- web source revision.
-
-For backend-family services the recorded image/revision must agree.
-
-Run the exact available backend artifact against the isolated restored database
-without host exposure and require `/api/health/ready` to pass.
-
-If the exact application artifact is unavailable, record
-`APPLICATION_ARTIFACT_MISSING` and prohibit production cutover. Durable off-VM
-application artifact is handled by AUD-04.
-
-## 9. Evidence
-
-Preserve:
-
-- selected dump/manifest keys;
-- checksums;
-- manifest schema version;
-- production checkout SHA;
-- runtime image IDs/revisions;
-- Alembic head;
-- row counts;
-- reconciliation results;
-- compatibility result;
-- UTC start/end;
-- production container IDs and health before/after.
-
-## 10. Cleanup
-
-Only after evidence is saved:
-
-- remove temporary restore application container;
-- remove temporary PostgreSQL container;
-- remove temporary restore volume;
-- remove temporary internal network;
-- remove temporary downloaded files.
-
-Before removal, verify every resource name begins with
-`dc-inventory-restore-`.
-
-Re-check production container IDs and health after cleanup.
-
-## 10A. Guarded command-level rehearsal
-
-Canonical executable procedure:
-
-    ops/recovery/rehearse_restore.sh
-
-После merge/deploy соответствующего release rehearsal запускается только
-явным operator action:
-
-    sudo -n bash ops/recovery/rehearse_restore.sh
-
-Script fail-closed проверяет S3 manifest/hash/retention, isolated PostgreSQL 18
-restore, Alembic head, projection reconciliation, exact backend image
-compatibility, cleanup и неизменность production runtime.
-
-Он не выполняет production cutover и не включает real-inventory mutations.
-
-## 11. Production cutover boundary
-
-This runbook does not authorize or automatically execute production cutover.
-
-Production recovery requires a separate incident/change decision and:
-
-1. inventory mutation gate remains closed;
-2. fresh canonical production backup;
-3. selected artifact verification PASS;
-4. isolated restore rehearsal PASS;
-5. exact durable application artifact available;
-6. migration compatibility/forward-fix plan approved;
-7. explicit target volume/config review;
-8. abort criteria recorded before modification;
-9. post-cutover health PASS;
-10. post-cutover reconciliation ZERO_DRIFT.
-
-In-place overwrite of the existing production PostgreSQL volume is not an
-accepted rehearsal procedure.
+Отдельно восстановить из утверждённых секретных хранилищ и проверить production `.env`, S3 endpoint/credentials, учётные записи PostgreSQL, Telegram bot/webhook/gateway secrets, Cloudflare Tunnel/DNS и, если используется, Microsoft Graph. Убедиться в совместимости версий PostgreSQL/Alembic и восстановленных образов. Реальное перезаписывание существующего production PostgreSQL volume **не** является допустимым сценарием репетиции; оно требует самостоятельного утверждённого плана аварийного восстановления.

@@ -124,6 +124,24 @@ def email_delivery_enabled(
     return raw == "true"
 
 
+def verify_checkout(root: Path, claimed_sha: str) -> None:
+    """Verify the reported checkout against the actual Git HEAD."""
+    if SHA_RE.fullmatch(claimed_sha) is None:
+        raise RuntimeError(f"invalid production checkout SHA: {claimed_sha!r}")
+
+    actual_sha = subprocess.check_output(
+        ["git", "rev-parse", "HEAD"],
+        cwd=root,
+        text=True,
+    ).strip()
+
+    if actual_sha != claimed_sha:
+        raise RuntimeError(
+            "production checkout SHA mismatch: "
+            f"claimed={claimed_sha}, actual={actual_sha}"
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--root", type=Path, required=True)
@@ -137,10 +155,7 @@ def main() -> None:
 
     checkout = args.production_checkout_sha
 
-    if SHA_RE.fullmatch(checkout) is None:
-        raise RuntimeError(
-            f"invalid production checkout SHA: {checkout!r}"
-        )
+    verify_checkout(args.root, checkout)
 
     backend = collect(
         args.root,

@@ -82,8 +82,8 @@ SELECT format(
 
 -- One-way cutover from the pre-split delivery-worker credential.
 -- Fresh installations normally have no such role. Existing installations
--- disable login first, terminate already-authenticated sessions, and revoke
--- every privilege previously granted by the old bootstrap.
+-- disable login and revoke legacy privileges in one transaction.
+-- Existing sessions are terminated separately after commit.
 SELECT format(
     'ALTER ROLE %I WITH NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS',
     :'legacy_worker_user'
@@ -94,11 +94,6 @@ WHERE EXISTS (
     WHERE rolname = :'legacy_worker_user'
 )
 \gexec
-
-SELECT pg_terminate_backend(pid)
-FROM pg_stat_activity
-WHERE usename = :'legacy_worker_user'
-  AND pid <> pg_backend_pid();
 
 SELECT format(
     'REVOKE ALL PRIVILEGES ON DATABASE %I FROM %I',
@@ -277,8 +272,47 @@ SELECT format(
 
 
 -- Identity/auth/access runtime.
+-- Runtime may create identity/access records, but UPDATE is deliberately
+-- column-scoped. Immutable identifiers and creation/request timestamps are
+-- not writable by the application database principal.
 SELECT format(
-    'GRANT SELECT, INSERT, UPDATE ON TABLE users, telegram_identities, access_requests TO %I',
+    'GRANT SELECT, INSERT ON TABLE users TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT UPDATE '
+    '(role, access_status, updated_at, approved_at, approved_by_user_id) '
+    'ON TABLE users TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT SELECT, INSERT ON TABLE telegram_identities TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT UPDATE '
+    '(username, first_name, last_name, language_code, updated_at, last_auth_at) '
+    'ON TABLE telegram_identities TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT SELECT, INSERT ON TABLE access_requests TO %I',
+    :'runtime_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT UPDATE '
+    '(status, decided_at, decided_by_user_id, decision_note) '
+    'ON TABLE access_requests TO %I',
     :'runtime_user'
 )
 \gexec

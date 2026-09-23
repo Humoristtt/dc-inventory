@@ -123,4 +123,21 @@ for needle, label in (
 if "5432:" in backup or "-p 5432" in backup:
     raise RuntimeError("Backup must not publish PostgreSQL host port")
 
+for needle in (
+    '"version_id"',
+    '"dump_version_id"',
+    '"manifest_version_id"',
+    '--versions-output',
+    'S3_VERSION_IDS=RECORDED',
+):
+    if needle not in backup + helper:
+        raise RuntimeError(f"Missing S3 version contract: {needle}")
+
+for needle in (
+    "VersionId=version_id",
+    "return version_id",
+    "args.versions_output",
+):
+    require(helper, needle, "version-specific backup verification")
+
 print("STAGE15A_CONTRACT_TEST=PASS")

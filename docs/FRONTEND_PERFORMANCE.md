@@ -1,260 +1,52 @@
-# Frontend performance and navigation
+# Производительность и навигация интерфейса
 
-Canonical decisions for startup and navigation performance of the
-Spikatel Inventory Telegram Mini App.
+Документ описывает действующий принцип загрузки Telegram Mini App и историческую приёмку оптимизации от 10–11.09.2026. Текущие исходники проверяем по `frontend/src/` и тестам, а не по старым показателям производительности. Общая система компонентов — в [FRONTEND_DESIGN_SYSTEM.md](FRONTEND_DESIGN_SYSTEM.md); авторизация и предметные операции — в [ARCHITECTURE.md](ARCHITECTURE.md).
 
-Last updated: 2026-09-11.
+## 1. Граница безопасности
 
-## Scope
+Состояние роли и доступа в React управляет отображением и маршрутизацией, **но не даёт разрешений**. Каждый защищённый запрос проходит проверку серверной HttpOnly-сессии, статуса пользователя и необходимой capability в FastAPI. Запрос `/api/auth/me` нельзя убирать ради ускорения и заменять доверием к браузерному состоянию. Фоновая проверка действующей сессии не должна блокировать каждое переключение страницы каталога.
 
-This document covers frontend startup, route loading, catalog navigation
-and perceived transition latency.
+Кэш запросов после авторизации хранится только в памяти процесса браузера. При полной перезагрузке Telegram WebView кэш пустой. Не сохраняем защищённые ответы в `localStorage` или IndexedDB: это усложняет разграничение пользователей на общем устройстве и работу с устаревшими данными.
 
-It does not redefine backend authorization, warehouse domain rules,
-database semantics or Telegram access policy.
+## 2. Как сокращён критический путь
 
-## Security boundary
+Ранее последовательный холодный переход мог ожидать загрузку основного JavaScript, проверку доступа, chunk страницы, экран загрузки, метаданные категории, список и затем карточку позиции. Оптимизация **совмещает независимые действия**, а не собирает весь интерфейс в стартовый bundle.
 
-Frontend role/access state is a presentation and navigation concern.
+**Загрузка текущего маршрута.** При запуске приложение начинает импорт модуля, соответствующего `window.location.pathname`, параллельно проверке сессии. Загрузка кода не обходит access gate: содержимое защищённой страницы появляется только после подтверждения доступа сервером.
 
-It is not a security boundary.
+**Прогрев остальных маршрутов.** После входа APPROVED-пользователя небольшой фиксированный набор route chunks загружается в фоне. Страницы остаются dynamic imports за пределами исходного JavaScript-пакета; мы обмениваем небольшую фоновую передачу данных на более предсказуемую навигацию.
 
-Protected backend endpoints continue to validate the server-side
-HttpOnly session and the required APPROVED / ADMIN policy for every
-request.
+**Граница ошибок.** `RouteContent` сохраняет общую Suspense/error recovery boundary между сменами pathname. Ошибка отдельной страницы сбрасывается по ключу нового маршрута; переход не обязан каждый раз размонтировать общую оболочку приложения.
 
-The frontend `/api/auth/me` query therefore must not be removed or
-replaced by trust in browser state merely to make navigation faster.
+**Переход к категории-листу.** Ответ иерархии уже содержит `id`, `key` и `parent_id`. Если он в кэше, `CategoryPage` определяет family/leaf без ожидания отдельного запроса метаданных. Список позиций листа загружается параллельно деталям категории. На странице семейства заранее запрашиваются сведения только о дочерних листах данного семейства, а не обо всём справочнике.
 
-The existing periodic APPROVED-session refresh is background work and
-is not performed on every catalog route transition.
+**Переход к Item.** Список уже содержит основные данные карточки и сводку наличия. При открытии Item эти сведения передаются как временные данные, чтобы отобразить страницу до завершения нового запроса. Канонический endpoint всё равно выполняется и перепроверяет значения; распределение количества по локациям приходит из собственных запросов API. Данные из route state не становятся источником истины.
 
-## Observed pre-optimization critical path
+## 3. Чего в этой архитектуре нет
 
-Before the current performance pass, a cold navigation could contain
-several serial stages:
+В рамках текущего MVP сознательно не добавляли Redux ради ещё одной копии server state, service workers, постоянное хранение кэша запросов, SSR, новый маршрутизатор, отдельный bootstrap/BFF endpoint и Redis для кэширования frontend. Эти компоненты нельзя вводить только ради предположительного ускорения: сначала нужны воспроизводимые замеры и реальный профиль нагрузки.
 
-1. initial JS;
-2. authentication/access gate;
-3. lazy route chunk;
-4. route-level loading screen;
-5. category metadata;
-6. item list;
-7. item-detail request.
+## 4. Что проверяем при изменениях
 
-Two concrete avoidable frontend costs were identified:
+Автоматизированный браузерный сценарий должен доказывать **порядок запросов**, а не только общее время на быстром компьютере:
 
-- `CategoryPage` waited for category-detail success before enabling the
-  item-list query;
-- opening an item from an already rendered catalog card requested the
-  same item payload again before painting the detail page.
+1. Загрузка JS текущего глубокого маршрута начинается, пока проверка авторизации намеренно удерживается незавершённой.
+2. Запрос Item-списка начинается, пока ответ с деталями leaf-категории ещё удерживается.
+3. Карточка Item отображает предварительные данные из списка, пока её канонический endpoint не ответил.
+4. После прогрева обычный переход не требует полноэкранного fallback «Загружаем страницу…».
 
-The React Query cache is intentionally in-memory. A hard browser/WebView
-reload therefore starts with an empty query cache.
+Дополнительно обязательны lint, TypeScript, Vitest, production build с bundle contract и затронутые Playwright-сценарии склада. Реальную плавность переходов, размеры и первый клик проверяют в Telegram Mobile/Desktop **после развёртывания**; синтетический браузер не заменяет такую проверку.
 
-## Accepted MVP strategy
+## 5. Историческое ограничение Telegram Desktop fullscreen
 
-The MVP keeps route-level code splitting and the existing bundle-size
-contract.
+В сентябрьском цикле PR #53 временно сделал полноэкранный режим ручным, чтобы локализовать проблему первого клика. На реальном Telegram Desktop hover и первый клик в обычном/expanded окне работали, но после перехода в native fullscreen первая операция мышью поглощалась WebView. Попытка best-effort восстановления фокуса через `window.focus()` и DOM focus в PR #54 не помогла. PR #55 вернул принятую автоматическую активацию fullscreen; прежний работающий образ был восстановлен на коммит `676c5276b6427194bd75e6d8a0d2ffb16bbb8b61`.
 
-Optimization is performed by moving work earlier and overlapping
-independent work rather than by making every route part of the initial
-bundle.
+Это зафиксированное поведение Telegram Desktop/WebView, а не подтверждённый дефект React или каталога. В MVP не внедряем синтетические клики или replay пользовательского ввода: такие обходы могут выполнять действие дважды. Операционный контракт desktop fullscreen описан в [OPERATIONS.md](OPERATIONS.md).
 
-### Current-route preload
+## 6. Датированная приёмка предыдущего цикла
 
-At application bootstrap the route module matching
-`window.location.pathname` starts loading immediately.
+Оптимизация прошла через PR #56; проверенный исходный коммит `7503aaf0b67512c31a618a845c6b571396234794`, merge/production — `230ae967ed8346b3f3edae615025c7d4c011872b`. Это **исторический результат**, не SHA сегодняшнего production. Тогда зафиксированы TypeScript PASS, lint без замечаний, Vitest 17 файлов/85 тестов, bundle contract PASS, исходный JS 283665 байт (около 90 КиБ gzip), Playwright Warehouse 62 PASS/8 ожидаемых пропусков и четыре успешных CI jobs. Проверка реальной Telegram-навигации прошла в production; схема БД на момент той приёмки — `f8a9b0c1d2e3`, складские мутации оставались выключены.
 
-This happens in parallel with the startup authentication request.
+Для того выпуска подтверждались резервные копии: перед переключением `postgres/full/2026/09/10/dc-inventory-20260910T230658Z.dump` с SHA-256 `168a32faf0f5b051b9e183864a14538b48add986d1d210e64c5b56e606979f36`; после выпуска `postgres/full/2026/09/10/dc-inventory-20260910T230755Z.dump` с SHA-256 `f4f3f70f4b0b5143d3cee9e521fe632480aff2016903cfa0e34a28b40313662e`. Эти идентификаторы сохраняются как свидетельство прошлой приёмки, **не** как актуальная резервная копия для будущего отката.
 
-Downloading route code does not grant access and does not bypass the
-Telegram access gate.
-
-### Fixed-route warmup
-
-After an approved application mounts, the small fixed set of route
-chunks is warmed in the background.
-
-The routes remain dynamic imports and therefore remain outside the
-initial JS import graph.
-
-This trades a small amount of background transfer for predictable
-subsequent navigation in the internal warehouse application.
-
-### Stable route boundary
-
-`RouteContent` remains the Suspense/error recovery boundary.
-
-It is no longer remounted purely because `location.pathname` changed.
-
-A route failure is reset when navigation changes the route reset key.
-
-### Catalog family/leaf fast path
-
-The catalog hierarchy response already contains `id`, `key` and
-`parent_id`.
-
-When hierarchy data is cached, `CategoryPage` can determine whether the
-destination is a family or leaf without waiting for the category-detail
-request.
-
-For a leaf, item loading can therefore start while category metadata is
-still loading.
-
-When a family page is visible, metadata for that family's small set of
-child leaf categories is prefetched. This avoids globally prefetching
-every category-detail endpoint.
-
-### Item-detail preview
-
-A catalog list entry already contains the complete catalog item identity,
-status and attributes plus an inventory summary.
-
-When navigation originates from an equipment card, that catalog item is
-passed as route state and used as React Query placeholder data for the
-detail page.
-
-The actual item endpoint still runs and revalidates server state.
-Inventory-location breakdown continues to use its own canonical API
-queries.
-
-The preview therefore improves first paint without turning client state
-into an authority.
-
-## Deliberately rejected MVP complexity
-
-The current MVP does not add:
-
-- Redux or another global state framework;
-- service workers;
-- IndexedDB query persistence;
-- localStorage persistence of protected catalog data;
-- SSR;
-- a new router;
-- a bootstrap/BFF endpoint;
-- Redis or another frontend cache service.
-
-Persistent browser caching of authenticated query data is intentionally
-avoided for now because it increases stale-data and shared-device /
-cross-user lifecycle complexity.
-
-## Performance acceptance
-
-Automated acceptance must prove behavior, not only elapsed wall-clock
-time.
-
-The browser suite therefore uses controlled pending network requests to
-prove that:
-
-- the current deep-route JS chunk starts loading while startup auth is
-  still pending;
-- leaf item loading starts while category metadata is deliberately held
-  unresolved;
-- item detail can paint from list preview while the detail endpoint is
-  deliberately held unresolved;
-- normal warmed navigation does not require the full-page
-  `Загружаем страницу…` fallback.
-
-The normal typecheck, lint, unit, production build/bundle contract and
-full Warehouse browser suite remain required.
-
-Final acceptance additionally requires real Telegram mobile/desktop
-visual testing after deployment.
-
-## Telegram Desktop fullscreen finding
-
-PR #53 changed desktop fullscreen from automatic to user initiated in
-order to isolate the first-click problem.
-
-Real Telegram Desktop testing showed:
-
-- windowed/expanded mode accepted hover and the first click normally;
-- after entering Telegram native fullscreen, the first mouse interaction
-  was consumed.
-
-PR #54 added best-effort `window.focus()` / DOM focus recovery after
-`fullscreenChanged`.
-
-Real Telegram Desktop testing showed no improvement.
-
-PR #55 therefore restored the accepted automatic desktop-fullscreen
-behavior.
-
-Production was restored to commit:
-
-    676c5276b6427194bd75e6d8a0d2ffb16bbb8b61
-
-The fullscreen first-input behavior is treated as a Telegram Desktop /
-native WebView limitation, not as a React/catalog performance defect.
-
-No further synthetic click or focus-replay workaround is planned for
-the MVP.
-
-## Accepted production result
-
-The frontend performance pass was accepted after automated, production and
-real Telegram validation.
-
-Accepted implementation:
-
-- PR #56;
-- audited branch commit:
-  `7503aaf0b67512c31a618a845c6b571396234794`;
-- merged `main` / production commit:
-  `230ae967ed8346b3f3edae615025c7d4c011872b`.
-
-Local frontend acceptance before merge:
-
-- TypeScript: PASS;
-- lint: 0 warnings / 0 errors;
-- Vitest: 17 files / 85 tests passed;
-- production build and initial bundle contract: PASS;
-- initial JS: 283665 bytes;
-- initial JS gzip: approximately 90 KiB;
-- Playwright Warehouse suite: 62 passed / 8 expected skipped.
-
-GitHub PR CI completed successfully for all four jobs:
-
-- backend;
-- frontend;
-- runtime;
-- telegram-gateway.
-
-Production deployment preserved the established release provenance contract.
-The following running services all reported source revision
-`230ae967ed8346b3f3edae615025c7d4c011872b`:
-
-- PostgreSQL;
-- backend;
-- Telegram worker;
-- maintenance worker;
-- web.
-
-Production acceptance also confirmed:
-
-- Alembic head `f8a9b0c1d2e3`;
-- `REAL_INVENTORY_MUTATIONS_ENABLED=false`;
-- internal and external health checks successful;
-- web host bind remained `127.0.0.1:8080`;
-- real Telegram navigation felt responsive and the performance pass was
-  accepted by live testing.
-
-Verified release backups:
-
-- pre-cutover:
-  `postgres/full/2026/09/10/dc-inventory-20260910T230658Z.dump`,
-  SHA256
-  `168a32faf0f5b051b9e183864a14538b48add986d1d210e64c5b56e606979f36`;
-- post-deploy:
-  `postgres/full/2026/09/10/dc-inventory-20260910T230755Z.dump`,
-  SHA256
-  `f4f3f70f4b0b5143d3cee9e521fe632480aff2016903cfa0e34a28b40313662e`.
-
-After acceptance, operational cleanup removed obsolete release tags, completed
-one-shot containers and obsolete temporary release directories. The current
-release and the immediately previous accepted release
-`676c5276b6427194bd75e6d8a0d2ffb16bbb8b61` were retained for rollback.
-
-The performance phase is closed. Subsequent visual and interaction work belongs
-to a separate UX consistency change set.
+Новый цикл CP-14 на 19.09.2026 прошёл отдельную изолированную full-stack проверку (`150` frontend unit tests и `2` Playwright), но она не повторяла замеры предыдущего производительного выпуска и не является новой production performance acceptance. Текущие релизные статусы и открытые проверки — в [AUDIT_0_12_REMEDIATION.md](AUDIT_0_12_REMEDIATION.md).

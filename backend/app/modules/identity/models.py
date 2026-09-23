@@ -30,8 +30,7 @@ class User(Base):
     __tablename__ = "users"
     __table_args__ = (
         CheckConstraint(
-            "role IN ('ENGINEER', 'SENIOR_ENGINEER', 'MANAGER', "
-            "'ADMIN', 'OWNER')",
+            "role IN ('ENGINEER', 'SENIOR_ENGINEER', 'MANAGER', 'ADMIN', 'OWNER')",
             name="user_role",
         ),
         Index(
@@ -43,6 +42,10 @@ class User(Base):
         CheckConstraint(
             "access_status IN ('PENDING', 'APPROVED', 'REJECTED', 'BLOCKED')",
             name="user_access_status",
+        ),
+        CheckConstraint(
+            "role <> 'OWNER' OR access_status = 'APPROVED'",
+            name="owner_must_be_approved",
         ),
     )
 
@@ -260,13 +263,11 @@ class UserAccessEvent(Base):
             name="user_access_event_changed",
         ),
         CheckConstraint(
-            "before_access_status IN "
-            "('PENDING', 'APPROVED', 'REJECTED', 'BLOCKED')",
+            "before_access_status IN ('PENDING', 'APPROVED', 'REJECTED', 'BLOCKED')",
             name="user_access_event_before_status",
         ),
         CheckConstraint(
-            "after_access_status IN "
-            "('PENDING', 'APPROVED', 'REJECTED', 'BLOCKED')",
+            "after_access_status IN ('PENDING', 'APPROVED', 'REJECTED', 'BLOCKED')",
             name="user_access_event_after_status",
         ),
         Index(
@@ -278,6 +279,11 @@ class UserAccessEvent(Base):
             "ix_user_access_events_actor_occurred",
             "actor_user_id",
             "occurred_at",
+        ),
+        Index(
+            "ix_user_access_events_target_txid",
+            "target_user_id",
+            "db_transaction_id",
         ),
     )
 
@@ -321,6 +327,11 @@ class UserAccessEvent(Base):
         nullable=False,
         server_default=func.now(),
     )
+    db_transaction_id: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        server_default=func.txid_current(),
+    )
 
 
 class UserRoleEvent(Base):
@@ -331,13 +342,11 @@ class UserRoleEvent(Base):
             name="user_role_event_changed",
         ),
         CheckConstraint(
-            "before_role IN ('ENGINEER', 'SENIOR_ENGINEER', 'MANAGER', "
-            "'ADMIN', 'OWNER')",
+            "before_role IN ('ENGINEER', 'SENIOR_ENGINEER', 'MANAGER', 'ADMIN', 'OWNER')",
             name="user_role_event_before_role",
         ),
         CheckConstraint(
-            "after_role IN ('ENGINEER', 'SENIOR_ENGINEER', 'MANAGER', "
-            "'ADMIN', 'OWNER')",
+            "after_role IN ('ENGINEER', 'SENIOR_ENGINEER', 'MANAGER', 'ADMIN', 'OWNER')",
             name="user_role_event_after_role",
         ),
         Index(
@@ -349,6 +358,11 @@ class UserRoleEvent(Base):
             "ix_user_role_events_actor_occurred",
             "actor_user_id",
             "occurred_at",
+        ),
+        Index(
+            "ix_user_role_events_target_txid",
+            "target_user_id",
+            "db_transaction_id",
         ),
     )
 
@@ -391,4 +405,9 @@ class UserRoleEvent(Base):
         DateTime(timezone=True),
         nullable=False,
         server_default=func.now(),
+    )
+    db_transaction_id: Mapped[int] = mapped_column(
+        BigInteger,
+        nullable=False,
+        server_default=func.txid_current(),
     )

@@ -136,7 +136,42 @@ assert "write_worker_heartbeat" in health_source
 assert "os.utime" in health_source
 
 db_permissions = service_block("db-permissions")
+assert "psql -X --single-transaction -v ON_ERROR_STOP=1" in db_permissions
 assert "/var/lib/postgresql" in db_permissions
+grants_source = (
+    ROOT / "backend/scripts/apply_database_permissions.sql"
+).read_text()
+
+terminator_source = (
+    ROOT / "backend/scripts/terminate_legacy_worker_sessions.sql"
+).read_text()
+
+apply_file = "-f /scripts/apply_database_permissions.sql"
+terminate_file = (
+    "-f /scripts/terminate_legacy_worker_sessions.sql"
+)
+
+assert "pg_terminate_backend(" not in grants_source
+
+assert apply_file in db_permissions
+assert terminate_file in db_permissions
+
+assert (
+    db_permissions.index(apply_file)
+    < db_permissions.index(terminate_file)
+)
+
+assert (
+    "./backend/scripts/terminate_legacy_worker_sessions.sql:"
+    "/scripts/terminate_legacy_worker_sessions.sql:ro"
+    in db_permissions
+)
+
+assert "pg_terminate_backend(pid, 5000)" in terminator_source
+assert (
+    "legacy worker sessions remain after revocation"
+    in terminator_source
+)
 assert "POSTGRES_TELEGRAM_WORKER_USER" in db_permissions
 assert "POSTGRES_EMAIL_WORKER_USER" in db_permissions
 assert "POSTGRES_LEGACY_WORKER_USER" in db_permissions

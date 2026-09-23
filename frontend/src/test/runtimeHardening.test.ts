@@ -1,16 +1,22 @@
 import { describe, expect, it } from "vitest";
 
+import appSource from "../app/App.tsx?raw";
+import routeModulesSource from "../app/routeModules.ts?raw";
+import mainSource from "../main.tsx?raw";
+
 import dockerIgnore from "../../.dockerignore?raw";
 import nginxConfig from "../../nginx.conf?raw";
+import nginxServerInclude from "../../nginx-server.inc?raw";
+import dockerfileSource from "../../Dockerfile?raw";
 
 function locationBody(signature: string): string {
   const marker = `${signature} {`;
-  const start = nginxConfig.indexOf(marker);
+  const start = nginxServerInclude.indexOf(marker);
 
   expect(start).toBeGreaterThanOrEqual(0);
 
-  const bodyStart = nginxConfig.indexOf("\n", start) + 1;
-  const end = nginxConfig.indexOf(
+  const bodyStart = nginxServerInclude.indexOf("\n", start) + 1;
+  const end = nginxServerInclude.indexOf(
     "\n        }",
     bodyStart,
   );
@@ -18,7 +24,7 @@ function locationBody(signature: string): string {
   expect(bodyStart).toBeGreaterThan(start);
   expect(end).toBeGreaterThan(bodyStart);
 
-  return nginxConfig.slice(bodyStart, end);
+  return nginxServerInclude.slice(bodyStart, end);
 }
 
 function expectSecurityHeaders(body: string): void {
@@ -40,9 +46,18 @@ function expectSecurityHeaders(body: string): void {
 }
 
 describe("production web hardening", () => {
+  it("ships the shared Nginx configuration to both server entrypoints", () => {
+    expect(dockerfileSource).toContain(
+      "COPY nginx-server.inc /etc/nginx/server-common.inc",
+    );
+    expect(
+      nginxConfig.match(/include \/etc\/nginx\/server-common\.inc;/g),
+    ).toHaveLength(2);
+  });
+
   it("keeps HSTS on all explicit security-header scopes", () => {
     expect(
-      nginxConfig.match(
+      nginxServerInclude.match(
         /add_header Strict-Transport-Security/g,
       ),
     ).toHaveLength(3);
@@ -50,13 +65,13 @@ describe("production web hardening", () => {
 
   it("keeps CSP and Permissions-Policy on all explicit security-header scopes", () => {
     expect(
-      nginxConfig.match(
+      nginxServerInclude.match(
         /add_header Content-Security-Policy/g,
       ),
     ).toHaveLength(3);
 
     expect(
-      nginxConfig.match(
+      nginxServerInclude.match(
         /add_header Permissions-Policy/g,
       ),
     ).toHaveLength(3);
@@ -93,6 +108,16 @@ describe("production web hardening", () => {
 });
 
 describe("production API rate limiting", () => {
+  it("trusts forwarded client IP only on the Unix socket", () => {
+    expect(nginxConfig).toContain("set_real_ip_from unix:;");
+    expect(nginxConfig).toContain(
+      "real_ip_header CF-Connecting-IP;",
+    );
+    expect(nginxServerInclude).toContain(
+      "proxy_set_header X-Real-IP $remote_addr;",
+    );
+  });
+
   it("defines independent general, sensitive, and Telegram webhook zones", () => {
     expect(nginxConfig).toContain(
       "limit_req_zone $api_rate_key zone=api_per_client:5m rate=30r/s;",
@@ -113,10 +138,10 @@ describe("production API rate limiting", () => {
       'map "$request_method:$uri" $sensitive_rate_key {',
     );
     expect(nginxConfig).toContain(
-      "POST:/api/auth/telegram $client_ip;",
+      "POST:/api/auth/telegram $remote_addr;",
     );
     expect(nginxConfig).toContain(
-      "POST:/api/access-requests $client_ip;",
+      "POST:/api/access-requests $remote_addr;",
     );
   });
 
@@ -125,7 +150,7 @@ describe("production API rate limiting", () => {
       "/api/telegram/webhook \"\";",
     );
     expect(nginxConfig).toContain(
-      "/api/telegram/webhook $client_ip;",
+      "/api/telegram/webhook $remote_addr;",
     );
   });
 
@@ -140,6 +165,20 @@ describe("production API rate limiting", () => {
     );
     expect(body).toContain(
       "limit_req zone=telegram_webhook burst=100 nodelay;",
+    );
+  });
+});
+
+describe("CP-07 route loading contract", () => {
+  it("preloads the requested route without warming every page", () => {
+    expect(mainSource).toContain(
+      "void preloadRouteForPath(window.location.pathname);",
+    );
+
+    expect(appSource).not.toContain("preloadApplicationRoutes");
+
+    expect(routeModulesSource).not.toContain(
+      "export async function preloadApplicationRoutes",
     );
   });
 });

@@ -1,236 +1,83 @@
-# Warehouse Domain V2
+# Складской учёт: журнал, остатки и ответственность
 
-Этот документ является каноническим описанием складской модели Spikatel Inventory.
+Warehouse Domain V2 ведёт **количественный** учёт оборудования и материалов ЦОД. Здесь описаны единицы учёта, допустимые операции, транзакции и проверка целостности. Категории и характеристики позиций определены в [CATALOG_SCHEMA.md](CATALOG_SCHEMA.md), матрица разрешений — в [RBAC_PROCUREMENT.md](RBAC_PROCUREMENT.md), пользовательские сценарии — в [PRODUCT_REQUIREMENTS.md](PRODUCT_REQUIREMENTS.md).
 
-## Основной принцип
+Warehouse V2 ранее развёрнут и принят в production. Последняя документированная production-схема закупок — `c3d4e5f6a7b8`, текущий source Alembic head — `a9c0d1e2f3a4`. Новые инварианты исходников не следует считать развёрнутыми без CP-16. Обычные складские мутации на production по последнему подтверждённому состоянию закрыты: `REAL_INVENTORY_MUTATIONS_ENABLED=false`; начальный one-shot bootstrap уже завершён.
 
-Warehouse V2 использует количественный учёт без модели индивидуальных физических
-экземпляров.
+## 1. Что мы учитываем
 
-Item является номенклатурной позицией, а не physical unit.
+`Item` описывает номенклатурную позицию, а не отдельное устройство. `StorageLocation` — место хранения с уникальным нормализованным кодом, именем, необязательным адресом, типом `WAREHOUSE` либо `DATACENTER` и статусом `ACTIVE`/`ARCHIVED`. Локацию с ненулевым остатком архивировать нельзя. Для движения хранится snapshot названия/кода локации, поэтому последующее редактирование справочника не переписывает смысл истории.
 
-Система ведёт две транзакционные current-state projections:
+Историю количества образуют неизменяемые `Movement` и `MovementLine`. Текущие значения хранятся в производных таблицах:
 
-    StockBalance = Item × StorageLocation × positive quantity
-    UserItemCustodyBalance = User × Item × positive quantity
+```text
+StockBalance = Item × StorageLocation × positive quantity
+UserItemCustodyBalance = User × Item × positive quantity
+```
 
-`actor_user_id` отвечает на вопрос «кто выполнил операцию».
+Сумма `StockBalance` по локациям даёт текущий общий остаток Item. `UserItemCustodyBalance` показывает агрегированное количество, числящееся за сотрудником; это не сведения о конкретном серийном устройстве. Обе проекции изменяются **только в согласованной складской транзакции**, а не прямым редактированием API карточки товара. Нулевые строки удаляются, отрицательные stock/custody запрещены.
 
-`custody_user_id` отвечает на вопрос «за каким USER сейчас числится количество
-оборудования».
+`actor_user_id` обозначает пользователя, выполнившего операцию. `custody_user_id` обозначает сотрудника, для которого изменяется персональное количество. Исполнитель и ответственный — разные роли данных; их нельзя объединять или выводить одно поле из другого без бизнес-правила.
 
-Actor и custody — разные понятия.
+## 2. Движения
 
-## Складской остаток
+| Тип | Изменение количества | Особые условия |
+|---|---|---|
+| `RECEIPT` | Внешний источник → одна локация | Новый приход активной позиции; отдельный итоговый приход закупки защищён дополнительными правилами. |
+| `ISSUE` | Локация → выдача | Для сотрудника с допустимой ролью увеличивается его custody; остаток локации уменьшается. |
+| `RETURN` | Возврат → локация | Для сотрудника custody уменьшается; вернуть больше числящегося количества нельзя. |
+| `TRANSFER` | Одна локация → другая | Источник и назначение должны различаться; суммарное складское количество не меняется. |
+| `WRITE_OFF` | Локация → списание | Административное выведение количества из оборота. |
+| `CORRECTION` | Компенсирующая корректировка | Ссылается на исходное движение; не переписывает его. Учитывает ограничения типа и custody. |
+| `REVERSAL` | Полная компенсирующая операция | Ссылается на исходное движение, которое нельзя разворачивать повторно. Правила custody наследуются по смыслу исходного движения. |
 
-Складская проекция:
+В модели `Movement` типы и допустимые сочетания source/destination проверяются ограничениями PostgreSQL: RECEIPT/RETURN имеют только назначение, ISSUE/WRITE_OFF — только источник, TRANSFER — обе разные локации. CORRECTION/REVERSAL связаны с `original_movement_id`. На один исходный movement допускается максимум один REVERSAL. Пустой `client_request_id`, пустой snapshot исполнителя и несогласованные snapshots локаций запрещены.
 
-    Item × StorageLocation → quantity
+`MovementLine` фиксирует Item, положительное количество и предметный snapshot на момент операции. Обычный API не обновляет и не удаляет записи immutable journal. Изменение имени или характеристик Item после движения не должно переписывать его исторический snapshot.
 
-Правила:
+Архивированный Item сохраняет историю и разрешённые операции завершения существующего количества. Новый RECEIPT/ISSUE для него запрещён; допустимость RETURN/TRANSFER/WRITE_OFF/CORRECTION/REVERSAL определяется конкретным исходным состоянием и правилами сервиса. Архивирование не удаляет остатки автоматически.
 
-- quantity — положительное целое число;
-- строки с нулевым остатком не хранятся;
-- отрицательный остаток запрещён;
-- общий складской остаток Item равен сумме остатков по локациям;
-- `stock_balances` является транзакционной проекцией immutable journal;
-- прямое редактирование остатка не допускается.
+## 3. Custody и блокировки пользователя
 
-## Custody
+ISSUE/RETURN, выполняемые ENGINEER или SENIOR_ENGINEER в режиме сотрудника, меняют его собственную custody. Административные движения ADMIN/OWNER не создают personal custody автоматически. Корректировка движения, содержащего custody, запрещена; REVERSAL выполняет соответствующую компенсирующую операцию. Если разворот RETURN вновь увеличивает custody, сотрудник должен оставаться `APPROVED` и иметь роль, допускающую ответственность.
 
-Персональная custody-проекция:
+Нельзя заблокировать пользователя или назначить ему роль без custody-capability, пока его баланс ненулевой. Операция изменения доступа и custody-changing движение должны синхронизироваться по блокировке строки пользователя. Это предотвращает гонку, в которой выдача одновременно проходит с блокировкой сотрудника. Правила переходов роли и статуса — в [RBAC_PROCUREMENT.md](RBAC_PROCUREMENT.md).
 
-    User × Item → quantity
+## 4. Атомарность и идемпотентность
 
-Правила:
+Для нового движения backend выполняет примерно следующую последовательность **в одной транзакции PostgreSQL**:
 
-- custody существует только для ENGINEER / SENIOR_ENGINEER;
-- ENGINEER / SENIOR_ENGINEER ISSUE увеличивает custody;
-- ENGINEER / SENIOR_ENGINEER RETURN уменьшает custody;
-- custody-capable пользователь не может вернуть больше, чем числится в его custody;
-- ADMIN / OWNER ISSUE/RETURN являются административными складскими движениями
-  и не создают персональную custody;
-- zero custody rows не хранятся;
-- negative custody запрещён;
-- correction custody-bearing movement запрещён;
-- reversal наследует custody исходного movement;
-- reversal RETURN, который снова увеличивает custody, допустим только для
-  APPROVED custody-capable пользователя;
-- блокировка пользователя с ненулевым custody запрещена fail-closed;
-- изменение access-state и custody-changing movement сериализуются по row lock
-  пользователя.
+1. Нормализует `client_request_id`, берёт advisory lock для исключения конкурирующих повторов и проверяет ранее сохранённые actor/request/fingerprint.
+2. При CORRECTION/REVERSAL блокирует исходное движение; для custody синхронизирует состояние пользователя.
+3. Проверяет активность и допустимость локаций и Item, затем блокирует затронутые строки в согласованном порядке.
+4. Блокирует stock/custody balances с детерминированным порядком, проверяет отсутствие отрицательных результатов.
+5. Создаёт `Movement`/`MovementLine`, обновляет проекции и при необходимости ставит notification intent в outbox.
+6. Выполняет COMMIT. Ошибка на любом этапе откатывает движение, проекции и outbox вместе.
 
-Custody является агрегированной количественной проекцией. Она не возвращает
-legacy модель InventoryUnit, serial/WWN lifecycle или current holder конкретного
-физического экземпляра.
+Уникальность пары `actor_user_id`/`client_request_id` защищена в PostgreSQL. Повтор того же запроса с совпадающим fingerprint возвращает сохранённое движение без второго изменения остатков; повтор с иным составом, количеством или custody возвращает конфликт. Клиент не должен генерировать новый идентификатор при простом повторе после потерянного HTTP-ответа.
 
-## Локации
+Отдельно хранится монотонный `journal_seq` для последовательной выдачи журнала. Наличие уникального sequence не заменяет историческое время `occurred_at` и UUID движения; эти поля предназначены для разных задач.
 
-StorageLocation содержит:
+## 5. Чтение истории и контроль доступа
 
-- stable machine code;
-- отображаемое имя;
-- тип WAREHOUSE или DATACENTER;
-- optional свободный address;
-- lifecycle ACTIVE / ARCHIVED.
+ENGINEER читает собственную actor-history. SENIOR_ENGINEER, ADMIN и OWNER могут читать общий журнал в пределах capabilities, в том числе фильтровать по сотруднику; MANAGER не получает права чтения общего журнала. Frontend скрывает недоступные действия, но окончательная проверка выполняется backend.
 
-Архивировать локацию с ненулевым остатком нельзя.
+Пагинация журнала привязана к серверному MVCC snapshot: первая страница фиксирует `pg_current_snapshot()` и время, последующие используют HMAC-подписанный opaque cursor, связанный с пользователем, фильтрами и snapshot. `pg_visible_in_snapshot(...)` исключает движения, которых не было видно при первой странице. Сырые `snapshot_at` и `before_journal_seq` не предоставляются как доверенные публичные параметры; клиент не должен создавать cursor самостоятельно. Механизм не блокирует все складские записи на время пролистывания.
 
-## Движения
+## 6. Связь с закупками
 
-Поддерживаются:
+Статусы Procurement до технической приёмки не изменяют stock. Финальная приёмка связывает `ProcurementRequest.final_movement_id` с **одним** созданным в общей транзакции RECEIPT. Обычный складской CORRECTION/REVERSAL этого итогового движения запрещён на уровне сервиса и инвариантов текущих миграций. Нельзя обходить это ограничение прямым generic adjustment. Отмена завершённой закупки требует отдельного согласованного бизнес-процесса, которого в текущем MVP нет.
 
-- RECEIPT: внешний источник → location;
-- ISSUE: location → внешний мир;
-- RETURN: внешний мир → location;
-- TRANSFER: location → location;
-- WRITE_OFF: location → внешний мир;
-- CORRECTION: linked исправляющее движение;
-- REVERSAL: полное компенсирующее движение исходного movement.
+## 7. Уведомления и сверка проекций
 
-Source head `d4e5f6a7b8c9` вводит дополнительный cross-domain invariant:
-movement, указанный как `ProcurementRequest.final_movement_id`, нельзя
-использовать как original movement для generic `CORRECTION` или `REVERSAL`.
-Ограничение проверяется application service и PostgreSQL trigger. Отмена
-completed procurement не моделируется generic warehouse adjustment.
+ISSUE создаёт Telegram notification intent в PostgreSQL outbox вместе с движением; idempotent replay не ставит второе намерение. Worker отправляет его позднее. Сохранение intent не означает доставку: Gateway может не ответить после успешной внешней отправки, поэтому возможна повторная попытка. Внешняя семантика at-least-once, не exactly-once.
 
-Для TRANSFER source и destination должны различаться.
+`backend/scripts/reconcile_inventory_projections.sql` **только читает** журнал и заново вычисляет ожидаемые stock/custody. Успешная сверка — **ноль строк** расхождений. При любом drift: остановить регулярные мутации, сохранить снимок, evidence и свежую резервную копию, расследовать причину. Автоматическое пересоздание таблиц остатков не разрешается.
 
-Movement хранит immutable snapshots actor, location и Item identity.
-Исторические движения не редактируются и не удаляются обычным API.
+После миграции склада, восстановления или рискованной операции с данными сверка обязательна. Во время восстановления SQL должен соответствовать версии возвращённой схемы и извлекаться из exact backend image в manifest выбранного backup; нельзя применять более новый SQL из текущего Git checkout без проверки совместимости. Порядок — в [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md).
 
-## Transaction model
+## 8. Границы текущей версии
 
-Movement, MovementLine, stock projection, custody projection и transactional
-outbox effects фиксируются одной PostgreSQL transaction.
+В Warehouse Domain V2 нет активного `InventoryUnit`, `/api/inventory/units`, `/api/inventory/mine`, учёта отдельного serial/WWN, состояния физического экземпляра или пользовательской страницы «Моё оборудование». Упоминания прежних моделей в исторических миграциях, регрессионных тестах и [HISTORY.md](HISTORY.md) не означают, что они составляют действующую модель. **Агрегированная custody существует** и является обязательным инвариантом, хотя не представлена отдельным экраном.
 
-Locking используется для:
-
-- idempotency key;
-- custody user access boundary;
-- original movement context;
-- locations;
-- Items;
-- stock balances;
-- custody balances.
-
-Journal feed не блокирует warehouse writers глобальным snapshot lock.
-Первая страница фиксирует PostgreSQL MVCC snapshot через
-`pg_current_snapshot()` и server timestamp. Последующие страницы используют
-HMAC-signed opaque cursor, привязанный к requester, фильтрам и исходному
-snapshot. `pg_visible_in_snapshot(...)` не допускает в feed transaction,
-которая была невидима при фиксации первой страницы, даже если она commit-нулась
-между страницами. Raw client-controlled `snapshot_at` и `before_journal_seq`
-не являются публичным pagination contract.
-
-## Idempotency
-
-Каждая mutation использует `client_request_id`.
-
-Повтор идентичного запроса того же actor возвращает существующее движение.
-Повтор того же ключа с другим payload возвращает conflict.
-
-Fingerprint включает custody context.
-
-## Archived Item
-
-Для архивированного Item запрещены:
-
-- RECEIPT;
-- ISSUE.
-
-Разрешены для завершения существующего складского состояния:
-
-- RETURN;
-- TRANSFER;
-- WRITE_OFF;
-- CORRECTION;
-- REVERSAL.
-
-## Роли
-
-ENGINEER:
-
-- browse/search/filter catalog;
-- просмотр stock и locations;
-- просмотр собственной actor-history;
-- ISSUE;
-- RETURN;
-- RECEIPT существующей номенклатуры;
-- TRANSFER.
-
-ENGINEER ISSUE/RETURN используют custody самого ENGINEER.
-
-SENIOR_ENGINEER:
-
-- все обычные warehouse operations ENGINEER;
-- общий movement journal и employee filter;
-- catalog create/edit/archive;
-- без `inventory.admin`.
-
-MANAGER:
-
-- read-only catalog / stock / locations;
-- warehouse mutations запрещены;
-- movement journal недоступен.
-
-ADMIN / OWNER:
-
-- общий movement journal и employee filter;
-- Location administration;
-- catalog administration;
-- RECEIPT / ISSUE / RETURN / TRANSFER;
-- WRITE_OFF;
-- CORRECTION;
-- REVERSAL.
-
-ADMIN / OWNER warehouse movement не назначает custody автоматически.
-
-## Access lifecycle
-
-APPROVED пользователь может выполнять только warehouse mutations, разрешённые его capabilities.
-
-Переход APPROVED → BLOCKED запрещён, пока у пользователя существует ненулевой
-`UserItemCustodyBalance`.
-
-Это правило синхронизировано с concurrent custody-changing movement через lock
-той же строки `users`.
-
-## Уведомления
-
-Каждый новый ISSUE ставит Telegram-уведомление ADMIN в transactional outbox в той
-же DB-транзакции, что и movement.
-
-Dedupe строится от movement id, поэтому idempotent replay не создаёт второе
-уведомление.
-
-## Reconciliation
-
-`backend/scripts/reconcile_inventory_projections.sql` пересчитывает ожидаемые:
-
-- stock balances по Item × Location;
-- custody balances по User × Item.
-
-Обе проекции сверяются с immutable journal.
-
-Нормальный результат reconciliation — zero rows.
-
-При recovery reconciliation SQL обязан соответствовать restored schema version
-и берётся из exact backend image, записанного в backup manifest.
-
-## Отсутствующая physical-unit модель
-
-Warehouse V2 не использует в active schema/API/UI:
-
-- SERIAL accounting mode;
-- InventoryUnit;
-- serial/WWN physical-unit lifecycle;
-- current holder конкретного физического экземпляра;
-- `/api/inventory/units`.
-
-Отдельного product UI «Моё оборудование» и отдельного `/api/inventory/mine`
-сейчас нет. Это не отменяет backend custody projection, используемую для
-целостности ISSUE/RETURN и access lifecycle.
-
-Historical physical-unit model допустима только в historical migrations,
-downgrade/regression tests и `docs/HISTORY.md`.
+Первый production import уже выполнен однократным CLI; повторять bootstrap нельзя. Обычные складские мутации требуют отдельного явного разрешения, а работа над документами не меняет `REAL_INVENTORY_MUTATIONS_ENABLED=false`.

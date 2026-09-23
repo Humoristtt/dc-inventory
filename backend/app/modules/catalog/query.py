@@ -362,7 +362,7 @@ def rj45_transceiver_predicate() -> ColumnElement[bool]:
         .where(
             Category.key == "transceiver_ethernet",
             CategoryAttribute.key == "connector",
-            normalized_connector == "rj45",
+            normalized_connector.like("rj45%"),
         )
     )
 

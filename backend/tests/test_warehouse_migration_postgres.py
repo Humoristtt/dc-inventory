@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 from tests.migration_helpers import alembic
 
 HEAD = "f8a9b0c1d2e3"
-CURRENT_HEAD = "a9c0d1e2f3a4"
+CURRENT_HEAD = "b0c1d2e3f4a5"
 PREVIOUS = "a2b3c4d5e6f7"
 pytestmark = pytest.mark.asyncio
 
@@ -365,14 +365,35 @@ async def test_access_audit_downgrade_refuses_history(
     await engine.dispose()
 
 
-async def test_frozen_configuration_matches_current_product_contract() -> None:
+async def test_frozen_configuration_matches_pre_b0_product_contract() -> None:
     from dataclasses import asdict
 
     from app.modules.catalog.configuration import FAMILIES, LEAVES
 
     path = Path(__file__).parents[1] / "migrations/data/b3c4d5e6f7a8_configuration.json"
     frozen = json.loads(path.read_text())
-    assert frozen["families"] == {k: list(v) for k, v in FAMILIES.items()}
-    assert frozen["leaves"] == {
-        k: [v[0], v[1], [asdict(a) for a in v[2]]] for k, v in LEAVES.items()
+
+    expected_families = {
+        key: list(value)
+        for key, value in FAMILIES.items()
+        if key != "copper_cabling"
     }
+    expected_leaves = {
+        key: [
+            value[0],
+            value[1],
+            [
+                asdict(attribute)
+                for attribute in value[2]
+                if not (
+                    key == "hdd"
+                    and attribute.key == "interface_speed"
+                )
+            ],
+        ]
+        for key, value in LEAVES.items()
+        if key != "ethernet_patch_cord"
+    }
+
+    assert frozen["families"] == expected_families
+    assert frozen["leaves"] == expected_leaves

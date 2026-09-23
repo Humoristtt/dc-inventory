@@ -129,7 +129,7 @@ services:
         test "$$LEGACY_WORKER_DB_USER" != "$$PGUSER"
         test "$$MAINTENANCE_DB_USER" != "$$PGUSER"
 
-        psql -v ON_ERROR_STOP=1 \
+        psql -X --single-transaction -v ON_ERROR_STOP=1 \
           -v runtime_user="$$RUNTIME_DB_USER" \
           -v runtime_password="$$RUNTIME_DB_PASSWORD" \
           -v telegram_worker_user="$$TELEGRAM_WORKER_DB_USER" \
@@ -140,6 +140,11 @@ services:
           -v maintenance_user="$$MAINTENANCE_DB_USER" \
           -v maintenance_password="$$MAINTENANCE_DB_PASSWORD" \
           -f /scripts/apply_database_permissions.sql
+
+        # Run only after role and grant changes commit successfully.
+        psql -X -v ON_ERROR_STOP=1 \
+          -v legacy_worker_user="$$LEGACY_WORKER_DB_USER" \
+          -f /scripts/terminate_legacy_worker_sessions.sql
     depends_on:
       postgres:
         condition: service_healthy
@@ -147,6 +152,7 @@ services:
         condition: service_completed_successfully
     volumes:
       - ./backend/scripts/apply_database_permissions.sql:/scripts/apply_database_permissions.sql:ro
+      - ./backend/scripts/terminate_legacy_worker_sessions.sql:/scripts/terminate_legacy_worker_sessions.sql:ro
     networks:
       - db_net
     read_only: true

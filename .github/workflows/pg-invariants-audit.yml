@@ -16,6 +16,10 @@ on:
       - "backend/tests/test_warehouse_migration_postgres.py"
       - "backend/app/modules/procurement/models.py"
       - "backend/app/modules/procurement/service.py"
+      - "compose.yaml"
+      - "backend/scripts/apply_database_permissions.sql"
+      - "backend/scripts/terminate_legacy_worker_sessions.sql"
+      - "backend/tests/test_runtime_database_role_contract.py"
       - "backend/app/db/health.py"
       - "backend/tests/test_health.py"
       - "backend/tests/test_health_schema_compatibility_postgres.py"
@@ -81,4 +85,5 @@ jobs:
             tests/test_a9_negative_migration_postgres.py \
             tests/test_a9_procurement_binding_postgres.py \
             tests/test_health.py \
-            tests/test_health_schema_compatibility_postgres.py
+            tests/test_health_schema_compatibility_postgres.py \
+            tests/test_runtime_database_role_contract.py

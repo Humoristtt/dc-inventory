@@ -82,8 +82,8 @@ SELECT format(
 
 -- One-way cutover from the pre-split delivery-worker credential.
 -- Fresh installations normally have no such role. Existing installations
--- disable login first, terminate already-authenticated sessions, and revoke
--- every privilege previously granted by the old bootstrap.
+-- disable login and revoke legacy privileges in one transaction.
+-- Existing sessions are terminated separately after commit.
 SELECT format(
     'ALTER ROLE %I WITH NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS',
     :'legacy_worker_user'
@@ -94,11 +94,6 @@ WHERE EXISTS (
     WHERE rolname = :'legacy_worker_user'
 )
 \gexec
-
-SELECT pg_terminate_backend(pid)
-FROM pg_stat_activity
-WHERE usename = :'legacy_worker_user'
-  AND pid <> pg_backend_pid();
 
 SELECT format(
     'REVOKE ALL PRIVILEGES ON DATABASE %I FROM %I',

@@ -2,7 +2,7 @@
 
 Этот документ отвечает на вопрос, **какие задачи решает система и какое поведение получает пользователь**. Точные поля каталога — в [CATALOG_SCHEMA.md](CATALOG_SCHEMA.md), транзакции и ограничения склада — в [WAREHOUSE_DOMAIN.md](WAREHOUSE_DOMAIN.md), разрешения и закупки — в [RBAC_PROCUREMENT.md](RBAC_PROCUREMENT.md). Команды для оператора не являются продуктовыми требованиями и находятся в [DEPLOYMENT.md](DEPLOYMENT.md) и [OPERATIONS.md](OPERATIONS.md).
 
-По последней подтверждённой проверке Warehouse Domain V2 развёрнут и принят в production. Procurement и пяти-ролевая RBAC также были развёрнуты на документированной production-схеме `c3d4e5f6a7b8`. Новые source-инварианты до `a9c0d1e2f3a4` не следует объявлять развёрнутыми без CP-16. Обычные складские изменения по последнему production evidence закрыты флагом `REAL_INVENTORY_MUTATIONS_ENABLED=false`; первоначальный импорт уже состоялся отдельно.
+По последней подтверждённой проверке Warehouse Domain V2 развёрнут и принят в production. Procurement и пяти-ролевая RBAC также были развёрнуты на документированной production-схеме `c3d4e5f6a7b8`. Новые source-инварианты до `b0c1d2e3f4a5` не следует объявлять развёрнутыми без CP-16. Обычные складские изменения по последнему production evidence закрыты флагом `REAL_INVENTORY_MUTATIONS_ENABLED=false`; первоначальный импорт уже состоялся отдельно.
 
 ## 1. Назначение и единица учёта
 

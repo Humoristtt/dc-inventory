@@ -79,6 +79,7 @@ SHEETS: dict[str, tuple[str, ...]] = {
         "Интерфейс",
         "Объём",
         "Скорость интерфейса",
+        "Скорость вращения",
         "Тип",
         "Количество",
     ),
@@ -113,6 +114,15 @@ SHEETS: dict[str, tuple[str, ...]] = {
         "Исполнение",
         "Количество",
     ),
+    "Ethernet патч-корды": (
+        "Категория",
+        "Разъём A",
+        "Разъём B",
+        "Длина",
+        "Экранирование",
+        "Цвет",
+        "Количество",
+    ),
 }
 
 
@@ -142,6 +152,15 @@ class Equipment:
             )
         elif self.category == "power_cable":
             keys = ("type", "connector_a", "connector_b", "length_m", "color")
+        elif self.category == "ethernet_patch_cord":
+            keys = (
+                "cable_category",
+                "connector_a",
+                "connector_b",
+                "length_m",
+                "shielding",
+                "color",
+            )
         else:
             keys = ("type", "configuration", "connector", "split_ratio")
         return " · ".join(
@@ -198,11 +217,36 @@ def _positive_integer(value: str) -> int:
         or number != number.to_integral_value()
         or not 0 < number <= 2**53 - 1
     ):
-        raise ValueError("quantity must be a positive integer within the supported range")
+        raise ValueError("value must be a positive integer within the supported range")
     return int(number)
 
 
-def normalize_row(sheet: str, row: dict[str, str], source: str) -> Equipment:
+def _quantity_integer(
+    value: str,
+    *,
+    allow_zero: bool,
+) -> int:
+    number = Decimal(value)
+    lower_bound = 0 if allow_zero else 1
+    if (
+        not number.is_finite()
+        or number != number.to_integral_value()
+        or not lower_bound <= number <= 2**53 - 1
+    ):
+        qualifier = "non-negative" if allow_zero else "positive"
+        raise ValueError(
+            f"quantity must be a {qualifier} integer within the supported range"
+        )
+    return int(number)
+
+
+def normalize_row(
+    sheet: str,
+    row: dict[str, str],
+    source: str,
+    *,
+    allow_zero_quantity: bool = False,
+) -> Equipment:
     keys: tuple[str, ...]
     manufacturer, model = row.get("Производитель"), row.get("Модель")
     if sheet == "SFP модули":
@@ -223,13 +267,60 @@ def normalize_row(sheet: str, row: dict[str, str], source: str) -> Equipment:
     elif sheet == "SSD  Накопители":
         if row["Тип"] not in {"Enterprise SSD", "Enterprise HDD"}:
             raise ValueError("unknown drive type")
+        if not re.fullmatch(
+            r"(?:2[.,]5|3[.,]5)\s*[″\"]?|M\.2|U\.[23]",
+            row["Форм-фактор"],
+        ):
+            raise ValueError("unsupported drive form factor")
+        if not re.fullmatch(
+            r"(?:SATA|SAS|NVMe)",
+            row["Интерфейс"],
+        ):
+            raise ValueError("unsupported drive interface")
+        if not re.fullmatch(
+            r"\d+(?:[.,]\d+)?\s*(?:ГБ|ТБ)",
+            row["Объём"],
+        ):
+            raise ValueError("unsupported drive capacity")
+        if not re.fullmatch(
+            r"\d+(?:[.,]\d+)?\s*Гбит/с",
+            row["Скорость интерфейса"],
+        ):
+            raise ValueError("unsupported drive interface speed")
         category = "ssd" if row["Тип"] == "Enterprise SSD" else "hdd"
+        if category == "ssd":
+            if row["Скорость вращения"] not in {"—", "-", "–"}:
+                raise ValueError("SSD rotation speed must be empty marker")
+            keys = (
+                "form_factor",
+                "interface",
+                "capacity",
+                "interface_speed",
+                "type",
+            )
+        else:
+            if not re.fullmatch(
+                r"[\d ]+\s*RPM",
+                row["Скорость вращения"],
+            ):
+                raise ValueError("HDD speed must be RPM")
+            keys = (
+                "form_factor",
+                "interface",
+                "capacity",
+                "interface_speed",
+                "rpm",
+                "type",
+            )
+    elif sheet == "Ethernet патч-корды":
+        category = "ethernet_patch_cord"
         keys = (
-            "form_factor",
-            "interface",
-            "capacity",
-            "interface_speed" if category == "ssd" else "rpm",
-            "type",
+            "cable_category",
+            "connector_a",
+            "connector_b",
+            "length_m",
+            "shielding",
+            "color",
         )
     else:
         category = {
@@ -240,7 +331,30 @@ def normalize_row(sheet: str, row: dict[str, str], source: str) -> Equipment:
             "Оптические сплиттеры  делители": "optical_splitter",
         }[sheet]
         keys = tuple(a.key for a in LEAVES[category][2])
-    headers = [h for h in SHEETS[sheet] if h not in {"Производитель", "Модель", "Количество"}]
+    headers = [
+        h
+        for h in SHEETS[sheet]
+        if h not in {"Производитель", "Модель", "Количество"}
+    ]
+    if sheet == "SSD  Накопители":
+        headers = (
+            [
+                "Форм-фактор",
+                "Интерфейс",
+                "Объём",
+                "Скорость интерфейса",
+                "Тип",
+            ]
+            if category == "ssd"
+            else [
+                "Форм-фактор",
+                "Интерфейс",
+                "Объём",
+                "Скорость интерфейса",
+                "Скорость вращения",
+                "Тип",
+            ]
+        )
     attributes: dict[str, str | int | Decimal | bool] = {}
     for key, header in zip(keys, headers, strict=True):
         value = row.get(header, "")
@@ -274,7 +388,10 @@ def normalize_row(sheet: str, row: dict[str, str], source: str) -> Equipment:
         manufacturer,
         model,
         attributes,
-        _positive_integer(row["Количество"]),
+        _quantity_integer(
+            row["Количество"],
+            allow_zero=allow_zero_quantity,
+        ),
         item_signature(category, manufacturer, model, attributes),
         [source],
     )
@@ -310,7 +427,11 @@ def _read_xml(archive: ZipFile, member: str) -> ET.Element:
     return root
 
 
-def read_workbook(path: Path = SOURCE) -> Validation:
+def read_workbook(
+    path: Path = SOURCE,
+    *,
+    allow_zero_quantity: bool = False,
+) -> Validation:
     result = Validation(path.expanduser().resolve())
     if not path.exists():
         result.errors.append("DATA_IMPORT_BLOCKED_SOURCE_FILE_MISSING")
@@ -402,7 +523,10 @@ def read_workbook(path: Path = SOURCE) -> Validation:
                     result.raw_rows += 1
                     row = {label: cells.get(index, "") for index, label in expected.items()}
                     try:
-                        result.source_quantity += _positive_integer(row["Количество"])
+                        result.source_quantity += _quantity_integer(
+                            row["Количество"],
+                            allow_zero=allow_zero_quantity,
+                        )
                         if set(cells) - set(expected):
                             raise ValueError("unmapped nonempty columns")
                         missing = [
@@ -412,7 +536,12 @@ def read_workbook(path: Path = SOURCE) -> Validation:
                         ]
                         if missing:
                             raise ValueError(f"blank required fields: {missing}")
-                        item = normalize_row(name, row, source)
+                        item = normalize_row(
+                            name,
+                            row,
+                            source,
+                            allow_zero_quantity=allow_zero_quantity,
+                        )
                         if item.signature in grouped:
                             grouped[item.signature].quantity += item.quantity
                             grouped[item.signature].sources.append(source)
@@ -425,12 +554,6 @@ def read_workbook(path: Path = SOURCE) -> Validation:
     except (BadZipFile, ET.ParseError, KeyError, OSError, ValueError, RuntimeError) as error:
         result.errors.append(f"invalid workbook: {error}")
     result.items = sorted(grouped.values(), key=lambda x: (x.category, x.signature))
-    for key, actual, expected_total in (
-        ("raw_rows", result.raw_rows, 78),
-        ("source_quantity", result.source_quantity, 670),
-    ):
-        if actual != expected_total:
-            result.warnings.append(f"{key}: expected {expected_total}, actual {actual}")
     return result
 
 
@@ -479,7 +602,15 @@ async def import_inventory(
                 attributes=item.attributes,
             ),
         )
-        lines.append(MovementLineCreate(item_id=item_id, quantity=item.quantity))
+        if item.quantity > 0:
+            lines.append(
+                MovementLineCreate(
+                    item_id=item_id,
+                    quantity=item.quantity,
+                )
+            )
+    if not lines:
+        raise ValueError("bootstrap workbook contains no positive stock quantity")
     movement = await create_movement(
         db,
         MovementCreate(

@@ -4,7 +4,7 @@
 
 ## 1. Исходное состояние и разрешение
 
-Последняя документированная production-проверка: checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`, Alembic `c3d4e5f6a7b8`. Это **историческое evidence**, не сегодняшняя проверка. Текущий source migration head: `a9c0d1e2f3a4`. Прежде чем утверждать план, оператор должен заново проверить реальный Git HEAD на VM, PostgreSQL Alembic head, image IDs/revisions, Compose, Tunnel origin, host-права, сервисы и backup.
+Последняя документированная production-проверка: checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`, Alembic `c3d4e5f6a7b8`. Это **историческое evidence**, не сегодняшняя проверка. Текущий source migration head: `b0c1d2e3f4a5`. Прежде чем утверждать план, оператор должен заново проверить реальный Git HEAD на VM, PostgreSQL Alembic head, image IDs/revisions, Compose, Tunnel origin, host-права, сервисы и backup.
 
 Warehouse Domain V2 и первоначальный импорт ранее приняты; initial bootstrap повторно не запускается. По последнему production evidence обычные складские мутации закрыты:
 

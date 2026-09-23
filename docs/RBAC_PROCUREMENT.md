@@ -2,7 +2,7 @@
 
 Это нормативное описание двух связанных предметных областей: серверных разрешений пользователей и бизнес-процесса закупки. Источник текущей матрицы — `backend/app/modules/identity/policy.py`, переходов — `backend/app/modules/identity/`, `backend/app/modules/access/` и `backend/app/modules/procurement/`. Складские транзакции описаны в [WAREHOUSE_DOMAIN.md](WAREHOUSE_DOMAIN.md); команды сопровождения — в [DEPLOYMENT.md](DEPLOYMENT.md).
 
-**Состояние на 19.09.2026.** Production и source используют пять ролей и capability-based authorization. По последней документированной проверке RBAC/Procurement развернуты на production Alembic `c3d4e5f6a7b8`. Procurement domain также содержит более поздние исправления в source migration head `a9c0d1e2f3a4`; они не становятся production state до отдельного cutover. Настоящая Telegram-приёмка нового выпуска ещё не выполнена. Штатный складской gate по последней проверке — `REAL_INVENTORY_MUTATIONS_ENABLED=false`.
+**Состояние на 19.09.2026.** Production и source используют пять ролей и capability-based authorization. По последней документированной проверке RBAC/Procurement развернуты на production Alembic `c3d4e5f6a7b8`. Procurement domain также содержит более поздние исправления в source migration head `b0c1d2e3f4a5`; они не становятся production state до отдельного cutover. Настоящая Telegram-приёмка нового выпуска ещё не выполнена. Штатный складской gate по последней проверке — `REAL_INVENTORY_MUTATIONS_ENABLED=false`.
 
 ## 1. Роль, допуск и сессия — разные сущности
 

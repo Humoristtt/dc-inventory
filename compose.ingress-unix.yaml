@@ -1,10 +1,11 @@
-# Explicit opt-in only. Never deploy without CP-07 approval.
+# Production direct-ingress override.
 # INGRESS_HOST_DIR must be a pre-created, access-controlled absolute host path.
 services:
   web:
-    # Fail closed if the old TCP Tunnel origin is left in place.
+    # Production traffic enters through host Nginx and the Unix socket only.
+    # Never publish the container TCP listener when this override is active.
     ports: !reset []
-    # Replace the local-only writable socket directory.
+    # Replace the image-local socket tmpfs with the controlled host bind mount.
     tmpfs: !override
       - /tmp
     volumes:

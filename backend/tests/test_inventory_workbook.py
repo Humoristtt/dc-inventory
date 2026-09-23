@@ -507,6 +507,104 @@ async def test_production_bootstrap_creates_single_location_and_receipt(
         await engine.dispose()
 
 
+@pytest.mark.asyncio
+async def test_production_bootstrap_keeps_zero_stock_catalog_item(
+    migration_database: str,
+) -> None:
+    from sqlalchemy import func, select
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+    from app.bootstrap.inventory_workbook import Validation
+    from app.bootstrap.production_inventory import bootstrap_transaction
+    from app.modules.catalog.models import Item
+    from app.modules.inventory.enums import LocationType
+    from app.modules.inventory.models import MovementLine, StockBalance
+    from tests.migration_helpers import alembic
+    from tests.warehouse_helpers import actor
+
+    alembic(migration_database, "upgrade", "head")
+
+    positive = normalize_row(
+        "Ethernet патч-корды",
+        dict(
+            zip(
+                SHEETS["Ethernet патч-корды"],
+                [
+                    "Cat.6",
+                    "RJ-45",
+                    "RJ-45",
+                    "2 м",
+                    "UTP",
+                    "Синий",
+                    "7",
+                ],
+                strict=True,
+            )
+        ),
+        "Ethernet патч-корды!2",
+        allow_zero_quantity=True,
+    )
+    zero = normalize_row(
+        "Ethernet патч-корды",
+        dict(
+            zip(
+                SHEETS["Ethernet патч-корды"],
+                [
+                    "Cat.6",
+                    "RJ-45",
+                    "RJ-45",
+                    "3 м",
+                    "UTP",
+                    "Серый",
+                    "0",
+                ],
+                strict=True,
+            )
+        ),
+        "Ethernet патч-корды!3",
+        allow_zero_quantity=True,
+    )
+    validation = Validation(
+        path=Path("synthetic-zero-stock.xlsx"),
+        sheets=["Ethernet патч-корды"],
+        raw_rows=2,
+        source_quantity=7,
+        items=[positive, zero],
+    )
+
+    engine = create_async_engine(migration_database)
+    try:
+        async with AsyncSession(engine, expire_on_commit=False) as db:
+            user, _ = await actor(db)
+
+            await bootstrap_transaction(
+                db,
+                validation,
+                location_code="ZERO-STOCK-01",
+                location_name="Zero-stock warehouse",
+                location_type=LocationType.WAREHOUSE,
+                actor_user_id=user.id,
+                expected_items=2,
+                expected_quantity=7,
+            )
+            await db.commit()
+
+            assert await db.scalar(
+                select(func.count()).select_from(Item)
+            ) == 2
+            assert await db.scalar(
+                select(func.count()).select_from(MovementLine)
+            ) == 1
+            assert await db.scalar(
+                select(func.count()).select_from(StockBalance)
+            ) == 1
+            assert await db.scalar(
+                select(func.sum(StockBalance.quantity))
+            ) == 7
+    finally:
+        await engine.dispose()
+
+
 @pytest.mark.parametrize("limit", ["MAX_WORKBOOK_BYTES", "MAX_ARCHIVE_MEMBERS",
                                   "MAX_UNCOMPRESSED_BYTES", "MAX_XML_BYTES",
                                   "MAX_XML_NODES", "MAX_XML_DEPTH"])

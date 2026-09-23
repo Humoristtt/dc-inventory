@@ -113,6 +113,7 @@ def test_explicit_drive_type_overrides_sheet_label() -> None:
                 "2.5",
                 "SAS",
                 "1 ТБ",
+                "6 Гбит/с",
                 "10 000 RPM",
                 "Enterprise HDD",
                 "2",
@@ -250,8 +251,9 @@ def test_drive_column_misalignment_is_rejected() -> None:
                 "Exos 7E10 ST4000NM025B",
                 "4 ТБ",
                 "3.5″",
-                "SAS 12 Гбит/с",
-                "7200 RPM",
+                "SAS",
+                "12 Гбит/с",
+                "7 200 RPM",
                 "Enterprise HDD",
                 "2",
             ],
@@ -262,6 +264,36 @@ def test_drive_column_misalignment_is_rejected() -> None:
     with pytest.raises(
         ValueError,
         match="unsupported drive form factor",
+    ):
+        normalize_row(
+            "SSD  Накопители",
+            row,
+            "synthetic",
+        )
+
+
+def test_ssd_requires_rotation_placeholder() -> None:
+    row = dict(
+        zip(
+            SHEETS["SSD  Накопители"],
+            [
+                "Micron",
+                "5300 PRO",
+                "2.5″",
+                "SATA",
+                "480 ГБ",
+                "6 Гбит/с",
+                "7200 RPM",
+                "Enterprise SSD",
+                "1",
+            ],
+            strict=True,
+        )
+    )
+
+    with pytest.raises(
+        ValueError,
+        match="SSD rotation speed must be empty marker",
     ):
         normalize_row(
             "SSD  Накопители",

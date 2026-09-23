@@ -122,7 +122,9 @@ def test_explicit_drive_type_overrides_sheet_label() -> None:
         )
     )
     item = normalize_row("SSD  Накопители", row, "synthetic")
-    assert item.category == "hdd" and item.attributes["rpm"] == 10000
+    assert item.category == "hdd"
+    assert item.attributes["interface_speed"] == "6 Гбит/с"
+    assert item.attributes["rpm"] == 10000
 
 
 def test_ethernet_patch_cord_normalization() -> None:
@@ -205,7 +207,7 @@ def test_misplaced_splitter_header_is_rejected(
     )
 
 
-def test_zero_quantity_is_incremental_import_only() -> None:
+def test_zero_quantity_requires_explicit_import_opt_in() -> None:
     row = dict(
         zip(
             SHEETS["Ethernet патч-корды"],

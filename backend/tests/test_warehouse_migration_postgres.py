@@ -181,7 +181,7 @@ async def test_baseline_head_empty_downgrade_and_metadata(migration_database: st
             "destination_holder_user_id",
             "datasheet_url",
         }.intersection(columns)
-        assert await db.scalar(text("SELECT count(*) FROM categories")) == 18
+        assert await db.scalar(text("SELECT count(*) FROM categories")) == 20
         assert (
             await db.scalar(
                 text(
@@ -192,7 +192,7 @@ async def test_baseline_head_empty_downgrade_and_metadata(migration_database: st
                     "AND btrim(description) <> ''"
                 )
             )
-            == 11
+            == 12
         )
     await engine.dispose()
     assert "No new upgrade operations detected" in alembic(url, "check")

@@ -1,8 +1,9 @@
-"""Fail-closed incremental production receipt from a validated inventory workbook.
+"""Fail-closed production stock snapshot reconciliation from inventory.xlsx.
 
-The initial production bootstrap remains one-shot. This command is the explicit
-path for adding a later, separately inventoried workbook to an existing
-warehouse without reopening the generic inventory mutation API.
+The initial production bootstrap remains one-shot. A later workbook is treated
+as an authoritative observed stock snapshot for the listed items at one
+warehouse. Only positive deltas are received automatically; negative deltas are
+blocked for explicit review instead of being silently written off.
 """
 
 from __future__ import annotations
@@ -68,6 +69,12 @@ class ReceiptPlan:
     new_items: int
     existing_manufacturers: int
     new_manufacturers: int
+    current_quantity: int
+    desired_quantity: int
+    receipt_quantity: int
+    negative_delta_items: int
+    negative_delta_quantity: int
+    zero_stock_items: int
 
 
 def client_request_id(source_hash: str) -> str:
@@ -119,8 +126,6 @@ async def _existing_import(
     *,
     request_id: str,
     location_id: UUID,
-    expected_lines: int,
-    expected_quantity: int,
 ) -> Movement | None:
     movements = list(
         (
@@ -144,23 +149,9 @@ async def _existing_import(
     if (
         movement.movement_type != MovementType.RECEIPT
         or movement.destination_location_id != location_id
-        or movement.line_count != expected_lines
     ):
         raise ValueError(
             "existing workbook receipt conflicts with the requested import"
-        )
-
-    quantity = int(
-        await db.scalar(
-            select(func.coalesce(func.sum(MovementLine.quantity), 0)).where(
-                MovementLine.movement_id == movement.id
-            )
-        )
-        or 0
-    )
-    if quantity != expected_quantity:
-        raise ValueError(
-            "existing workbook receipt quantity conflicts with the source"
         )
 
     return movement
@@ -187,12 +178,6 @@ async def _plan(
         db,
         request_id=request_id,
         location_id=context.location.id,
-        expected_lines=sum(
-            1
-            for item in validation.items
-            if item.quantity > 0
-        ),
-        expected_quantity=validation.source_quantity,
     )
 
     category_keys = sorted({item.category for item in validation.items})
@@ -257,6 +242,53 @@ async def _plan(
         else []
     )
 
+    items_by_signature = {
+        item.identity_signature: item
+        for item in existing_items
+    }
+    existing_ids = [
+        item.id
+        for item in existing_items
+    ]
+    balances = {
+        balance.item_id: balance.quantity
+        for balance in (
+            (
+                await db.scalars(
+                    select(StockBalance).where(
+                        StockBalance.location_id == context.location.id,
+                        StockBalance.item_id.in_(existing_ids),
+                    )
+                )
+            ).all()
+            if existing_ids
+            else []
+        )
+    }
+
+    current_quantity = 0
+    receipt_quantity = 0
+    negative_delta_items = 0
+    negative_delta_quantity = 0
+
+    for equipment in validation.items:
+        catalog_item = items_by_signature.get(
+            equipment.signature
+        )
+        current = (
+            balances.get(catalog_item.id, 0)
+            if catalog_item is not None
+            else 0
+        )
+        current_quantity += current
+        delta = equipment.quantity - current
+
+        if delta > 0:
+            receipt_quantity += delta
+        elif delta < 0:
+            negative_delta_items += 1
+            negative_delta_quantity += -delta
+
     return ReceiptPlan(
         location_id=context.location.id,
         location_code=context.location.code,
@@ -270,6 +302,16 @@ async def _plan(
         existing_manufacturers=len(existing_manufacturers),
         new_manufacturers=(
             len(manufacturer_names) - len(existing_manufacturers)
+        ),
+        current_quantity=current_quantity,
+        desired_quantity=validation.source_quantity,
+        receipt_quantity=receipt_quantity,
+        negative_delta_items=negative_delta_items,
+        negative_delta_quantity=negative_delta_quantity,
+        zero_stock_items=sum(
+            1
+            for item in validation.items
+            if item.quantity == 0
         ),
     )
 
@@ -323,12 +365,22 @@ async def apply_inventory_receipt(
             "reused_items": plan.existing_items,
             "created_manufacturers": 0,
             "reused_manufacturers": plan.existing_manufacturers,
-            "receipt_quantity": validation.source_quantity,
-            "zero_stock_items": sum(
-                1
-                for item in validation.items
-                if item.quantity == 0
+            "desired_quantity": plan.desired_quantity,
+            "receipt_quantity": int(
+                await db.scalar(
+                    select(
+                        func.coalesce(
+                            func.sum(MovementLine.quantity),
+                            0,
+                        )
+                    ).where(
+                        MovementLine.movement_id
+                        == plan.existing_movement_id
+                    )
+                )
+                or 0
             ),
+            "zero_stock_items": plan.zero_stock_items,
             "projection_drift_rows": 0,
         }
 
@@ -391,7 +443,6 @@ async def apply_inventory_receipt(
     }
 
     created_items = 0
-    lines: list[MovementLineCreate] = []
 
     for equipment in validation.items:
         catalog_item = items_by_signature.get(equipment.signature)
@@ -429,17 +480,52 @@ async def apply_inventory_receipt(
         if catalog_item.status != ItemStatus.ACTIVE:
             raise ValueError("archived item cannot receive new stock")
 
-        if equipment.quantity > 0:
+    item_ids = [
+        item.id
+        for item in items_by_signature.values()
+    ]
+    balances = {
+        balance.item_id: balance.quantity
+        for balance in (
+            await db.scalars(
+                select(StockBalance)
+                .where(
+                    StockBalance.location_id == location.id,
+                    StockBalance.item_id.in_(item_ids),
+                )
+                .order_by(StockBalance.item_id)
+                .with_for_update()
+            )
+        ).all()
+    }
+
+    lines: list[MovementLineCreate] = []
+    negative_deltas: list[str] = []
+
+    for equipment in validation.items:
+        catalog_item = items_by_signature[equipment.signature]
+        current = balances.get(catalog_item.id, 0)
+        delta = equipment.quantity - current
+
+        if delta < 0:
+            negative_deltas.append(
+                f"{equipment.name}: current={current}, "
+                f"snapshot={equipment.quantity}"
+            )
+        elif delta > 0:
             lines.append(
                 MovementLineCreate(
                     item_id=catalog_item.id,
-                    quantity=equipment.quantity,
+                    quantity=delta,
                 )
             )
 
-    if not lines:
+    if negative_deltas:
+        details = "; ".join(negative_deltas[:20])
         raise ValueError(
-            "workbook contains no positive stock quantity to receive"
+            "snapshot would reduce existing stock; "
+            "automatic write-off is forbidden: "
+            + details
         )
 
     stock_before = int(
@@ -456,19 +542,23 @@ async def apply_inventory_receipt(
         or 0
     )
 
-    movement_result = await create_movement(
-        db,
-        MovementCreate(
-            movement_type=MovementType.RECEIPT,
-            destination_location_id=location.id,
-            client_request_id=client_request_id(source_hash),
-            lines=lines,
-        ),
-        actor_user_id=actor_user_id,
-        actor_display_name=(
-            "Администратор · импорт "
-            + Path(source_name).name
-        ),
+    movement_result = (
+        await create_movement(
+            db,
+            MovementCreate(
+                movement_type=MovementType.RECEIPT,
+                destination_location_id=location.id,
+                client_request_id=client_request_id(source_hash),
+                lines=lines,
+            ),
+            actor_user_id=actor_user_id,
+            actor_display_name=(
+                "Администратор · сверка "
+                + Path(source_name).name
+            ),
+        )
+        if lines
+        else None
     )
 
     stock_after = int(
@@ -485,22 +575,35 @@ async def apply_inventory_receipt(
         or 0
     )
 
-    if stock_after - stock_before != validation.source_quantity:
+    receipt_quantity = sum(
+        line.quantity
+        for line in lines
+    )
+
+    if stock_after - stock_before != receipt_quantity:
         raise ValueError(
-            "post-import stock delta does not match workbook quantity"
+            "post-import stock delta does not match planned receipt"
         )
 
-    movement = movement_result.record.movement
-    movement_quantity = sum(
-        line.quantity
-        for line in movement_result.record.lines
+    movement = (
+        movement_result.record.movement
+        if movement_result is not None
+        else None
     )
-    if (
+    movement_quantity = (
+        sum(
+            line.quantity
+            for line in movement_result.record.lines
+        )
+        if movement_result is not None
+        else 0
+    )
+    if movement is not None and (
         movement.line_count != len(lines)
-        or movement_quantity != validation.source_quantity
+        or movement_quantity != receipt_quantity
     ):
         raise ValueError(
-            "post-import receipt does not match workbook totals"
+            "post-import receipt does not match planned delta"
         )
 
     drift = (await db.execute(text(RECONCILIATION_SQL))).all()
@@ -512,10 +615,18 @@ async def apply_inventory_receipt(
 
     return {
         "state": "success",
-        "replayed": movement_result.replayed,
+        "replayed": (
+            movement_result.replayed
+            if movement_result is not None
+            else False
+        ),
         "location_id": str(location.id),
         "location_code": location.code,
-        "receipt_movement_id": str(movement.id),
+        "receipt_movement_id": (
+            str(movement.id)
+            if movement is not None
+            else None
+        ),
         "created_items": created_items,
         "reused_items": len(validation.items) - created_items,
         "created_manufacturers": created_manufacturers,
@@ -524,6 +635,7 @@ async def apply_inventory_receipt(
         ),
         "stock_before": stock_before,
         "stock_after": stock_after,
+        "desired_quantity": validation.source_quantity,
         "receipt_quantity": movement_quantity,
         "zero_stock_items": sum(
             1
@@ -610,7 +722,16 @@ async def run(args: argparse.Namespace) -> dict[str, object]:
                         plan.existing_manufacturers
                     ),
                     "new_manufacturers": plan.new_manufacturers,
-                    "receipt_quantity": validation.source_quantity,
+                    "current_quantity": plan.current_quantity,
+                    "desired_quantity": plan.desired_quantity,
+                    "receipt_quantity": plan.receipt_quantity,
+                    "negative_delta_items": (
+                        plan.negative_delta_items
+                    ),
+                    "negative_delta_quantity": (
+                        plan.negative_delta_quantity
+                    ),
+                    "zero_stock_items": plan.zero_stock_items,
                 }
     finally:
         await engine.dispose()
@@ -642,7 +763,10 @@ def main() -> None:
     parser.add_argument(
         "--apply",
         action="store_true",
-        help="commit one idempotent receipt; default is dry-run",
+        help=(
+            "apply positive snapshot deltas as one idempotent receipt; "
+            "default is dry-run"
+        ),
     )
     parser.add_argument("--confirm")
 

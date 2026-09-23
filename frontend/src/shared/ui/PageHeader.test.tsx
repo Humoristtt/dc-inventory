@@ -19,7 +19,7 @@ afterEach(() => {
   cleanup();
 });
 
-it("keeps title in canonical title slot without optional actions", () => {
+it("keeps an unindented title when back and actions are absent", () => {
   render(
     <PageHeader
       kicker="Каталог"
@@ -47,9 +47,15 @@ it("keeps title in canonical title slot without optional actions", () => {
       ".ds-page-header__actions",
     ),
   ).not.toBeNull();
+
+  const heading = header?.querySelector(".ds-page-header__heading-row");
+  expect(heading?.classList.contains("ds-page-header__heading-row--no-back"))
+    .toBe(true);
+  expect(heading?.classList.contains("ds-page-header__heading-row--no-actions"))
+    .toBe(true);
 });
 
-it("renders back action through the shared slot", () => {
+it("retains the back-action column and the back button", () => {
   const onBack = vi.fn();
 
   render(
@@ -59,6 +65,11 @@ it("renders back action through the shared slot", () => {
       title="Карточка оборудования"
     />,
   );
+
+  const heading = screen.getByRole("heading", { name: "Карточка оборудования" })
+    .closest(".ds-page-header__heading-row");
+  expect(heading?.classList.contains("ds-page-header__heading-row--no-back"))
+    .toBe(false);
 
   fireEvent.click(
     screen.getByRole(
@@ -70,7 +81,7 @@ it("renders back action through the shared slot", () => {
   expect(onBack).toHaveBeenCalledTimes(1);
 });
 
-it("renders actions and contextual content without changing header anatomy", () => {
+it("retains contextual actions without adding an empty back column", () => {
   render(
     <PageHeader
       actions={<span>Активно</span>}
@@ -89,10 +100,10 @@ it("renders actions and contextual content without changing header anatomy", () 
     screen.getByText("Поиск"),
   ).toBeInTheDocument();
 
-  expect(
-    screen.getByRole(
-      "heading",
-      { level: 1, name: "Ethernet" },
-    ),
-  ).toBeInTheDocument();
+  const heading = screen.getByRole("heading", { level: 1, name: "Ethernet" })
+    .closest(".ds-page-header__heading-row");
+  expect(heading?.classList.contains("ds-page-header__heading-row--no-back"))
+    .toBe(true);
+  expect(heading?.classList.contains("ds-page-header__heading-row--no-actions"))
+    .toBe(false);
 });

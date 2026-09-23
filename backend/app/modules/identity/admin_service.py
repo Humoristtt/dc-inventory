@@ -98,7 +98,12 @@ async def get_admin_user(
     return cast(
         User | None,
         await db.scalar(
-            select(User).where(User.id == user_id).options(joinedload(User.telegram_identity))
+            select(User)
+            .where(
+                User.id == user_id,
+                User.telegram_identity.has(),
+            )
+            .options(joinedload(User.telegram_identity))
         ),
     )
 
@@ -223,7 +228,7 @@ async def list_admin_users(
     total = await db.scalar(
         select(func.count(User.id))
         .select_from(User)
-        .outerjoin(
+        .join(
             TelegramIdentity,
             TelegramIdentity.user_id == User.id,
         )
@@ -233,7 +238,7 @@ async def list_admin_users(
     rows = (
         await db.scalars(
             select(User)
-            .outerjoin(
+            .join(
                 TelegramIdentity,
                 TelegramIdentity.user_id == User.id,
             )

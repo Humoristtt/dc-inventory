@@ -196,7 +196,7 @@ class ProcurementRevisionLine(Base):
             name="catalog_item_shape",
         ),
         CheckConstraint(
-            "char_length(expected_identity_signature) = 64",
+            "expected_identity_signature ~ '^[0-9a-f]{64}$'",
             name="expected_identity_sig_len",
         ),
         Index("ix_procurement_revision_lines_revision", "revision_id", "line_no"),

@@ -52,7 +52,7 @@ require(
 )
 require(
     "docs/OPERATIONS.md",
-    "private/runtime-only identifiers",
+    "private/runtime-only идентификаторов",
 )
 require(
     "docs/OPERATIONS.md",
@@ -64,7 +64,7 @@ require(
 )
 require(
     "docs/DEPLOYMENT.md",
-    "https://app.spik-inventory.ru",
+    "TELEGRAM_WEB_APP_URL",
 )
 
 env_example = (ROOT / ".env.example").read_text()

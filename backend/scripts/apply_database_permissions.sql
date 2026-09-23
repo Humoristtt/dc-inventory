@@ -82,8 +82,8 @@ SELECT format(
 
 -- One-way cutover from the pre-split delivery-worker credential.
 -- Fresh installations normally have no such role. Existing installations
--- disable login first, terminate already-authenticated sessions, and revoke
--- every privilege previously granted by the old bootstrap.
+-- disable login and revoke legacy privileges in one transaction.
+-- Existing sessions are terminated separately after commit.
 SELECT format(
     'ALTER ROLE %I WITH NOLOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS',
     :'legacy_worker_user'
@@ -319,6 +319,15 @@ SELECT format(
 
 SELECT format(
     'GRANT SELECT, INSERT, UPDATE ON TABLE auth_sessions TO %I',
+    :'runtime_user'
+)
+\gexec
+
+
+-- Account reset can detach identities and remove pending access requests.
+-- Immutable users/audit/warehouse/procurement rows remain undeletable.
+SELECT format(
+    'GRANT DELETE ON TABLE telegram_identities, access_requests TO %I',
     :'runtime_user'
 )
 \gexec

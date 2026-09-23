@@ -10,6 +10,7 @@ import {
 import { Navigate } from "react-router-dom";
 
 import "../../features/admin/access-admin.css";
+import { UserAccountReset } from "../../features/admin/UserAccountReset";
 import { useAuthState } from "../../features/auth/useAuthState";
 import {
   adminUserError,
@@ -666,6 +667,12 @@ export function AdminUsersPage() {
                       : "История изменений"}
                   </button>
                 </div>
+
+                <UserAccountReset
+                  user={user}
+                  currentUserId={currentUser?.id}
+                  canAssignAdmin={canAssignAdmin}
+                />
 
                 {historyUserId === user.id ? (
                   <div className="admin-user-history">

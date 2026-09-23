@@ -75,21 +75,39 @@ async def test_readiness_checks_schema_even_when_tables_are_empty() -> None:
     engine = MagicMock()
     connection = AsyncMock()
     engine.connect.return_value.__aenter__.return_value = connection
+
+    # schema_contract returns True only when an invariant is broken.
+    connection.scalar.return_value = False
+
     await ensure_database_ready(engine)
-    query = str(connection.execute.call_args.args[0])
+
+    assert connection.execute.call_count == 1
+    assert connection.scalar.call_count == 1
+
+    query = "\n".join(
+        (
+            str(connection.execute.call_args.args[0]),
+            str(connection.scalar.call_args.args[0]),
+        )
+    )
+
     assert "WHERE false" in query
-    assert "m.journal_seq" in query and "s.expires_at" in query
+    assert "m.journal_seq" in query
+    assert "s.expires_at" in query
     assert "m.custody_user_id" in query
+
     assert "public.user_item_custody_balances c" in query
     assert "c.user_id" in query
     assert "c.item_id" in query
     assert "c.quantity" in query
+
     assert "public.user_access_events ua" in query
     assert "ua.actor_user_id" in query
     assert "ua.target_user_id" in query
     assert "ua.before_access_status" in query
     assert "ua.after_access_status" in query
     assert "ua.occurred_at" in query
+
     assert "u.role" in query
     assert "public.user_role_events ur" in query
     assert "ur.actor_user_id" in query
@@ -97,14 +115,40 @@ async def test_readiness_checks_schema_even_when_tables_are_empty() -> None:
     assert "ur.before_role" in query
     assert "ur.after_role" in query
     assert "ur.occurred_at" in query
+
     assert "public.procurement_requests pr" in query
     assert "pr.state_version" in query
     assert "pr.current_revision_id" in query
+
+    assert "public.procurement_revision_lines prl" in query
+    assert "prl.expected_identity_signature" in query
+
     assert "public.procurement_events pe" in query
     assert "pe.event_type" in query
+
     assert "public.email_outbox eo" in query
     assert "eo.status" in query
-    connection.execute.side_effect = ProgrammingError("sql", {}, Exception("missing column"))
+
+    # Centralized PostgreSQL invariant contract.
+    assert "pg_trigger" in query
+    assert "pg_proc" in query
+    assert "catalog_decimal_identity" in query
+    assert "trg_items_validate_identity" in query
+    assert "trg_procurement_revision_lines_append_only" in query
+    assert "dc_inventory_unicode_fast" in query
+
+    connection.scalar.return_value = True
+
+    with pytest.raises(DatabaseUnavailableError):
+        await ensure_database_ready(engine)
+
+    connection.scalar.return_value = False
+    connection.execute.side_effect = ProgrammingError(
+        "sql",
+        {},
+        Exception("missing column"),
+    )
+
     with pytest.raises(DatabaseUnavailableError):
         await ensure_database_ready(engine)
 

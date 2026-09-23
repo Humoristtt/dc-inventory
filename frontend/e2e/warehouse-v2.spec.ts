@@ -851,8 +851,8 @@ test(
         throw new Error("desktop geometry unavailable");
       }
 
-      expect(geometry.shellWidth).toBeLessThanOrEqual(1921);
-      expect(geometry.catalogWidth).toBeLessThanOrEqual(1921);
+      expect(geometry.shellWidth).toBe(geometry.viewportWidth);
+      expect(geometry.catalogWidth).toBeLessThanOrEqual(geometry.viewportWidth);
 
       const leftGutter = geometry.shellLeft;
       const rightGutter =
@@ -861,7 +861,8 @@ test(
       expect(Math.abs(leftGutter - rightGutter))
         .toBeLessThanOrEqual(2);
 
-      expect(leftGutter).toBeGreaterThan(250);
+      expect(leftGutter).toBeGreaterThanOrEqual(0);
+      expect(leftGutter).toBeLessThanOrEqual(1);
     }
 
     await page.evaluate(() => {

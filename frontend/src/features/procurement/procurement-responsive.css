@@ -1,0 +1,68 @@
+/* Procurement-specific layout, without changing its current visual style. */
+.procurement-page {
+  min-height: 100dvh;
+}
+
+.procurement-page__body {
+  min-width: 0;
+  container-type: inline-size;
+}
+
+@container (max-width: 599px) {
+  .procurement-page__body .procurement-overview,
+  .procurement-page__body .procurement-fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .procurement-page__body .procurement-actions,
+  .procurement-page__body .procurement-line-actions,
+  .procurement-page__body .procurement-add-row {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+
+  .procurement-page__body .procurement-lines > li,
+  .procurement-page__body .procurement-lines--detail > li {
+    min-width: 0;
+    flex-wrap: wrap;
+    overflow-wrap: anywhere;
+  }
+}
+
+@container (min-width: 600px) {
+  .procurement-page__body .procurement-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 1150px) {
+  .procurement-page__body .procurement-overview {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.procurement-dialog-backdrop .procurement-dialog {
+  min-width: 0;
+  min-height: 0;
+  max-height: calc(
+    100dvh
+    - max(16px, var(--safe-area-top))
+    - max(16px, var(--safe-area-bottom))
+  );
+}
+
+.procurement-dialog__heading h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (pointer: coarse) {
+  .procurement-tabs button {
+    min-height: 44px;
+  }
+
+  .procurement-dialog__heading button {
+    min-width: 44px;
+    min-height: 44px;
+  }
+}

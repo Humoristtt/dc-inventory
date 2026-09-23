@@ -1,0 +1,89 @@
+name: PostgreSQL invariant audit
+
+on:
+  pull_request:
+    paths:
+      - "backend/migrations/versions/**"
+      - "backend/app/modules/catalog/normalization.py"
+      - "backend/tests/test_e5_procurement_invariants_postgres.py"
+      - "backend/tests/test_cp02_identity_db_invariants.py"
+      - "backend/tests/test_f6_existing_owner_upgrade_postgres.py"
+      - "backend/tests/test_f7_catalog_custody_postgres.py"
+      - "backend/tests/test_f8_catalog_identity_postgres.py"
+      - "backend/tests/test_cp04_historical_migration_postgres.py"
+      - "backend/tests/test_a9_negative_migration_postgres.py"
+      - "backend/tests/test_a9_procurement_binding_postgres.py"
+      - "backend/tests/test_warehouse_migration_postgres.py"
+      - "backend/app/modules/procurement/models.py"
+      - "backend/app/modules/procurement/service.py"
+      - "compose.yaml"
+      - "backend/scripts/apply_database_permissions.sql"
+      - "backend/scripts/terminate_legacy_worker_sessions.sql"
+      - "backend/tests/test_runtime_database_role_contract.py"
+      - "backend/app/db/health.py"
+      - "backend/tests/test_health.py"
+      - "backend/tests/test_health_schema_compatibility_postgres.py"
+      - ".github/workflows/pg-invariants-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres-invariants:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+        env:
+          POSTGRES_DB: dc_inventory
+          POSTGRES_USER: dc_inventory
+          POSTGRES_PASSWORD: ci-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U dc_inventory -d dc_inventory"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      APP_ENV: test
+      DATABASE_URL: postgresql+asyncpg://dc_inventory:ci-only-password@127.0.0.1:5432/dc_inventory
+      DATABASE_CONNECT_TIMEOUT_SECONDS: "5"
+      RUN_POSTGRES_INTEGRATION: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.lock
+      - name: Install locked backend dependencies
+        working-directory: backend
+        run: python -m pip install --require-hashes -r requirements-dev.lock
+      - name: Check migration and regression code
+        working-directory: backend
+        run: |
+          ruff check app tests migrations
+          mypy app tests migrations/env.py migrations/versions
+      - name: Upgrade PostgreSQL 18 from base to source head
+        working-directory: backend
+        run: |
+          alembic upgrade head
+          alembic check
+          alembic current
+      - name: Execute procurement, identity, catalog and custody regressions
+        working-directory: backend
+        run: |
+          pytest -q tests/test_e5_procurement_invariants_postgres.py \
+            tests/test_cp02_identity_db_invariants.py \
+            tests/test_f6_existing_owner_upgrade_postgres.py \
+            tests/test_f7_catalog_custody_postgres.py \
+            tests/test_f8_catalog_identity_postgres.py \
+            tests/test_procurement_postgres.py \
+            tests/test_cp04_historical_migration_postgres.py \
+            tests/test_a9_negative_migration_postgres.py \
+            tests/test_a9_procurement_binding_postgres.py \
+            tests/test_health.py \
+            tests/test_health_schema_compatibility_postgres.py \
+            tests/test_runtime_database_role_contract.py

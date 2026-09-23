@@ -41,22 +41,6 @@ def upgrade() -> None:
 
     op.execute(
         """
-        UPDATE procurement_revision_lines
-        SET expected_identity_signature =
-            display_snapshot ->> 'identity_signature'
-        WHERE expected_identity_signature IS NULL
-          AND display_snapshot ? 'identity_signature'
-          AND char_length(
-              display_snapshot ->> 'identity_signature'
-          ) = 64
-          AND (
-              display_snapshot ->> 'identity_signature'
-          ) ~ '^[0-9a-f]{64}$'
-        """
-    )
-
-    op.execute(
-        """
         WITH snapshot_lines AS (
             SELECT
                 line.id AS line_id,
@@ -68,6 +52,21 @@ def upgrade() -> None:
               ON category.key =
                  line.display_snapshot ->> 'category_key'
             WHERE line.expected_identity_signature IS NULL
+              AND jsonb_typeof(
+                  line.display_snapshot -> 'category_key'
+              ) = 'string'
+              AND (
+                  NOT (line.display_snapshot ? 'manufacturer_name')
+                  OR jsonb_typeof(
+                      line.display_snapshot -> 'manufacturer_name'
+                  ) IN ('string', 'null')
+              )
+              AND (
+                  NOT (line.display_snapshot ? 'model')
+                  OR jsonb_typeof(
+                      line.display_snapshot -> 'model'
+                  ) IN ('string', 'null')
+              )
               AND jsonb_typeof(
                   line.display_snapshot -> 'attributes'
               ) = 'object'
@@ -81,12 +80,24 @@ def upgrade() -> None:
                     CASE attribute.data_type
                         WHEN 'TEXT'
                             THEN jsonb_typeof(entry.value) = 'string'
+                              AND catalog_identity_text(
+                                  entry.value #>> '{}'
+                              ) <> ''
                         WHEN 'ENUM'
                             THEN jsonb_typeof(entry.value) = 'string'
+                              AND catalog_identity_text(
+                                  entry.value #>> '{}'
+                              ) <> ''
                         WHEN 'INTEGER'
                             THEN jsonb_typeof(entry.value) = 'number'
+                              AND entry.value::text ~ '^-?(0|[1-9][0-9]*)$'
+                              AND abs(
+                                  (entry.value #>> '{}')::numeric
+                              ) <= 9007199254740991
                         WHEN 'DECIMAL'
                             THEN jsonb_typeof(entry.value) = 'string'
+                              AND (entry.value #>> '{}') ~
+                                  '^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$'
                         WHEN 'BOOLEAN'
                             THEN jsonb_typeof(entry.value) = 'boolean'
                         ELSE false
@@ -213,6 +224,16 @@ def upgrade() -> None:
                   parts.valid_values,
                   true
               )
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM category_attributes AS required_attribute
+                  WHERE required_attribute.category_id = snapshot.category_id
+                    AND required_attribute.required
+                    AND NOT (
+                        snapshot.display_snapshot -> 'attributes'
+                        ? required_attribute.key
+                    )
+              )
         )
         UPDATE procurement_revision_lines AS line
         SET expected_identity_signature =
@@ -220,6 +241,16 @@ def upgrade() -> None:
         FROM reconstructed
         WHERE reconstructed.line_id = line.id
           AND line.expected_identity_signature IS NULL
+          AND (
+              NOT (line.display_snapshot ? 'identity_signature')
+              OR (
+                  jsonb_typeof(
+                      line.display_snapshot -> 'identity_signature'
+                  ) = 'string'
+                  AND line.display_snapshot ->> 'identity_signature'
+                      = reconstructed.identity_signature
+              )
+          )
         """
     )
 
@@ -256,7 +287,7 @@ def upgrade() -> None:
     op.create_check_constraint(
         op.f("ck_procurement_revision_lines_expected_identity_sig_len"),
         "procurement_revision_lines",
-        "char_length(expected_identity_signature) = 64",
+        "expected_identity_signature ~ '^[0-9a-f]{64}$'",
     )
     op.execute(
         """

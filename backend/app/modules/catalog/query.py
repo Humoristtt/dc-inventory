@@ -78,6 +78,7 @@ class CatalogQuerySpec:
     category_ids: tuple[uuid.UUID, ...]
     definitions: tuple[CategoryAttribute, ...]
     long_range: bool
+    rj45: bool
     category_key: str | None
     status: ItemStatus
     manufacturer_ids: tuple[uuid.UUID, ...]
@@ -163,6 +164,7 @@ async def build_catalog_query_spec(
     q: str | None = None,
     category_key: str | None = None,
     long_range: bool = False,
+    rj45: bool = False,
     item_status: ItemStatus = ItemStatus.ACTIVE,
     manufacturer_ids: Sequence[uuid.UUID] = (),
     availability: str = Availability.ANY.value,
@@ -172,6 +174,16 @@ async def build_catalog_query_spec(
     filter_expressions: Sequence[str] = (),
 ) -> CatalogQuerySpec:
     tokens = _normalize_query_tokens(q)
+    if rj45 and long_range:
+        raise CatalogValidationError(
+            "transceiver_view_conflict",
+            "rj45 and long_range cannot be combined",
+        )
+    if rj45 and category_key != "transceiver_ethernet":
+        raise CatalogValidationError(
+            "rj45_category_invalid",
+            "rj45 view requires transceiver_ethernet category",
+        )
     for field, values in (
         ("manufacturer_ids", manufacturer_ids),
         ("location_ids", location_ids),
@@ -294,6 +306,7 @@ async def build_catalog_query_spec(
         category_ids=category_ids,
         definitions=tuple(definitions),
         long_range=long_range,
+        rj45=rj45,
         category_id=category.id if category is not None else None,
         category_key=category.key if category is not None else None,
         status=item_status,
@@ -327,8 +340,38 @@ def long_range_predicate() -> ColumnElement[bool]:
     )
 
 
+def rj45_transceiver_predicate() -> ColumnElement[bool]:
+    normalized_connector = func.lower(
+        func.regexp_replace(
+            ItemAttributeValue.text_value,
+            r"[^a-z0-9]+",
+            "",
+            "g",
+        )
+    )
+    return Item.id.in_(
+        select(ItemAttributeValue.item_id)
+        .join(
+            CategoryAttribute,
+            CategoryAttribute.id == ItemAttributeValue.category_attribute_id,
+        )
+        .join(
+            Category,
+            Category.id == CategoryAttribute.category_id,
+        )
+        .where(
+            Category.key == "transceiver_ethernet",
+            CategoryAttribute.key == "connector",
+            normalized_connector == "rj45",
+        )
+    )
+
+
 async def equipment_scope(
-    db: AsyncSession, key: str | None, long_range: bool
+    db: AsyncSession,
+    key: str | None,
+    long_range: bool,
+    rj45: bool = False,
 ) -> list[ColumnElement[bool]]:
     ids = (
         await scope_category_ids(
@@ -339,8 +382,17 @@ async def equipment_scope(
         else ()
     )
     predicates: list[ColumnElement[bool]] = [Item.category_id.in_(ids)] if key else []
-    if long_range:
+    if rj45:
+        predicates.append(rj45_transceiver_predicate())
+    elif long_range:
         predicates.append(long_range_predicate())
+    elif key == "transceiver_ethernet":
+        predicates.extend(
+            [
+                ~long_range_predicate(),
+                ~rj45_transceiver_predicate(),
+            ]
+        )
     elif key in TRANSCEIVER_LEAF_KEYS:
         predicates.append(~long_range_predicate())
     return predicates
@@ -746,8 +798,17 @@ def _item_predicates(
     predicates: list[ColumnElement[bool]] = [Item.status == spec.status]
     if spec.category_key is not None:
         predicates.append(Item.category_id.in_(spec.category_ids))
-    if spec.long_range:
+    if spec.rj45:
+        predicates.append(rj45_transceiver_predicate())
+    elif spec.long_range:
         predicates.append(long_range_predicate())
+    elif spec.category_key == "transceiver_ethernet":
+        predicates.extend(
+            [
+                ~long_range_predicate(),
+                ~rj45_transceiver_predicate(),
+            ]
+        )
     elif spec.category_key in TRANSCEIVER_LEAF_KEYS:
         predicates.append(~long_range_predicate())
     if spec.manufacturer_ids and "manufacturer" not in exclude:

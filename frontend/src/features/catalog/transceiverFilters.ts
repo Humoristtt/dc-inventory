@@ -89,8 +89,7 @@ export function isSpeedBucketSelected(
 export function applySpeedBucket(
   filters: readonly CatalogAttributeFilter[],
   values: readonly string[],
-  *,
-  clear: boolean,
+  { clear }: { clear: boolean },
 ): CatalogAttributeFilter[] {
   const remaining = filters.filter(
     (filter) => filter.key !== "speed",

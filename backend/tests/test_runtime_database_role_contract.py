@@ -21,6 +21,23 @@ def test_runtime_database_permission_source_is_least_privilege() -> None:
 
     assert "GRANT UPDATE (processed_at) ON TABLE telegram_updates" in permissions
 
+    assert (
+        "'GRANT SELECT ON TABLE alembic_version TO %I'"
+        in permissions
+    )
+    assert (
+        "GRANT INSERT ON TABLE alembic_version"
+        not in permissions
+    )
+    assert (
+        "GRANT UPDATE ON TABLE alembic_version"
+        not in permissions
+    )
+    assert (
+        "GRANT DELETE ON TABLE alembic_version"
+        not in permissions
+    )
+
     assert "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE auth_sessions" not in permissions
 
     assert "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public" not in permissions

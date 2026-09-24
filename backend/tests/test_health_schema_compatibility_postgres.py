@@ -2,7 +2,11 @@ import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from app.db.health import DatabaseUnavailableError, ensure_database_ready
+from app.db.health import (
+    DatabaseUnavailableError,
+    ensure_database_ready,
+    source_migration_head,
+)
 from tests.migration_helpers import alembic
 
 pytestmark = pytest.mark.asyncio
@@ -55,6 +59,52 @@ async def test_readiness_rejects_pre_rbac_and_pre_procurement_schemas_and_accept
 
     try:
         await ensure_database_ready(engine)
+    finally:
+        await engine.dispose()
+
+
+async def test_readiness_rejects_stale_alembic_version_marker(
+    migration_database: str,
+) -> None:
+    alembic(
+        migration_database,
+        "upgrade",
+        "head",
+    )
+
+    engine = create_async_engine(
+        migration_database
+    )
+
+    try:
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "UPDATE public.alembic_version "
+                    "SET version_num = "
+                    "'stale_readiness_head'"
+                )
+            )
+
+        with pytest.raises(
+            DatabaseUnavailableError,
+            match="migration head mismatch",
+        ):
+            await ensure_database_ready(engine)
+
+        async with engine.begin() as connection:
+            await connection.execute(
+                text(
+                    "UPDATE public.alembic_version "
+                    "SET version_num = :head"
+                ),
+                {
+                    "head": source_migration_head(),
+                },
+            )
+
+        await ensure_database_ready(engine)
+
     finally:
         await engine.dispose()
 

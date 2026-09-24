@@ -350,6 +350,65 @@ def main() -> int:
             f"response: {health!r}"
         )
 
+    headers = run(
+        "curl",
+        "-fsSI",
+        "--resolve",
+        (
+            "app.spik-inventory.ru:"
+            "443:127.0.0.1"
+        ),
+        (
+            "https://"
+            "app.spik-inventory.ru/"
+            "healthz"
+        ),
+    )
+
+    for line in headers.splitlines():
+        if not line.lower().startswith(
+            "server:"
+        ):
+            continue
+
+        server_value = line.split(
+            ":",
+            1,
+        )[1].strip()
+
+        if "/" in server_value:
+            fail(
+                "host nginx leaks "
+                f"version: {server_value}"
+            )
+
+    unknown_host = subprocess.run(
+        [
+            "curl",
+            "-ksS",
+            "--resolve",
+            (
+                "invalid.example:"
+                "443:127.0.0.1"
+            ),
+            "-o",
+            "/dev/null",
+            (
+                "https://"
+                "invalid.example/"
+            ),
+        ],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    if unknown_host.returncode == 0:
+        fail(
+            "unknown HTTPS host "
+            "was accepted"
+        )
+
     ready = json.loads(
         run(
             "curl",

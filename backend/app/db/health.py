@@ -1,17 +1,66 @@
+from functools import lru_cache
+from pathlib import Path
+
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from app.db.schema_contract import critical_trigger_contract_sql
 
+ROOT = Path(__file__).resolve().parents[2]
+
 
 class DatabaseUnavailableError(RuntimeError):
     """База данных недоступна для обслуживания запросов."""
 
 
-async def ensure_database_ready(engine: AsyncEngine) -> None:
+@lru_cache
+def source_migration_head() -> str:
+    config = Config(
+        str(ROOT / "alembic.ini")
+    )
+    config.set_main_option(
+        "script_location",
+        str(ROOT / "migrations"),
+    )
+
+    heads = (
+        ScriptDirectory
+        .from_config(config)
+        .get_heads()
+    )
+
+    if len(heads) != 1:
+        raise RuntimeError(
+            "expected exactly one "
+            f"Alembic head, got {heads!r}"
+        )
+
+    return heads[0]
+
+
+async def ensure_database_ready(
+    engine: AsyncEngine,
+) -> None:
     try:
+        expected_head = source_migration_head()
+
         async with engine.connect() as connection:
+            database_head = await connection.scalar(
+                text(
+                    "SELECT version_num "
+                    "FROM public.alembic_version"
+                )
+            )
+
+            if database_head != expected_head:
+                raise DatabaseUnavailableError(
+                    "database migration "
+                    "head mismatch"
+                )
+
             await connection.execute(
                 text(
                     "SELECT u.role, u.access_status, s.expires_at, "
@@ -42,10 +91,27 @@ async def ensure_database_ready(engine: AsyncEngine) -> None:
                 )
             )
 
-            contract_broken = await connection.scalar(text(critical_trigger_contract_sql()))
+            contract_broken = (
+                await connection.scalar(
+                    text(
+                        critical_trigger_contract_sql()
+                    )
+                )
+            )
 
             if contract_broken is True:
-                raise DatabaseUnavailableError("critical database trigger contract mismatch")
+                raise DatabaseUnavailableError(
+                    "critical database "
+                    "trigger contract mismatch"
+                )
 
-    except (SQLAlchemyError, OSError, TimeoutError) as exc:
+    except DatabaseUnavailableError:
+        raise
+
+    except (
+        SQLAlchemyError,
+        OSError,
+        TimeoutError,
+        RuntimeError,
+    ) as exc:
         raise DatabaseUnavailableError from exc

@@ -65,4 +65,24 @@ with tempfile.TemporaryDirectory() as tmp:
     assert result.returncode == 1
     assert "invalid env assignment" in result.stderr
 
+
+
+example = EXAMPLE.read_text()
+compose = (ROOT / "compose.yaml").read_text()
+
+assert (
+    "INGRESS_HOST_DIR=/var/lib/dc-inventory-ingress"
+    in example
+)
+
+assert (
+    "ACCESS_CALLBACK_TTL_SECONDS: "
+    "${ACCESS_CALLBACK_TTL_SECONDS:-900}"
+    in compose
+)
+
+assert not (
+    ROOT / "compose.tunnel-socket.yaml"
+).exists()
+
 print("ENV_FILE_CONTRACT=PASS")

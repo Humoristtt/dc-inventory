@@ -114,7 +114,8 @@ class IngressComposeTests(unittest.TestCase):
                 "Production ingress Compose config failed",
             )
 
-            web = json.loads(result.stdout)["services"]["web"]
+            rendered = json.loads(result.stdout)
+            web = rendered["services"]["web"]
 
             self.assertFalse(web.get("ports"))
             self.assertTrue(
@@ -138,6 +139,16 @@ class IngressComposeTests(unittest.TestCase):
             self.assertFalse(mount.get("read_only", False))
             self.assertFalse(
                 mount.get("bind", {}).get("create_host_path", False)
+            )
+
+            self.assertEqual(
+                set(web.get("networks", {})),
+                {"app_net"},
+            )
+
+            self.assertNotIn(
+                "ingress_net",
+                rendered.get("networks", {}),
             )
 
 

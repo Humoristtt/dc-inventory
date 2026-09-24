@@ -5,7 +5,10 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app.db.health import DatabaseUnavailableError
+from app.db.health import (
+    DatabaseUnavailableError,
+    source_migration_head,
+)
 from app.main import create_app
 
 
@@ -22,6 +25,7 @@ async def test_live_healthcheck() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+    assert response.headers["Cache-Control"] == "no-store"
 
 
 @pytest.mark.asyncio
@@ -42,6 +46,7 @@ async def test_ready_healthcheck() -> None:
 
     assert response.status_code == 200
     assert response.json() == {"status": "ready"}
+    assert response.headers["Cache-Control"] == "no-store"
 
 
 @pytest.mark.asyncio
@@ -63,6 +68,7 @@ async def test_ready_returns_503_when_database_is_unavailable() -> None:
 
     assert response.status_code == 503
     assert response.json() == {"detail": "database unavailable"}
+    assert response.headers["Cache-Control"] == "no-store"
 
 
 async def test_readiness_checks_schema_even_when_tables_are_empty() -> None:
@@ -76,21 +82,27 @@ async def test_readiness_checks_schema_even_when_tables_are_empty() -> None:
     connection = AsyncMock()
     engine.connect.return_value.__aenter__.return_value = connection
 
-    # schema_contract returns True only when an invariant is broken.
-    connection.scalar.return_value = False
+    # First scalar is the exact Alembic head; second is the
+    # centralized trigger/function/collation contract.
+    connection.scalar.side_effect = [
+        source_migration_head(),
+        False,
+    ]
 
     await ensure_database_ready(engine)
 
     assert connection.execute.call_count == 1
-    assert connection.scalar.call_count == 1
+    assert connection.scalar.call_count == 2
 
     query = "\n".join(
         (
+            str(connection.scalar.call_args_list[0].args[0]),
             str(connection.execute.call_args.args[0]),
-            str(connection.scalar.call_args.args[0]),
+            str(connection.scalar.call_args_list[1].args[0]),
         )
     )
 
+    assert "public.alembic_version" in query
     assert "WHERE false" in query
     assert "m.journal_seq" in query
     assert "s.expires_at" in query
@@ -137,12 +149,20 @@ async def test_readiness_checks_schema_even_when_tables_are_empty() -> None:
     assert "trg_procurement_revision_lines_append_only" in query
     assert "dc_inventory_unicode_fast" in query
 
-    connection.scalar.return_value = True
+    connection.scalar.reset_mock()
+    connection.scalar.side_effect = [
+        source_migration_head(),
+        True,
+    ]
 
     with pytest.raises(DatabaseUnavailableError):
         await ensure_database_ready(engine)
 
-    connection.scalar.return_value = False
+    connection.scalar.reset_mock()
+    connection.scalar.side_effect = [
+        source_migration_head(),
+        False,
+    ]
     connection.execute.side_effect = ProgrammingError(
         "sql",
         {},
@@ -150,6 +170,24 @@ async def test_readiness_checks_schema_even_when_tables_are_empty() -> None:
     )
 
     with pytest.raises(DatabaseUnavailableError):
+        await ensure_database_ready(engine)
+
+
+async def test_readiness_rejects_migration_head_mismatch() -> None:
+    from unittest.mock import MagicMock
+
+    from app.db.health import ensure_database_ready
+
+    engine = MagicMock()
+    connection = AsyncMock()
+    engine.connect.return_value.__aenter__.return_value = connection
+
+    connection.scalar.return_value = "stale_migration_head"
+
+    with pytest.raises(
+        DatabaseUnavailableError,
+        match="migration head mismatch",
+    ):
         await ensure_database_ready(engine)
 
 

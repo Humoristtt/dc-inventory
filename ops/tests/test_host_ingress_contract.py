@@ -42,7 +42,19 @@ CI = (
     / "ci.yml"
 ).read_text()
 
-assert SITE.count("server {") == 2
+assert SITE.count("server {") == 4
+
+assert "server_tokens off;" in SITE
+
+for fragment in (
+    "listen 80 default_server;",
+    "listen [::]:80 default_server;",
+    "listen 443 ssl default_server;",
+    "listen [::]:443 ssl default_server;",
+    "ssl_reject_handshake on;",
+    "return 444;",
+):
+    assert fragment in SITE
 
 for fragment in (
     "listen 80;",

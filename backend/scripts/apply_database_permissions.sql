@@ -398,6 +398,14 @@ SELECT format(
 \gexec
 
 
+-- Runtime readiness verifies the exact deployed migration head.
+SELECT format(
+    'GRANT SELECT ON TABLE alembic_version TO %I',
+    :'runtime_user'
+)
+\gexec
+
+
 -- Versioned catalog schema definitions are read-only at runtime.
 SELECT format(
     'GRANT SELECT ON TABLE categories, category_attributes TO %I',

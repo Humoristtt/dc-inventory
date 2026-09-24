@@ -5,6 +5,10 @@ services:
     # Production traffic enters through host Nginx and the Unix socket only.
     # Never publish the container TCP listener when this override is active.
     ports: !reset []
+    # Base/dev keeps ingress_net for the localhost TCP listener.
+    # Production receives traffic through the Unix socket only.
+    networks: !override
+      - app_net
     # Replace the image-local socket tmpfs with the controlled host bind mount.
     tmpfs: !override
       - /tmp

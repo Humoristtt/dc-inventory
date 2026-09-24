@@ -396,6 +396,7 @@ services:
       start_period: 5s
     networks:
       - app_net
+      - ingress_net
     read_only: true
     tmpfs:
       - /tmp

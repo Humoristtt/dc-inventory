@@ -482,8 +482,14 @@ export function AdminUsersPage() {
           <label>
             Поиск
             <input
+              autoCapitalize="none"
+              autoComplete="off"
+              autoCorrect="off"
+              data-gramm="false"
+              data-gramm_editor="false"
               maxLength={100}
               placeholder="Имя, username или Telegram ID"
+              spellCheck={false}
               value={searchDraft}
               onChange={(event) =>
                 setSearchDraft(event.target.value)

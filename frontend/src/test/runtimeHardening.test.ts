@@ -5,6 +5,7 @@ import routeModulesSource from "../app/routeModules.ts?raw";
 import mainSource from "../main.tsx?raw";
 
 import dockerIgnore from "../../.dockerignore?raw";
+import indexSource from "../../index.html?raw";
 import nginxConfig from "../../nginx.conf?raw";
 import nginxServerInclude from "../../nginx-server.inc?raw";
 import dockerfileSource from "../../Dockerfile?raw";
@@ -44,6 +45,14 @@ function expectSecurityHeaders(body: string): void {
     'add_header Permissions-Policy "camera=(self), microphone=(), geolocation=(), payment=(), usb=()" always;',
   );
 }
+
+describe("frontend source hygiene", () => {
+  it("does not load the retired DOM mutation hotfix", () => {
+    expect(indexSource).not.toContain(
+      "search-input-assistance-20260922",
+    );
+  });
+});
 
 describe("production web hardening", () => {
   it("ships the shared Nginx configuration to both server entrypoints", () => {

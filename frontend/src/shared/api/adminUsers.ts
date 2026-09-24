@@ -250,6 +250,115 @@ export async function getUserRoleEvents(
   return readJson<UserRoleEventPage>(response);
 }
 
+export async function resetAdminUserAccount(
+  userId: string,
+  telegramUserId: number,
+  confirmation: string,
+): Promise<void> {
+  const response = await fetch(
+    `/api/admin/users/${encodeURIComponent(userId)}/reset`,
+    {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        telegram_user_id: telegramUserId,
+        confirmation,
+      }),
+    },
+  );
+
+  if (response.status === 204) {
+    return;
+  }
+
+  if (!response.ok) {
+    let payload: unknown = null;
+
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+
+    let message = `HTTP ${response.status}`;
+    let code: string | undefined;
+
+    if (
+      payload !== null
+      && typeof payload === "object"
+      && "detail" in payload
+    ) {
+      const detail = (
+        payload as { detail?: unknown }
+      ).detail;
+
+      if (typeof detail === "string") {
+        message = detail;
+      } else if (
+        detail !== null
+        && typeof detail === "object"
+      ) {
+        const structured = detail as {
+          code?: unknown;
+          message?: unknown;
+        };
+
+        if (typeof structured.code === "string") {
+          code = structured.code;
+        }
+
+        if (typeof structured.message === "string") {
+          message = structured.message;
+        }
+      }
+    }
+
+    throw new ApiRequestError(
+      response.status,
+      message,
+      code,
+    );
+  }
+
+  throw new ApiRequestError(
+    response.status,
+    "Unexpected admin account reset response",
+  );
+}
+
+
+export function resetAdminUserError(
+  error: unknown,
+): string {
+  if (error instanceof ApiRequestError) {
+    switch (error.code) {
+      case "admin_user_outstanding_custody":
+        return "У пользователя осталось выданное оборудование. Сначала оформите возврат.";
+
+      case "admin_user_active_procurement":
+        return "У пользователя есть незавершённая закупка. Завершите её или переназначьте ответственного.";
+
+      case "admin_user_recovery_invariant":
+        return "Учётную запись владельца или резервного владельца сбрасывать нельзя.";
+
+      case "admin_user_forbidden":
+        return "Недостаточно прав для сброса этой учётной записи.";
+
+      case "admin_user_not_found":
+        return "Учётная запись уже сброшена или удалена. Обновите список.";
+
+      case "admin_user_reset_identity_mismatch":
+        return "Данные пользователя изменились. Обновите список перед повторной попыткой.";
+    }
+  }
+
+  return "Сброс не выполнен. Проверьте соединение и повторите попытку.";
+}
+
+
 export function adminUserError(error: unknown): string {
   if (error instanceof ApiRequestError) {
     switch (error.code) {

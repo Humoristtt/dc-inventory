@@ -1,7 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-import type { AdminUser } from "../../shared/api/adminUsers";
+import {
+  type AdminUser,
+  resetAdminUserAccount,
+  resetAdminUserError,
+} from "../../shared/api/adminUsers";
 import "./user-account-reset.css";
 
 const CONFIRMATION = "СБРОСИТЬ";
@@ -12,59 +16,18 @@ type Props = {
   canAssignAdmin: boolean;
 };
 
-async function resetAccount(user: AdminUser): Promise<void> {
-  const response = await fetch(
-    `/api/admin/users/${encodeURIComponent(user.id)}/reset`,
-    {
-      method: "POST",
-      credentials: "same-origin",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        telegram_user_id: user.telegram_user_id,
-        confirmation: CONFIRMATION,
-      }),
-    },
-  );
-
-  if (response.status === 204) return;
-
-  let code = "";
-  if (!response.ok) {
-    try {
-      const data = (await response.json()) as {
-        detail?: { code?: string };
-      };
-      code = data.detail?.code ?? "";
-    } catch {
-      // A failed HTTP response is shown without rendering server-supplied HTML.
-    }
-  }
-
-  const messages: Record<string, string> = {
-    admin_user_outstanding_custody:
-      "У пользователя осталось выданное оборудование. Сначала оформите возврат.",
-    admin_user_active_procurement:
-      "У пользователя есть незавершённая закупка. Завершите её или переназначьте ответственного.",
-    admin_user_recovery_invariant:
-      "Учётную запись владельца или резервного владельца сбрасывать нельзя.",
-    admin_user_forbidden: "Недостаточно прав для сброса этой учётной записи.",
-    admin_user_not_found: "Учётная запись уже сброшена или удалена. Обновите список.",
-    admin_user_reset_identity_mismatch:
-      "Данные пользователя изменились. Обновите список перед повторной попыткой.",
-  };
-
-  throw new Error(
-    messages[code] ?? "Сброс не выполнен. Проверьте соединение и повторите попытку.",
-  );
-}
-
 export function UserAccountReset({ user, currentUserId, canAssignAdmin }: Props) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
   const [confirmation, setConfirmation] = useState("");
 
   const mutation = useMutation({
-    mutationFn: () => resetAccount(user),
+    mutationFn: () =>
+      resetAdminUserAccount(
+        user.id,
+        user.telegram_user_id,
+        CONFIRMATION,
+      ),
     onSuccess: async () => {
       setOpen(false);
       setConfirmation("");
@@ -138,7 +101,7 @@ export function UserAccountReset({ user, currentUserId, canAssignAdmin }: Props)
             </label>
             {mutation.isError ? (
               <p className="admin-user-reset__error" role="alert">
-                {mutation.error.message}
+                {resetAdminUserError(mutation.error)}
               </p>
             ) : null}
             <div className="admin-user-reset__dialog-actions">

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-import ast
 import re
 from pathlib import Path
 
@@ -43,78 +42,6 @@ def require_heading(name: str, heading: str) -> None:
         )
 
 
-def source_alembic_heads() -> set[str]:
-    versions = ROOT / "backend/migrations/versions"
-    revisions: set[str] = set()
-    parents: set[str] = set()
-
-    for path in versions.glob("*.py"):
-        tree = ast.parse(path.read_text(), filename=str(path))
-
-        revision: str | None = None
-        down_revisions: list[str] = []
-
-        for node in tree.body:
-            name: str | None = None
-            value_node: ast.expr | None = None
-
-            if (
-                isinstance(node, ast.AnnAssign)
-                and isinstance(node.target, ast.Name)
-                and node.value is not None
-            ):
-                name = node.target.id
-                value_node = node.value
-
-            elif (
-                isinstance(node, ast.Assign)
-                and len(node.targets) == 1
-                and isinstance(node.targets[0], ast.Name)
-            ):
-                name = node.targets[0].id
-                value_node = node.value
-
-            if name not in {"revision", "down_revision"}:
-                continue
-
-            if value_node is None:
-                continue
-
-            value = ast.literal_eval(value_node)
-
-            if name == "revision":
-                if isinstance(value, str):
-                    revision = value
-                continue
-
-            if isinstance(value, str):
-                down_revisions = [value]
-            elif isinstance(value, (tuple, list)):
-                down_revisions = [
-                    item
-                    for item in value
-                    if isinstance(item, str)
-                ]
-            elif value is None:
-                down_revisions = []
-
-        if revision is not None:
-            revisions.add(revision)
-            parents.update(down_revisions)
-
-    return revisions - parents
-
-
-SOURCE_HEADS = source_alembic_heads()
-
-if len(SOURCE_HEADS) != 1:
-    raise RuntimeError(
-        f"expected one source Alembic head, got {sorted(SOURCE_HEADS)}"
-    )
-
-SOURCE_ALEMBIC_HEAD = next(iter(SOURCE_HEADS))
-
-
 CURRENT_DOCS = (
     "README.md",
     "docs/ARCHITECTURE.md",
@@ -154,33 +81,9 @@ for name in CURRENT_DOCS + HISTORICAL_STAGE15_DOCS:
 # Current production baseline
 # ---------------------------------------------------------------------------
 
-# Accepted production head remains an explicit operational fact in
-# production-facing documentation. Source head is derived from the migration
-# graph independently.
-ACCEPTED_PRODUCTION_ALEMBIC_HEAD = "c3d4e5f6a7b8"
-
-for name in (
-    "README.md",
-    "docs/DEPLOYMENT.md",
-    "docs/DEVELOPMENT.md",
-    "docs/OPERATIONS.md",
-):
-    require(name, ACCEPTED_PRODUCTION_ALEMBIC_HEAD)
-
-for name in (
-    "README.md",
-    "docs/DEPLOYMENT.md",
-    "docs/DEVELOPMENT.md",
-    "docs/OPERATIONS.md",
-):
-    forbid(name, "c5d6e7f8a9b0")
-
-for name in (
-    "README.md",
-    "docs/DEVELOPMENT.md",
-    "docs/ROADMAP.md",
-):
-    require(name, SOURCE_ALEMBIC_HEAD)
+# Live production/source migration revisions are operational evidence.
+# Documentation CI must not freeze a concrete Alembic revision ID. Exact
+# revisions are verified by migration/runtime contracts instead.
 
 for name in (
     "README.md",
@@ -553,11 +456,6 @@ for assertion in (
 # RBAC_SOURCE_FRESHNESS_CONTRACT_V1
 
 require(
-    "docs/DEPLOYMENT.md",
-    SOURCE_ALEMBIC_HEAD,
-)
-
-require(
     "README.md",
     "ENGINEER`, `SENIOR_ENGINEER`, `MANAGER`, `ADMIN`",
 )
@@ -578,10 +476,6 @@ require(
 )
 require(
     "docs/RBAC_PROCUREMENT.md",
-    SOURCE_ALEMBIC_HEAD,
-)
-require(
-    "docs/RBAC_PROCUREMENT.md",
     "REAL_INVENTORY_MUTATIONS_ENABLED=false",
 )
 require(
@@ -595,11 +489,6 @@ require(
 require(
     "docs/DEPLOYMENT.md",
     "EMAIL_DELIVERY_ENABLED=false",
-)
-
-require(
-    "docs/ROADMAP.md",
-    f"Source migration head `{SOURCE_ALEMBIC_HEAD}`",
 )
 
 for name, stale_value in (

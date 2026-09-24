@@ -69,7 +69,9 @@ assert '"libpcre2-8-0=${PCRE2_VERSION}"' in BACKEND_DOCKERFILE
 assert "apt-get update" in BACKEND_DOCKERFILE
 assert "rm -rf /var/lib/apt/lists/*" in BACKEND_DOCKERFILE
 
-assert "apk add --no-cache --upgrade libuuid=2.42.3-r1" in WEB_DOCKERFILE
+assert "libexpat=2.8.5-r0" in WEB_DOCKERFILE
+assert "libuuid=2.42.3-r1" in WEB_DOCKERFILE
+assert "apk add --no-cache --upgrade" in WEB_DOCKERFILE
 
 action_refs = re.findall(
     r"^\s+- uses:\s+([^@\s]+)@([^\s#]+)",

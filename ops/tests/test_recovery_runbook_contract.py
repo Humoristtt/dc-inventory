@@ -57,6 +57,9 @@ for required in (
     "docker volume rm",
     "docker network rm",
     "PRODUCTION_RUNTIME_UNCHANGED=PASS",
+    'domain = "app.spik-inventory.ru"',
+    'resolve = f"{domain}:443:127.0.0.1"',
+    'f"https://{domain}{path}"',
     "AUD_06_REHEARSAL=PASS",
 ):
     assert required in source, required
@@ -69,6 +72,7 @@ for forbidden in (
     "REAL_INVENTORY_ENTRY=BLOCKED_PENDING_NEXT_ROADMAP",
     "backup manifest does not match current production checkout",
     '$ROOT/backend/scripts/reconcile_inventory_projections.sql',
+    "http://127.0.0.1:8080",
 ):
     assert forbidden not in source, forbidden
 

@@ -7,7 +7,7 @@ if [ "${EUID}" -ne 0 ]; then
     exit 1
 fi
 
-for command_name in date docker git grep mktemp python3 rm seq sleep tr; do
+for command_name in curl date docker git grep mktemp python3 rm seq sleep tr; do
     command -v "${command_name}" >/dev/null
 done
 ROOT=/opt/dc-inventory
@@ -77,17 +77,31 @@ production_id() {
 production_health() {
     python3 - <<'HEALTH'
 import json
-import urllib.request
+import subprocess
+
+domain = "app.spik-inventory.ru"
+resolve = f"{domain}:443:127.0.0.1"
 
 for path, expected in (
     ("/api/health/live", "ok"),
     ("/api/health/ready", "ready"),
 ):
-    with urllib.request.urlopen(
-        "http://127.0.0.1:8080" + path,
-        timeout=5,
-    ) as response:
-        payload = json.load(response)
+    result = subprocess.run(
+        [
+            "curl",
+            "--fail",
+            "--silent",
+            "--show-error",
+            "--resolve",
+            resolve,
+            f"https://{domain}{path}",
+        ],
+        check=True,
+        text=True,
+        stdout=subprocess.PIPE,
+    )
+
+    payload = json.loads(result.stdout)
 
     if payload.get("status") != expected:
         raise SystemExit(

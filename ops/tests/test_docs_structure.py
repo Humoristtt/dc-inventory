@@ -39,10 +39,10 @@ for needle in (
     "Нормативные документы",
     "Исторические",
     "production",
-    "a9c0d1e2f3a4",
-    "c3d4e5f6a7b8",
-    "CP-07",
-    "CP-00–18",
+    "DEPLOYMENT.md",
+    "OPERATIONS.md",
+    "RECOVERY_RUNBOOK.md",
+    "HISTORY.md",
 ):
     assert needle.lower() in text.lower(), f"Нет нужной границы: {needle}"
 

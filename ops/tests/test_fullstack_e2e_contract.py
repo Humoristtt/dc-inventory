@@ -3,6 +3,8 @@
 import json
 from pathlib import Path
 
+from alembic_graph import single_source_alembic_head
+
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -21,6 +23,9 @@ workflow = (
 local_runner = (
     ROOT / "ops/tests/run_fullstack_local.sh"
 ).read_text()
+
+source_alembic_head = single_source_alembic_head(ROOT)
+assert source_alembic_head
 
 
 assert package["scripts"]["test:e2e"] == (
@@ -59,10 +64,14 @@ for required in (
     "REAL_INVENTORY_MUTATIONS_ENABLED=true",
     "fullstack_db_guard.py verify",
     "env -i",
+    "EXPECTED_ALEMBIC_HEAD",
+    "ops/tests/alembic_graph.py",
+    "FULLSTACK_ALEMBIC_HEAD=",
 ):
     assert required in local_runner, required
 
 assert ".env.fullstack" not in local_runner
+assert "a9c0d1e2f3a4" not in local_runner
 
 assert (
     local_runner.index("fullstack_db_guard.py topology")

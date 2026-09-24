@@ -4,6 +4,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$ROOT"
 
+EXPECTED_ALEMBIC_HEAD="$(
+  python3 ops/tests/alembic_graph.py
+)"
+test -n "$EXPECTED_ALEMBIC_HEAD"
+
 if [[ ! -f .env ]]; then
   echo "local .env is required" >&2
   exit 1
@@ -253,9 +258,21 @@ domain_state="$(docker compose -f compose.dev.yaml exec -T postgres \
 test "$domain_state" = "1|2|6|5|12|2"
 echo "FULLSTACK_DATABASE_DOMAIN_STATE=PASS"
 
-test "$(docker compose -f compose.dev.yaml exec -T postgres \
-  psql -U "$POSTGRES_USER" -d "$TEST_DB" -At -v ON_ERROR_STOP=1 \
-  -c "SELECT version_num FROM alembic_version" </dev/null)" = "a9c0d1e2f3a4"
+ACTUAL_ALEMBIC_HEAD="$(
+  docker compose -f compose.dev.yaml exec -T postgres \
+    psql \
+    -U "$POSTGRES_USER" \
+    -d "$TEST_DB" \
+    -At \
+    -v ON_ERROR_STOP=1 \
+    -c "SELECT version_num FROM alembic_version" \
+    </dev/null |
+  tr -d '[:space:]'
+)"
+
+test "$ACTUAL_ALEMBIC_HEAD" = "$EXPECTED_ALEMBIC_HEAD"
+
+echo "FULLSTACK_ALEMBIC_HEAD=$ACTUAL_ALEMBIC_HEAD"
 
 drift="$(docker compose -f compose.dev.yaml exec -T postgres \
   psql -U "$POSTGRES_USER" -d "$TEST_DB" -qAt -v ON_ERROR_STOP=1 \

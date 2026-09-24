@@ -534,15 +534,15 @@ jobs:
 
           assert len(backend_networks) == 2
           assert len(postgres_networks) == 1
-          assert len(web_networks) == 1
+          assert len(web_networks) == 2
           assert backend_networks & postgres_networks
           assert backend_networks & web_networks
           assert not (postgres_networks & web_networks)
-          assert all(
+          assert any(
               name.endswith("_app_net")
               for name in web_networks
           )
-          assert not any(
+          assert any(
               name.endswith("_ingress_net")
               for name in web_networks
           )

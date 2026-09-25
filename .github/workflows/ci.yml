@@ -728,7 +728,27 @@ jobs:
                 has_table_privilege(
                   'dc_inventory_app_ci',
                   'user_item_custody_balances',
-                  'SELECT, INSERT, UPDATE, DELETE'
+                  'SELECT'
+                ),
+                has_table_privilege(
+                  'dc_inventory_app_ci',
+                  'user_item_custody_balances',
+                  'INSERT, UPDATE, DELETE'
+                ),
+                has_table_privilege(
+                  'dc_inventory_app_ci',
+                  'stock_balances',
+                  'SELECT'
+                ),
+                has_table_privilege(
+                  'dc_inventory_app_ci',
+                  'stock_balances',
+                  'INSERT, UPDATE, DELETE'
+                ),
+                has_function_privilege(
+                  'dc_inventory_app_ci',
+                  'public.refresh_warehouse_projection(uuid,uuid)',
+                  'EXECUTE'
                 ),
                 has_schema_privilege(
                   'dc_inventory_app_ci',
@@ -738,7 +758,24 @@ jobs:
             "
           )"
 
-          test "$privilege_matrix" = "t|t|t|f|f|f|f|t|f"
+          test "$privilege_matrix" = "t|t|t|f|f|f|f|t|f|t|f|t|f"
+
+          for statement in \
+            "UPDATE stock_balances SET quantity = quantity WHERE false" \
+            "DELETE FROM stock_balances WHERE false" \
+            "UPDATE user_item_custody_balances SET quantity = quantity WHERE false" \
+            "DELETE FROM user_item_custody_balances WHERE false"
+          do
+            if runtime_psql -c "$statement" \
+              >/tmp/runtime-projection-denied.log 2>&1
+            then
+              echo "unexpected direct projection DML: $statement"
+              exit 1
+            fi
+
+            grep -qi 'permission denied' \
+              /tmp/runtime-projection-denied.log
+          done
 
           outbox_update_columns="$(
             owner_psql -At -c "

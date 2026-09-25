@@ -154,11 +154,12 @@ async def _create_movement(
 ) -> MovementResult:
     """Caller owns transaction.
 
-    Lock order: request, custody user, original, locations, items, stock, custody.
+    Lock order: request, custody user, original, locations, items.
 
-    Locking every involved item also serializes creation of previously absent
-    stock and custody rows. Both projections and the sealed movement commit or
-    roll back together.
+    Locking every involved item serializes all runtime warehouse writes for
+    that item, including creation/update of projection rows inside the
+    database-controlled projection writer. The journal and both projections
+    commit or roll back together.
     """
     if payload.movement_type != MovementType.REVERSAL:
         if custody_user_id is not None and payload.movement_type not in {
@@ -350,8 +351,9 @@ async def _create_movement(
         locations.get(payload.destination_location_id) if payload.destination_location_id else None
     )
     # The request is bounded to 500 items and two locations. Item locks above
-    # serialize missing-row creation as well as existing-row updates. Lock all
-    # balances in one deterministic statement before applying any deltas.
+    # serialize both existing and missing projection rows for normal runtime
+    # writers. Projection rows are read here for validation; the privileged DB
+    # writer performs the actual journal-derived DML after movement lines exist.
     balances = {
         (balance.item_id, balance.location_id): balance
         for balance in (
@@ -362,7 +364,6 @@ async def _create_movement(
                     StockBalance.location_id.in_(location_ids),
                 )
                 .order_by(StockBalance.item_id, StockBalance.location_id)
-                .with_for_update()
             )
         ).all()
     }
@@ -378,7 +379,6 @@ async def _create_movement(
                         UserItemCustodyBalance.item_id.in_(item_ids),
                     )
                     .order_by(UserItemCustodyBalance.item_id)
-                    .with_for_update()
                 )
             ).all()
         }

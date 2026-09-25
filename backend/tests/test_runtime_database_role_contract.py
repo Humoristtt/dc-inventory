@@ -77,6 +77,20 @@ def test_runtime_outbox_recovery_update_is_column_scoped() -> None:
     assert "'GRANT UPDATE ON TABLE notification_outbox TO %I'" not in permissions
 
 
+def test_telegram_worker_outbox_update_is_column_scoped() -> None:
+    permissions = (
+        Path(__file__).resolve().parents[1] / "scripts" / "apply_database_permissions.sql"
+    ).read_text()
+
+    assert "'GRANT SELECT ON TABLE notification_outbox TO %I'" in permissions
+    assert (
+        "'GRANT UPDATE (status, attempts, available_at, claimed_at, claim_token, '"
+        "\n    'sent_at, last_error, updated_at) ON TABLE notification_outbox TO %I'"
+        in permissions
+    )
+    assert "'GRANT SELECT, UPDATE ON TABLE notification_outbox TO %I'" not in permissions
+
+
 def test_telegram_start_state_permissions_are_column_scoped() -> None:
     permissions = (
         Path(__file__).resolve().parents[1] / "scripts" / "apply_database_permissions.sql"

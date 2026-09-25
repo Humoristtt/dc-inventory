@@ -633,7 +633,12 @@ jobs:
             docker compose --env-file .env.ci -f compose.yaml exec -T postgres \
               psql -U dc_inventory -d dc_inventory -AtF '|' -c "
                 SELECT
-                  has_table_privilege('dc_inventory_telegram_worker_ci', 'notification_outbox', 'SELECT, UPDATE'),
+                  has_table_privilege('dc_inventory_telegram_worker_ci', 'notification_outbox', 'SELECT'),
+                  has_table_privilege('dc_inventory_telegram_worker_ci', 'notification_outbox', 'UPDATE'),
+                  has_column_privilege('dc_inventory_telegram_worker_ci', 'notification_outbox', 'status', 'UPDATE'),
+                  has_column_privilege('dc_inventory_telegram_worker_ci', 'notification_outbox', 'payload', 'UPDATE'),
+                  has_column_privilege('dc_inventory_telegram_worker_ci', 'notification_outbox', 'method', 'UPDATE'),
+                  has_column_privilege('dc_inventory_telegram_worker_ci', 'notification_outbox', 'dedupe_key', 'UPDATE'),
                   has_table_privilege('dc_inventory_telegram_worker_ci', 'email_outbox', 'SELECT'),
                   has_table_privilege('dc_inventory_email_worker_ci', 'email_outbox', 'SELECT'),
                   has_table_privilege('dc_inventory_email_worker_ci', 'notification_outbox', 'SELECT'),
@@ -642,7 +647,25 @@ jobs:
                   has_table_privilege('dc_inventory_email_worker_ci', 'movements', 'INSERT');
               "
           )"
-          test "$worker_privileges" = "t|f|t|f|f|f|f"
+          test "$worker_privileges" = "t|f|t|f|f|f|f|t|f|f|f|f"
+
+          telegram_outbox_update_columns="$(
+            docker compose --env-file .env.ci -f compose.yaml exec -T postgres \
+              psql -U dc_inventory -d dc_inventory -At -c "
+                SELECT string_agg(
+                  column_name,
+                  ','
+                  ORDER BY column_name
+                )
+                FROM information_schema.column_privileges
+                WHERE grantee = 'dc_inventory_telegram_worker_ci'
+                  AND table_schema = 'public'
+                  AND table_name = 'notification_outbox'
+                  AND privilege_type = 'UPDATE';
+              "
+          )"
+          test "$telegram_outbox_update_columns" = \
+            "attempts,available_at,claim_token,claimed_at,last_error,sent_at,status,updated_at"
 
       - name: Verify backend database role
         run: |

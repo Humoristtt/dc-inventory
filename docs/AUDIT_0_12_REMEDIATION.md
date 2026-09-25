@@ -649,15 +649,32 @@ Evidence:
 
 ### CP-18 — Fresh independent Audit 0–12
 
-Status: `OPEN`
+Status: `COMPLETE — FINDINGS OPEN`
 
-This is a fresh independent audit after all remediation and acceptance work.
+Fresh audit baseline:
+- source `main=3de3d0f57a2b8a751df81f6970f81a9e25ded16d`;
+- tree `493fe8ea44dc2e049b948f41d93a8924620aa160`;
+- last accepted production runtime remains `593ddec0c9100b0df2eafe4f324c7bb600d75cba`;
+- production Alembic remains `b0c1d2e3f4a5` by dated 25.09.2026 evidence.
+
+Result:
+- Audit 0–12 completed independently against current source and available production evidence;
+- 54 finding IDs remain active after accounting for fixed, partially fixed, conditional and duplicate observations;
+- Audit 12 introduced 0 new independent IDs; its cross-cutting rows are correlations only;
+- final project acceptance is not passed;
+- production was not changed by CP-18.
+
+Implementation branch:
+`remediation/cp18-findings-20260925`.
+
+First remediation package:
+`DB delivery least-privilege` — `A4-P2-002`, `A6-P2-002`, related `A10-P3-006` / X12-02.
 
 ## Current next action
 
-Execute CP-18 — fresh independent Audit 0–12, then perform final Markdown cleanup/crosswalk against the accepted production state.
+Execute the deduplicated remediation packages from [MASTER_REMEDIATION_PLAN.md](MASTER_REMEDIATION_PLAN.md). Start with the Telegram delivery-worker database boundary and its CI oracle, then continue to PostgreSQL invariants and Procurement correctness. Do not deploy to production until a separate release gate is approved.
 
-CP-16 and CP-17 are closed on production evidence from 25.09.2026. Remaining email/restore-specific gates must not be silently treated as closed by the Telegram acceptance.
+CP-16 and CP-17 remain closed on production evidence from 25.09.2026. Email/restore-specific gates remain separate and must not be silently treated as closed by Telegram acceptance.
 
 ---
 

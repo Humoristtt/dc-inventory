@@ -511,8 +511,17 @@ WHERE pg_get_serial_sequence(
 
 
 -- Telegram delivery worker: outbox plus start-welcome chat state.
+-- Delivery may mutate only lease/result state. Message identity and payload
+-- remain immutable to the worker database principal.
 SELECT format(
-    'GRANT SELECT, UPDATE ON TABLE notification_outbox TO %I',
+    'GRANT SELECT ON TABLE notification_outbox TO %I',
+    :'telegram_worker_user'
+)
+\gexec
+
+SELECT format(
+    'GRANT UPDATE (status, attempts, available_at, claimed_at, claim_token, '
+    'sent_at, last_error, updated_at) ON TABLE notification_outbox TO %I',
     :'telegram_worker_user'
 )
 \gexec

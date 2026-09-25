@@ -101,19 +101,18 @@ async def test_d2_upgrade_refuses_existing_projection_drift(
 
     engine = create_async_engine(url)
 
-    async with AsyncSession(engine, expire_on_commit=False) as db:
-        async with db.begin():
-            state = await scenario(db)
-            await move(
-                db,
-                state,
-                "RECEIPT",
-                5,
-                destination=state[2],
-                key="d2-preflight-receipt",
-            )
-            item_id = state[1]
-            location_id = state[2]
+    async with AsyncSession(engine, expire_on_commit=False) as db, db.begin():
+        state = await scenario(db)
+        await move(
+            db,
+            state,
+            "RECEIPT",
+            5,
+            destination=state[2],
+            key="d2-preflight-receipt",
+        )
+        item_id = state[1]
+        location_id = state[2]
 
     alembic(url, "downgrade", PREVIOUS_HEAD)
 

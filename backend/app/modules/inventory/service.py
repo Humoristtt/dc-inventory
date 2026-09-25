@@ -422,15 +422,6 @@ async def _create_movement(
                 raise InventoryConflictError(
                     "quantity exceeds supported range", code="quantity_overflow"
                 )
-            if balance is not None:
-                if quantity == 0:
-                    await db.delete(balance)
-                else:
-                    balance.quantity = quantity
-            elif quantity:
-                db.add(
-                    StockBalance(item_id=line.item_id, location_id=location_id, quantity=quantity)
-                )
         custody_delta = _custody_delta(payload.movement_type, original) * line.quantity
         if custody_user_id is not None and custody_delta:
             custody_balance = custody_balances.get(line.item_id)
@@ -447,19 +438,6 @@ async def _create_movement(
                     "quantity exceeds supported range",
                     code="quantity_overflow",
                 )
-            if custody_balance is not None:
-                if custody_quantity == 0:
-                    await db.delete(custody_balance)
-                else:
-                    custody_balance.quantity = custody_quantity
-            elif custody_quantity:
-                new_custody_balance = UserItemCustodyBalance(
-                    user_id=custody_user_id,
-                    item_id=line.item_id,
-                    quantity=custody_quantity,
-                )
-                db.add(new_custody_balance)
-                custody_balances[line.item_id] = new_custody_balance
         item = items[line.item_id]
         movement_lines.append(
             MovementLine(
@@ -475,6 +453,25 @@ async def _create_movement(
             )
         )
     db.add_all(movement_lines)
+    await db.flush()
+
+    # The runtime principal has no direct DML privileges on warehouse
+    # projections. The SECURITY DEFINER function re-derives each affected
+    # balance from the immutable journal, so retries cannot double-apply a
+    # delta and arbitrary projection writes cannot bypass the ledger.
+    for movement_line in movement_lines:
+        await db.execute(
+            text(
+                "SELECT refresh_warehouse_projection("
+                "CAST(:movement_id AS uuid), CAST(:item_id AS uuid)"
+                ")"
+            ),
+            {
+                "movement_id": str(movement.id),
+                "item_id": str(movement_line.item_id),
+            },
+        )
+
     await db.flush()
     return MovementResult(MovementRecord(movement, movement_lines), replayed=False)
 

@@ -11,6 +11,7 @@ from tests.migration_helpers import alembic
 
 HEAD = "f8a9b0c1d2e3"
 CURRENT_HEAD = "c1d2e3f4a5b6"
+B3 = "b3c4d5e6f7a8"
 PREVIOUS = "a2b3c4d5e6f7"
 pytestmark = pytest.mark.asyncio
 
@@ -254,6 +255,118 @@ async def test_upgrade_refuses_populated_legacy_domain(
     async with engine.connect() as db:
         assert await db.scalar(text("SELECT version_num FROM alembic_version")) == PREVIOUS
         assert await db.scalar(text("SELECT to_regclass('inventory_units')")) is not None
+    await engine.dispose()
+
+
+async def test_upgrade_refuses_modified_legacy_system_attribute_without_partial_writes(
+    migration_database: str,
+) -> None:
+    url = migration_database
+    alembic(url, "upgrade", PREVIOUS)
+    engine = create_async_engine(url)
+
+    async with engine.begin() as db:
+        attribute_id = await db.scalar(
+            text(
+                "SELECT id FROM category_attributes "
+                "ORDER BY id LIMIT 1"
+            )
+        )
+        assert attribute_id is not None
+        await db.execute(
+            text(
+                "UPDATE category_attributes "
+                "SET label = 'Modified legacy label' "
+                "WHERE id = :attribute_id"
+            ),
+            {"attribute_id": attribute_id},
+        )
+
+    output = alembic(
+        url,
+        "upgrade",
+        CURRENT_HEAD,
+        success=False,
+    )
+    assert "legacy upgrade category configuration drift" in output
+
+    async with engine.connect() as db:
+        assert (
+            await db.scalar(
+                text("SELECT version_num FROM alembic_version")
+            )
+            == PREVIOUS
+        )
+        assert (
+            await db.scalar(
+                text(
+                    "SELECT label FROM category_attributes "
+                    "WHERE id = :attribute_id"
+                ),
+                {"attribute_id": attribute_id},
+            )
+            == "Modified legacy label"
+        )
+        assert (
+            await db.scalar(
+                text("SELECT to_regclass('inventory_units')")
+            )
+            is not None
+        )
+
+    await engine.dispose()
+
+
+async def test_downgrade_refuses_modified_v2_system_attribute_without_partial_writes(
+    migration_database: str,
+) -> None:
+    url = migration_database
+    alembic(url, "upgrade", B3)
+    engine = create_async_engine(url)
+
+    async with engine.begin() as db:
+        attribute_id = await db.scalar(
+            text(
+                "SELECT id FROM category_attributes "
+                "ORDER BY id LIMIT 1"
+            )
+        )
+        assert attribute_id is not None
+        await db.execute(
+            text(
+                "UPDATE category_attributes "
+                "SET label = 'Modified v2 label' "
+                "WHERE id = :attribute_id"
+            ),
+            {"attribute_id": attribute_id},
+        )
+
+    output = alembic(
+        url,
+        "downgrade",
+        PREVIOUS,
+        success=False,
+    )
+    assert "downgrade category configuration drift" in output
+
+    async with engine.connect() as db:
+        assert (
+            await db.scalar(
+                text("SELECT version_num FROM alembic_version")
+            )
+            == B3
+        )
+        assert (
+            await db.scalar(
+                text(
+                    "SELECT label FROM category_attributes "
+                    "WHERE id = :attribute_id"
+                ),
+                {"attribute_id": attribute_id},
+            )
+            == "Modified v2 label"
+        )
+
     await engine.dispose()
 
 

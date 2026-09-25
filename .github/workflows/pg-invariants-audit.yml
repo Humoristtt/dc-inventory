@@ -86,6 +86,7 @@ jobs:
             tests/test_cp04_historical_migration_postgres.py \
             tests/test_a9_negative_migration_postgres.py \
             tests/test_a9_procurement_binding_postgres.py \
+            tests/test_warehouse_migration_postgres.py \
             tests/test_health.py \
             tests/test_health_schema_compatibility_postgres.py \
             tests/test_runtime_database_role_contract.py

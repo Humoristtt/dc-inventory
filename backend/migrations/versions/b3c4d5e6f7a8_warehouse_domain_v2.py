@@ -112,6 +112,11 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     _guard_empty("downgrade")
+    _guard_configuration_contract(
+        operation='downgrade',
+        expected=_v2_configuration_contract(),
+        v2=True,
+    )
     _drop_v2_triggers()
     op.execute("DELETE FROM category_attributes")
     op.execute("DELETE FROM categories WHERE parent_id IS NOT NULL")
@@ -237,6 +242,245 @@ def _frozen(name: str) -> dict[str, Any]:
     )
 
 
+def _configuration_rows(
+    query: str,
+) -> list[dict[str, Any]]:
+    connection = op.get_bind()
+    return [
+        dict(row._mapping)
+        for row in connection.execute(sa.text(query))
+    ]
+
+
+def _previous_configuration_contract() -> dict[str, list[dict[str, Any]]]:
+    frozen = _frozen('previous_configuration')
+    category_fields = (
+        'id',
+        'key',
+        'display_name',
+        'description',
+        'default_accounting_mode',
+        'sort_order',
+        'is_system',
+    )
+    attribute_fields = (
+        'id',
+        'category_id',
+        'key',
+        'label',
+        'data_type',
+        'unit',
+        'required',
+        'filterable',
+        'searchable',
+        'card_visible',
+        'detail_visible',
+        'table_visible',
+        'excel_visible',
+        'sort_order',
+        'filter_type',
+        'allowed_values',
+        'validation_metadata',
+        'is_system',
+    )
+    return {
+        'categories': sorted(
+            (
+                {field: row[field] for field in category_fields}
+                for row in frozen['categories']
+            ),
+            key=lambda row: row['id'],
+        ),
+        'category_attributes': sorted(
+            (
+                {field: row[field] for field in attribute_fields}
+                for row in frozen['category_attributes']
+            ),
+            key=lambda row: row['id'],
+        ),
+    }
+
+
+def _v2_configuration_contract() -> dict[str, list[dict[str, Any]]]:
+    configuration = _frozen('configuration')
+    keys = [*configuration['families'], *configuration['leaves']]
+    ids = {
+        key: str(uuid5(NAMESPACE_URL, 'spikatel:category:' + key))
+        for key in keys
+    }
+
+    categories: list[dict[str, Any]] = []
+    attributes: list[dict[str, Any]] = []
+
+    for index, (key, (name, description)) in enumerate(
+        configuration['families'].items()
+    ):
+        categories.append(
+            {
+                'id': ids[key],
+                'key': key,
+                'display_name': name,
+                'description': description,
+                'parent_id': None,
+                'sort_order': index,
+                'is_system': True,
+            }
+        )
+
+    for index, (key, (parent, name, definitions)) in enumerate(
+        configuration['leaves'].items()
+    ):
+        categories.append(
+            {
+                'id': ids[key],
+                'key': key,
+                'display_name': name,
+                'description': None,
+                'parent_id': ids[parent],
+                'sort_order': index,
+                'is_system': True,
+            }
+        )
+
+        for order, attribute in enumerate(definitions):
+            numeric = attribute['data_type'] in ('INTEGER', 'DECIMAL')
+            metadata = (
+                {
+                    'min': (
+                        1
+                        if attribute['data_type'] == 'INTEGER'
+                        else 0.0000000001
+                    )
+                }
+                if numeric
+                else (
+                    {'max_length': 2000}
+                    if attribute['data_type'] == 'TEXT'
+                    else None
+                )
+            )
+            visible = not attribute['derived']
+            attributes.append(
+                {
+                    'id': str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            (
+                                'spikatel:attribute:'
+                                + key
+                                + ':'
+                                + attribute['key']
+                            ),
+                        )
+                    ),
+                    'category_id': ids[key],
+                    'key': attribute['key'],
+                    'label': attribute['label'],
+                    'data_type': attribute['data_type'],
+                    'unit': attribute['unit'],
+                    'required': attribute['required'],
+                    'filterable': True,
+                    'searchable': True,
+                    'card_visible': visible,
+                    'detail_visible': visible,
+                    'table_visible': True,
+                    'excel_visible': True,
+                    'sort_order': order,
+                    'filter_type': 'RANGE' if numeric else 'EXACT',
+                    'allowed_values': None,
+                    'validation_metadata': metadata,
+                    'is_system': True,
+                }
+            )
+
+    return {
+        'categories': sorted(categories, key=lambda row: row['id']),
+        'category_attributes': sorted(
+            attributes,
+            key=lambda row: row['id'],
+        ),
+    }
+
+
+def _configuration_snapshot(*, v2: bool) -> dict[str, list[dict[str, Any]]]:
+    if v2:
+        categories = _configuration_rows(
+            '''
+            SELECT
+                id::text AS id,
+                key,
+                display_name,
+                description,
+                parent_id::text AS parent_id,
+                sort_order,
+                is_system
+            FROM categories
+            ORDER BY id
+            '''
+        )
+    else:
+        categories = _configuration_rows(
+            '''
+            SELECT
+                id::text AS id,
+                key,
+                display_name,
+                description,
+                default_accounting_mode,
+                sort_order,
+                is_system
+            FROM categories
+            ORDER BY id
+            '''
+        )
+
+    attributes = _configuration_rows(
+        '''
+        SELECT
+            id::text AS id,
+            category_id::text AS category_id,
+            key,
+            label,
+            data_type,
+            unit,
+            required,
+            filterable,
+            searchable,
+            card_visible,
+            detail_visible,
+            table_visible,
+            excel_visible,
+            sort_order,
+            filter_type,
+            allowed_values,
+            validation_metadata,
+            is_system
+        FROM category_attributes
+        ORDER BY id
+        '''
+    )
+
+    return {
+        'categories': categories,
+        'category_attributes': attributes,
+    }
+
+
+def _guard_configuration_contract(
+    *,
+    operation: str,
+    expected: dict[str, list[dict[str, Any]]],
+    v2: bool,
+) -> None:
+    actual = _configuration_snapshot(v2=v2)
+    if actual != expected:
+        raise RuntimeError(
+            'warehouse v2 refused: '
+            f'{operation} category configuration drift; '
+            'explicit reviewed mapping/recovery required'
+        )
+
+
 def _guard_empty(operation: str) -> None:
     # Locks exclude concurrent writes until the migration transaction commits.
     op.execute('LOCK TABLE items, locations, movements, movement_lines, stock_balances, '
@@ -263,6 +507,11 @@ def _guard_upgrade() -> None:
     _guard_empty('upgrade')
     if connection.execute(sa.text('SELECT EXISTS (SELECT 1 FROM categories WHERE NOT is_system)')).scalar():
         raise RuntimeError('warehouse v2 refused: custom categories require explicit mapping')
+    _guard_configuration_contract(
+        operation='legacy upgrade',
+        expected=_previous_configuration_contract(),
+        v2=False,
+    )
 
 
 def _new_constraints_and_configuration() -> None:

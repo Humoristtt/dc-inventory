@@ -31,6 +31,13 @@ CRITICAL_DB_TRIGGERS = (
         True,
     ),
     CriticalTrigger(
+        "category_attributes",
+        "trg_category_attributes_validate_existing_values",
+        "validate_category_attribute_existing_values",
+        True,
+        True,
+    ),
+    CriticalTrigger(
         "items",
         "trg_items_leaf",
         "validate_v2_leaf",

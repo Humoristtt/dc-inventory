@@ -383,7 +383,10 @@ async def test_downgrade_refuses_populated_v2_without_losing_data(
     from tests.warehouse_helpers import actor, cable_payload, move, scenario
 
     url = migration_database
-    alembic(url, "upgrade", HEAD)
+    # This test uses current application services to seed data, so its schema
+    # must be the current source head. Historical b3 behavior is still the
+    # downgrade boundary under test.
+    alembic(url, "upgrade", CURRENT_HEAD)
     engine = create_async_engine(url)
     async with AsyncSession(engine, expire_on_commit=False) as db:
         if domain == "item":
@@ -408,7 +411,10 @@ async def test_downgrade_refuses_populated_v2_without_losing_data(
             for table in ("items", "locations", "movements", "movement_lines", "stock_balances")
         ]
         assert before == after
-        assert await db.scalar(text("SELECT version_num FROM alembic_version")) == HEAD
+        assert (
+            await db.scalar(text("SELECT version_num FROM alembic_version"))
+            == CURRENT_HEAD
+        )
     await engine.dispose()
 
 

@@ -186,7 +186,7 @@ def upgrade() -> None:
         CREATE FUNCTION validate_category_attribute_existing_values()
         RETURNS trigger
         LANGUAGE plpgsql
-        AS $
+        AS $$
         BEGIN
             IF EXISTS (
                 SELECT 1
@@ -214,7 +214,7 @@ def upgrade() -> None:
 
             RETURN NEW;
         END;
-        $
+        $$
         """
     )
     op.execute(

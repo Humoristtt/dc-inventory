@@ -728,7 +728,27 @@ jobs:
                 has_table_privilege(
                   'dc_inventory_app_ci',
                   'user_item_custody_balances',
-                  'SELECT, INSERT, UPDATE, DELETE'
+                  'SELECT'
+                ),
+                has_table_privilege(
+                  'dc_inventory_app_ci',
+                  'user_item_custody_balances',
+                  'INSERT, UPDATE, DELETE'
+                ),
+                has_table_privilege(
+                  'dc_inventory_app_ci',
+                  'stock_balances',
+                  'SELECT'
+                ),
+                has_table_privilege(
+                  'dc_inventory_app_ci',
+                  'stock_balances',
+                  'INSERT, UPDATE, DELETE'
+                ),
+                has_function_privilege(
+                  'dc_inventory_app_ci',
+                  'public.refresh_warehouse_projection(uuid,uuid)',
+                  'EXECUTE'
                 ),
                 has_schema_privilege(
                   'dc_inventory_app_ci',
@@ -738,7 +758,7 @@ jobs:
             "
           )"
 
-          test "$privilege_matrix" = "t|t|t|f|f|f|f|t|f"
+          test "$privilege_matrix" = "t|t|t|f|f|f|f|t|f|t|f|t|f"
 
           outbox_update_columns="$(
             owner_psql -At -c "

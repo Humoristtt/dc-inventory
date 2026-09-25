@@ -99,7 +99,7 @@ UID/GID каталога остались `0:0`. Этот механизм не�
 - `app.spik-inventory.ru` — direct public ingress; host Nginx терминирует TLS и проксирует в `/var/lib/dc-inventory-ingress/ingress.sock`;
 - production web не имеет host TCP bindings и состоит только в `app_net`;
 - `cloudflared` не является входом для пользовательского Mini App;
-- отдельный hostname `telegram-webhook.spik-inventory.ru` опубликован через Tunnel `dc-inventory-prod` только для пути `/api/telegram/webhook`;
+- отдельный hostname `telegram-webhook.spik-inventory.ru` опубликован через выделенный Tunnel только для пути `/api/telegram/webhook`;
 - Tunnel origin: `https://localhost:443`;
 - origin settings: `HTTP Host Header=app.spik-inventory.ru`, `Origin Server Name=app.spik-inventory.ru`, TLS certificate verification включена;
 - Cloudflare Access на webhook не используется; unmatched Tunnel routes закрываются `http_status:404`;
@@ -115,7 +115,7 @@ CP_R7_POST_DEPLOY_ACCEPTANCE=PASS
 CP_R7_POST_DEPLOY_BACKUP=PASS
 ```
 
-После восстановления Telegram Tunnel входящий webhook был переключён с `https://app.spik-inventory.ru/api/telegram/webhook` на `https://telegram-webhook.spik-inventory.ru/api/telegram/webhook` с `drop_pending_updates=false`. Накопившаяся очередь уменьшилась с 9 до 0; updates `472023532..472023540` были приняты и обработаны, новые `sendPhoto`/`deleteMessage` завершились `SENT`, `last_error` после переключения отсутствовал. Реальный Telegram/Mini App smoke подтверждён в CP-17.
+После восстановления Telegram Tunnel входящий webhook был переключён с `https://app.spik-inventory.ru/api/telegram/webhook` на `https://telegram-webhook.spik-inventory.ru/api/telegram/webhook` с `drop_pending_updates=false`. Накопившаяся очередь уменьшилась с 9 до 0; все накопившиеся updates были приняты и обработаны, новые `sendPhoto`/`deleteMessage` завершились `SENT`, `last_error` после переключения отсутствовал. Реальный Telegram/Mini App smoke подтверждён в CP-17.
 
 ### Эксплуатационное правило
 

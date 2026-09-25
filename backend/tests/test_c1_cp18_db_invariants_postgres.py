@@ -333,7 +333,7 @@ async def test_category_attribute_type_change_rejects_existing_values(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
-    item_id = await create_item(db, cable_payload())
+    await create_item(db, cable_payload())
 
     attribute_id = await db.scalar(
         select(CategoryAttribute.id)

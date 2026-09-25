@@ -12,13 +12,19 @@ Spikatel Inventory — Telegram Mini App для ведения номенкла�
 Telegram Mini App / браузер
           │ HTTPS
           ▼
-Cloudflare Tunnel → Nginx → FastAPI ──→ PostgreSQL
-                              │             ▲
-                              └─ outbox ────┘
-                                               │
-                                   Telegram / email workers
-                                               │
-                                Cloudflare Gateway / Graph
+app.spik-inventory.ru (direct ingress)
+          │
+          ▼
+host Nginx → Unix socket → web Nginx → FastAPI ──→ PostgreSQL
+                                                  │             ▲
+                                                  └─ outbox ────┘
+                                                                   │
+                                                       Telegram / email workers
+                                                                   │
+                                                    Cloudflare Gateway / Graph
+
+Telegram Bot API → telegram-webhook.spik-inventory.ru
+                 → Cloudflare Tunnel → host Nginx → Unix socket → FastAPI webhook
 ```
 
 Backend — модульный монолит на Python 3.12, FastAPI, SQLAlchemy 2, asyncpg и Alembic. Предметные модули разделены на `auth`, `access`, `identity`, `catalog`, `inventory`, `procurement`, `notifications`, `telegram_bot` и `maintenance`. Frontend — React, TypeScript и Vite. Окружение использует PostgreSQL 18, Docker Compose, Nginx и Cloudflare. Непосредственно к PostgreSQL из браузера не обращаемся. Структура и границы доверия подробно описаны в [архитектуре](docs/ARCHITECTURE.md).
@@ -49,17 +55,19 @@ Backend проверяет подпись и срок действия Telegram 
 
 ## 5. Текущее состояние исходников и production
 
-Актуальность этой записи: **19.09.2026**. Различаем исходный код, последнюю документированную проверку production и фактическое состояние production, которое перед следующим выпуском нужно проверить заново.
+Актуальность этой записи: **25.09.2026**. Различаем исходный код, подтверждённый production baseline и фактическое live-состояние, которое перед следующим выпуском всё равно проверяется заново.
 
 | Контур | Последние подтверждённые сведения |
 |---|---|
-| Исходники `remediation/audit-0-12` | Кодовая база проверялась на `38d1b19`; текущий Alembic head `b0c1d2e3f4a5`. После этого коммита редакционные изменения документов не означают изменения runtime. |
-| Последняя документированная production-проверка | Checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`; схема `c3d4e5f6a7b8`. Это датированное свидетельство, не live monitoring. |
+| Исходники / `main` | Merge release `593ddec0c9100b0df2eafe4f324c7bb600d75cba`; source Alembic head `b0c1d2e3f4a5`. Документационные изменения после release не меняют runtime сами по себе. |
+| Подтверждённый production baseline | Checkout/runtime `593ddec0c9100b0df2eafe4f324c7bb600d75cba`; Alembic `b0c1d2e3f4a5`; release/runtime provenance, runtime DB roles, zero-drift reconciliation, ingress/readiness и post-deploy backup — PASS. |
 | Склад | По последнему зафиксированному состоянию `REAL_INVENTORY_MUTATIONS_ENABLED=false`: обычные мутации запрещены до отдельного решения. |
 
 ```text
-ALEMBIC_HEAD=c3d4e5f6a7b8
-SOURCE_ALEMBIC_HEAD=b0c1d2e3f4a5
+PRODUCTION_REVISION=593ddec0c9100b0df2eafe4f324c7bb600d75cba
+ALEMBIC_HEAD=b0c1d2e3f4a5
+RELEASE_RUNTIME_MATCH=PASS
+CP17_TELEGRAM_WEBHOOK=PASS
 ```
 
 Первоначальное production-наполнение склада также завершено:
@@ -70,12 +78,10 @@ SOURCE_ALEMBIC_HEAD=b0c1d2e3f4a5
 
 Повторный initial bootstrap запрещён. Его успешное выполнение не снимает защиту обычных складских операций.
 
-Текущая post-cutover source-фаза: CP-14 закрыт после изолированной full-stack приёмки; CP-15 выполняется. В CP-15 исправлена проверка одноразовой БД перед миграциями (`38d1b19`). CP-07–CP-12 остаются OPEN из-за незавершённых production-зависимостей; CP-13 закрыт по локальной документационной приёмке 20.09.2026; полный CI на итоговом SHA ещё не подтверждён. CP-16 — согласованное развёртывание, CP-17 — реальная Telegram-приёмка после него, CP-18 — независимый повторный аудит. Подробные статусы, факты и ограничения фиксируем в [журнале исправлений](docs/AUDIT_0_12_REMEDIATION.md) и [плане работ](docs/ROADMAP.md).
-
-**Критическое ограничение CP-07:** подготовленный Nginx разделяет недоверенный TCP-вход и доверенный Unix socket. Последний документированный production Tunnel всё ещё направлен на `http://localhost:8080`. Нельзя разворачивать новый web-образ без согласованного переключения Tunnel и проверки UID/GID, прав каталога сокета и отката: иначе реальные клиенты могут разделить один bucket ограничения запросов. Остальные production-проверки включают delivery, DB permissions, provenance образов и настоящий S3 restore rehearsal.
+CP-16 production deployment и CP-17 real Telegram acceptance закрыты. Пользовательский `app.spik-inventory.ru` обслуживается direct ingress через host Nginx и Unix socket; Cloudflare Tunnel `dc-inventory-prod` выделен только для входящего `telegram-webhook.spik-inventory.ru/api/telegram/webhook`. При переключении webhook накопленная очередь была сохранена и доставлена, после чего `pending_update_count=0` и `last_error=NONE`. Следующий обязательный этап — CP-18 independent Audit 0–12; email остаётся выключенным, а restore/rehearsal остаётся отдельным эксплуатационным gate. Подробные статусы и evidence — в [журнале исправлений](docs/AUDIT_0_12_REMEDIATION.md) и [плане работ](docs/ROADMAP.md).
 
 ## 6. Где искать инструкции
 
-Начальная точка для разработчика и оператора — [карта документации](docs/README.md), которая перечисляет **все** Markdown и их назначение. Для изменения исходников: [DEVELOPMENT](docs/DEVELOPMENT.md). Для выпуска: [DEPLOYMENT](docs/DEPLOYMENT.md) и отдельный [план CP-07](docs/CP07_HTTP_SOCKET_MIGRATION.md). Для сопровождения: [OPERATIONS](docs/OPERATIONS.md). Для аварийного восстановления: [RECOVERY_RUNBOOK](docs/RECOVERY_RUNBOOK.md). Для истории завершённых работ: [HISTORY](docs/HISTORY.md). Команды production не копируем из локального dev-сценария.
+Начальная точка для разработчика и оператора — [карта документации](docs/README.md), которая перечисляет **все** Markdown и их назначение. Для изменения исходников: [DEVELOPMENT](docs/DEVELOPMENT.md). Для выпуска: [DEPLOYMENT](docs/DEPLOYMENT.md); принятый ingress baseline и история CP-07 — в [CP07_HTTP_SOCKET_MIGRATION](docs/CP07_HTTP_SOCKET_MIGRATION.md). Для сопровождения: [OPERATIONS](docs/OPERATIONS.md). Для аварийного восстановления: [RECOVERY_RUNBOOK](docs/RECOVERY_RUNBOOK.md). Для истории завершённых работ: [HISTORY](docs/HISTORY.md). Команды production не копируем из локального dev-сценария.
 
 Реальные наборы оборудования, содержимое workbook, секреты, дампы БД и private/runtime-only production identifiers не помещаем в публичный Git. Публичные service identifiers (например, адрес Mini App и публичный support username) допустимы по назначению. Source-only sync, Git push или обновление документации **не** обновляют контейнеры, миграции и внешний Tunnel. Production меняем только по явно согласованному release-плану.

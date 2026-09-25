@@ -4,7 +4,7 @@
 
 ## 1. Исходное состояние и разрешение
 
-Последняя документированная production-проверка: checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`, Alembic `c3d4e5f6a7b8`. Это **историческое evidence**, не сегодняшняя проверка. Текущий source migration head: `b0c1d2e3f4a5`. Прежде чем утверждать план, оператор должен заново проверить реальный Git HEAD на VM, PostgreSQL Alembic head, image IDs/revisions, Compose, Tunnel origin, host-права, сервисы и backup.
+Подтверждённый production release на 25.09.2026: checkout/runtime `593ddec0c9100b0df2eafe4f324c7bb600d75cba`, Alembic `b0c1d2e3f4a5`. Release/runtime provenance, runtime DB roles, zero-drift reconciliation, direct ingress, dedicated Telegram webhook Tunnel и post-deploy off-VM backup приняты. Перед любым следующим release оператор всё равно заново проверяет Git HEAD на VM, Alembic head, image IDs/revisions, Compose, host ingress, Tunnel route, сервисы и backup.
 
 Warehouse Domain V2 и первоначальный импорт ранее приняты; initial bootstrap повторно не запускается. По последнему production evidence обычные складские мутации закрыты:
 
@@ -13,13 +13,13 @@ REAL_INVENTORY_MUTATIONS_ENABLED=false
 EMAIL_DELIVERY_ENABLED=false
 ```
 
-Изменение этих флагов требует самостоятельного решения и acceptance. CP-07–12 содержат локально исправленные, но ещё не принятые в production части. CP-14 завершил изолированную full-stack приёмку, CP-15 — предрелизный аудит, CP-16 deployment, CP-17 реальный Telegram smoke. Закрытый локальный checkpoint не даёт права считать production обновлённым.
+Изменение этих флагов требует самостоятельного решения и acceptance. CP-16 production deployment и CP-17 real Telegram smoke выполнены для release `593ddec0c9100b0df2eafe4f324c7bb600d75cba`; CP-07 production ingress также закрыт фактической приёмкой. Исторические локальные checkpoints сами по себе не являются доказательством нового будущего deployment.
 
 **Перед изменением production** получить approved immutable SHA, результат required CI/review, подтверждённую совместимость схемы и артефактов, свежую verified off-VM backup, maintenance window, план отката или forward-fix, перечень ответственных и критерии немедленной остановки. Без этих условий никакие команды ниже не выполняются на VM.
 
 ## 2. Контейнеры, сети и учётные записи
 
-`compose.yaml` описывает PostgreSQL, одноразовые `migrate` и `db-permissions`, FastAPI backend, Nginx web, Telegram worker, maintenance worker и необязательный email worker (`profiles: ["email"]`). Backend, workers и PostgreSQL работают в разделённых Docker-сетях. PostgreSQL volume постоянный; host-порт базы и backend не публикуются. По текущему Compose web слушает на host только `127.0.0.1:${WEB_PORT:-8080}`; текущий Tunnel по последней проверке направлен на `http://localhost:8080`. Это **прежняя конфигурация**, а не доказательство, что Unix-вход готов в production.
+`compose.yaml` описывает PostgreSQL, одноразовые `migrate` и `db-permissions`, FastAPI backend, Nginx web, Telegram worker, maintenance worker и необязательный email worker (`profiles: ["email"]`). Backend, workers и PostgreSQL работают в разделённых Docker-сетях. PostgreSQL volume постоянный; host-порт базы и backend не публикуются. В принятом production overlay web не имеет host TCP bindings: host Nginx терминирует TLS и передаёт запросы через `/var/lib/dc-inventory-ingress/ingress.sock`; production web остаётся только в `app_net`. Base/dev Compose может сохранять loopback TCP для локальной разработки, но это не production ingress.
 
 Сервисы используют read-only root filesystem, временные `/tmp`, `cap_drop: ALL`, `no-new-privileges`, ограничения CPU/RAM/PID и ограниченные логи Docker. Backend image запускает приложение от UID 10001; фактический UID/GID Nginx и systemd `cloudflared` обязательно измеряются перед CP-07. `/healthz` проверяет web, `/api/health/live` — приложение, `/api/health/ready` — доступность БД и readiness.
 
@@ -64,19 +64,19 @@ APP_REVISION="$REVISION" docker compose build backend postgres web
 
 `ops/backup/runtime_provenance.py` проверяет соответствие заявленного checkout SHA реальному HEAD и читает immutable IDs/revisions фактически работающих images. Telegram/maintenance workers должны соответствовать backend image, email worker проверяется при включении. Допустимый source-only docs/host-side `ops/` sync может оставить image revision старее Git HEAD **только при доказанно неизменных Docker build contexts и application runtime source**; host-side `ops/` scripts проверяются отдельно. Такой sync не является deploy.
 
-## 4. Отдельный обязательный gate CP-07: Tunnel и Unix
+## 4. Production ingress baseline после CP-07
 
-В исходном `frontend/nginx.conf` реализованы два входа: недоверенный TCP `:8080` без доверия входящему `CF-Connecting-IP`, и доверенный Unix `/run/dc-inventory/ingress.sock` с `set_real_ip_from unix:` и `real_ip_header CF-Connecting-IP`. На новом TCP входе реальные пользователи старого Tunnel могут разделить один per-client rate-limit bucket.
+CP-07 закрыт production-приёмкой 25.09.2026. Пользовательский `app.spik-inventory.ru` обслуживается напрямую: public HTTPS → host Nginx → `/var/lib/dc-inventory-ingress/ingress.sock` → web Nginx → backend. Production web не публикует TCP-порт и не зависит от внешней `ingress_net`.
 
-**Нельзя выпускать новый web image, оставляя production Tunnel на прежнем TCP-origin.** До change window нужно проверить поддержку Unix-origin установленной версией `cloudflared`, точные UID/GID, доступный только разрешённой группе host-каталог режима `0750`, bind mount и сетевую схему. Текущий исходный `compose.yaml` описывает web loopback port, но не содержит готового bind mount каталога сокета: перед production переходом необходимо отдельно подготовить и проверить фактическую конфигурацию доставки этого каталога в web-контейнер. Ни наличие Unix `listen` в Nginx, ни локальный `nginx -t` этого не доказывают.
+Cloudflare Tunnel `dc-inventory-prod` используется только для входящего Telegram webhook: `telegram-webhook.spik-inventory.ru/api/telegram/webhook` → `https://localhost:443` host Nginx. Route фиксирует `HTTP Host Header=app.spik-inventory.ru` и TLS `Origin Server Name=app.spik-inventory.ru`; TLS verification остаётся включённой, интерактивный Cloudflare Access для webhook не применяется, fallback закрыт 404.
 
-Во время отдельного согласованного окна переключают **совместно** web image и Tunnel-origin, проверяют двух независимых клиентов, rate limits, внешний HTTPS, backend заголовки, доступ к сокету и Telegram. Откат возвращает **и** прежний web, **и** прежний Tunnel TCP-origin. Полные prerequisites и критерии отказа — в [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md). Пока это не выполнено, CP-07 остаётся OPEN.
+Будущий release обязан **сохранить эту границу**, если отдельным change request не утверждена новая архитектура. Проверить отсутствие host bindings у production web, доступность Unix socket, host TLS/health, состояние `cloudflared`, точный webhook route и real Telegram smoke. История перехода и rollback-контекст — в [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md).
 
 ## 5. Telegram, Graph и секреты
 
 Production backend требует `TELEGRAM_BOT_TOKEN`, `ADMIN_TELEGRAM_USER_ID`, `NOTIFICATION_TELEGRAM_USER_ID`, `TELEGRAM_WEBHOOK_SECRET` и корректный HTTPS-origin `TELEGRAM_WEB_APP_URL` без path/query/fragment. `ADMIN_TELEGRAM_USER_ID` закрепляет единственного recovery OWNER; операционные уведомления направляются отдельному `NOTIFICATION_TELEGRAM_USER_ID`. Frontend bot token не получает.
 
-Входящий webhook `/api/telegram/webhook` проверяет `X-Telegram-Bot-Api-Secret-Token`. Исходящие сообщения берёт из outbox Telegram worker и отправляет на HTTPS `TELEGRAM_GATEWAY_URL` с `TELEGRAM_GATEWAY_SECRET`; Bot API token хранится у доверенного Cloudflare Worker и у backend для проверки initData, но **не** у отправляющего worker. Gateway ограничивает методы `sendMessage`, `sendPhoto`, `deleteMessage`, `editMessageText`, `editMessageReplyMarkup`, `answerCallbackQuery`. При смене bot token требуется согласованное обновление секретов backend/Gateway и проверка входящих/исходящих операций. Недоступный Gateway не откатывает уже совершённый складской COMMIT.
+Входящий webhook `/api/telegram/webhook` проверяет `X-Telegram-Bot-Api-Secret-Token`; production Telegram webhook URL — `https://telegram-webhook.spik-inventory.ru/api/telegram/webhook` и проходит через dedicated Cloudflare Tunnel route. Исходящие сообщения берёт из outbox Telegram worker и отправляет на HTTPS `TELEGRAM_GATEWAY_URL` с `TELEGRAM_GATEWAY_SECRET`; Bot API token хранится у доверенного Cloudflare Worker и у backend для проверки initData, но **не** у отправляющего worker. Gateway ограничивает методы `sendMessage`, `sendPhoto`, `deleteMessage`, `editMessageText`, `editMessageReplyMarkup`, `answerCallbackQuery`. При смене bot token или webhook transport требуется согласованное обновление и проверка входящих/исходящих операций. Недоступный Gateway не откатывает уже совершённый складской COMMIT.
 
 `EMAIL_DELIVERY_ENABLED=false` по умолчанию. Включение Microsoft Graph требует утверждённых tenant/client/sender секретов, отдельной DB role, профиля `email` и live acceptance. Ошибка внешней отправки не отменяет транзакцию закупки; при lost acknowledgement возможно повторное сообщение. Ни Telegram, ни email не дают exactly-once внешнего side effect.
 
@@ -86,7 +86,7 @@ Production backend требует `TELEGRAM_BOT_TOKEN`, `ADMIN_TELEGRAM_USER_ID`
 2. Если новая миграция несовместима со старым приложением, остановить старые web/backend/workers **до** изменения схемы, сохранив PostgreSQL healthy.
 3. Из утверждённого release выполнить Alembic upgrade до ожидаемого единственного head. Migration timeout и lock timeout независимы от runtime defaults: `MIGRATION_STATEMENT_TIMEOUT_SECONDS=300`, `MIGRATION_LOCK_TIMEOUT_SECONDS=5`.
 4. После миграции выполнить `db-permissions`; проверить фактические GRANT/REVOKE, legacy role и момент завершения соединений.
-5. Запустить только новые совместимые runtime images, затем выполнить совместное переключение CP-07 по отдельному плану.
+5. Запустить только новые совместимые runtime images и подтвердить сохранение принятого ingress baseline CP-07; изменение direct ingress или Telegram Tunnel route выполнять только отдельным согласованным change.
 6. Подтвердить health, OWNER/login, outbox/worker heartbeat, фактические image IDs/revisions, разрешения, read-only reconciliation и реальный Telegram smoke. Записать результаты и новую backup.
 
 Историческая RBAC migration `f8a9b0c1d2e3 → a1b2c3d4e5f6` уже была выполнена; её нельзя применять повторно или запускать pre-RBAC backend на новой схеме. Downgrade SFP и другие потенциально разрушительные откаты разрешены только при доказанном отсутствии новых несовместимых данных и прохождении migration guards. Если downgrade небезопасен, выбирать согласованный forward-fix или восстановление проверенной pre-cutover backup **вместе с совместимым приложением**, но не просто возвращать старый image поверх новой схемы.

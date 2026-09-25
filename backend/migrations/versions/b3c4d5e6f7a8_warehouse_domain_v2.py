@@ -112,6 +112,7 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     _guard_empty("downgrade")
+    _guard_v2_configuration()
     _drop_v2_triggers()
     op.execute("DELETE FROM category_attributes")
     op.execute("DELETE FROM categories WHERE parent_id IS NOT NULL")
@@ -237,6 +238,237 @@ def _frozen(name: str) -> dict[str, Any]:
     )
 
 
+_CATEGORY_COLUMNS = (
+    'id',
+    'key',
+    'display_name',
+    'description',
+    'sort_order',
+    'is_system',
+)
+_PREVIOUS_CATEGORY_COLUMNS = (
+    *_CATEGORY_COLUMNS,
+    'default_accounting_mode',
+)
+_V2_CATEGORY_COLUMNS = (
+    *_CATEGORY_COLUMNS,
+    'parent_id',
+)
+_ATTRIBUTE_COLUMNS = (
+    'id',
+    'category_id',
+    'key',
+    'label',
+    'data_type',
+    'unit',
+    'required',
+    'filterable',
+    'searchable',
+    'card_visible',
+    'detail_visible',
+    'table_visible',
+    'excel_visible',
+    'sort_order',
+    'filter_type',
+    'allowed_values',
+    'validation_metadata',
+    'is_system',
+)
+_UUID_COLUMNS = {'id', 'category_id', 'parent_id'}
+_JSON_COLUMNS = {'allowed_values', 'validation_metadata'}
+
+
+def _configuration_matches(
+    table: str,
+    columns: tuple[str, ...],
+    expected: list[dict[str, Any]],
+) -> bool:
+    connection = op.get_bind()
+    actual_count = connection.scalar(
+        sa.text(f'SELECT count(*) FROM {table}')
+    )
+    if actual_count != len(expected):
+        return False
+
+    for index, row in enumerate(expected):
+        clauses: list[str] = []
+        parameters: dict[str, Any] = {}
+        for column in columns:
+            parameter = f'value_{index}_{column}'
+            value = row.get(column)
+            if column in _UUID_COLUMNS:
+                clauses.append(
+                    f'{column} IS NOT DISTINCT FROM '
+                    f'CAST(:{parameter} AS uuid)'
+                )
+                parameters[parameter] = value
+            elif column in _JSON_COLUMNS:
+                clauses.append(
+                    f'{column} IS NOT DISTINCT FROM '
+                    f'CAST(:{parameter} AS jsonb)'
+                )
+                parameters[parameter] = (
+                    json.dumps(value, sort_keys=True)
+                    if value is not None
+                    else None
+                )
+            else:
+                clauses.append(
+                    f'{column} IS NOT DISTINCT FROM :{parameter}'
+                )
+                parameters[parameter] = value
+
+        if not connection.scalar(
+            sa.text(
+                f'SELECT EXISTS (SELECT 1 FROM {table} '
+                f'WHERE {" AND ".join(clauses)})'
+            ),
+            parameters,
+        ):
+            return False
+
+    return True
+
+
+def _guard_previous_configuration() -> None:
+    previous = _frozen('previous_configuration')
+    if not _configuration_matches(
+        'categories',
+        _PREVIOUS_CATEGORY_COLUMNS,
+        previous['categories'],
+    ) or not _configuration_matches(
+        'category_attributes',
+        _ATTRIBUTE_COLUMNS,
+        previous['category_attributes'],
+    ):
+        raise RuntimeError(
+            'warehouse v2 upgrade refused: legacy catalog configuration drift; '
+            'no configuration was discarded'
+        )
+
+
+def _expected_v2_configuration() -> tuple[
+    list[dict[str, Any]],
+    list[dict[str, Any]],
+]:
+    configuration = _frozen('configuration')
+    ids = {
+        key: str(uuid5(NAMESPACE_URL, 'spikatel:category:' + key))
+        for key in [
+            *configuration['families'],
+            *configuration['leaves'],
+        ]
+    }
+    categories: list[dict[str, Any]] = []
+    attributes: list[dict[str, Any]] = []
+
+    for index, (key, (name, description)) in enumerate(
+        configuration['families'].items()
+    ):
+        categories.append(
+            {
+                'id': ids[key],
+                'key': key,
+                'display_name': name,
+                'description': description,
+                'sort_order': index,
+                'is_system': True,
+                'parent_id': None,
+            }
+        )
+
+    for index, (key, (parent, name, definitions)) in enumerate(
+        configuration['leaves'].items()
+    ):
+        categories.append(
+            {
+                'id': ids[key],
+                'key': key,
+                'display_name': name,
+                'description': None,
+                'sort_order': index,
+                'is_system': True,
+                'parent_id': ids[parent],
+            }
+        )
+        for order, attribute in enumerate(definitions):
+            numeric = attribute['data_type'] in (
+                'INTEGER',
+                'DECIMAL',
+            )
+            metadata = (
+                {
+                    'min': (
+                        1
+                        if attribute['data_type'] == 'INTEGER'
+                        else 0.0000000001
+                    )
+                }
+                if numeric
+                else (
+                    {'max_length': 2000}
+                    if attribute['data_type'] == 'TEXT'
+                    else None
+                )
+            )
+            visible = not attribute['derived']
+            attributes.append(
+                {
+                    'id': str(
+                        uuid5(
+                            NAMESPACE_URL,
+                            (
+                                'spikatel:attribute:'
+                                + key
+                                + ':'
+                                + attribute['key']
+                            ),
+                        )
+                    ),
+                    'category_id': ids[key],
+                    'key': attribute['key'],
+                    'label': attribute['label'],
+                    'data_type': attribute['data_type'],
+                    'unit': attribute['unit'],
+                    'required': attribute['required'],
+                    'filterable': True,
+                    'searchable': True,
+                    'card_visible': visible,
+                    'detail_visible': visible,
+                    'table_visible': True,
+                    'excel_visible': True,
+                    'sort_order': order,
+                    'filter_type': (
+                        'RANGE'
+                        if numeric
+                        else 'EXACT'
+                    ),
+                    'allowed_values': None,
+                    'validation_metadata': metadata,
+                    'is_system': True,
+                }
+            )
+
+    return categories, attributes
+
+
+def _guard_v2_configuration() -> None:
+    categories, attributes = _expected_v2_configuration()
+    if not _configuration_matches(
+        'categories',
+        _V2_CATEGORY_COLUMNS,
+        categories,
+    ) or not _configuration_matches(
+        'category_attributes',
+        _ATTRIBUTE_COLUMNS,
+        attributes,
+    ):
+        raise RuntimeError(
+            'warehouse v2 downgrade refused: catalog configuration drift; '
+            'no configuration was discarded'
+        )
+
+
 def _guard_empty(operation: str) -> None:
     # Locks exclude concurrent writes until the migration transaction commits.
     op.execute('LOCK TABLE items, locations, movements, movement_lines, stock_balances, '
@@ -248,7 +480,10 @@ def _guard_empty(operation: str) -> None:
 
 
 def _guard_upgrade() -> None:
-    op.execute('LOCK TABLE inventory_units, movements, movement_lines, stock_balances, items IN ACCESS EXCLUSIVE MODE')
+    op.execute(
+        'LOCK TABLE inventory_units, movements, movement_lines, stock_balances, '
+        'items, categories, category_attributes IN ACCESS EXCLUSIVE MODE'
+    )
     connection = op.get_bind()
     checks = {
         'per-unit data': 'SELECT 1 FROM inventory_units',
@@ -261,8 +496,7 @@ def _guard_upgrade() -> None:
         if connection.execute(sa.text(f'SELECT EXISTS ({query})')).scalar():
             raise RuntimeError(f'warehouse v2 refused: incompatible legacy {label}; no data was discarded')
     _guard_empty('upgrade')
-    if connection.execute(sa.text('SELECT EXISTS (SELECT 1 FROM categories WHERE NOT is_system)')).scalar():
-        raise RuntimeError('warehouse v2 refused: custom categories require explicit mapping')
+    _guard_previous_configuration()
 
 
 def _new_constraints_and_configuration() -> None:

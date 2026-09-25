@@ -643,7 +643,7 @@ Evidence:
 - old direct webhook had `pending_update_count=9` and `last_error=Connection timed out`;
 - webhook switched with `drop_pending_updates=false`;
 - after switch: `pending_update_count=0`, `last_error=NONE`, allowed updates `message` and `callback_query`;
-- production accepted updates `472023532..472023540`, all with `processed_at`;
+- все 9 накопившихся updates были приняты и получили `processed_at`;
 - generated `sendPhoto`/`deleteMessage` outbox entries completed `SENT`;
 - real `/start`, Mini App authentication and requested access/application flow accepted by operator.
 

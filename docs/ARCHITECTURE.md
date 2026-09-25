@@ -8,10 +8,13 @@
 Telegram WebView / браузер
           │ HTTPS
           ▼
-Cloudflare Tunnel
+app.spik-inventory.ru — direct public ingress
           │
           ▼
-Nginx (статический React + reverse proxy + rate limits)
+host Nginx (TLS)
+          │ Unix socket
+          ▼
+web Nginx (React + reverse proxy + rate limits)
           │ /api/*
           ▼
 FastAPI → auth/access/identity → catalog/inventory/procurement
@@ -23,6 +26,14 @@ FastAPI → auth/access/identity → catalog/inventory/procurement
                                       Telegram / email workers
                                                        │
                                   Cloudflare Gateway / Microsoft Graph
+
+Telegram Bot API
+          │ webhook HTTPS
+          ▼
+telegram-webhook.spik-inventory.ru
+          │ Cloudflare Tunnel
+          ▼
+cloudflared → host Nginx → Unix socket → web Nginx → FastAPI webhook
 ```
 
 `backend/app/main.py` создаёт FastAPI-приложение, проверяет production-конфигурацию, подключает `TrustedHostMiddleware`, регистрирует маршруты через `backend/app/api/router.py` и на время жизни приложения открывает async SQLAlchemy engine. Маршруты распределены между `auth`, `access`, административным `identity`, `catalog`, `inventory`, `procurement`, `telegram_bot` и `health`. В production Swagger/OpenAPI endpoints отключены. Для доступа снаружи backend не публикует host port: его вызывает только внутренний Nginx.
@@ -66,7 +77,7 @@ user_item_custody_balances(User, Item, quantity)
 
 API не вызывает Telegram Bot API или Microsoft Graph в середине складской/закупочной транзакции. Вместо этого он записывает intent в PostgreSQL outbox с детерминированным dedupe key. Отдельный worker забирает сообщение по lease/claim, отправляет и фиксирует результат либо retry/DEAD. `/start` welcome проверяет актуальность claim token до изменения состояния чата и сохраняет результат в согласованной БД-транзакции.
 
-Входящие Telegram updates проходят webhook secret и dedupe. Исходящие запросы Telegram worker направляет в Cloudflare Worker Gateway по HTTPS; Bot API token находится в отдельной доверенной границе. Email worker опционален, использует Microsoft Graph и отдельные права PostgreSQL; `EMAIL_DELIVERY_ENABLED=false` по умолчанию. Внешняя отправка **at-least-once**: outbox исключает дублирование намерений при replay, но при потерянном подтверждении Gateway/Graph возможно повторное внешнее сообщение. Exactly-once для такой границы не заявляется.
+Входящие Telegram updates проходят отдельный hostname `telegram-webhook.spik-inventory.ru` через Cloudflare Tunnel `dc-inventory-prod`, затем `cloudflared` обращается к `https://localhost:443`; host Nginx передаёт запрос в тот же Unix ingress web-контейнера, а FastAPI проверяет webhook secret и выполняет dedupe. Пользовательский `app.spik-inventory.ru` через Tunnel не проходит. Исходящие запросы Telegram worker направляет в Cloudflare Worker Gateway по HTTPS; Bot API token находится в отдельной доверенной границе. Email worker опционален, использует Microsoft Graph и отдельные права PostgreSQL; `EMAIL_DELIVERY_ENABLED=false` по умолчанию. Внешняя отправка **at-least-once**: outbox исключает дублирование намерений при replay, но при потерянном подтверждении Gateway/Graph возможно повторное внешнее сообщение. Exactly-once для такой границы не заявляется.
 
 ## 7. Frontend: скорость не меняет доверие
 
@@ -74,9 +85,9 @@ React access shell появляется без ожидания загрузки
 
 ## 8. Ingress и сетевое доверие
 
-В текущем исходном `frontend/nginx.conf` разделены недоверенный TCP `:8080` и доверенный Unix `/run/dc-inventory/ingress.sock`. На TCP Nginx не принимает чужие IP/proto headers как истину. На Unix использует `set_real_ip_from unix:` и `real_ip_header CF-Connecting-IP`, нормализует адрес для per-client rate limit и передаёт backend HTTPS-схему. Доверие к Unix-входу требует ограниченного host-каталога и проверенных UID/GID; права только самого socket недостаточны.
+В production release `593ddec0c9100b0df2eafe4f324c7bb600d75cba` web-контейнер не публикует TCP-порт на host и состоит только в `app_net`. Host Nginx терминирует публичный TLS и проксирует приложение через защищённый host Unix socket `/var/lib/dc-inventory-ingress/ingress.sock`; внутри web используется Unix ingress Nginx. Direct ingress не доверяет произвольному `CF-Connecting-IP` как клиентскому адресу.
 
-По последней документированной production-проверке Cloudflare Tunnel всё ещё направлен на `http://localhost:8080`. Развёртывание нового web-образа с этим старым origin запрещено: клиенты могут разделить один rate-limit bucket. CP-07 production migration остаётся открытой; совместное переключение, реальные права и rollback описаны в [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md).
+Cloudflare Tunnel больше не является пользовательским ingress. Он выделен только под Telegram webhook: route `telegram-webhook.spik-inventory.ru/api/telegram/webhook` ведёт к `https://localhost:443`, с `HTTP Host Header=app.spik-inventory.ru` и TLS `Origin Server Name=app.spik-inventory.ru`; unmatched routes закрываются fallback 404. Сервис `cloudflared` работает отдельным системным пользователем. CP-07 production migration закрыта фактической приёмкой; исторический переход и rollback-контекст сохранены в [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md).
 
 ## 9. Безопасность данных, provenance и восстановление
 
@@ -84,4 +95,4 @@ React access shell появляется без ожидания загрузки
 
 Initial production inventory был выполнен один раз через `app.bootstrap.production_inventory`: внешний workbook, closed gate, пустой Warehouse domain, существующий APPROVED ADMIN, одна транзакция создания локации и opening RECEIPT, контроль counts и zero-drift до COMMIT. Повторный bootstrap запрещён. Обычная граница — `REAL_INVENTORY_MUTATIONS_ENABLED`. Production default остаётся `false`.
 
-Восстановление проводится по manifest, проверенному dump и точному application artifact в изолированной БД. SQL сверки должен соответствовать restored schema и извлекаться из exact backend image backup, а не из произвольно более нового checkout. CP-11 real S3 rehearsal, права БД CP-09, provenance CP-10 и реальная delivery CP-08 требуют отдельных production-подтверждений. Текущий source head — `b0c1d2e3f4a5`, последний документированный production head — `c3d4e5f6a7b8`; изменение документации не меняет эту разницу. Статусы и доказательства — [AUDIT_0_12_REMEDIATION.md](AUDIT_0_12_REMEDIATION.md).
+Восстановление проводится по manifest, проверенному dump и точному application artifact в изолированной БД. SQL сверки должен соответствовать restored schema и извлекаться из exact backend image backup, а не из произвольно более нового checkout. Подтверждённый production release на 25.09.2026 — `593ddec0c9100b0df2eafe4f324c7bb600d75cba`, Alembic `b0c1d2e3f4a5`; release/runtime provenance, runtime DB roles, zero-drift reconciliation, post-deploy backup и real Telegram webhook acceptance прошли. Отдельные restore/email и финальные audit gates остаются самостоятельными задачами. Статусы и доказательства — [AUDIT_0_12_REMEDIATION.md](AUDIT_0_12_REMEDIATION.md).

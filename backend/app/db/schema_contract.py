@@ -61,6 +61,11 @@ CRITICAL_DB_TRIGGERS = (
     ),
     CriticalTrigger(
         "item_attribute_values",
+        "trg_item_attribute_values_validate_data_type",
+        "validate_item_attribute_value_data_type",
+    ),
+    CriticalTrigger(
+        "item_attribute_values",
         "trg_item_attribute_values_required_attributes",
         "enforce_item_attribute_required_completeness",
         True,

@@ -1,6 +1,6 @@
 # CP-07 — переключение Cloudflare Tunnel на доверенный Unix-вход Nginx
 
-**Состояние на 19.09.2026: локальная реализация и проверки выполнены; переключение production — OPEN.** Этот документ описывает требования к отдельному согласованному change window, а не разрешает выполнить его во время правки документации. Общий порядок выпуска и восстановления: [DEPLOYMENT.md](DEPLOYMENT.md) и [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md).
+**Состояние на 25.09.2026: production migration — CLOSED / PASS.** Release `593ddec0c9100b0df2eafe4f324c7bb600d75cba` развернут и принят. Пользовательский ingress переведён на direct HTTPS через host Nginx и Unix socket; Cloudflare Tunnel больше не обслуживает пользовательский `app.spik-inventory.ru` и используется только для входящего Telegram webhook. Разделы 1–7 ниже сохранены как исторический план и evidence перехода; фактическая конечная схема описана в разделе 8. Общий порядок выпуска и восстановления: [DEPLOYMENT.md](DEPLOYMENT.md) и [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md).
 
 ## 1. Какой дефект устраняем
 
@@ -90,3 +90,39 @@ UID/GID каталога остались `0:0`. Этот механизм не�
 версией cloudflared и работоспособность обратного переключения.
 
 До выполнения этих условий CP-07 остаётся OPEN.
+
+
+## 8. Production result, 25.09.2026
+
+Фактическая принятая схема отличается от первоначально планировавшегося варианта «Cloudflare Tunnel → Unix socket напрямую»:
+
+- `app.spik-inventory.ru` — direct public ingress; host Nginx терминирует TLS и проксирует в `/var/lib/dc-inventory-ingress/ingress.sock`;
+- production web не имеет host TCP bindings и состоит только в `app_net`;
+- `cloudflared` не является входом для пользовательского Mini App;
+- отдельный hostname `telegram-webhook.spik-inventory.ru` опубликован через Tunnel `dc-inventory-prod` только для пути `/api/telegram/webhook`;
+- Tunnel origin: `https://localhost:443`;
+- origin settings: `HTTP Host Header=app.spik-inventory.ru`, `Origin Server Name=app.spik-inventory.ru`, TLS certificate verification включена;
+- Cloudflare Access на webhook не используется; unmatched Tunnel routes закрываются `http_status:404`;
+- `cloudflared` работает отдельным системным пользователем; `/etc/cloudflared` имеет ограниченный групповой доступ, token-файл читается сервисом и не хранится в Git.
+
+Production acceptance:
+
+```text
+PRODUCTION_REVISION=593ddec0c9100b0df2eafe4f324c7bb600d75cba
+ALEMBIC_HEAD=b0c1d2e3f4a5
+RELEASE_RUNTIME_MATCH=PASS
+CP_R7_POST_DEPLOY_ACCEPTANCE=PASS
+CP_R7_POST_DEPLOY_BACKUP=PASS
+```
+
+После восстановления Telegram Tunnel входящий webhook был переключён с `https://app.spik-inventory.ru/api/telegram/webhook` на `https://telegram-webhook.spik-inventory.ru/api/telegram/webhook` с `drop_pending_updates=false`. Накопившаяся очередь уменьшилась с 9 до 0; updates `472023532..472023540` были приняты и обработаны, новые `sendPhoto`/`deleteMessage` завершились `SENT`, `last_error` после переключения отсутствовал. Реальный Telegram/Mini App smoke подтверждён в CP-17.
+
+### Эксплуатационное правило
+
+Не возвращать `app.spik-inventory.ru` за Tunnel без отдельного архитектурного решения. Текущая граница намеренно разделяет:
+
+1. пользовательский Mini App/browser traffic — direct ingress;
+2. Telegram inbound webhook — dedicated Cloudflare Tunnel hostname;
+3. Telegram outbound delivery — Cloudflare Worker Gateway.
+
+Изменение любого из этих путей требует отдельной проверки health, webhook secret, TLS/SNI, rollback и real Telegram smoke.

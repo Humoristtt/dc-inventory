@@ -12,6 +12,7 @@ from tests.migration_helpers import alembic
 HEAD = "f8a9b0c1d2e3"
 CURRENT_HEAD = "c1d2e3f4a5b6"
 PREVIOUS = "a2b3c4d5e6f7"
+WAREHOUSE_V2 = "b3c4d5e6f7a8"
 pytestmark = pytest.mark.asyncio
 
 
@@ -254,6 +255,120 @@ async def test_upgrade_refuses_populated_legacy_domain(
     async with engine.connect() as db:
         assert await db.scalar(text("SELECT version_num FROM alembic_version")) == PREVIOUS
         assert await db.scalar(text("SELECT to_regclass('inventory_units')")) is not None
+    await engine.dispose()
+
+
+async def test_warehouse_v2_upgrade_refuses_modified_legacy_attribute(
+    migration_database: str,
+) -> None:
+    url = migration_database
+    alembic(url, "upgrade", PREVIOUS)
+    engine = create_async_engine(url)
+
+    async with engine.begin() as db:
+        updated = await db.scalar(
+            text(
+                """
+                UPDATE category_attributes
+                SET label = label || ' CP18 drift'
+                WHERE id = (
+                    SELECT ca.id
+                    FROM category_attributes ca
+                    JOIN categories c
+                      ON c.id = ca.category_id
+                    WHERE c.key = 'sfp'
+                    ORDER BY ca.sort_order, ca.id
+                    LIMIT 1
+                )
+                RETURNING label
+                """
+            )
+        )
+        assert updated is not None
+        assert updated.endswith("CP18 drift")
+
+    output = alembic(
+        url,
+        "upgrade",
+        WAREHOUSE_V2,
+        success=False,
+    )
+    assert "legacy catalog configuration drift" in output
+
+    async with engine.connect() as db:
+        assert (
+            await db.scalar(
+                text("SELECT version_num FROM alembic_version")
+            )
+            == PREVIOUS
+        )
+        assert await db.scalar(
+            text(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM category_attributes
+                    WHERE label LIKE '%CP18 drift'
+                )
+                """
+            )
+        )
+
+    await engine.dispose()
+
+
+async def test_warehouse_v2_downgrade_refuses_modified_v2_attribute(
+    migration_database: str,
+) -> None:
+    url = migration_database
+    alembic(url, "upgrade", WAREHOUSE_V2)
+    engine = create_async_engine(url)
+
+    async with engine.begin() as db:
+        updated_id = await db.scalar(
+            text(
+                """
+                UPDATE category_attributes
+                SET label = label || ' CP18 drift'
+                WHERE id = (
+                    SELECT id
+                    FROM category_attributes
+                    ORDER BY id
+                    LIMIT 1
+                )
+                RETURNING id
+                """
+            )
+        )
+        assert updated_id is not None
+
+    output = alembic(
+        url,
+        "downgrade",
+        PREVIOUS,
+        success=False,
+    )
+    assert "downgrade refused: catalog configuration drift" in output
+
+    async with engine.connect() as db:
+        assert (
+            await db.scalar(
+                text("SELECT version_num FROM alembic_version")
+            )
+            == WAREHOUSE_V2
+        )
+        assert await db.scalar(
+            text(
+                """
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM category_attributes
+                    WHERE label LIKE '%CP18 drift'
+                )
+                """
+            )
+        )
+
     await engine.dispose()
 
 

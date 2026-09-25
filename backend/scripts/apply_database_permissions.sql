@@ -434,7 +434,9 @@ SELECT format(
 \gexec
 
 
--- Mutable current warehouse projections.
+-- Mutable locations remain application-managed. Warehouse projections are
+-- journal-derived: runtime can read them but may write only through the
+-- SECURITY DEFINER refresh function created by the schema migration.
 SELECT format(
     'GRANT SELECT, INSERT, UPDATE ON TABLE locations TO %I',
     :'runtime_user'
@@ -442,15 +444,15 @@ SELECT format(
 \gexec
 
 SELECT format(
-    'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE stock_balances TO %I',
+    'GRANT SELECT ON TABLE stock_balances, '
+    'user_item_custody_balances TO %I',
     :'runtime_user'
 )
 \gexec
 
-
 SELECT format(
-    'GRANT SELECT, INSERT, UPDATE, DELETE '
-    'ON TABLE user_item_custody_balances TO %I',
+    'GRANT EXECUTE ON FUNCTION '
+    'public.refresh_warehouse_projection(uuid, uuid) TO %I',
     :'runtime_user'
 )
 \gexec

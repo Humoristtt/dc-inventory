@@ -251,3 +251,116 @@ async def test_item_attribute_value_must_match_declared_data_type(
                 ),
                 {"value_id": str(value_id)},
             )
+
+
+async def test_item_attribute_enum_value_must_be_allowed(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    item_id = await create_item(db, cable_payload())
+    category_id = await db.scalar(
+        select(Category.id).where(
+            Category.key == "optical_patch_cord"
+        )
+    )
+    assert category_id is not None
+
+    attribute_id = uuid.uuid4()
+    await db.execute(
+        text(
+            """
+            INSERT INTO category_attributes (
+                id,
+                category_id,
+                key,
+                label,
+                data_type,
+                required,
+                allowed_values
+            )
+            VALUES (
+                CAST(:id AS uuid),
+                CAST(:category_id AS uuid),
+                :key,
+                :label,
+                'ENUM',
+                false,
+                CAST(:allowed_values AS jsonb)
+            )
+            """
+        ),
+        {
+            "id": str(attribute_id),
+            "category_id": str(category_id),
+            "key": f"cp18_enum_{uuid.uuid4().hex}",
+            "label": "CP18 enum",
+            "allowed_values": '["A", "B"]',
+        },
+    )
+    await db.flush()
+
+    with pytest.raises(DBAPIError):
+        async with db.begin_nested():
+            await db.execute(
+                text(
+                    """
+                    INSERT INTO item_attribute_values (
+                        id,
+                        item_id,
+                        category_attribute_id,
+                        category_id,
+                        enum_value
+                    )
+                    VALUES (
+                        CAST(:id AS uuid),
+                        CAST(:item_id AS uuid),
+                        CAST(:attribute_id AS uuid),
+                        CAST(:category_id AS uuid),
+                        'C'
+                    )
+                    """
+                ),
+                {
+                    "id": str(uuid.uuid4()),
+                    "item_id": str(item_id),
+                    "attribute_id": str(attribute_id),
+                    "category_id": str(category_id),
+                },
+            )
+
+
+async def test_category_attribute_type_change_rejects_existing_values(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    item_id = await create_item(db, cable_payload())
+
+    attribute_id = await db.scalar(
+        select(CategoryAttribute.id)
+        .join(
+            Category,
+            Category.id == CategoryAttribute.category_id,
+        )
+        .where(
+            Category.key == "optical_patch_cord",
+            CategoryAttribute.key == "connector_a",
+        )
+    )
+    assert attribute_id is not None
+
+    with pytest.raises(DBAPIError):
+        async with db.begin_nested():
+            await db.execute(
+                text(
+                    """
+                    UPDATE category_attributes
+                    SET data_type = 'ENUM',
+                        allowed_values = '["OTHER"]'::jsonb
+                    WHERE id = CAST(:attribute_id AS uuid)
+                    """
+                ),
+                {"attribute_id": str(attribute_id)},
+            )
+            await db.execute(
+                text("SET CONSTRAINTS ALL IMMEDIATE")
+            )

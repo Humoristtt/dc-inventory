@@ -760,6 +760,23 @@ jobs:
 
           test "$privilege_matrix" = "t|t|t|f|f|f|f|t|f|t|f|t|f"
 
+          for statement in \
+            "UPDATE stock_balances SET quantity = quantity WHERE false" \
+            "DELETE FROM stock_balances WHERE false" \
+            "UPDATE user_item_custody_balances SET quantity = quantity WHERE false" \
+            "DELETE FROM user_item_custody_balances WHERE false"
+          do
+            if runtime_psql -c "$statement" \
+              >/tmp/runtime-projection-denied.log 2>&1
+            then
+              echo "unexpected direct projection DML: $statement"
+              exit 1
+            fi
+
+            grep -qi 'permission denied' \
+              /tmp/runtime-projection-denied.log
+          done
+
           outbox_update_columns="$(
             owner_psql -At -c "
               SELECT string_agg(

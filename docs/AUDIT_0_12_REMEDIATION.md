@@ -352,7 +352,7 @@ Further optimization requires production-representative measurements.
 
 ### CP-07 — Frontend architecture / HTTP hardening
 
-Status: `OPEN`
+Status: `CLOSED` — production acceptance 25.09.2026
 
 Frontend:
 - Исправления сохранены в коммите `d22301cc3fb08a3a6e1bffaff2ac31b9cac178e2`.
@@ -368,15 +368,21 @@ HTTP:
 - Передача нормализованных IP и схемы в backend — PASS.
 - Доступ к сокету: посторонний пользователь отклонён, разрешённая группа допущена — PASS.
 
-Ограничения:
+Исторические ограничения локального этапа:
 - Первоначальный тест выявил доступность сокета `0666` через каталог `0755`.
 - Защита проверена после установки прав каталога `0750`.
-- Фактические UID/GID, права bind mount и доступ пользователя `cloudflared` на production не проверены.
-- Production по-прежнему использует Tunnel origin `http://localhost:8080`.
-- Новый web-образ нельзя разворачивать с прежним TCP-маршрутом Tunnel: публичные клиенты могут разделить один rate-limit bucket.
+- Старый production Tunnel origin `http://localhost:8080` был признан несовместимым с новым web trust model.
 
-Локальная реализация проверена. Production migration остаётся OPEN.
-Процедура и результаты: `docs/CP07_HTTP_SOCKET_MIGRATION.md`.
+Production evidence, 25.09.2026:
+- release/runtime `593ddec0c9100b0df2eafe4f324c7bb600d75cba` принят;
+- production web не имеет host TCP bindings и состоит только в `app_net`;
+- пользовательский `app.spik-inventory.ru` обслуживается напрямую через host Nginx → `/var/lib/dc-inventory-ingress/ingress.sock`;
+- Cloudflare Tunnel исключён из пользовательского ingress и выделен под `telegram-webhook.spik-inventory.ru/api/telegram/webhook`;
+- `cloudflared` работает отдельным системным пользователем; service/token permissions проверены;
+- host ingress verifier, readiness и release/runtime provenance — PASS;
+- post-deploy off-VM backup — PASS.
+
+Процедура, исторический план и конечная схема: `docs/CP07_HTTP_SOCKET_MIGRATION.md`.
 
 ### CP-08 — Async outbox / email / Telegram launch
 
@@ -615,13 +621,31 @@ cloudflared, cutover/rollback и эксплуатационная приёмка
 
 ### CP-16 — Controlled production deployment
 
-Status: `OPEN`
+Status: `CLOSED` — production release accepted 25.09.2026.
+
+Evidence:
+- production checkout/runtime: `593ddec0c9100b0df2eafe4f324c7bb600d75cba`;
+- Alembic: `b0c1d2e3f4a5`;
+- immutable release/runtime provenance match — PASS;
+- migrate and db-permissions — exit 0;
+- runtime PostgreSQL roles are LOGIN least-privilege identities; legacy role LOGIN disabled, active legacy sessions 0;
+- reconciliation — zero drift;
+- host ingress/readiness — PASS;
+- post-deploy off-VM backup — PASS;
+- `REAL_INVENTORY_MUTATIONS_ENABLED=false`, `EMAIL_DELIVERY_ENABLED=false` preserved.
 
 ### CP-17 — Real Telegram Mini App acceptance
 
-Status: `OPEN`
+Status: `CLOSED` — real Telegram acceptance 25.09.2026.
 
-Manual acceptance must use the real Telegram Mini App after deployment.
+Evidence:
+- dedicated Tunnel route `telegram-webhook.spik-inventory.ru/api/telegram/webhook` externally reached backend; unauthenticated probe returned expected HTTP 401;
+- old direct webhook had `pending_update_count=9` and `last_error=Connection timed out`;
+- webhook switched with `drop_pending_updates=false`;
+- after switch: `pending_update_count=0`, `last_error=NONE`, allowed updates `message` and `callback_query`;
+- все 9 накопившихся updates были приняты и получили `processed_at`;
+- generated `sendPhoto`/`deleteMessage` outbox entries completed `SENT`;
+- real `/start`, Mini App authentication and requested access/application flow accepted by operator.
 
 ### CP-18 — Fresh independent Audit 0–12
 
@@ -631,11 +655,9 @@ This is a fresh independent audit after all remediation and acceptance work.
 
 ## Current next action
 
-Execute CP-15 — Three-pass pre-deployment audit.
+Execute CP-18 — fresh independent Audit 0–12, then perform final Markdown cleanup/crosswalk against the accepted production state.
 
-CP-14 isolated full-stack acceptance is closed.
-CP-15 must verify release readiness and remaining CP-07–CP-12
-production dependencies before CP-16 deployment approval.
+CP-16 and CP-17 are closed on production evidence from 25.09.2026. Remaining email/restore-specific gates must not be silently treated as closed by the Telegram acceptance.
 
 ---
 

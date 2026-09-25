@@ -148,7 +148,7 @@ require(
 )
 require(
     "README.md",
-    "Текущая post-cutover source-фаза:",
+    "CP-16 production deployment и CP-17 real Telegram acceptance закрыты.",
 )
 require(
     "docs/RBAC_PROCUREMENT.md",
@@ -425,15 +425,15 @@ require(
 )
 require(
     "docs/ROADMAP.md",
-    "Accepted production/runtime golden baseline перед новым feature cycle:",
+    "Accepted production/runtime baseline текущего remediation cycle:",
 )
 require(
     "docs/ROADMAP.md",
-    "- [x] required CI;",
+    "- [x] immutable release/runtime provenance match;",
 )
 require(
     "docs/ROADMAP.md",
-    "- [x] local/source/runtime golden-state verification.",
+    "- [x] real Telegram acceptance и post-deploy off-VM backup.",
 )
 
 

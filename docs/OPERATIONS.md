@@ -2,13 +2,15 @@
 
 Этот документ — рабочая карта сопровождения: какие сервисы ожидаются, как проверить их состояние и когда остановить опасную операцию. Пошаговый выпуск выполняется только по [DEPLOYMENT.md](DEPLOYMENT.md), изолированное восстановление — по [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md), правила склада — по [WAREHOUSE_DOMAIN.md](WAREHOUSE_DOMAIN.md). Записи ниже **не означают**, что сервер проверен в момент чтения файла.
 
-Актуализация документа: 19.09.2026. Последняя документированная production-проверка checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`, Alembic `c3d4e5f6a7b8`; source head `b0c1d2e3f4a5` относится к более новой ветке, а не к запущенной БД. Перед CP-16 повторно сверить все значения и конфигурацию на VM.
+Актуализация документа: 25.09.2026. Подтверждённый production checkout/runtime — `593ddec0c9100b0df2eafe4f324c7bb600d75cba`, Alembic — `b0c1d2e3f4a5`. Post-deploy acceptance подтвердил совпадение release/runtime provenance, отдельные PostgreSQL runtime roles, zero-drift reconciliation и healthy ingress/readiness. Post-deploy off-VM backup также проверен.
 
 ```text
-ALEMBIC_HEAD=c3d4e5f6a7b8
-SOURCE_ALEMBIC_HEAD=b0c1d2e3f4a5
-RBAC_CUTOVER=PASS
-PROCUREMENT_DEPLOYMENT=PASS
+PRODUCTION_REVISION=593ddec0c9100b0df2eafe4f324c7bb600d75cba
+ALEMBIC_HEAD=b0c1d2e3f4a5
+RELEASE_RUNTIME_MATCH=PASS
+CP_R7_POST_DEPLOY_ACCEPTANCE=PASS
+CP_R7_POST_DEPLOY_BACKUP=PASS
+CP17_TELEGRAM_WEBHOOK=PASS
 REAL_INVENTORY_MUTATIONS_ENABLED=false
 ```
 
@@ -16,7 +18,7 @@ REAL_INVENTORY_MUTATIONS_ENABLED=false
 
 VM не является development environment. Изменения runtime требуют approved SHA, CI/review, immutable images, verified off-VM backup, maintenance plan, критерии отката и явное разрешение. Source-only синхронизация docs/host-side `ops/` не запускает контейнеры и допускается без rebuild **только** при неизменных Docker build contexts/application runtime source; host scripts проверяем отдельно. Не принимать Git HEAD за фактическую версию запущенного образа.
 
-Критичный открытый пункт CP-07: последний подтверждённый Tunnel origin — `http://localhost:8080`. Новый web image с изменённой моделью TCP доверия нельзя разворачивать на старый Tunnel origin: разные клиенты могут делить один rate-limit bucket. Нужны согласованная миграция web/Tunnel, фактические UID/GID, защищённый host-каталог Unix-сокета и рабочий rollback. Исходный `compose.yaml` ещё не содержит готового bind mount сокета, поэтому локальный `nginx -t` не подтверждает production готовность. Полный план — [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md).
+CP-07 production cutover завершён. Пользовательский HTTPS ingress больше не зависит от Cloudflare Tunnel: `app.spik-inventory.ru` приходит напрямую на host Nginx, который терминирует TLS и проксирует запросы в web через защищённый Unix socket `/var/lib/dc-inventory-ingress/ingress.sock`. Production web не имеет host TCP bindings и не подключён к внешней `ingress_net`. Cloudflare Tunnel сохранён как отдельный транспорт только для входящего Telegram webhook; подробности и rollback-контекст — в [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md).
 
 ## 2. Какие контейнеры и состояния ожидаем
 
@@ -31,7 +33,7 @@ VM не является development environment. Изменения runtime т�
 | Maintenance worker | Работает, heartbeat актуален | Одна успешная bounded retention iteration. |
 | Email worker | Необязателен | Только при утверждённом профиле `email` и `EMAIL_DELIVERY_ENABLED=true`. |
 
-В текущем исходном Compose PostgreSQL и backend не имеют host-published ports; web публикует `127.0.0.1:${WEB_PORT:-8080}`. Проверить фактические порты после выпуска. `/healthz`, `/api/health/live`, `/api/health/ready` должны отвечать HTTP 200 в здоровом состоянии. При недоступной БД `live` остаётся доступным (200), `ready` возвращает 503; после восстановления БД `ready` должен вернуться к 200 без рестарта backend. Нельзя считать зелёный `/healthz` доказательством корректности БД или outbox.
+В принятом production overlay PostgreSQL, backend и web не имеют host-published application ports. Публичный HTTPS принимает host Nginx и передаёт запросы в web через `/var/lib/dc-inventory-ingress/ingress.sock`; production web состоит только в `app_net`. `/healthz`, `/api/health/live`, `/api/health/ready` должны отвечать HTTP 200 в здоровом состоянии. При недоступной БД `live` остаётся доступным (200), `ready` возвращает 503; после восстановления БД `ready` должен вернуться к 200 без рестарта backend. Нельзя считать зелёный `/healthz` доказательством корректности БД или outbox.
 
 Сервисные Docker image revisions проверяем непосредственно по immutable image IDs и label `org.opencontainers.image.revision`; сравниваем с approved release manifest, а не только со строкой Git HEAD на VM. Исторический rollback image не является текущим runtime только потому, что его tag остался в Docker daemon.
 
@@ -60,7 +62,7 @@ VM не является development environment. Изменения runtime т�
 
 ## 5. Telegram: вход и отправка
 
-Входящий путь: Telegram → Cloudflare/Tunnel → Nginx → FastAPI webhook → PostgreSQL dedupe входящего update. Исходящий путь: транзакционный notification outbox → Telegram worker → HTTPS Cloudflare Worker Gateway → Telegram Bot API. Production VM не требует прямого выхода к `api.telegram.org:443`; worker не получает bot token. Для Gateway установлен секрет и разрешённый набор методов; потеря доступности Gateway не откатывает уже зафиксированное складское или закупочное действие.
+Входящий путь разделён с пользовательским ingress: Telegram → `telegram-webhook.spik-inventory.ru/api/telegram/webhook` → Cloudflare edge → dedicated Tunnel → `cloudflared` → `https://localhost:443` → host Nginx → Unix socket → FastAPI webhook → PostgreSQL dedupe. Tunnel route задаёт `HTTP Host Header` и TLS `Origin Server Name` как `app.spik-inventory.ru`; интерактивный Cloudflare Access на webhook не используется. `cloudflared` работает отдельным системным пользователем; каталог `/etc/cloudflared` ограничен группой сервиса, token-файл не хранится в Git. Исходящий путь: транзакционный notification outbox → Telegram worker → HTTPS Cloudflare Worker Gateway → Telegram Bot API. Production VM не требует прямого выхода к `api.telegram.org:443`; worker не получает bot token.
 
 После изменений runtime проверить настоящим Telegram клиентом `/start`: входящее сообщение удаляется best-effort, новое брендированное приветствие отправляется как `sendPhoto` с caption и WebApp button, публичный `/telegram/start-welcome.png` доступен. Проверить request → ADMIN notification → approve/reject → user notification → APPROVED login, включая фактические роли. Локальный Playwright с синтетически подписанным `initData` **не** заменяет CP-17 real Telegram acceptance.
 
@@ -99,4 +101,4 @@ REAL_INVENTORY_MUTATIONS_ENABLED=false
 
 Сначала установить точный контур и изменение: baseline image/HEAD, Alembic, health, workers и время последнего успешного backup. При проблемах авторизации проверить серверную сессию и роли; при сообщении об остатке — read-only reconciliation и журнал; при `DEAD` — lease/attempts и состояние внешнего Gateway; при ошибке готовности БД — PostgreSQL и сети. Не исправлять проблему изменением production `.env`, прямым SQL UPDATE проекций или открытием mutation gate без отдельного решения.
 
-Если необходимы миграции, смена Cloudflare origin, ротация OWNER или восстановление, остановить рутинную диагностику и перейти к соответствующему согласованному runbook. CP-07–12 остаются открытыми до фактических production evidence, независимо от локальных тестов и этой документации. Статусы и доказательства — в [AUDIT_0_12_REMEDIATION.md](AUDIT_0_12_REMEDIATION.md).
+Если необходимы миграции, изменение direct ingress/Cloudflare webhook route, ротация OWNER или восстановление, остановить рутинную диагностику и перейти к соответствующему согласованному runbook. По состоянию на 25.09.2026 CP-07 production ingress и CP-17 real Telegram acceptance имеют фактическое production evidence; отдельные email/restore и финальные audit gates отслеживаются в [AUDIT_0_12_REMEDIATION.md](AUDIT_0_12_REMEDIATION.md).

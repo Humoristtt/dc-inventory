@@ -1,13 +1,14 @@
 # MASTER REMEDIATION — рабочий план завершения dc-inventory
 
-**Дата сверки:** 20.09.2026. **Назначение:** единый рабочий план по результатам AUDIT 0–12 и последующей программе CP-00–18. Этот документ заменяет *порядок выполнения* из исходного MASTER REMEDIATION, но не заменяет исходный PDF как свидетельство первоначальных находок. Полную историю аудитов и промежуточные журналы разрешено удалить из рабочего дерева только на финальном этапе, после переноса необходимых требований и проверки зависимостей.
+**Дата сверки:** 25.09.2026. **Назначение:** единый рабочий план по результатам AUDIT 0–12 и последующей программе CP-00–18. Этот документ заменяет *порядок выполнения* из исходного MASTER REMEDIATION, но не заменяет исходный PDF как свидетельство первоначальных находок. Полную историю аудитов и промежуточные журналы разрешено удалить из рабочего дерева только на финальном этапе, после переноса необходимых требований и проверки зависимостей.
 
 ## 1. Источники, факты и граница достоверности
 
 - Исходный аудит: PDF «Аудит 11.35.25(1).pdf» и предоставленный исходный мастер-план, baseline `22ca1fdb9b4ab2ab813fba2ca531ca90d248cf35`, tree `43dbafafd826520802131371fab1305aeadfe210`. В исходном плане указаны 71 ID AUDIT 0–11, включая один отклонённый false positive (`A0-P2-002`) и одно закрытое наблюдение без исправления (`A2-P3-007`). AUDIT 12 содержит 14 корреляций, **не 14 дополнительных независимых ошибок**. Считать нагрузку по корневым причинам, не по количеству ID.
-- Последний **подтверждённый пользователем локальный** checkout: `remediation/audit-0-12`, `3c89959de0dab6ffc556d0babe05e657a875e5fd`, чистый worktree. Коммит реализует отдельную offline-проверку утверждённого `release.json` против runtime provenance; локально 9 тестов, docs freshness и docs structure — PASS.
-- **Наблюдение GitHub API на 20.09.2026:** удалённая `remediation/audit-0-12` указывает на `fa3aafd51ddb819b53a2c3c4c4ca7b1e7edd7c7f`. Это НЕ подтверждает, что локальный HEAD равен remote. Сопоставить после `git fetch` на Mac; не удалять локальные коммиты.
-- Source Alembic head по локальной проверке: `a9c0d1e2f3a4`; 26 ревизий, линейный граф. От последней **документированной**, но не перепроверенной production-ревизии `c3d4e5f6a7b8` — шесть source-ревизий. Фактические production checkout/image IDs/Alembic/данные/backup/CI для нового HEAD **не подтверждены**.
+- GitHub `main` и принятый production release: `593ddec0c9100b0df2eafe4f324c7bb600d75cba` (merge PR #81).
+- Production Alembic head: `b0c1d2e3f4a5`; release/runtime provenance match, DB role cutover, zero-drift reconciliation, host ingress и post-deploy backup — PASS.
+- CP-17 real Telegram acceptance завершён: dedicated webhook Tunnel работает, накопившаяся очередь доставлена без drop, Mini App/auth/access flow принят оператором.
+- Локального checkout `dc-inventory` на Mac на момент сверки нет; документационная ветка ведётся напрямую через GitHub API. Это не меняет production runtime.
 - Точные сопоставления 71 ID должны сверяться с оригинальным аудитом и crosswalk. Исходный план упоминает `MASTER_REMEDIATION_CROSSWALK.csv`, но его наличие именно в текущем checkout этим документом не подтверждается. Не объявлять все ID закрытыми лишь по закрытию соответствующего CP.
 
 **Принцип:** локальное `CLOSED` означает проверку исправления на исходниках и изолированной БД, но не развёртывание в production. Не заменять фактическое наблюдение production предположением.
@@ -16,7 +17,7 @@
 
 **Цель:** завершить исправления первоначальных аудитов, подтвердить production-зависимости, выпустить согласованный immutable release, проверить реальную Telegram Mini App, провести независимый повторный аудит AUDIT 0–12, затем очистить документацию.
 
-Ограничения до согласованного release: не менять production, S3, Cloudflare, Telegram webhook, реальные флаги, секреты и GitHub без отдельного разрешения. Разработка — на локальной ветке Mac после проверки HEAD/worktree. Не выполнять `reset --hard`, force-push, удаление веток, коммит, push или deploy автоматически. Не раскрывать `.env`, пароль, токен, dump и персональные данные. Тестовое окружение: `REAL_INVENTORY_MUTATIONS_ENABLED=false`, `EMAIL_DELIVERY_ENABLED=false`. Узкие изменения + адресные отрицательные тесты; полный набор CI после интеграции, а не после каждой строки.
+Production release и Telegram ingress change уже выполнены и приняты. До следующего change не менять production, S3, Cloudflare route, Telegram webhook, реальные флаги или секреты без отдельного разрешения. Не выполнять force-push/rewrite истории и не раскрывать `.env`, пароли, токены, dump или персональные данные. `REAL_INVENTORY_MUTATIONS_ENABLED=false` и `EMAIL_DELIVERY_ENABLED=false` остаются production baseline до отдельного решения.
 
 **До DDL и любых действий production:** approved SHA и образы, фактическая версия Alembic, совместимость schema/app, свежая проверенная off-VM backup, восстанавливаемый rollback artifact, maintenance window, критерии STOP и ответственные. Никакой автоматической переписи исторических immutable-данных при обнаружении несовместимостей.
 
@@ -27,47 +28,38 @@
 | Пакет исходного плана | Связанные ID / требование | Подтверждённый прогресс | Остаток |
 |---|---|---|---|
 | R0 — исходное состояние | Audit baseline, Git и production boundary | Локальный HEAD/worktree и граф миграций зафиксированы | Сопоставить Mac↔remote; live baseline только по разрешению |
-| R1 — OWNER-only | `A4-P1-001`, `A6-P1-001`, `A10-P2-002`, `X12-01` | CP-03 `CLOSED` локально: общий HTTP/Telegram guard, отрицательные PostgreSQL-тесты | Проверить перечень ID; реальная приёмка CP-17 |
-| R2 — Telegram grants + CI oracle | `A4-P2-002`, `A6-P2-002`, `A10-P3-006`, `X12-02` | CP-02/09: локальные права и транзакционная процедура проверялись | Фактические production grants и legacy sessions — CP-09/16; сопоставить CI oracle с ID |
+| R1 — OWNER-only | `A4-P1-001`, `A6-P1-001`, `A10-P2-002`, `X12-01` | CP-03 локально закрыт; CP-17 real Telegram acceptance — PASS | Финальная ID-by-ID сверка в CP-18 |
+| R2 — Telegram grants + CI oracle | `A4-P2-002`, `A6-P2-002`, `A10-P3-006`, `X12-02` | Production runtime roles проверены; legacy LOGIN=false, active sessions=0 | Финальная ID-by-ID сверка в CP-18 |
 | R3 — placeholders и секреты | `A4-P2-003`; `A4-P3-004` — исследование | Локальные конфигурационные тесты есть; полного ID-by-ID подтверждения здесь нет | Сверить валидаторы и негативные тесты; реальные секреты не печатать; replay — только после threat model |
 | R4 — инварианты PostgreSQL | `A2-P2-001/003/004/005/008`, `A6-P2-006`, `X12-05/06` | CP-02/04 локально `CLOSED`; source head включает новые DB constraints | Сверить каждый ID с текущим DDL/PG tests; preflight реальных данных и compatibility — CP-15/16 |
 | R5 — guard до исторической b3 | `A2-P2-002` | Нельзя считать закрытым лишь потому, что source head достиг `a9...` | Проверить текущий pre-migration deployment guard и применимость b3 к фактическому production head |
 | R6 — Procurement / idempotency | `A3-P2-001/002`, `A1-P2-001/002`, `A6-P2-003/004/008`, `A11-P3-005`, `A1-P3-004` | CP-04 и CP-05 локально `CLOSED`; procurement-семантика и retry проверялись | Сверка ID/отрицательных матриц; production schema и реальные integrations |
-| R7 — frontend | `A5-P2-001/002/003`, `A5-P3-004/006`, `A6-P2-007`, `A11-P2-004`, `A11-P3-007` | CP-05 локально `CLOSED`; CP-07 frontend тесты пройдены | Production web/Tunnel socket cutover и браузерная приёмка — CP-07/16/17 |
+| R7 — frontend | `A5-P2-001/002/003`, `A5-P3-004/006`, `A6-P2-007`, `A11-P2-004`, `A11-P3-007` | CP-07 production ingress, CP-16 deployment и CP-17 real Mini App — PASS | Финальная ID-by-ID сверка в CP-18 |
 | R8 — производительность | `A1-P2-003`, `A7-P2-001/002`, `A1-P3-005`, `A6-P3-010`, `A11-P2-003` | CP-06 локально `CLOSED` по зафиксированным fixtures/query-count | Не обещать production p95; дополнительные индексы/параллельность — только после замеров |
-| R9 — CI / release | `A0-P2-003`, `A0-P3-004`, `A8-P2-001/002`, `A8-P3-003/004`, `A10-P3-007` | CP-10 локальные контракты; коммит `3c89959` добавляет image ID/revision verifier | Подтвердить полный CI на approved SHA, immutable build/runtime в CP-16; проверить остаток ID |
+| R9 — CI / release | `A0-P2-003`, `A0-P3-004`, `A8-P2-001/002`, `A8-P3-003/004`, `A10-P3-007` | Immutable release `593ddec...` построен; release/runtime verifier — PASS; production provenance принят | Финальная ID-by-ID сверка в CP-18 |
 | R10 — backup / S3 / restore | `A9-P2-001/002/003/004/005`, `A9-P3-006/007`, `A6-P3-009`, `A10-P2-003` | CP-11 локальные валидаторы и synthetic restore | Реальный S3/backup/recovery/least-privilege rehearsal — отдельное разрешение и CP-11/16 |
-| R11 — интеграция | `A6-P2-005/006/007/008`, `A5-P3-005` | CP-14 `CLOSED`: isolated PG+API+браузер, 540 backend / 150 frontend / 2 Playwright | Повторить требуемые CI gates на итоговом SHA, проверить real Telegram в CP-17; flaky не закрывать простым retry |
+| R11 — интеграция | `A6-P2-005/006/007/008`, `A5-P3-005` | CP-14 isolated full-stack и CP-17 real Telegram/Mini App — PASS | Финальная независимая перепроверка в CP-18 |
 | R12 — документация и необязательные исследования | `A0-P3-005`, `A10-*`, `A11-*`, `A2-P3-006`, `A4-P3-004`, `A7-P3-003` | CP-13 локально закрыт (структура: 23 tracked Markdown / 22 unique targets); связанные документы обновлялись по мере фиксов | Проверить coverage каждого ID; общая чистка после CP-18; не внедрять speculative refactor без данных |
 
-**Известные ограничения:** `CP-07`–`CP-12` открыты из-за эксплуатационной приёмки; их локальные исправления не надо переписывать без воспроизведённого дефекта. `CP-00`–`CP-06` закрыты локально, `CP-13` и `CP-14` закрыты локально, `CP-15` в работе, `CP-16`–`CP-18` открыты. Конкретная дата и полное соответствие каждого Audit ID требуют финального crosswalk/регрессионного отчёта.
+**Текущее состояние:** CP-16 production deployment и CP-17 real Telegram acceptance закрыты. CP-07 production ingress также принят. Email остаётся выключенным; отдельный restore/rehearsal не следует считать закрытым только по успешному post-deploy backup. Следующий обязательный этап — CP-18 independent Audit 0–12 и финальный crosswalk.
 
 ## 4. Выполняемый путь — только оставшиеся этапы
 
 | Порядок | Этап | Выход и строгий критерий |
 |---|---|---|
-| 0 | **Синхронизация Git без потерь** | `git fetch`; сравнить commit ancestry и counts; не обнулять локальный HEAD. Если remote впереди — ff-only после clean check. Если local впереди — не откатывать исправления, сначала принять решение о публикации. Если divergence — остановиться и разобрать diff. |
-| 1 | **CP-15, проход 1: исходники/миграции/security** | Завершить ID-by-ID crosswalk, выделить не закрытые P1/P2, оценить DDL и production preflight. Известно: 26 Alembic rev, одна цепочка, шесть rev от *документированного* baseline. Граф PASS не доказывает качество данных или применимость миграций. |
-| 2 | **CP-15, проход 2: CI и release** | Однократный affected/required gate на итоговом SHA; immutable release manifest vs runtime verifier, оповещение о непроверенных/непрошедших тестах. GitHub CI возможен только после отдельно разрешённой публикации. |
-| 3 | **CP-15, проход 3: production readiness** | Список конкретных CP-07–12 gates, операторские preflight SQL без DDL, backout, socket/Tunnel и S3 prerequisites. `GO/NO-GO` не объявлять без evidence. |
-| 4 | **CP-16: approved production release** | Отдельное разрешение; фактические checkout/image/DB/grants, verified backup и rollback, migration stop conditions, совместный web/Tunnel cutover, контроль данных/health. |
-| 5 | **CP-17: real Telegram smoke** | Настоящая Mini App, авторизация/roles, каталог/склад/закупки, webhook/outbox/notification, независимые клиенты. Synthetic CP-14 не заменяет этот этап. |
-| 6 | **CP-18: новый независимый аудит 0–12** | Каждый раздел с датой, SHA, тестом и результатом. Не копировать старые PASS как новые. Исправить обнаруженные блокеры и перепроверить. |
-| 7 | **Финальная очистка Markdown** | Применить раздел 6, удалить исторические/аудиторские документы из *рабочего дерева* после переноса необходимых требований и проверки CI/ссылок. Оставить единый план разработки. |
+| 0 | **CP-15: pre-deployment audit** | `DONE` — release readiness доведена до утверждённого production change. |
+| 1 | **CP-16: approved production release** | `DONE` — `593ddec...`, Alembic `b0c1d2e3f4a5`, provenance/roles/reconciliation/health/backup PASS. |
+| 2 | **CP-17: real Telegram smoke** | `DONE` — dedicated webhook Tunnel, pending queue drain, real Mini App/auth/access acceptance PASS. |
+| 3 | **CP-18: новый независимый аудит 0–12** | `NEXT` — каждый раздел с датой, SHA, свежим evidence и результатом; старые PASS не копировать как новые. |
+| 4 | **Финальная очистка Markdown** | После CP-18: перенос актуальных требований, удаление устаревших audit/history документов, проверка ссылок/docs contracts/CI. |
 
 **Без новых критических ошибок это план примерно на 2–4 рабочих дня усилий**, а не обещанный срок: реальный production cutover, разрешения и восстановление могут занять больше. Оценка не учитывает неизвестные дополнительные дефекты.
 
-## 5. Ближайшая задача CP-15: миграционный preflight
+## 5. Ближайшая задача — CP-18 independent Audit 0–12
 
-Последний read-only `git grep` подтвердил guard в `f7a8b9c0d1e2` (`missing_required`, `ineligible_custody`), `f8b9c0d1e2f3` (`PG_UNICODE_FAST`, `duplicate_signatures`) и `a9c0d1e2f3a4` (`ACCESS EXCLUSIVE`, временный `DISABLE TRIGGER`, отказ при `unresolved`). Это подтверждает наличие кода, **не отсутствие ошибок в данных**.
+CP-18 выполняется как новый аудит уже принятого production состояния, а не как переписывание старых выводов. Baseline для проверки: source/main и production revision `593ddec0c9100b0df2eafe4f324c7bb600d75cba`, Alembic `b0c1d2e3f4a5`, `REAL_INVENTORY_MUTATIONS_ENABLED=false`, `EMAIL_DELIVERY_ENABLED=false`.
 
-Нужно в рамках одного предметного review:
-1. Сопоставить существующие негативные тесты guard с каждым фактическим условием и миграционным API. Имеется отдельная regression исторической identity, но один её PASS не доказывает все preflight-проверки.
-2. Проверить требования `PG_UNICODE_FAST` к реальной версии PostgreSQL и подготовить *только read-only* preflight дубликатов, обязательных атрибутов, custody и исторических позиций. Без пользовательского согласования не запускать запросы в production.
-3. Уточнить фактический production `alembic_version`, текущие образ/checkout и окно блокировки. Не применять все шесть миграций автоматически. При проблемах данных — `STOP`, согласование способа устранения, никаких silent updates.
-4. Записать покрытие ID и результат каждого test gate в едином CP-15 evidence с текущим SHA.
-
-После этой проверки переходить к security/CI. Не запускать повторно уже пройденные полные тесты без затронутого кода или изменения окружения.
+Обязательный порядок: заново проверить каждый Audit 0–12 по текущему коду и production evidence; отдельно проверить split ingress (direct user traffic + dedicated Telegram Tunnel), runtime DB privileges, release provenance, backup/recovery assumptions и real Telegram delivery; для каждого ID зафиксировать свежий PASS/FAIL/NOT-APPLICABLE с доказательством. Только после устранения новых блокеров переходить к финальной очистке Markdown.
 
 ## 6. Финальная политика документации — новое решение владельца проекта
 
@@ -85,4 +77,4 @@
 
 Для каждого подтверждённого нового дефекта: источник ID → доказательство текущего воспроизведения → минимальный patch → отрицательный и положительный тест → staged diff и clean state → отдельный явно разрешённый commit. Исключить повторную реализацию уже закрытого root cause. Никакой push/deploy только ради обновления плана.
 
-**Сейчас:** сначала безопасно `fetch` + `merge-base` + сравнение локального `3c89959` с удалённым `fa3aafd`. Следом разместить этот файл как `docs/MASTER_REMEDIATION_PLAN.md` в локальном репозитории, проверить diff и документы. Если локальный HEAD впереди — не делать `reset --hard` ради внешнего вида GitHub: это потеряет исправления, которых там ещё нет. Публикация в GitHub — отдельный согласованный шаг.
+**Сейчас:** выполнить CP-18 independent Audit 0–12 на текущем `main`/production baseline. Локального checkout на Mac нет; документационные изменения текущего шага ведутся отдельной GitHub-веткой и не меняют production runtime. После CP-18 — финальная Markdown-консолидация и удаление отработавших audit/history документов по разделу 6.

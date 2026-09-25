@@ -68,7 +68,7 @@ APP_REVISION="$REVISION" docker compose build backend postgres web
 
 CP-07 закрыт production-приёмкой 25.09.2026. Пользовательский `app.spik-inventory.ru` обслуживается напрямую: public HTTPS → host Nginx → `/var/lib/dc-inventory-ingress/ingress.sock` → web Nginx → backend. Production web не публикует TCP-порт и не зависит от внешней `ingress_net`.
 
-Cloudflare Tunnel `dc-inventory-prod` используется только для входящего Telegram webhook: `telegram-webhook.spik-inventory.ru/api/telegram/webhook` → `https://localhost:443` host Nginx. Route фиксирует `HTTP Host Header=app.spik-inventory.ru` и TLS `Origin Server Name=app.spik-inventory.ru`; TLS verification остаётся включённой, интерактивный Cloudflare Access для webhook не применяется, fallback закрыт 404.
+Выделенный Cloudflare Tunnel используется только для входящего Telegram webhook: `telegram-webhook.spik-inventory.ru/api/telegram/webhook` → `https://localhost:443` host Nginx. Route фиксирует `HTTP Host Header=app.spik-inventory.ru` и TLS `Origin Server Name=app.spik-inventory.ru`; TLS verification остаётся включённой, интерактивный Cloudflare Access для webhook не применяется, fallback закрыт 404.
 
 Будущий release обязан **сохранить эту границу**, если отдельным change request не утверждена новая архитектура. Проверить отсутствие host bindings у production web, доступность Unix socket, host TLS/health, состояние `cloudflared`, точный webhook route и real Telegram smoke. История перехода и rollback-контекст — в [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md).
 

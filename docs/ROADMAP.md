@@ -1,16 +1,16 @@
 # Состояние проекта и порядок дальнейших работ
 
-Документ фиксирует последовательность работ, а не заменяет технические требования или журнал проверок. Дата сверки: 19.09.2026. Текущий исходный код — ветка `remediation/audit-0-12` после коммита `38d1b19`. Для описания устройства системы используем [архитектуру](ARCHITECTURE.md), для технических подробностей исправлений — [журнал CP-00–18](AUDIT_0_12_REMEDIATION.md), для истории предыдущих выпусков — [HISTORY.md](HISTORY.md).
+Документ фиксирует последовательность работ, а не заменяет технические требования или журнал проверок. Дата сверки: 25.09.2026. Текущий `main` и принятый production release — `593ddec0c9100b0df2eafe4f324c7bb600d75cba`. Для описания устройства системы используем [архитектуру](ARCHITECTURE.md), для технических подробностей исправлений — [журнал CP-00–18](AUDIT_0_12_REMEDIATION.md), для истории предыдущих выпусков — [HISTORY.md](HISTORY.md).
 
 ## 1. Разделяем исходники и работающую систему
 
 | Контур | Подтверждённое состояние | Что означает |
 |---|---|---|
-| Исходный код | Source migration head `b0c1d2e3f4a5`; CP-14 закрыт, CP-15 открыт | Код, миграции и локальные проверки доступны в remediation-ветке, но это не свидетельство развёртывания. |
-| Production | Последняя документированная проверка checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`, Alembic `c3d4e5f6a7b8` | Фактический текущий SHA, схема, образы и конфигурация требуют новой проверки перед CP-16. |
+| Исходный код | `main` = `593ddec0c9100b0df2eafe4f324c7bb600d75cba`; source Alembic head `b0c1d2e3f4a5` | Документационные изменения после release не меняют runtime сами по себе. |
+| Production | Checkout/runtime `593ddec0c9100b0df2eafe4f324c7bb600d75cba`, Alembic `b0c1d2e3f4a5`; provenance/roles/reconciliation/ingress/readiness/backup PASS | Это подтверждённый baseline 25.09.2026, но не замена live-проверке перед будущим change. |
 | Складские изменения | `REAL_INVENTORY_MUTATIONS_ENABLED=false` по последнему production evidence | Обычные мутации закрыты. Ранее выполненный одноразовый импорт не означал снятие этой защиты. |
 
-Git push, изменение документации и синхронизация checkout не меняют запущенные контейнеры. Локальный PASS нельзя переносить на production. CP-16 требует отдельного разрешённого окна, резервной копии, планов отката и проверки конфигурации.
+Git push и изменение документации не меняют запущенные контейнеры. CP-16 и CP-17 уже завершены для указанного release; любой следующий production change снова требует отдельного разрешённого окна, свежей backup, rollback/forward-fix плана и проверки конфигурации.
 
 ## 2. Реализованная основа
 
@@ -40,7 +40,7 @@ Warehouse Domain V2 развёрнут и принят ранее. Initial boots
 - [x] При финальной технической приёмке создаётся один Warehouse RECEIPT в общей транзакции с завершением закупки.
 - [x] Локально проверены исправления идентичности закупочных позиций, пагинации, поиска и повторной отправки с постоянным `client_request_id`.
 - [x] CP-14: изолированный браузерный сценарий с реальными HTTP API и PostgreSQL, подписанным синтетическим Telegram `initData`, проверкой RBAC, склада, закупок и reconciliation.
-- [ ] Реальная приёмка актуального выпуска через Telegram Mini App после CP-16.
+- [x] Реальная приёмка актуального выпуска через Telegram Mini App после CP-16 — PASS 25.09.2026.
 - [ ] Включение и проверка Microsoft Graph email в production — только с утверждёнными секретами и отдельным профилем.
 
 В рамках CP-14 зафиксированы backend `540 passed, 1 skipped`, frontend `150 passed`, Playwright `2 passed`. SFP downgrade safety относится к отдельному CI gate. Эти результаты относятся к локальному изолированному контуру, не к production.
@@ -50,45 +50,47 @@ Warehouse Domain V2 развёрнут и принят ранее. Initial boots
 | Этап | Состояние | Следующее действие |
 |---|---|---|
 | CP-00–CP-06 | Закрытые локальные технические этапы по журналу | Не изменять без воспроизведённой регрессии. |
-| CP-07 | OPEN | Проверить права Unix socket, UID/GID и совместно переключить web/Tunnel в production. |
-| CP-08 | OPEN | Проверить реальные Telegram/Graph delivery, конфигурацию и worker lifecycle. |
-| CP-09 | OPEN | Выполнить контролируемое применение PostgreSQL permissions и проверить legacy sessions. |
-| CP-10 | OPEN | Подтвердить provenance реальных образов и release artifacts на целевом сервере. |
-| CP-11 | OPEN | Выполнить восстановление настоящей резервной копии и внешней конфигурации по runbook. |
-| CP-12 | OPEN | Завершить независимый обзор сопровождаемости и production acceptance. |
-| CP-13 | CLOSED — локальная проверка 20.09.2026 | 23 Markdown сверены; четыре документационных контракта PASS, исправления тестов зафиксированы в `7d43286`. Production acceptance не входит в закрытие. |
-| CP-14 | CLOSED | Изолированная full-stack приёмка пройдена, см. коммит `3f549d5`. |
-| CP-15 | OPEN, выполняется | Проверить исходники, документы, безопасность и эксплуатационные риски тремя проходами. |
-| CP-16 | OPEN | Выпуск только после согласования и закрытия предрелизных блокеров. |
-| CP-17 | OPEN | Ручная проверка настоящего Telegram Mini App после выпуска. |
-| CP-18 | OPEN | Новый независимый аудит двенадцати разделов по итоговому коду и документации. |
+| CP-07 | CLOSED | Production ingress принят: direct user ingress через host Nginx/Unix socket; Tunnel выделен только под Telegram webhook. |
+| CP-08 | PARTIAL | Telegram live delivery accepted; Microsoft Graph email остаётся выключенным и требует отдельной приёмки. |
+| CP-09 | CLOSED | Production runtime roles/grants проверены; legacy LOGIN=false, active legacy sessions=0. |
+| CP-10 | CLOSED | Immutable release/runtime provenance принят на production. |
+| CP-11 | PARTIAL | Post-deploy off-VM backup PASS; отдельный real restore/rehearsal по runbook остаётся открытым. |
+| CP-12 | OPEN | Финальная сопровождаемость и crosswalk перепроверяются в CP-18. |
+| CP-13 | CLOSED — локальная проверка 20.09.2026 | 23 Markdown сверены; документационные контракты PASS. |
+| CP-14 | CLOSED | Изолированная full-stack приёмка пройдена. |
+| CP-15 | CLOSED | Предрелизные проверки завершены перед approved release. |
+| CP-16 | CLOSED | Production release `593ddec...` принят 25.09.2026. |
+| CP-17 | CLOSED | Real Telegram webhook/Mini App/auth/access acceptance PASS 25.09.2026. |
+| CP-18 | OPEN — NEXT | Новый независимый аудит двенадцати разделов по итоговому коду и production evidence. |
 
 В CP-15 выявлен и исправлен порядок проверки одноразовой PostgreSQL: проверка топологии и случайного маркера выполняется **до** Alembic. Коммит `38d1b19`; после исправления — два Playwright-теста, zero-drift reconciliation и удаление одноразовой БД. Это закрывает конкретный локальный дефект runner, **не** весь CP-15.
 
 ## 6. Порядок завершения текущего цикла
 
-1. Сверить все Markdown с исходниками и реальными статусами; устранить дубли и расхождения, сохранив уникальные исторические доказательства. Не менять статусы CP-07–CP-12 без production evidence.
-2. Провести оставшиеся проходы CP-15, зафиксировать найденные дефекты и их исправления; отдельно проверить CI и критичные эксплуатационные сценарии.
-3. После итоговой редакции документации выполнить запланированные повторные проверки двенадцати разделов; результат каждого раздела фиксировать с конкретным SHA и датой, не подменяя ими CP-16/17.
-4. Только после явного согласования переходить к CP-16: определить approved SHA, подтвердить CI, свежую off-VM backup, совместимость миграций и планы отката; отдельно согласовать CP-07 Tunnel/web cutover.
-5. После развёртывания выполнить CP-17 и затем CP-18. Открытые production-зависимости закрывать только по фактическим результатам.
+1. Выполнить CP-18 как свежий independent Audit 0–12 на baseline `593ddec0c9100b0df2eafe4f324c7bb600d75cba` / Alembic `b0c1d2e3f4a5`; для каждого ID фиксировать новое evidence, а не переносить старый PASS.
+2. Особо перепроверить split ingress: direct `app.spik-inventory.ru` и dedicated `telegram-webhook.spik-inventory.ru` через Cloudflare Tunnel, runtime DB grants, release provenance, backup/recovery assumptions и Telegram delivery.
+3. Исправить только реально воспроизведённые блокеры и повторить затронутые gates.
+4. После CP-18 выполнить финальную Markdown-консолидацию: перенести актуальные требования, обновить ссылки/contracts, удалить отработавшие audit/history документы по принятой политике.
+5. После очистки оставить `ROADMAP.md` единственным актуальным планом дальнейшей разработки.
 
 Команды развёртывания, восстановления и критерии остановки не копируем в roadmap: их владельцы — [DEPLOYMENT.md](DEPLOYMENT.md), [OPERATIONS.md](OPERATIONS.md), [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md) и [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md).
 
 ## 10. Accepted clean baseline
 
-Accepted production/runtime golden baseline перед новым feature cycle:
+Accepted production/runtime baseline текущего remediation cycle:
 
-`1242f56c131d0f8c470e05cbaf209c48a37e85a4`
+`593ddec0c9100b0df2eafe4f324c7bb600d75cba`
 
-Историческая приёмка предыдущего цикла, не результат текущего CP-15:
+Подтверждено 25.09.2026:
 
-- [x] required CI;
-- [x] Warehouse V2/UX/design-system production acceptance;
-- [x] real Telegram desktop acceptance и fresh verified production backup;
-- [x] local/source/runtime golden-state verification.
+- [x] immutable release/runtime provenance match;
+- [x] Alembic `b0c1d2e3f4a5`;
+- [x] runtime DB role cutover и zero-drift reconciliation;
+- [x] direct host ingress + Unix socket;
+- [x] dedicated Cloudflare Tunnel для Telegram webhook;
+- [x] real Telegram acceptance и post-deploy off-VM backup.
 
-Более позднее документированное production evidence — checkout/runtime `6d9bafef494f910b9bd1ebea7c5b7cf45f853742`, схема `c3d4e5f6a7b8`. Его актуальность на момент будущего деплоя проверяется отдельно.
+Этот baseline является исходной точкой CP-18, но перед будущим production change всё равно требуется новая live-проверка.
 
 ## 11. Работы вне текущего цикла
 

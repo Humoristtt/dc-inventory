@@ -78,7 +78,7 @@ CP17_TELEGRAM_WEBHOOK=PASS
 
 Повторный initial bootstrap запрещён. Его успешное выполнение не снимает защиту обычных складских операций.
 
-CP-16 production deployment и CP-17 real Telegram acceptance закрыты. Пользовательский `app.spik-inventory.ru` обслуживается direct ingress через host Nginx и Unix socket; Cloudflare Tunnel `dc-inventory-prod` выделен только для входящего `telegram-webhook.spik-inventory.ru/api/telegram/webhook`. При переключении webhook накопленная очередь была сохранена и доставлена, после чего `pending_update_count=0` и `last_error=NONE`. Следующий обязательный этап — CP-18 independent Audit 0–12; email остаётся выключенным, а restore/rehearsal остаётся отдельным эксплуатационным gate. Подробные статусы и evidence — в [журнале исправлений](docs/AUDIT_0_12_REMEDIATION.md) и [плане работ](docs/ROADMAP.md).
+CP-16 production deployment и CP-17 real Telegram acceptance закрыты. Пользовательский `app.spik-inventory.ru` обслуживается direct ingress через host Nginx и Unix socket; отдельный Cloudflare Tunnel выделен только для входящего `telegram-webhook.spik-inventory.ru/api/telegram/webhook`. При переключении webhook накопленная очередь была сохранена и доставлена, после чего `pending_update_count=0` и `last_error=NONE`. Следующий обязательный этап — CP-18 independent Audit 0–12; email остаётся выключенным, а restore/rehearsal остаётся отдельным эксплуатационным gate. Подробные статусы и evidence — в [журнале исправлений](docs/AUDIT_0_12_REMEDIATION.md) и [плане работ](docs/ROADMAP.md).
 
 ## 6. Где искать инструкции
 

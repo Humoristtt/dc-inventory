@@ -101,10 +101,10 @@ async def test_d2_upgrade_refuses_existing_projection_drift(
 
     engine = create_async_engine(url)
 
-    async with AsyncSession(engine, expire_on_commit=False) as db, db.begin():
-        state = await scenario(db)
+    async with AsyncSession(engine, expire_on_commit=False) as session, session.begin():
+        state = await scenario(session)
         await move(
-            db,
+            session,
             state,
             "RECEIPT",
             5,
@@ -116,8 +116,8 @@ async def test_d2_upgrade_refuses_existing_projection_drift(
 
     alembic(url, "downgrade", PREVIOUS_HEAD)
 
-    async with engine.begin() as db:
-        await db.execute(
+    async with engine.begin() as connection:
+        await connection.execute(
             update(StockBalance)
             .where(
                 StockBalance.item_id == item_id,
@@ -134,13 +134,13 @@ async def test_d2_upgrade_refuses_existing_projection_drift(
     )
     assert "warehouse projection drift exists" in output
 
-    async with engine.connect() as db:
+    async with engine.connect() as connection:
         assert (
-            await db.scalar(text("SELECT version_num FROM alembic_version"))
+            await connection.scalar(text("SELECT version_num FROM alembic_version"))
             == PREVIOUS_HEAD
         )
         assert (
-            await db.scalar(
+            await connection.scalar(
                 select(StockBalance.quantity).where(
                     StockBalance.item_id == item_id,
                     StockBalance.location_id == location_id,

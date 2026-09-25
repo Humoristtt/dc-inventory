@@ -47,7 +47,10 @@ def upgrade() -> None:
                     WHEN 'INTEGER' THEN iav.integer_value IS NULL
                     WHEN 'DECIMAL' THEN iav.decimal_value IS NULL
                     WHEN 'BOOLEAN' THEN iav.boolean_value IS NULL
-                    WHEN 'ENUM' THEN iav.enum_value IS NULL
+                    WHEN 'ENUM' THEN (
+                        iav.enum_value IS NULL
+                        OR NOT (ca.allowed_values ? iav.enum_value)
+                    )
                     ELSE true
                 END
             )
@@ -117,9 +120,10 @@ def upgrade() -> None:
         AS $$
         DECLARE
             expected_data_type text;
+            expected_allowed_values jsonb;
         BEGIN
-            SELECT data_type
-            INTO expected_data_type
+            SELECT data_type, allowed_values
+            INTO expected_data_type, expected_allowed_values
             FROM category_attributes
             WHERE id = NEW.category_attribute_id
               AND category_id = NEW.category_id;
@@ -142,7 +146,13 @@ def upgrade() -> None:
                 AND NEW.boolean_value IS NULL
             ) OR (
                 expected_data_type = 'ENUM'
-                AND NEW.enum_value IS NULL
+                AND (
+                    NEW.enum_value IS NULL
+                    OR NOT (
+                        expected_allowed_values
+                        ? NEW.enum_value
+                    )
+                )
             ) THEN
                 RAISE EXCEPTION
                     'item attribute value does not match declared data type'
@@ -168,6 +178,53 @@ def upgrade() -> None:
         ON item_attribute_values
         FOR EACH ROW
         EXECUTE FUNCTION validate_item_attribute_value_data_type()
+        """
+    )
+
+    op.execute(
+        """
+        CREATE FUNCTION validate_category_attribute_existing_values()
+        RETURNS trigger
+        LANGUAGE plpgsql
+        AS $
+        BEGIN
+            IF EXISTS (
+                SELECT 1
+                FROM item_attribute_values iav
+                WHERE iav.category_attribute_id = NEW.id
+                  AND CASE NEW.data_type
+                      WHEN 'TEXT' THEN iav.text_value IS NULL
+                      WHEN 'INTEGER' THEN iav.integer_value IS NULL
+                      WHEN 'DECIMAL' THEN iav.decimal_value IS NULL
+                      WHEN 'BOOLEAN' THEN iav.boolean_value IS NULL
+                      WHEN 'ENUM' THEN (
+                          iav.enum_value IS NULL
+                          OR NOT (
+                              NEW.allowed_values
+                              ? iav.enum_value
+                          )
+                      )
+                      ELSE true
+                  END
+            ) THEN
+                RAISE EXCEPTION
+                    'category attribute definition conflicts with stored values'
+                    USING ERRCODE = '23514';
+            END IF;
+
+            RETURN NEW;
+        END;
+        $
+        """
+    )
+    op.execute(
+        """
+        CREATE CONSTRAINT TRIGGER
+            trg_category_attributes_validate_existing_values
+        AFTER UPDATE ON category_attributes
+        DEFERRABLE INITIALLY DEFERRED
+        FOR EACH ROW
+        EXECUTE FUNCTION validate_category_attribute_existing_values()
         """
     )
 
@@ -268,6 +325,20 @@ def downgrade() -> None:
             RETURN NEW;
         END;
         $$
+        """
+    )
+
+    op.execute(
+        """
+        DROP TRIGGER IF EXISTS
+            trg_category_attributes_validate_existing_values
+        ON category_attributes
+        """
+    )
+    op.execute(
+        """
+        DROP FUNCTION IF EXISTS
+            validate_category_attribute_existing_values()
         """
     )
 

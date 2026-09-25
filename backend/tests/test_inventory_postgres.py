@@ -1106,12 +1106,24 @@ async def test_balance_locks_are_batched_and_transfer_reconciles(
         )
         with capture_sql(connection) as statements:
             await create_movement(db, payload, actor_user_id=s[0], actor_display_name="Synthetic")
-        balance_selects = [sql for sql in statements if sql.startswith("SELECT stock_balances.")]
+        item_lock_selects = [
+            sql
+            for sql in statements
+            if sql.startswith("SELECT items.") and " FOR UPDATE" in sql
+        ]
+        assert len(item_lock_selects) == 1
+
+        balance_selects = [
+            sql
+            for sql in statements
+            if sql.startswith("SELECT stock_balances.")
+        ]
         assert len(balance_selects) == 1
         assert (
-            "ORDER BY stock_balances.item_id, stock_balances.location_id FOR UPDATE"
-            in (balance_selects[0])
+            "ORDER BY stock_balances.item_id, stock_balances.location_id"
+            in balance_selects[0]
         )
+        assert " FOR UPDATE" not in balance_selects[0]
     balances = (
         await db.scalars(select(StockBalance).where(StockBalance.item_id.in_(item_ids)))
     ).all()

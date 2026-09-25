@@ -19,13 +19,13 @@ PREVIOUS_HEAD = "c1d2e3f4a5b6"
 CURRENT_HEAD = "d2e3f4a5b6c7"
 
 
-async def _reconciliation_rows(db: AsyncSession) -> list[object]:
+async def _has_reconciliation_drift(db: AsyncSession) -> bool:
     sql = (
         Path(__file__).parents[1]
         / "scripts"
         / "reconcile_inventory_projections.sql"
     ).read_text()
-    return list((await db.execute(text(sql))).all())
+    return bool((await db.execute(text(sql))).all())
 
 
 async def test_d2_service_keeps_stock_and_custody_equal_to_journal(
@@ -90,7 +90,7 @@ async def test_d2_service_keeps_stock_and_custody_equal_to_journal(
             },
         )
 
-    assert not await _reconciliation_rows(db)
+    assert not await _has_reconciliation_drift(db)
 
 
 async def test_d2_upgrade_refuses_existing_projection_drift(

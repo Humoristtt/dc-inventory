@@ -665,9 +665,10 @@ async def process_telegram_update(
     if isinstance(message, dict):
         text = message.get("text")
         chat = message.get("chat")
+        text_parts = text.split(maxsplit=1) if isinstance(text, str) else []
+        command = text_parts[0].split("@", 1)[0] if text_parts else None
         if (
-            isinstance(text, str)
-            and text.split(maxsplit=1)[0].split("@", 1)[0] == "/start"
+            command == "/start"
             and isinstance(chat, dict)
             and chat.get("type") == "private"
         ):

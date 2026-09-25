@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     String,
@@ -273,6 +274,23 @@ class ProcurementEvent(Base):
         CheckConstraint(
             "metadata IS NULL OR jsonb_typeof(metadata) = 'object'", name="metadata_object"
         ),
+        CheckConstraint(
+            "from_status IS NULL OR from_status IN ("
+            "'AGREEMENT_PENDING_MANAGER', 'AGREEMENT_REVISION_REQUIRED', "
+            "'PURCHASING', 'AWAITING_ACCEPTANCE', 'COMPLETED')",
+            name="from_status",
+        ),
+        CheckConstraint(
+            "to_status IS NULL OR to_status IN ("
+            "'AGREEMENT_PENDING_MANAGER', 'AGREEMENT_REVISION_REQUIRED', "
+            "'PURCHASING', 'AWAITING_ACCEPTANCE', 'COMPLETED')",
+            name="to_status",
+        ),
+        ForeignKeyConstraint(
+            ["revision_id", "request_id"],
+            ["procurement_revisions.id", "procurement_revisions.request_id"],
+            ondelete="RESTRICT",
+        ),
         Index("ix_procurement_events_request_occurred", "request_id", "occurred_at", "id"),
         Index("ix_procurement_events_actor_occurred", "actor_user_id", "occurred_at"),
         UniqueConstraint(
@@ -327,7 +345,7 @@ class ProcurementEvent(Base):
         )
     )
     revision_id: Mapped[uuid.UUID | None] = mapped_column(
-        Uuid(as_uuid=True), ForeignKey("procurement_revisions.id", ondelete="RESTRICT")
+        Uuid(as_uuid=True)
     )
     comment: Mapped[str | None] = mapped_column(Text)
     metadata_json: Mapped[dict[str, Any] | None] = mapped_column(

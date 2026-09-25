@@ -49,10 +49,23 @@ def test_runtime_database_permission_source_is_least_privilege() -> None:
     assert "'journal_seq'" in permissions
 
     assert (
-        "'GRANT SELECT, INSERT, UPDATE, DELETE '"
-        "\n    'ON TABLE user_item_custody_balances TO %I'" in permissions
+        "'GRANT SELECT ON TABLE stock_balances, '"
+        "\n    'user_item_custody_balances TO %I'" in permissions
     )
-    assert permissions.count("user_item_custody_balances") == 1
+    assert (
+        "'GRANT EXECUTE ON FUNCTION '"
+        "\n    'public.refresh_warehouse_projection(uuid, uuid) TO %I'"
+        in permissions
+    )
+    assert (
+        "GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE stock_balances"
+        not in permissions
+    )
+    assert (
+        "GRANT SELECT, INSERT, UPDATE, DELETE "
+        "\n    'ON TABLE user_item_custody_balances TO %I'"
+        not in permissions
+    )
     assert "GRANT SELECT, INSERT ON TABLE user_access_events, user_role_events" in permissions
     assert "UPDATE ON TABLE user_role_events" not in permissions
     assert "DELETE ON TABLE user_role_events" not in permissions

@@ -7,6 +7,7 @@ on:
       - "backend/app/modules/catalog/normalization.py"
       - "backend/tests/test_e5_procurement_invariants_postgres.py"
       - "backend/tests/test_c1_cp18_db_invariants_postgres.py"
+      - "backend/tests/test_d2_projection_boundary_postgres.py"
       - "backend/tests/test_cp02_identity_db_invariants.py"
       - "backend/tests/test_f6_existing_owner_upgrade_postgres.py"
       - "backend/tests/test_f7_catalog_custody_postgres.py"
@@ -17,6 +18,8 @@ on:
       - "backend/tests/test_warehouse_migration_postgres.py"
       - "backend/app/modules/procurement/models.py"
       - "backend/app/modules/procurement/service.py"
+      - "backend/app/modules/inventory/service.py"
+      - "backend/app/db/schema_contract.py"
       - "compose.yaml"
       - "backend/scripts/apply_database_permissions.sql"
       - "backend/scripts/terminate_legacy_worker_sessions.sql"
@@ -78,6 +81,7 @@ jobs:
         run: |
           pytest -q tests/test_e5_procurement_invariants_postgres.py \
             tests/test_c1_cp18_db_invariants_postgres.py \
+            tests/test_d2_projection_boundary_postgres.py \
             tests/test_cp02_identity_db_invariants.py \
             tests/test_f6_existing_owner_upgrade_postgres.py \
             tests/test_f7_catalog_custody_postgres.py \

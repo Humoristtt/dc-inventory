@@ -225,6 +225,7 @@ CRITICAL_DB_FUNCTIONS = (
     "catalog_identity_text",
     "catalog_item_signature",
     "catalog_normalize_comparison",
+    "refresh_warehouse_projection",
 )
 
 CRITICAL_DB_COLLATIONS = (

@@ -94,14 +94,56 @@ def _raise_procurement_error(error: Exception) -> NoReturn:
 
 
 def _raise_db_error(error: DBAPIError) -> NoReturn:
-    code = (
-        "procurement_concurrency_conflict"
-        if postgres_sqlstate(error) in RETRYABLE_POSTGRES_SQLSTATES
-        else "procurement_database_conflict"
-    )
+    sqlstate = postgres_sqlstate(error)
+
+    if sqlstate in RETRYABLE_POSTGRES_SQLSTATES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "procurement_concurrency_conflict",
+                "message": (
+                    "procurement operation conflicted with concurrent activity; retry"
+                ),
+            },
+        ) from error
+
+    if isinstance(error, IntegrityError) and sqlstate in {
+        "23503",  # foreign_key_violation
+        "23505",  # unique_violation
+        "23514",  # check_violation
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "procurement_database_conflict",
+                "message": "procurement operation conflicts with current state",
+            },
+        ) from error
+
+    if (
+        (isinstance(sqlstate, str) and sqlstate.startswith("08"))
+        or sqlstate
+        in {
+            "57014",  # query_canceled / statement timeout
+            "57P01",  # admin_shutdown
+            "57P02",  # crash_shutdown
+            "57P03",  # cannot_connect_now
+        }
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "code": "procurement_database_unavailable",
+                "message": "procurement database is temporarily unavailable",
+            },
+        ) from error
+
     raise HTTPException(
-        status_code=status.HTTP_409_CONFLICT,
-        detail={"code": code, "message": "procurement operation conflicts with current state"},
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail={
+            "code": "procurement_database_error",
+            "message": "procurement database operation failed",
+        },
     ) from error
 
 

@@ -1,6 +1,6 @@
 # Карта документации Spikatel Inventory
 
-Актуально для ветки `remediation/audit-0-12` на 19.09.2026. Этот файл — **оглавление и правило выбора источника истины**, а не ещё одна копия требований, архитектуры или runbook. Начальная точка проекта: [README в корне](../README.md). Правила работы с репозиторием: [AGENTS.md](../AGENTS.md).
+Актуально для `main` / production baseline `593ddec0c9100b0df2eafe4f324c7bb600d75cba` на 25.09.2026. Этот файл — **оглавление и правило выбора источника истины**, а не ещё одна копия требований, архитектуры или runbook. Начальная точка проекта: [README в корне](../README.md). Правила работы с репозиторием: [AGENTS.md](../AGENTS.md).
 
 ## 1. Как читать документацию
 
@@ -9,7 +9,7 @@
 3. **Развёртывать:** [DEPLOYMENT](DEPLOYMENT.md) → [OPERATIONS](OPERATIONS.md). Для смены HTTP ingress дополнительно обязателен [план CP-07](CP07_HTTP_SOCKET_MIGRATION.md); для восстановления — [RECOVERY_RUNBOOK](RECOVERY_RUNBOOK.md).
 4. **Проверять прошлые решения:** [HISTORY](HISTORY.md) и датированные архивные материалы. Их старые значения миграций, состояния инфраструктуры и решения нельзя механически превращать в нынешние факты.
 
-Различайте три сущности: состояние исходников и миграционного графа; **последний документально подтверждённый** production checkout/schema/runtime; фактическое состояние production **в момент новой проверки**. Git push сам по себе не обновляет контейнеры или БД. Исходный Alembic head `a9c0d1e2f3a4`, последняя документированная production schema `c3d4e5f6a7b8`; перед CP-16 оба значения необходимо проверить заново. Защита штатных складских операций `REAL_INVENTORY_MUTATIONS_ENABLED=false` не отменяет выполненный ранее одноразовый bootstrap.
+Различайте три сущности: состояние исходников и миграционного графа; **последний документально подтверждённый** production checkout/schema/runtime; фактическое состояние production **в момент новой проверки**. Git push сам по себе не обновляет контейнеры или БД. На 25.09.2026 подтверждены production revision `593ddec0c9100b0df2eafe4f324c7bb600d75cba` и Alembic `b0c1d2e3f4a5`; это датированное evidence, а не live monitoring. Защита штатных складских операций `REAL_INVENTORY_MUTATIONS_ENABLED=false` не отменяет выполненный ранее одноразовый bootstrap.
 
 ## 2. Нормативные документы: один владелец каждого контракта
 
@@ -30,7 +30,7 @@
 | [DEPLOYMENT.md](DEPLOYMENT.md) | Release artifacts, immutable SHA/image labels, секреты, границы миграций, точный порядок controlled deployment и rollback |
 | [OPERATIONS.md](OPERATIONS.md) | Подтверждённые и неподтверждённые production facts, роли БД, health, workers, мониторинг, retention, S3/backup, smoke |
 | [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md) | Изолированное восстановление, проверка manifest/dump, exact image и schema-matched reconciliation, критерии остановки |
-| [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md) | Специальная одновременная смена Cloudflare Tunnel и web на Unix socket: UID/GID, bind mount, проверки и rollback |
+| [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md) | История и итог production ingress migration: direct user ingress через host Nginx/Unix socket и отдельный Cloudflare Tunnel только для Telegram webhook |
 | [ROADMAP.md](ROADMAP.md) | Текущая последовательность работ и отличие локального PASS от production acceptance |
 | [AUDIT_0_12_REMEDIATION.md](AUDIT_0_12_REMEDIATION.md) | Подробный непрерывный журнал CP-00–18, коммиты, тесты, открытые условия; не переписывать историю чекпойнтов краткой сводкой |
 | [MASTER_REMEDIATION_PLAN.md](MASTER_REMEDIATION_PLAN.md) | Сводный порядок устранения замечаний 12 аудитов; фактические результаты и evidence — в CP-журнале |
@@ -67,6 +67,6 @@
 
 ## 6. Достоверность и проверки
 
-Источник текущих технических фактов — `backend/`, `frontend/`, `compose.yaml`, `ops/`, миграции и регрессионные тесты. Проверять `python3 ops/tests/test_docs_freshness.py`, `python3 ops/tests/test_notification_delivery_contract.py`, `python3 ops/tests/test_recovery_runbook_contract.py`, `python3 ops/tests/test_docs_structure.py` и `git diff --check` на актуальном checkout. Документационная проверка не является заменой full-stack CP-14 или проверок production CP-16/17.
+Источник текущих технических фактов — `backend/`, `frontend/`, `compose.yaml`, `ops/`, миграции и регрессионные тесты. Проверять `python3 ops/tests/test_docs_freshness.py`, `python3 ops/tests/test_notification_delivery_contract.py`, `python3 ops/tests/test_recovery_runbook_contract.py`, `python3 ops/tests/test_docs_structure.py` и `git diff --check` на актуальном checkout. CP-16 production deployment и CP-17 real Telegram acceptance уже имеют production evidence; следующий независимый gate — CP-18.
 
 Секреты, реальные inventory dataset/workbook, dumps, `.env` и private/runtime-only IDs в публичный Git не помещать. Восстановление, миграции, Cloudflare/Tunnel и live Telegram/email требуют отдельных разрешённых операций, а не выполняются в рамках редактирования документации.

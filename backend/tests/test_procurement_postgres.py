@@ -54,6 +54,7 @@ from app.modules.procurement.service import (
     complete_acceptance,
     create_and_bind_line,
     create_request,
+    get_request_record,
     manager_accept,
     report_discrepancy,
     return_for_correction,

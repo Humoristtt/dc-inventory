@@ -181,6 +181,36 @@ class Settings(BaseSettings):
     )
 
 
+def validate_production_placeholders(settings: Settings) -> None:
+    if settings.app_env != "production":
+        return
+
+    values = {
+        "DATABASE_URL": settings.database_url,
+        "TELEGRAM_BOT_TOKEN": settings.telegram_bot_token_value,
+        "TELEGRAM_WEBHOOK_SECRET": settings.telegram_webhook_secret_value,
+        "TELEGRAM_GATEWAY_URL": settings.telegram_gateway_url_value,
+        "TELEGRAM_GATEWAY_SECRET": settings.telegram_gateway_secret_value,
+        "MICROSOFT_GRAPH_TENANT_ID": settings.microsoft_graph_tenant_id_value,
+        "MICROSOFT_GRAPH_CLIENT_ID": settings.microsoft_graph_client_id_value,
+        "MICROSOFT_GRAPH_CLIENT_SECRET": settings.microsoft_graph_client_secret_value,
+        "MICROSOFT_GRAPH_SENDER": settings.microsoft_graph_sender_value,
+    }
+
+    placeholders = [
+        name
+        for name, value in values.items()
+        if value is not None and "replace-with-" in value
+    ]
+    if placeholders:
+        raise RuntimeError(
+            "production configuration contains placeholder values: "
+            + ", ".join(placeholders)
+        )
+
+
 @lru_cache
 def get_settings() -> Settings:
-    return Settings()
+    settings = Settings()
+    validate_production_placeholders(settings)
+    return settings

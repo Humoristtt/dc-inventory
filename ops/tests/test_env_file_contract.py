@@ -11,13 +11,21 @@ VALIDATOR = ROOT / "ops/validate_env_file.py"
 EXAMPLE = ROOT / ".env.example"
 
 
-def run(path: Path) -> subprocess.CompletedProcess[str]:
+def run(
+    path: Path,
+    *,
+    production: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    arguments = [
+        "python3",
+        str(VALIDATOR),
+    ]
+    if production:
+        arguments.append("--production")
+    arguments.append(str(path))
+
     return subprocess.run(
-        [
-            "python3",
-            str(VALIDATOR),
-            str(path),
-        ],
+        arguments,
         cwd=ROOT,
         text=True,
         capture_output=True,
@@ -64,6 +72,61 @@ with tempfile.TemporaryDirectory() as tmp:
     result = run(malformed)
     assert result.returncode == 1
     assert "invalid env assignment" in result.stderr
+
+    production_placeholder = root / "production-placeholder.env"
+    production_placeholder.write_text(
+        "APP_ENV=production\n"
+        "POSTGRES_PASSWORD=replace-with-a-strong-owner-secret\n"
+        "TELEGRAM_BOT_TOKEN=replace-with-bot-token\n"
+    )
+
+    result = run(production_placeholder, production=True)
+    assert result.returncode == 1
+    assert (
+        "production value for POSTGRES_PASSWORD is still a placeholder"
+        in result.stderr
+    )
+    assert (
+        "production value for TELEGRAM_BOT_TOKEN is still a placeholder"
+        in result.stderr
+    )
+
+    production_unsafe_password = root / "production-unsafe-password.env"
+    production_unsafe_password.write_text(
+        "APP_ENV=production\n"
+        "POSTGRES_PASSWORD=owner:secret@unsafe\n"
+        "POSTGRES_RUNTIME_PASSWORD=runtime:secret@unsafe\n"
+        "POSTGRES_TELEGRAM_WORKER_PASSWORD=telegram:secret@unsafe\n"
+        "POSTGRES_EMAIL_WORKER_PASSWORD=email:secret@unsafe\n"
+        "POSTGRES_MAINTENANCE_PASSWORD=maintenance:secret@unsafe\n"
+    )
+
+    result = run(production_unsafe_password, production=True)
+    assert result.returncode == 1
+    for key in (
+        "POSTGRES_PASSWORD",
+        "POSTGRES_RUNTIME_PASSWORD",
+        "POSTGRES_TELEGRAM_WORKER_PASSWORD",
+        "POSTGRES_EMAIL_WORKER_PASSWORD",
+        "POSTGRES_MAINTENANCE_PASSWORD",
+    ):
+        assert (
+            f"production value for {key} must be URL-safe"
+            in result.stderr
+        )
+
+    production_safe_password = root / "production-safe-password.env"
+    production_safe_password.write_text(
+        "APP_ENV=production\n"
+        "POSTGRES_PASSWORD=owner_secret-123.~\n"
+        "POSTGRES_RUNTIME_PASSWORD=runtime_secret-123.~\n"
+        "POSTGRES_TELEGRAM_WORKER_PASSWORD=telegram_secret-123.~\n"
+        "POSTGRES_EMAIL_WORKER_PASSWORD=email_secret-123.~\n"
+        "POSTGRES_MAINTENANCE_PASSWORD=maintenance_secret-123.~\n"
+    )
+
+    result = run(production_safe_password, production=True)
+    assert result.returncode == 0, result.stderr
 
 
 

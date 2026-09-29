@@ -78,6 +78,59 @@ def test_production_backend_rejects_missing_telegram_config(
         create_app(settings)
 
 
+@pytest.mark.parametrize(
+    ("field", "value", "expected_name"),
+    [
+        (
+            "database_url",
+            "postgresql+asyncpg://dc_inventory:replace-with-db-secret@postgres:5432/dc_inventory",
+            "DATABASE_URL",
+        ),
+        (
+            "telegram_bot_token",
+            "replace-with-bot-token",
+            "TELEGRAM_BOT_TOKEN",
+        ),
+        (
+            "telegram_webhook_secret",
+            "replace-with-webhook-secret",
+            "TELEGRAM_WEBHOOK_SECRET",
+        ),
+        (
+            "telegram_gateway_secret",
+            "replace-with-gateway-secret",
+            "TELEGRAM_GATEWAY_SECRET",
+        ),
+    ],
+)
+def test_production_backend_rejects_placeholder_values_without_echoing_secret(
+    field: str,
+    value: str,
+    expected_name: str,
+) -> None:
+    settings = production_settings(**{field: value})
+
+    with pytest.raises(RuntimeError) as exc_info:
+        create_app(settings)
+
+    message = str(exc_info.value)
+    assert expected_name in message
+    assert value not in message
+
+
+def test_non_production_placeholder_values_remain_allowed_for_examples() -> None:
+    settings = Settings(
+        app_env="development",
+        database_url=(
+            "postgresql+asyncpg://dc_inventory:"
+            "replace-with-a-strong-owner-secret@postgres:5432/dc_inventory"
+        ),
+        telegram_bot_token="replace-with-bot-token",
+    )
+
+    validate_backend_runtime_config(settings)
+
+
 def test_missing_fields_are_reported_together() -> None:
     settings = production_settings(
         telegram_bot_token=None,

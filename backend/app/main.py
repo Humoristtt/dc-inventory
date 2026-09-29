@@ -6,11 +6,17 @@ from fastapi import FastAPI, Request, Response
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from app.api.router import api_router
-from app.core.config import Settings, get_settings
+from app.core.config import (
+    Settings,
+    get_settings,
+    validate_production_placeholders,
+)
 from app.db.engine import create_engine
 
 
 def validate_backend_runtime_config(settings: Settings) -> None:
+    validate_production_placeholders(settings)
+
     if settings.app_env != "production":
         return
 

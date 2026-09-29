@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import datetime as datetime_module
-import hashlib
-import json
 import uuid
-from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import cast
@@ -14,6 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql.elements import ColumnElement
 
+from app.core.idempotency import (
+    advisory_lock_key,
+    canonical_fingerprint,
+    normalize_idempotency_key,
+)
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Item, Manufacturer
 from app.modules.catalog.normalization import identity_text
@@ -182,7 +184,7 @@ async def _create_movement(
     canonical["client_request_id"] = request_id
     canonical["custody_user_id"] = str(custody_user_id) if custody_user_id else None
     canonical["lines"] = sorted(canonical["lines"], key=lambda line: line["item_id"])
-    fingerprint = _fingerprint(canonical)
+    fingerprint = canonical_fingerprint(canonical)
     await _lock_idempotency_key(db, actor_user_id, request_id)
     existing = await _existing_idempotent_result(
         db,
@@ -815,7 +817,7 @@ class MovementResult:
 
 
 def normalize_inline_text(value: str, *, field: str, max_length: int) -> str:
-    normalized = " ".join(value.split())
+    normalized = normalize_idempotency_key(value)
     if not normalized:
         raise InventoryValidationError(
             f"{field} must not be blank",
@@ -841,22 +843,6 @@ def display_identity(identity: TelegramIdentity) -> str:
     if identity.username:
         return f"{full_name} (@{identity.username})"
     return full_name
-
-
-def _fingerprint(payload: Mapping[str, object]) -> str:
-    canonical = json.dumps(
-        payload,
-        sort_keys=True,
-        separators=(",", ":"),
-        ensure_ascii=False,
-    )
-    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def _advisory_lock_key(namespace: str, *parts: object) -> int:
-    value = "|".join([namespace, *(str(part) for part in parts)])
-    digest = hashlib.sha256(value.encode("utf-8")).digest()
-    return int.from_bytes(digest[:8], byteorder="big", signed=True)
 
 
 async def acquire_movement_feed_snapshot(
@@ -905,7 +891,7 @@ async def _lock_idempotency_key(
     await db.execute(
         select(
             func.pg_advisory_xact_lock(
-                _advisory_lock_key(
+                advisory_lock_key(
                     "warehouse-idempotency",
                     actor_user_id,
                     client_request_id,
@@ -922,7 +908,7 @@ async def _lock_original_movement_context(
     await db.execute(
         select(
             func.pg_advisory_xact_lock(
-                _advisory_lock_key(
+                advisory_lock_key(
                     "warehouse-original-movement",
                     movement_id,
                 )

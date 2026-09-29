@@ -309,6 +309,92 @@ async def test_transceiver_speed_sort_is_numeric(
     ]
 
 
+async def test_transceiver_speed_sort_handles_large_fractional_and_non_numeric_values(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    marker = uuid.uuid4().hex
+
+    one = await transceiver(
+        db,
+        marker,
+        "до 300 м",
+        speed="1 Гбит/с",
+    )
+    fractional = await transceiver(
+        db,
+        marker,
+        "до 300 м",
+        speed="2,5 Гбит/с",
+    )
+    hundred = await transceiver(
+        db,
+        marker,
+        "до 300 м",
+        speed="100 Гбит/с",
+    )
+    huge = await transceiver(
+        db,
+        marker,
+        "до 300 м",
+        speed="123456789012345678901234567890 Гбит/с",
+    )
+    non_numeric = await transceiver(
+        db,
+        marker,
+        "до 300 м",
+        speed="скорость неизвестна",
+    )
+
+    ascending = await build_catalog_query_spec(
+        db,
+        q=marker,
+        category_key="transceiver_ethernet",
+        sort="speed",
+        order="asc",
+    )
+    ascending_page = await query_catalog_items(
+        db,
+        ascending,
+        limit=20,
+        offset=0,
+    )
+    assert [
+        record.record.item.id
+        for record in ascending_page.items
+    ] == [
+        one,
+        fractional,
+        hundred,
+        huge,
+        non_numeric,
+    ]
+
+    descending = await build_catalog_query_spec(
+        db,
+        q=marker,
+        category_key="transceiver_ethernet",
+        sort="speed",
+        order="desc",
+    )
+    descending_page = await query_catalog_items(
+        db,
+        descending,
+        limit=20,
+        offset=0,
+    )
+    assert [
+        record.record.item.id
+        for record in descending_page.items
+    ] == [
+        huge,
+        hundred,
+        fractional,
+        one,
+        non_numeric,
+    ]
+
+
 async def test_scoped_facets_free_text_and_pagination(
     warehouse_db: AsyncSession,
 ) -> None:

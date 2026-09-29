@@ -48,6 +48,7 @@ class ReleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             destination = Path(temporary) / "release"
             with patch.object(module, "output", side_effect=self.release_outputs()), \
+                    patch.object(module, "validate_release_env"), \
                     patch.object(module.subprocess, "run") as compose:
                 module.build(Path("unused.env"), destination)
             compose.assert_called_once()
@@ -57,6 +58,25 @@ class ReleaseTests(unittest.TestCase):
             self.assertTrue(all(image["image_id"] == "sha256:" + "c" * 64
                                 for image in manifest["images"].values()))
             self.assertIn(f"APP_REVISION={sha}\n", (destination / "release.env").read_text())
+
+    def test_invalid_release_env_stops_before_compose_build(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "release"
+            with patch.object(module, "output", side_effect=self.release_outputs()[:4]), \
+                    patch.object(
+                        module,
+                        "validate_release_env",
+                        side_effect=RuntimeError("release environment validation failed"),
+                    ), \
+                    patch.object(module.subprocess, "run") as compose:
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "release environment validation failed",
+                ):
+                    module.build(Path("invalid.env"), destination)
+
+            compose.assert_not_called()
+            self.assertFalse(destination.exists())
 
     def test_failed_build_or_inspection_leaves_no_release_output(self):
         cases = [
@@ -69,6 +89,7 @@ class ReleaseTests(unittest.TestCase):
                     tempfile.TemporaryDirectory() as temporary:
                 destination = Path(temporary) / "release"
                 with patch.object(module, "output", side_effect=replies), \
+                        patch.object(module, "validate_release_env"), \
                         patch.object(module.subprocess, "run", side_effect=build_error):
                     with self.assertRaises((RuntimeError, subprocess.CalledProcessError)):
                         module.build(Path("unused.env"), destination)
@@ -79,6 +100,7 @@ class ReleaseTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             destination = Path(temporary) / "release"
             with patch.object(module, "output", side_effect=self.release_outputs()), \
+                    patch.object(module, "validate_release_env"), \
                     patch.object(module.subprocess, "run"), \
                     patch.object(Path, "write_text", side_effect=OSError("write failed")):
                 with self.assertRaisesRegex(OSError, "write failed"):

@@ -87,19 +87,34 @@ with tempfile.TemporaryDirectory() as tmp:
     production_unsafe_password.write_text(
         "APP_ENV=production\n"
         "POSTGRES_PASSWORD=owner:secret@unsafe\n"
+        "POSTGRES_RUNTIME_PASSWORD=runtime:secret@unsafe\n"
+        "POSTGRES_TELEGRAM_WORKER_PASSWORD=telegram:secret@unsafe\n"
+        "POSTGRES_EMAIL_WORKER_PASSWORD=email:secret@unsafe\n"
+        "POSTGRES_MAINTENANCE_PASSWORD=maintenance:secret@unsafe\n"
     )
 
     result = run(production_unsafe_password)
     assert result.returncode == 1
-    assert (
-        "production value for POSTGRES_PASSWORD must be URL-safe"
-        in result.stderr
-    )
+    for key in (
+        "POSTGRES_PASSWORD",
+        "POSTGRES_RUNTIME_PASSWORD",
+        "POSTGRES_TELEGRAM_WORKER_PASSWORD",
+        "POSTGRES_EMAIL_WORKER_PASSWORD",
+        "POSTGRES_MAINTENANCE_PASSWORD",
+    ):
+        assert (
+            f"production value for {key} must be URL-safe"
+            in result.stderr
+        )
 
     production_safe_password = root / "production-safe-password.env"
     production_safe_password.write_text(
         "APP_ENV=production\n"
         "POSTGRES_PASSWORD=owner_secret-123.~\n"
+        "POSTGRES_RUNTIME_PASSWORD=runtime_secret-123.~\n"
+        "POSTGRES_TELEGRAM_WORKER_PASSWORD=telegram_secret-123.~\n"
+        "POSTGRES_EMAIL_WORKER_PASSWORD=email_secret-123.~\n"
+        "POSTGRES_MAINTENANCE_PASSWORD=maintenance_secret-123.~\n"
     )
 
     result = run(production_safe_password)

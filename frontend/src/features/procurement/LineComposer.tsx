@@ -15,17 +15,6 @@ import {
 } from "../../shared/api/catalog";
 import type { ProcurementLineInput } from "../../shared/api/procurement";
 
-const manufactured = new Set([
-  "transceiver_ethernet",
-  "transceiver_fc",
-  "network_ethernet",
-  "network_fc",
-  "ssd",
-  "hdd",
-  "ram",
-  "pcie_adapter",
-]);
-
 const MAX_PROCUREMENT_LINES = 500;
 
 function quantity(value: string): number | null {
@@ -167,6 +156,12 @@ export function LineComposer({ lines, onChange }: Props) {
     return all.filter((entry) => !parents.has(entry.id));
   }, [categories.data]);
 
+  const selectedProposedCategory = leaves.find(
+    (entry) => entry.key === category,
+  );
+  const identityRequired =
+    selectedProposedCategory?.requires_manufacturer_model === true;
+
   const categoryGroups = useMemo(() => {
     const all = categories.data ?? [];
     const families = all
@@ -222,7 +217,7 @@ export function LineComposer({ lines, onChange }: Props) {
     },
     enabled:
       mode === "PROPOSED_ITEM"
-      && manufactured.has(category),
+      && identityRequired,
     staleTime: 5 * 60_000,
   });
 
@@ -399,7 +394,7 @@ export function LineComposer({ lines, onChange }: Props) {
       setError("Заполните категорию, название и обязательные характеристики.");
       return;
     }
-    if (manufactured.has(category) && (!manufacturerId || !model.trim())) {
+    if (identityRequired && (!manufacturerId || !model.trim())) {
       setError("Для этой категории нужны производитель и модель.");
       return;
     }
@@ -573,7 +568,7 @@ export function LineComposer({ lines, onChange }: Props) {
               ))}
             </select>
           </label>
-          {manufactured.has(category) ? (
+          {identityRequired ? (
             <>
               <label>
                 Поиск производителя
@@ -635,7 +630,7 @@ export function LineComposer({ lines, onChange }: Props) {
             Название
             <input maxLength={255} value={name} onChange={(event) => setName(event.target.value)} />
           </label>
-          {manufactured.has(category) ? (
+          {identityRequired ? (
             <label>
               Модель
               <input maxLength={255} value={model} onChange={(event) => setModel(event.target.value)} />

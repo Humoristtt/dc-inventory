@@ -17,6 +17,28 @@ async def test_catalog_api_read_admin_and_gate_boundaries(warehouse_db: AsyncSes
                 assert (await client.get(path, headers=users[name][1])).status_code == 403
             for name in ("user", "senior", "manager", "admin", "owner"):
                 assert (await client.get(path, headers=users[name][1])).status_code == 200
+        categories_response = await client.get(
+            "/api/catalog/categories",
+            headers=users["user"][1],
+        )
+        assert categories_response.status_code == 200
+        category_policy = {
+            row["key"]: row["requires_manufacturer_model"]
+            for row in categories_response.json()
+        }
+        assert category_policy["transceiver_ethernet"] is True
+        assert category_policy["optical_patch_cord"] is False
+
+        transceiver_response = await client.get(
+            "/api/catalog/categories/transceiver_ethernet",
+            headers=users["user"][1],
+        )
+        assert transceiver_response.status_code == 200
+        assert (
+            transceiver_response.json()["requires_manufacturer_model"]
+            is True
+        )
+
         payload = cable_payload().model_dump(mode="json")
         path = "/api/admin/catalog/items"
         assert (await client.post(path, headers=users["user"][1], json=payload)).status_code == 403

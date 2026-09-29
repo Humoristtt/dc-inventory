@@ -94,7 +94,11 @@ def parse_env_values(
     return values, errors
 
 
-def validate_env_file(path: Path) -> list[str]:
+def validate_env_file(
+    path: Path,
+    *,
+    production: bool = False,
+) -> list[str]:
     allowed, reference_errors = parse_env_keys(
         REFERENCE_ENV
     )
@@ -112,7 +116,7 @@ def validate_env_file(path: Path) -> list[str]:
             f"{path}: unknown environment key {key}"
         )
 
-    if values.get("APP_ENV") == "production":
+    if production:
         for key, value in sorted(values.items()):
             if "replace-with-" in value:
                 errors.append(
@@ -140,14 +144,21 @@ def validate_env_file(path: Path) -> list[str]:
 
 
 def main() -> int:
-    if len(sys.argv) != 2:
+    args = sys.argv[1:]
+    production = False
+
+    if args[:1] == ["--production"]:
+        production = True
+        args = args[1:]
+
+    if len(args) != 1:
         print(
-            "usage: validate_env_file.py PATH",
+            "usage: validate_env_file.py [--production] PATH",
             file=sys.stderr,
         )
         return 2
 
-    path = Path(sys.argv[1])
+    path = Path(args[0])
 
     if not path.is_file():
         print(
@@ -156,7 +167,10 @@ def main() -> int:
         )
         return 2
 
-    errors = validate_env_file(path)
+    errors = validate_env_file(
+        path,
+        production=production,
+    )
 
     if errors:
         for error in errors:
@@ -165,8 +179,9 @@ def main() -> int:
 
     keys, _ = parse_env_keys(path)
 
+    mode = "production" if production else "keys"
     print(
-        f"ENV_FILE_KEYS=PASS "
+        f"ENV_FILE_{mode.upper()}=PASS "
         f"file={path} keys={len(keys)}"
     )
     return 0

@@ -52,17 +52,6 @@ import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
 import "../../features/catalog/admin-catalog.css";
 import "../../features/inventory/inventory.css";
 
-const manufactured = new Set([
-  "transceiver_ethernet",
-  "transceiver_fc",
-  "network_ethernet",
-  "network_fc",
-  "ssd",
-  "hdd",
-  "ram",
-  "pcie_adapter",
-]);
-
 type Draft = {
   category: string;
   manufacturer: string;
@@ -312,7 +301,8 @@ export function ItemFormPage() {
     (category) => category.parent_id === familyId,
   ) ?? [];
 
-  const identityRequired = manufactured.has(draft.category);
+  const identityRequired =
+    selected?.requires_manufacturer_model === true;
 
   const schema = useQuery({
     staleTime: 5 * 60_000,

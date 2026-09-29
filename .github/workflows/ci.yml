@@ -41,108 +41,15 @@ jobs:
 
       - name: Verify immutable supply-chain references
         shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
+        run: python3 ops/tests/test_immutable_supply_chain_references.py
 
-          workflow = Path(".github/workflows/ci.yml").read_text()
+      - name: Repository data policy
+        shell: bash
+        run: python3 ops/tests/test_repository_data_policy.py
 
-          action_refs = re.findall(
-              r"^\s+- uses:\s+([^@\s]+)@([^\s#]+)",
-              workflow,
-              flags=re.MULTILINE,
-          )
-
-          mutable_actions = [
-              f"{name}@{ref}"
-              for name, ref in action_refs
-              if re.fullmatch(r"[0-9a-f]{40}", ref) is None
-          ]
-
-          image_refs = []
-
-          for filename in (
-              "backend/Dockerfile",
-              "frontend/Dockerfile",
-          ):
-              source = Path(filename)
-
-              for line in source.read_text().splitlines():
-                  if line.startswith("FROM "):
-                      image_refs.append(
-                          (filename, line.split()[1])
-                      )
-
-          for filename in (
-              "compose.yaml",
-              "compose.dev.yaml",
-          ):
-              source = Path(filename)
-
-              for line in source.read_text().splitlines():
-                  match = re.match(
-                      r"^(?:  |    )image:\s+(\S+)\s*$",
-                      line,
-                  )
-
-                  if match:
-                      image_refs.append(
-                          (filename, match.group(1))
-                      )
-
-          for line in workflow.splitlines():
-              match = re.match(
-                  r"^ {8}image:\s+(\S+)\s*$",
-                  line,
-              )
-
-              if match:
-                  image_refs.append(
-                      (
-                          ".github/workflows/ci.yml",
-                          match.group(1),
-                      )
-                  )
-
-          mutable_images = []
-
-          for source, image in image_refs:
-              if image.startswith("dc-inventory-") or image in {
-                  "${BACKEND_IMAGE:-dc-inventory-backend:local}",
-                  "${WEB_IMAGE:-dc-inventory-web:local}",
-                  "${POSTGRES_IMAGE:-dc-inventory-postgres:local}",
-              }:
-                  continue
-
-              if re.search(
-                  r"@sha256:[0-9a-f]{64}$",
-                  image,
-              ) is None:
-                  mutable_images.append(
-                      f"{source}:{image}"
-                  )
-
-          if mutable_actions:
-              print(
-                  "Mutable GitHub Action references:",
-                  *mutable_actions,
-                  sep="\n",
-              )
-
-          if mutable_images:
-              print(
-                  "Mutable external image references:",
-                  *mutable_images,
-                  sep="\n",
-              )
-
-          if mutable_actions or mutable_images:
-              raise SystemExit(1)
-
-          print("IMMUTABLE_SUPPLY_CHAIN_GUARD=PASS")
-          PY
-
+      - name: Frozen migration artifacts contract
+        shell: bash
+        run: python3 ops/tests/test_migration_frozen_artifacts_contract.py
 
       - name: Stage 15 backup contract
         shell: bash

@@ -380,6 +380,7 @@ async def _prepare_lines(
             )
         )
 
+    _validate_aggregate_line_quantities(rows)
     return rows
 
 

@@ -39,6 +39,7 @@ from app.modules.procurement.schemas import (
     DiscrepancyCreate,
     ExistingItemLineCreate,
     ExpectedStateMutation,
+    MAX_PROCUREMENT_ITEM_QUANTITY,
     ProcurementAcceptanceCreate,
     ProcurementRequestCreate,
     ProposedItemCreateAndBind,
@@ -47,6 +48,7 @@ from app.modules.procurement.schemas import (
 )
 from app.modules.procurement.service import (
     ProcurementConflictError,
+    ProcurementValidationError,
     complete_acceptance,
     create_and_bind_line,
     create_request,
@@ -435,6 +437,183 @@ async def test_create_and_bind_proposed_item_is_atomic_and_idempotent(
         await create_and_bind_line(db, record.request.id, conflict, actor_user_id=senior.id)
     assert error.value.code == "line_already_bound"
     assert await db.scalar(select(func.count()).select_from(Item)) == (item_count or 0) + 1
+
+
+async def test_request_rejects_aggregate_quantity_over_safe_bound(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    initiator, _ = await actor(db, UserRole.ADMIN)
+    manager, _ = await actor(db, UserRole.MANAGER)
+    item_id = await create_item(db, cable_payload())
+
+    with pytest.raises(ProcurementValidationError) as exc_info:
+        await create_request(
+            db,
+            ProcurementRequestCreate(
+                assigned_manager_user_id=manager.id,
+                client_request_id="aggregate-overflow-create",
+                lines=[
+                    existing_line(
+                        item_id,
+                        MAX_PROCUREMENT_ITEM_QUANTITY,
+                    ),
+                    existing_line(item_id, 1),
+                ],
+            ),
+            actor_user_id=initiator.id,
+            settings=settings(),
+        )
+
+    assert exc_info.value.code == "aggregate_quantity_too_large"
+    assert await db.scalar(select(func.count(ProcurementRequest.id))) == 0
+
+
+async def test_request_allows_aggregate_at_safe_bound(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    initiator, _ = await actor(db, UserRole.ADMIN)
+    manager, _ = await actor(db, UserRole.MANAGER)
+    item_id = await create_item(db, cable_payload())
+
+    record = await create_request(
+        db,
+        ProcurementRequestCreate(
+            assigned_manager_user_id=manager.id,
+            client_request_id="aggregate-boundary-create",
+            lines=[
+                existing_line(
+                    item_id,
+                    MAX_PROCUREMENT_ITEM_QUANTITY - 1,
+                ),
+                existing_line(item_id, 1),
+            ],
+        ),
+        actor_user_id=initiator.id,
+        settings=settings(),
+    )
+
+    assert sum(
+        line.quantity
+        for line in record.current_revision.lines
+    ) == MAX_PROCUREMENT_ITEM_QUANTITY
+
+
+async def test_request_rejects_existing_and_proposed_identity_convergence_over_safe_bound(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    initiator, _ = await actor(db, UserRole.ADMIN)
+    manager, _ = await actor(db, UserRole.MANAGER)
+    proposed = cable_payload()
+    item_id = await create_item(db, proposed)
+
+    with pytest.raises(ProcurementValidationError) as exc_info:
+        await create_request(
+            db,
+            ProcurementRequestCreate(
+                assigned_manager_user_id=manager.id,
+                client_request_id="aggregate-proposed-convergence",
+                lines=[
+                    existing_line(
+                        item_id,
+                        MAX_PROCUREMENT_ITEM_QUANTITY,
+                    ),
+                    ProposedItemLineCreate(
+                        line_type=ProcurementLineType.PROPOSED_ITEM,
+                        category_key=proposed.category_key,
+                        manufacturer_id=proposed.manufacturer_id,
+                        name=proposed.name,
+                        model=proposed.model,
+                        attributes=proposed.attributes,
+                        quantity=1,
+                    ),
+                ],
+            ),
+            actor_user_id=initiator.id,
+            settings=settings(),
+        )
+
+    assert exc_info.value.code == "aggregate_quantity_too_large"
+    assert await db.scalar(select(func.count(ProcurementRequest.id))) == 0
+
+
+async def test_revision_rejects_aggregate_quantity_over_safe_bound_without_state_change(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    (
+        initiator,
+        manager,
+        _senior,
+        item_id,
+        _location,
+        record,
+    ) = await seed_procurement(db)
+
+    record = await return_for_correction(
+        db,
+        record.request.id,
+        CorrectionRequest(
+            expected_state_version=record.request.state_version,
+            expected_revision_id=record.request.current_revision_id,
+            client_request_id="aggregate-revision-correction",
+            comment="rebuild aggregate",
+        ),
+        actor_user_id=manager.id,
+        settings=settings(),
+    )
+
+    revision_id_before = record.request.current_revision_id
+    state_version_before = record.request.state_version
+    revision_count_before = await db.scalar(
+        select(func.count(ProcurementRevision.id)).where(
+            ProcurementRevision.request_id == record.request.id
+        )
+    )
+    event_count_before = await db.scalar(
+        select(func.count(ProcurementEvent.id)).where(
+            ProcurementEvent.request_id == record.request.id
+        )
+    )
+
+    with pytest.raises(ProcurementValidationError) as exc_info:
+        await submit_revision(
+            db,
+            record.request.id,
+            RevisionCreate(
+                expected_state_version=record.request.state_version,
+                expected_revision_id=record.request.current_revision_id,
+                client_request_id="aggregate-overflow-revision",
+                lines=[
+                    existing_line(
+                        item_id,
+                        MAX_PROCUREMENT_ITEM_QUANTITY,
+                    ),
+                    existing_line(item_id, 1),
+                ],
+            ),
+            actor_user_id=initiator.id,
+            settings=settings(),
+        )
+
+    assert exc_info.value.code == "aggregate_quantity_too_large"
+
+    await db.refresh(record.request)
+    assert record.request.status == ProcurementStatus.AGREEMENT_REVISION_REQUIRED
+    assert record.request.current_revision_id == revision_id_before
+    assert record.request.state_version == state_version_before
+    assert await db.scalar(
+        select(func.count(ProcurementRevision.id)).where(
+            ProcurementRevision.request_id == record.request.id
+        )
+    ) == revision_count_before
+    assert await db.scalar(
+        select(func.count(ProcurementEvent.id)).where(
+            ProcurementEvent.request_id == record.request.id
+        )
+    ) == event_count_before
 
 
 async def test_request_creation_is_idempotent(

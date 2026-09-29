@@ -217,9 +217,10 @@ export function createAndBindProcurementLine(
     model: string | null;
     attributes: Record<string, string | number | boolean>;
   },
+  clientRequestId: string = crypto.randomUUID(),
 ) {
   return mutateProcurement(request.id, "create-and-bind-line", {
-    ...expectedState(request),
+    ...expectedState(request, clientRequestId),
     line_id: lineId,
     item,
   });
@@ -236,11 +237,14 @@ export function mutateProcurement(
   );
 }
 
-export function expectedState(request: ProcurementRequest) {
+export function expectedState(
+  request: ProcurementRequest,
+  clientRequestId: string = crypto.randomUUID(),
+) {
   return {
     expected_state_version: request.state_version,
     expected_revision_id: request.current_revision_id,
-    client_request_id: crypto.randomUUID(),
+    client_request_id: clientRequestId,
   };
 }
 

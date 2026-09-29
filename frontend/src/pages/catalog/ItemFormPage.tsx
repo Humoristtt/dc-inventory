@@ -237,6 +237,11 @@ export function ItemFormPage() {
   const [manufacturerName, setManufacturerName] = useState("");
   const [manufacturerInput, setManufacturerInput] = useState("");
   const manufacturerInitialized = useRef(false);
+  const procurementIntentRef = useRef<{
+    fingerprint: string;
+    clientRequestId: string;
+  } | null>(null);
+  const mutationInFlightRef = useRef(false);
 
   const item = useQuery({
     queryKey: ["catalog", "item", itemId],
@@ -468,12 +473,33 @@ export function ItemFormPage() {
       }
 
       if (procurement.data && procurementLineId && procurementRequestId) {
+        const fingerprint = JSON.stringify({
+          requestId: procurement.data.id,
+          stateVersion: procurement.data.state_version,
+          revisionId: procurement.data.current_revision_id,
+          lineId: procurementLineId,
+          item: payload,
+        });
+        let intent = procurementIntentRef.current;
+
+        if (
+          intent === null
+          || intent.fingerprint !== fingerprint
+        ) {
+          intent = {
+            fingerprint,
+            clientRequestId: crypto.randomUUID(),
+          };
+          procurementIntentRef.current = intent;
+        }
+
         return {
           kind: "procurement" as const,
           saved: await createAndBindProcurementLine(
             procurement.data,
             procurementLineId,
             payload,
+            intent.clientRequestId,
           ),
         };
       }
@@ -485,6 +511,7 @@ export function ItemFormPage() {
     },
     onSuccess: ({ kind, saved }) => {
       if (kind === "procurement") {
+        procurementIntentRef.current = null;
         client.setQueryData(
           ["procurement", "request", saved.id],
           saved,
@@ -520,6 +547,9 @@ export function ItemFormPage() {
       });
 
       navigate(`/catalog/items/${saved.id}`, { replace: true });
+    },
+    onSettled: () => {
+      mutationInFlightRef.current = false;
     },
   });
 
@@ -620,10 +650,12 @@ export function ItemFormPage() {
               Object.keys(next).length
               || !schema.isSuccess
               || mutation.isPending
+              || mutationInFlightRef.current
             ) {
               return;
             }
 
+            mutationInFlightRef.current = true;
             mutation.mutate({
               category_key: draft.category,
               manufacturer_id: identityRequired

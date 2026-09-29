@@ -49,6 +49,7 @@ from app.modules.procurement.notifications import (
     technical_recipient_user_ids,
 )
 from app.modules.procurement.schemas import (
+    MAX_PROCUREMENT_ITEM_QUANTITY,
     AssignmentMutation,
     CorrectionRequest,
     ExistingItemLineCreate,
@@ -379,7 +380,26 @@ async def _prepare_lines(
             )
         )
 
+    _validate_aggregate_line_quantities(rows)
     return rows
+
+
+def _validate_aggregate_line_quantities(
+    lines: Sequence[ProcurementRevisionLine],
+) -> None:
+    quantities: defaultdict[str, int] = defaultdict(int)
+
+    for line in lines:
+        quantities[line.expected_identity_signature] += line.quantity
+
+        if (
+            quantities[line.expected_identity_signature]
+            > MAX_PROCUREMENT_ITEM_QUANTITY
+        ):
+            raise ProcurementValidationError(
+                "aggregated item quantity is too large",
+                code="aggregate_quantity_too_large",
+            )
 
 
 async def _next_request_number(db: AsyncSession) -> str:
@@ -1087,6 +1107,8 @@ async def bind_line(
             code="item_identity_mismatch",
         )
 
+    _validate_aggregate_line_quantities(record.current_revision.lines)
+
     db.add(
         ProcurementLineCatalogBinding(
             revision_line_id=line.id,
@@ -1164,6 +1186,8 @@ async def create_and_bind_line(
             "created catalog identity does not match approved procurement line",
             code="item_identity_mismatch",
         )
+
+    _validate_aggregate_line_quantities(record.current_revision.lines)
 
     item_id = await create_item(db, payload.item)
     db.add(
@@ -1326,6 +1350,8 @@ async def complete_acceptance(
                 code="item_identity_mismatch",
             )
 
+    _validate_aggregate_line_quantities(record.current_revision.lines)
+
     quantities: defaultdict[uuid.UUID, int] = defaultdict(int)
     for line in record.current_revision.lines:
         item_id = _bound_item_id(line)
@@ -1334,8 +1360,11 @@ async def complete_acceptance(
                 "all proposed lines must be bound", code="unbound_procurement_line"
             )
         quantities[item_id] += line.quantity
-        if quantities[item_id] > 2**53 - 1:
-            raise ProcurementValidationError("aggregated item quantity is too large")
+        if quantities[item_id] > MAX_PROCUREMENT_ITEM_QUANTITY:
+            raise ProcurementValidationError(
+                "aggregated item quantity is too large",
+                code="aggregate_quantity_too_large",
+            )
     movement = await create_movement(
         db,
         MovementCreate(

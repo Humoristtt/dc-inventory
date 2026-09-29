@@ -45,6 +45,7 @@ class CategorySummaryOut(BaseModel):
     sort_order: int
     is_system: bool
     parent_id: UUID | None
+    requires_manufacturer_model: bool
 
 
 class CategoryAttributeOut(BaseModel):

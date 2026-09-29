@@ -327,6 +327,8 @@ export function ProcurementDetailPage() {
 
   const current = request.data;
   const actions = useMemo(() => new Set(current?.available_actions ?? []), [current]);
+  const activeLocations =
+    locations.data?.filter((entry) => entry.status === "ACTIVE") ?? [];
   const act = (action: string, extra: Record<string, unknown> = {}) => {
     if (!current || mutationInFlightRef.current) return;
 
@@ -489,9 +491,34 @@ export function ProcurementDetailPage() {
           />
         </label>
 
+        {managers.isPending ? (
+          <p role="status">Загружаем менеджеров…</p>
+        ) : null}
+        {managers.isError ? (
+          <p role="alert">
+            Не удалось загрузить менеджеров.{" "}
+            <button
+              onClick={() => void managers.refetch()}
+              type="button"
+            >
+              Повторить
+            </button>
+          </p>
+        ) : null}
+        {!managers.isPending
+          && !managers.isError
+          && managerOptions.length === 0 ? (
+            <p>Менеджеры не найдены.</p>
+          ) : null}
+
         <label>
           Новый менеджер
           <select
+            disabled={
+              managers.isPending
+              || managers.isError
+              || mutation.isPending
+            }
             value={managerId}
             onChange={(event) =>
               setManagerId(
@@ -537,7 +564,11 @@ export function ProcurementDetailPage() {
 
         <button
           className="button button--dark"
-          disabled={!managerId}
+          disabled={
+            !managerId
+            || managers.isError
+            || mutation.isPending
+          }
           onClick={() =>
             act(
               "transfer-manager",
@@ -556,25 +587,77 @@ export function ProcurementDetailPage() {
       <Dialog open={dialog === "correction"} title="Вернуть на корректировку" onClose={() => setDialog(null)}>
         <label>Комментарий<textarea maxLength={4000} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
         <details><summary>Добавить альтернативный состав</summary><LineComposer lines={proposal} onChange={setProposal} /></details>
-        <button className="button button--danger" disabled={!comment.trim()} onClick={() => act("return-for-correction", { comment, alternative_proposal: proposal.length ? proposal : null })} type="button">Вернуть</button>
+        <button className="button button--danger" disabled={!comment.trim() || mutation.isPending} onClick={() => act("return-for-correction", { comment, alternative_proposal: proposal.length ? proposal : null })} type="button">Вернуть</button>
       </Dialog>
 
       <Dialog open={dialog === "revision"} title="Новая редакция" onClose={() => setDialog(null)}>
         <LineComposer lines={revisionLines} onChange={setRevisionLines} />
         <label>Комментарий<textarea maxLength={4000} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
-        <button className="button button--accent" disabled={!revisionLines.length} onClick={() => act("revisions", { lines: revisionLines, general_comment: comment.trim() || null })} type="button">Отправить редакцию</button>
+        <button className="button button--accent" disabled={!revisionLines.length || mutation.isPending} onClick={() => act("revisions", { lines: revisionLines, general_comment: comment.trim() || null })} type="button">Отправить редакцию</button>
       </Dialog>
 
       <Dialog open={dialog === "discrepancy"} title="Есть расхождения" onClose={() => setDialog(null)}>
         <label>Что отличается<textarea maxLength={4000} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
-        <button className="button button--danger" disabled={!comment.trim()} onClick={() => act("discrepancies", { comment })} type="button">Зафиксировать</button>
+        <button className="button button--danger" disabled={!comment.trim() || mutation.isPending} onClick={() => act("discrepancies", { comment })} type="button">Зафиксировать</button>
       </Dialog>
 
       <Dialog open={dialog === "accept"} title="Подтвердить приёмку" onClose={() => setDialog(null)}>
         <p>После подтверждения на склад будет добавлено:</p>
         <ul>{current.current_revision.lines.map((line) => <li key={line.id}>{lineTitle(line)} — {line.quantity} шт.</li>)}</ul>
-        <label>Место приёмки<select value={locationId} onChange={(event) => setLocationId(event.target.value)}><option value="">Выберите</option>{(locations.data ?? []).filter((entry) => entry.status === "ACTIVE").map((entry) => <option key={entry.id} value={entry.id}>{entry.name} · {entry.code}</option>)}</select></label>
-        <button className="button button--accent" disabled={!locationId || current.current_revision.lines.some((line) => !line.bound_item_id)} onClick={() => act("acceptance", { receiving_location_id: locationId })} type="button">Подтвердить и оприходовать</button>
+        {locations.isPending ? (
+          <p role="status">Загружаем места приёмки…</p>
+        ) : null}
+        {locations.isError ? (
+          <p role="alert">
+            Не удалось загрузить места приёмки.{" "}
+            <button onClick={() => void locations.refetch()} type="button">
+              Повторить
+            </button>
+          </p>
+        ) : null}
+        {!locations.isPending
+          && !locations.isError
+          && activeLocations.length === 0 ? (
+            <p>Нет доступных мест приёмки.</p>
+          ) : null}
+        <label>
+          Место приёмки
+          <select
+            disabled={
+              locations.isPending
+              || locations.isError
+              || mutation.isPending
+            }
+            value={locationId}
+            onChange={(event) => setLocationId(event.target.value)}
+          >
+            <option value="">Выберите</option>
+            {activeLocations.map((entry) => (
+              <option key={entry.id} value={entry.id}>
+                {entry.name} · {entry.code}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button
+          className="button button--accent"
+          disabled={
+            !locationId
+            || locations.isError
+            || mutation.isPending
+            || current.current_revision.lines.some(
+              (line) => !line.bound_item_id,
+            )
+          }
+          onClick={() =>
+            act(
+              "acceptance",
+              { receiving_location_id: locationId },
+            )}
+          type="button"
+        >
+          Подтвердить и оприходовать
+        </button>
       </Dialog>
 
       <Dialog
@@ -593,11 +676,36 @@ export function ProcurementDetailPage() {
           />
         </label>
 
+        {bindingSearch.trim().length < 2 ? (
+          <p>Введите минимум 2 символа для поиска.</p>
+        ) : null}
+        {bindingItems.isPending ? (
+          <p role="status">Ищем оборудование…</p>
+        ) : null}
+        {bindingItems.isError ? (
+          <p role="alert">
+            Не удалось загрузить оборудование.{" "}
+            <button
+              onClick={() => void bindingItems.refetch()}
+              type="button"
+            >
+              Повторить
+            </button>
+          </p>
+        ) : null}
+        {bindingSearch.trim().length >= 2
+          && !bindingItems.isPending
+          && !bindingItems.isError
+          && bindingItemOptions.length === 0 ? (
+            <p>Оборудование не найдено.</p>
+          ) : null}
+
         <div className="procurement-binding-results">
           {bindingItemOptions.map(
             (item) => (
               <button
                 className="button"
+                disabled={mutation.isPending}
                 key={item.id}
                 onClick={() =>
                   act(

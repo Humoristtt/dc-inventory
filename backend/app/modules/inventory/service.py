@@ -16,7 +16,6 @@ from app.core.idempotency import (
     canonical_fingerprint,
     normalize_idempotency_key,
 )
-
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Item, Manufacturer
 from app.modules.catalog.normalization import identity_text

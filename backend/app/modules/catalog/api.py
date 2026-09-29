@@ -111,6 +111,9 @@ def _category_summary(category: Category) -> CategorySummaryOut:
         parent_id=category.parent_id,
         sort_order=category.sort_order,
         is_system=category.is_system,
+        requires_manufacturer_model=(
+            category.key in MANUFACTURED_LEAVES
+        ),
     )
 
 

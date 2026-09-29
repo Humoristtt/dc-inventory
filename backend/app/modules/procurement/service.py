@@ -49,13 +49,13 @@ from app.modules.procurement.notifications import (
     technical_recipient_user_ids,
 )
 from app.modules.procurement.schemas import (
+    MAX_PROCUREMENT_ITEM_QUANTITY,
     AssignmentMutation,
     CorrectionRequest,
     ExistingItemLineCreate,
     ExpectedStateMutation,
     LineBindingCreate,
     ManagerTransfer,
-    MAX_PROCUREMENT_ITEM_QUANTITY,
     ProcurementAcceptanceCreate,
     ProcurementLineCreate,
     ProcurementRequestCreate,

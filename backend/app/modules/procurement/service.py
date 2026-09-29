@@ -645,6 +645,7 @@ async def _lock_and_validate_expected(
     payload: ExpectedStateMutation,
     *,
     actor_user_id: uuid.UUID,
+    event_type: ProcurementEventType,
 ) -> tuple[ProcurementRecord, str, str, ProcurementEvent | None]:
     record = await get_request_record(db, request_id, lock=True)
     client_request_id = _normalize_client_request_id(payload.client_request_id)
@@ -657,6 +658,11 @@ async def _lock_and_validate_expected(
         )
     )
     if previous is not None:
+        if previous.event_type != event_type:
+            raise ProcurementConflictError(
+                "idempotency key was used for another procurement action",
+                code="idempotency_action_conflict",
+            )
         if previous.request_fingerprint != fingerprint:
             raise ProcurementConflictError(
                 "idempotency key was used with another payload",
@@ -702,7 +708,11 @@ async def manager_accept(
     actor_user_id: uuid.UUID,
 ) -> ProcurementRecord:
     record, key, fingerprint, replay = await _lock_and_validate_expected(
-        db, request_id, payload, actor_user_id=actor_user_id
+        db,
+        request_id,
+        payload,
+        actor_user_id=actor_user_id,
+        event_type=ProcurementEventType.MANAGER_ACCEPTED,
     )
     await _lock_and_require_actor_capabilities(
         db,
@@ -752,7 +762,11 @@ async def return_for_correction(
     settings: Settings,
 ) -> ProcurementRecord:
     record, key, fingerprint, replay = await _lock_and_validate_expected(
-        db, request_id, payload, actor_user_id=actor_user_id
+        db,
+        request_id,
+        payload,
+        actor_user_id=actor_user_id,
+        event_type=ProcurementEventType.CORRECTION_REQUESTED,
     )
     await _lock_and_require_actor_capabilities(
         db,
@@ -810,7 +824,11 @@ async def submit_revision(
     settings: Settings,
 ) -> ProcurementRecord:
     record, key, fingerprint, replay = await _lock_and_validate_expected(
-        db, request_id, payload, actor_user_id=actor_user_id
+        db,
+        request_id,
+        payload,
+        actor_user_id=actor_user_id,
+        event_type=ProcurementEventType.REVISION_SUBMITTED,
     )
     await _lock_and_require_actor_capabilities(
         db,
@@ -876,7 +894,11 @@ async def _change_assignment(
     settings: Settings,
 ) -> ProcurementRecord:
     record, key, fingerprint, replay = await _lock_and_validate_expected(
-        db, request_id, payload, actor_user_id=actor_user_id
+        db,
+        request_id,
+        payload,
+        actor_user_id=actor_user_id,
+        event_type=event_type,
     )
     await _lock_and_require_actor_capabilities(
         db,
@@ -972,7 +994,11 @@ async def transfer_to_acceptance(
     settings: Settings,
 ) -> ProcurementRecord:
     record, key, fingerprint, replay = await _lock_and_validate_expected(
-        db, request_id, payload, actor_user_id=actor_user_id
+        db,
+        request_id,
+        payload,
+        actor_user_id=actor_user_id,
+        event_type=ProcurementEventType.TRANSFERRED_TO_ACCEPTANCE,
     )
     await _lock_and_require_actor_capabilities(
         db,
@@ -1018,7 +1044,11 @@ async def bind_line(
     actor_user_id: uuid.UUID,
 ) -> ProcurementRecord:
     record, key, fingerprint, replay = await _lock_and_validate_expected(
-        db, request_id, payload, actor_user_id=actor_user_id
+        db,
+        request_id,
+        payload,
+        actor_user_id=actor_user_id,
+        event_type=ProcurementEventType.LINE_BOUND,
     )
     await _lock_and_require_actor_capabilities(
         db,
@@ -1090,7 +1120,11 @@ async def create_and_bind_line(
 ) -> ProcurementRecord:
     """Create a proposed catalog Item and bind it in the same transaction."""
     record, key, fingerprint, replay = await _lock_and_validate_expected(
-        db, request_id, payload, actor_user_id=actor_user_id
+        db,
+        request_id,
+        payload,
+        actor_user_id=actor_user_id,
+        event_type=ProcurementEventType.LINE_BOUND,
     )
     await _lock_and_require_actor_capabilities(
         db,
@@ -1166,7 +1200,11 @@ async def report_discrepancy(
     settings: Settings,
 ) -> ProcurementRecord:
     record, key, fingerprint, replay = await _lock_and_validate_expected(
-        db, request_id, payload, actor_user_id=actor_user_id
+        db,
+        request_id,
+        payload,
+        actor_user_id=actor_user_id,
+        event_type=ProcurementEventType.DISCREPANCY_REPORTED,
     )
     await _lock_and_require_actor_capabilities(
         db,
@@ -1219,7 +1257,11 @@ async def complete_acceptance(
     settings: Settings,
 ) -> ProcurementRecord:
     record, key, fingerprint, replay = await _lock_and_validate_expected(
-        db, request_id, payload, actor_user_id=actor_user_id
+        db,
+        request_id,
+        payload,
+        actor_user_id=actor_user_id,
+        event_type=ProcurementEventType.COMPLETED,
     )
     await _lock_and_require_actor_capabilities(
         db,

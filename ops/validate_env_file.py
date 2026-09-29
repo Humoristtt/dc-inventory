@@ -11,6 +11,14 @@ REFERENCE_ENV = ROOT / ".env.example"
 KEY_PATTERN = re.compile(
     r"^(?:export\s+)?([A-Z][A-Z0-9_]*)\s*="
 )
+URL_SAFE_SECRET_PATTERN = re.compile(r"^[A-Za-z0-9._~-]+$")
+URL_INTERPOLATED_SECRET_KEYS = {
+    "POSTGRES_PASSWORD",
+    "POSTGRES_RUNTIME_PASSWORD",
+    "POSTGRES_TELEGRAM_WORKER_PASSWORD",
+    "POSTGRES_EMAIL_WORKER_PASSWORD",
+    "POSTGRES_MAINTENANCE_PASSWORD",
+}
 
 
 def parse_env_keys(
@@ -49,21 +57,84 @@ def parse_env_keys(
     return keys, errors
 
 
+
+def parse_env_values(
+    path: Path,
+) -> tuple[dict[str, str], list[str]]:
+    values: dict[str, str] = {}
+    errors: list[str] = []
+
+    for line_number, raw_line in enumerate(
+        path.read_text().splitlines(),
+        start=1,
+    ):
+        line = raw_line.strip()
+
+        if not line or line.startswith("#"):
+            continue
+
+        match = KEY_PATTERN.match(line)
+        if match is None:
+            continue
+
+        key = match.group(1)
+        if key in values:
+            continue
+
+        raw_value = line[match.end():].strip()
+        if (
+            len(raw_value) >= 2
+            and raw_value[0] == raw_value[-1]
+            and raw_value[0] in {"'", '"'}
+        ):
+            raw_value = raw_value[1:-1]
+
+        values[key] = raw_value
+
+    return values, errors
+
+
 def validate_env_file(path: Path) -> list[str]:
     allowed, reference_errors = parse_env_keys(
         REFERENCE_ENV
     )
     actual, actual_errors = parse_env_keys(path)
+    values, value_errors = parse_env_values(path)
 
     errors = [
         *reference_errors,
         *actual_errors,
+        *value_errors,
     ]
 
     for key in sorted(actual - allowed):
         errors.append(
             f"{path}: unknown environment key {key}"
         )
+
+    if values.get("APP_ENV") == "production":
+        for key, value in sorted(values.items()):
+            if "replace-with-" in value:
+                errors.append(
+                    f"{path}: production value for {key} is still a placeholder"
+                )
+
+        for key in sorted(URL_INTERPOLATED_SECRET_KEYS):
+            value = values.get(key)
+            if value is None:
+                continue
+
+            if not value:
+                errors.append(
+                    f"{path}: production value for {key} must not be empty"
+                )
+                continue
+
+            if URL_SAFE_SECRET_PATTERN.fullmatch(value) is None:
+                errors.append(
+                    f"{path}: production value for {key} must be URL-safe "
+                    "(RFC 3986 unreserved characters only)"
+                )
 
     return errors
 

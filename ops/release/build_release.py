@@ -7,6 +7,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
@@ -24,6 +25,27 @@ def output(*args: str) -> str:
     return subprocess.check_output(args, cwd=ROOT, text=True).strip()
 
 
+def validate_release_env(env_file: Path) -> None:
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "ops" / "validate_env_file.py"),
+            "--production",
+            str(env_file.resolve()),
+        ],
+        cwd=ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        detail = result.stderr.strip() or "production env validation failed"
+        raise RuntimeError(
+            "release environment validation failed:\n"
+            + detail
+        )
+
+
 def build(env_file: Path, destination: Path) -> None:
     if destination.exists():
         raise FileExistsError(f"release output already exists: {destination}")
@@ -36,6 +58,7 @@ def build(env_file: Path, destination: Path) -> None:
     existing = set(output("docker", "image", "ls", "--format", "{{.Repository}}:{{.Tag}}").splitlines())
     if existing.intersection(refs.values()):
         raise RuntimeError("release tag already exists; reuse retained artifacts, do not rebuild")
+    validate_release_env(env_file)
     environment = {**os.environ, **refs, "APP_REVISION": revision}
     subprocess.run(
         ["docker", "compose", "--env-file", str(env_file.resolve()), "-f", "compose.yaml",

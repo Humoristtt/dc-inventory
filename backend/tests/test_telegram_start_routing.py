@@ -61,6 +61,53 @@ async def test_start_is_ignored_outside_private_chat(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "text",
+    [
+        "",
+        " ",
+        "\t",
+        "\n  \t",
+    ],
+)
+async def test_empty_or_whitespace_text_is_ignored(
+    monkeypatch: pytest.MonkeyPatch,
+    text: str,
+) -> None:
+    enqueue = AsyncMock()
+    monkeypatch.setattr(
+        service,
+        "enqueue_start_message",
+        enqueue,
+    )
+
+    db = cast(AsyncSession, object())
+    settings = cast(Settings, object())
+
+    await service.process_telegram_update(
+        db,
+        update_id=102,
+        payload={
+            "message": {
+                "message_id": 79,
+                "text": text,
+                "chat": {
+                    "id": 123456789,
+                    "type": "private",
+                },
+                "from": {
+                    "id": 123456789,
+                    "first_name": "Whitespace user",
+                },
+            },
+        },
+        settings=settings,
+    )
+
+    enqueue.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_start_is_enqueued_for_private_chat(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

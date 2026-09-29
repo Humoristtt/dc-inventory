@@ -1,5 +1,3 @@
-import pytest
-
 from app.modules.procurement.enums import ProcurementStatus
 from app.modules.procurement.state_machine import transition_allowed
 
@@ -32,21 +30,17 @@ _ALLOWED = {
 }
 
 
-@pytest.mark.parametrize(
-    ("current", "target"),
-    [
-        (current, target)
-        for current in ProcurementStatus
-        for target in ProcurementStatus
-    ],
-)
-def test_procurement_transition_matrix_is_exhaustive(
-    current: ProcurementStatus,
-    target: ProcurementStatus,
-) -> None:
-    assert transition_allowed(current, target) is (
-        (current, target) in _ALLOWED
-    )
+def test_procurement_transition_matrix_is_exhaustive() -> None:
+    checked = 0
+
+    for current in ProcurementStatus:
+        for target in ProcurementStatus:
+            assert transition_allowed(current, target) is (
+                (current, target) in _ALLOWED
+            )
+            checked += 1
+
+    assert checked == len(ProcurementStatus) ** 2
 
 
 def test_purchasing_cannot_skip_directly_to_completed() -> None:

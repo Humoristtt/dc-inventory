@@ -494,6 +494,68 @@ async def test_request_creation_is_idempotent(
     assert exc_info.value.code == "idempotency_payload_conflict"
 
 
+async def test_same_action_replay_is_idempotent_but_cross_action_key_reuse_is_rejected(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    (
+        _initiator,
+        manager,
+        _senior,
+        _item_id,
+        _location,
+        record,
+    ) = await seed_procurement(db)
+
+    shared = expected(record, "shared-action-key")
+
+    accepted = await manager_accept(
+        db,
+        record.request.id,
+        shared,
+        actor_user_id=manager.id,
+    )
+    assert accepted.request.status == ProcurementStatus.PURCHASING
+
+    replay = await manager_accept(
+        db,
+        record.request.id,
+        shared,
+        actor_user_id=manager.id,
+    )
+    assert replay.request.status == ProcurementStatus.PURCHASING
+
+    with pytest.raises(ProcurementConflictError) as exc_info:
+        await transfer_to_acceptance(
+            db,
+            record.request.id,
+            shared,
+            actor_user_id=manager.id,
+            settings=settings(),
+        )
+
+    assert exc_info.value.code == "idempotency_action_conflict"
+
+    await db.refresh(record.request)
+    assert record.request.status == ProcurementStatus.PURCHASING
+
+    manager_accepted = await db.scalar(
+        select(func.count(ProcurementEvent.id)).where(
+            ProcurementEvent.request_id == record.request.id,
+            ProcurementEvent.event_type == ProcurementEventType.MANAGER_ACCEPTED,
+        )
+    )
+    transferred = await db.scalar(
+        select(func.count(ProcurementEvent.id)).where(
+            ProcurementEvent.request_id == record.request.id,
+            ProcurementEvent.event_type
+            == ProcurementEventType.TRANSFERRED_TO_ACCEPTANCE,
+        )
+    )
+    assert manager_accepted == 1
+    assert transferred == 0
+
+
 async def test_revision_history_is_immutable(
     warehouse_db: AsyncSession,
 ) -> None:

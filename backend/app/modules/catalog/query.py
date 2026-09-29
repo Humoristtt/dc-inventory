@@ -431,7 +431,7 @@ def _speed_sort_value() -> Any:
     )
     return sql_cast(
         numeric_text,
-        Numeric(20, 6),
+        Numeric(),
     )
 
 

@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Literal
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -112,6 +112,36 @@ class Settings(BaseSettings):
         ge=1,
         le=365,
     )
+
+    @model_validator(mode="after")
+    def reject_production_placeholders(self) -> "Settings":
+        if self.app_env != "production":
+            return self
+
+        values = {
+            "DATABASE_URL": self.database_url,
+            "TELEGRAM_BOT_TOKEN": self.telegram_bot_token_value,
+            "TELEGRAM_WEBHOOK_SECRET": self.telegram_webhook_secret_value,
+            "TELEGRAM_GATEWAY_URL": self.telegram_gateway_url_value,
+            "TELEGRAM_GATEWAY_SECRET": self.telegram_gateway_secret_value,
+            "MICROSOFT_GRAPH_TENANT_ID": self.microsoft_graph_tenant_id_value,
+            "MICROSOFT_GRAPH_CLIENT_ID": self.microsoft_graph_client_id_value,
+            "MICROSOFT_GRAPH_CLIENT_SECRET": self.microsoft_graph_client_secret_value,
+            "MICROSOFT_GRAPH_SENDER": self.microsoft_graph_sender_value,
+        }
+
+        placeholders = [
+            name
+            for name, value in values.items()
+            if value is not None and "replace-with-" in value
+        ]
+        if placeholders:
+            raise ValueError(
+                "production configuration contains placeholder values: "
+                + ", ".join(placeholders)
+            )
+
+        return self
 
     @field_validator(
         "admin_telegram_user_id",

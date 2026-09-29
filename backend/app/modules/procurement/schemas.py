@@ -17,6 +17,8 @@ from app.modules.procurement.enums import (
 
 type ProcurementScalar = str | int | Decimal | bool
 
+MAX_PROCUREMENT_ITEM_QUANTITY = 2**53 - 1
+
 
 class StrictRequestModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -35,7 +37,7 @@ class StrictRequestModel(BaseModel):
 class ExistingItemLineCreate(StrictRequestModel):
     line_type: Literal[ProcurementLineType.EXISTING_ITEM]
     item_id: UUID
-    quantity: StrictInt = Field(gt=0, le=2**53 - 1)
+    quantity: StrictInt = Field(gt=0, le=MAX_PROCUREMENT_ITEM_QUANTITY)
 
 
 class ProposedItemLineCreate(StrictRequestModel):
@@ -45,7 +47,7 @@ class ProposedItemLineCreate(StrictRequestModel):
     name: str = Field(min_length=1, max_length=255)
     model: str | None = Field(default=None, max_length=255)
     attributes: dict[str, ProcurementScalar] = Field(default_factory=dict)
-    quantity: StrictInt = Field(gt=0, le=2**53 - 1)
+    quantity: StrictInt = Field(gt=0, le=MAX_PROCUREMENT_ITEM_QUANTITY)
 
 
 ProcurementLineCreate = Annotated[

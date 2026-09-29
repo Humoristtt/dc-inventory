@@ -416,7 +416,7 @@ export function ProcurementDetailPage() {
                 </div>
                 {actions.has("bind_lines") && !line.bound_item_id ? (
                   <div className="procurement-line-actions">
-                    <button className="button" onClick={() => setBindingLine(line.id)} type="button">
+                    <button className="button" disabled={mutation.isPending} onClick={() => setBindingLine(line.id)} type="button">
                       Связать
                     </button>
                     <Link
@@ -434,14 +434,14 @@ export function ProcurementDetailPage() {
         </section>
 
         <div className="procurement-actions">
-          {actions.has("take_ownership") ? <button className="button" onClick={() => act("take-ownership", { expected_assigned_manager_user_id: current.assigned_manager.id })} type="button">Взять на себя</button> : null}
-          {actions.has("transfer_manager") ? <button className="button" onClick={() => setDialog("transfer")} type="button">Передать менеджеру</button> : null}
-          {actions.has("manager_accept") ? <button className="button button--dark" onClick={() => act("manager-accept")} type="button">Принять в работу</button> : null}
-          {actions.has("return_for_correction") ? <button className="button button--danger" onClick={() => setDialog("correction")} type="button">Вернуть на корректировку</button> : null}
-          {actions.has("transfer_to_acceptance") ? <button className="button button--dark" onClick={() => act("transfer-to-acceptance")} type="button">Передать на приёмку</button> : null}
-          {actions.has("submit_revision") ? <button className="button button--accent" onClick={openRevision} type="button">Создать новую редакцию</button> : null}
-          {actions.has("report_discrepancy") ? <button className="button button--danger" onClick={() => setDialog("discrepancy")} type="button">Есть расхождения</button> : null}
-          {actions.has("complete_acceptance") ? <button className="button button--accent" onClick={() => setDialog("accept")} type="button">Подтвердить приёмку</button> : null}
+          {actions.has("take_ownership") ? <button className="button" disabled={mutation.isPending} onClick={() => act("take-ownership", { expected_assigned_manager_user_id: current.assigned_manager.id })} type="button">Взять на себя</button> : null}
+          {actions.has("transfer_manager") ? <button className="button" disabled={mutation.isPending} onClick={() => setDialog("transfer")} type="button">Передать менеджеру</button> : null}
+          {actions.has("manager_accept") ? <button className="button button--dark" disabled={mutation.isPending} onClick={() => act("manager-accept")} type="button">Принять в работу</button> : null}
+          {actions.has("return_for_correction") ? <button className="button button--danger" disabled={mutation.isPending} onClick={() => setDialog("correction")} type="button">Вернуть на корректировку</button> : null}
+          {actions.has("transfer_to_acceptance") ? <button className="button button--dark" disabled={mutation.isPending} onClick={() => act("transfer-to-acceptance")} type="button">Передать на приёмку</button> : null}
+          {actions.has("submit_revision") ? <button className="button button--accent" disabled={mutation.isPending} onClick={openRevision} type="button">Создать новую редакцию</button> : null}
+          {actions.has("report_discrepancy") ? <button className="button button--danger" disabled={mutation.isPending} onClick={() => setDialog("discrepancy")} type="button">Есть расхождения</button> : null}
+          {actions.has("complete_acceptance") ? <button className="button button--accent" disabled={mutation.isPending} onClick={() => setDialog("accept")} type="button">Подтвердить приёмку</button> : null}
         </div>
         {mutation.isPending ? <p role="status">Сохраняем…</p> : null}
         {mutation.isError ? <p role="alert">{procurementError(mutation.error)}</p> : null}

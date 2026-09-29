@@ -35,11 +35,11 @@ from app.modules.procurement.models import (
     ProcurementRevisionLine,
 )
 from app.modules.procurement.schemas import (
+    MAX_PROCUREMENT_ITEM_QUANTITY,
     CorrectionRequest,
     DiscrepancyCreate,
     ExistingItemLineCreate,
     ExpectedStateMutation,
-    MAX_PROCUREMENT_ITEM_QUANTITY,
     ProcurementAcceptanceCreate,
     ProcurementRequestCreate,
     ProposedItemCreateAndBind,

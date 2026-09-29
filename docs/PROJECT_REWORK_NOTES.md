@@ -209,6 +209,9 @@
 - [OPEN] LOW code-style — backend comments/docstrings смешивают русский и английский; архитектурные термины и error messages тоже не имеют единого правила. Предлагаемый стандарт: code identifiers/comments/docstrings — English; user-facing UI/errors/docs — Russian, кроме устойчивых технических терминов.
 - [OPEN] LOW architecture — встречаются private imports между sibling modules и локальные imports для обхода связности. Перед рефакторингом построить import/dependency map и убрать только реальные boundary violations, не исторические migrations/vendor.
 - [OPEN] LOW docs-style — current-state facts, runbook commands, history и implementation notes смешаны в одних файлах. Разнести ответственность документов после source stabilization.
+- [OPEN] MEDIUM frontend/design-system — часть CSS использует tokens, но admin/reset/responsive слои содержат десятки локальных hex-цветов и собственные визуальные значения. Это уже второй фактический design system. Решение: инвентаризация цветов/spacing/radius/typography → перенос в tokens/semantic variables → удаление локальных дублей.
+- [OPEN] MEDIUM frontend/responsive — breakpoints не унифицированы: одновременно встречаются 359/370/390/400/420/430/520/560/620/679/680/720/1099/1100/1200/1919px. Нужен небольшой нормативный breakpoint set и миграция feature CSS без изменения layout semantics.
+- [OPEN] MEDIUM frontend/css-architecture — `catalog.css` ~1160 строк, несколько feature-specific responsive файлов и override-файлов (`admin-select-alignment.css`, `*-responsive.css`) создают cascade ownership ambiguity. Нужна карта ownership и постепенная декомпозиция, а не ещё один override layer.
 
 Заполняется только по текущему коду; каждый пункт перед исправлением получает точный regression/acceptance contract.
 

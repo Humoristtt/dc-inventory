@@ -217,7 +217,7 @@ export function createAndBindProcurementLine(
     model: string | null;
     attributes: Record<string, string | number | boolean>;
   },
-  clientRequestId = crypto.randomUUID(),
+  clientRequestId: string = crypto.randomUUID(),
 ) {
   return mutateProcurement(request.id, "create-and-bind-line", {
     ...expectedState(request, clientRequestId),
@@ -239,7 +239,7 @@ export function mutateProcurement(
 
 export function expectedState(
   request: ProcurementRequest,
-  clientRequestId = crypto.randomUUID(),
+  clientRequestId: string = crypto.randomUUID(),
 ) {
   return {
     expected_state_version: request.state_version,

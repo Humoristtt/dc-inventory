@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-import hashlib
-import json
 import uuid
 from collections import defaultdict
-from collections.abc import Mapping, Sequence
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -16,6 +14,11 @@ from sqlalchemy.orm import joinedload, selectinload
 from sqlalchemy.sql.base import ExecutableOption
 
 from app.core.config import Settings
+from app.core.idempotency import (
+    advisory_lock_key,
+    canonical_fingerprint,
+    normalize_idempotency_key,
+)
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Item
 from app.modules.catalog.schemas import ItemCreate
@@ -125,13 +128,8 @@ class ProcurementPage:
     total: int
 
 
-def _canonical_fingerprint(payload: Mapping[str, object]) -> str:
-    serialized = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
-
-
 def _normalize_client_request_id(value: str) -> str:
-    normalized = " ".join(value.split())
+    normalized = normalize_idempotency_key(value)
     if not normalized:
         raise ProcurementValidationError(
             "client_request_id must not be blank", code="client_request_id_required"
@@ -399,8 +397,7 @@ async def _next_request_number(db: AsyncSession) -> str:
 
 
 async def _advisory_lock(db: AsyncSession, namespace: str, *parts: object) -> None:
-    raw = "|".join([namespace, *(str(part) for part in parts)])
-    key = int.from_bytes(hashlib.sha256(raw.encode()).digest()[:8], "big", signed=True)
+    key = advisory_lock_key(namespace, *parts)
     await db.execute(select(func.pg_advisory_xact_lock(key)))
 
 
@@ -408,7 +405,7 @@ def _payload_fingerprint(payload: object) -> str:
     data = payload.model_dump(mode="json") if isinstance(payload, BaseModel) else payload
     if not isinstance(data, dict):
         raise TypeError("mutation payload must serialize to an object")
-    return _canonical_fingerprint(data)
+    return canonical_fingerprint(data)
 
 
 async def _add_event(

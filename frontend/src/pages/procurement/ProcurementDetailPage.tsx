@@ -19,7 +19,6 @@ import { useAuthState } from "../../features/auth/useAuthState";
 import { getCatalogItems } from "../../shared/api/catalog";
 import { getLocations } from "../../shared/api/inventory";
 import {
-  expectedState,
   getProcurementManagers,
   getProcurementRequest,
   mutateProcurement,
@@ -301,11 +300,17 @@ export function ProcurementDetailPage() {
       (page) => page.items,
     )
     ?? [];
+  const actionIntentRef = useRef<{
+    fingerprint: string;
+    clientRequestId: string;
+  } | null>(null);
+  const mutationInFlightRef = useRef(false);
 
   const mutation = useMutation({
     mutationFn: ({ action, body }: { action: string; body: Record<string, unknown> }) =>
       mutateProcurement(requestId, action, body),
     onSuccess: (saved) => {
+      actionIntentRef.current = null;
       queryClient.setQueryData(["procurement", "request", requestId], saved);
       void queryClient.invalidateQueries({ queryKey: ["procurement", "requests"] });
       setDialog(null);
@@ -315,22 +320,53 @@ export function ProcurementDetailPage() {
     onError: async () => {
       await request.refetch();
     },
+    onSettled: () => {
+      mutationInFlightRef.current = false;
+    },
   });
 
   const current = request.data;
   const actions = useMemo(() => new Set(current?.available_actions ?? []), [current]);
   const act = (action: string, extra: Record<string, unknown> = {}) => {
-    if (!current) return;
-    const body: Record<string, unknown> = { ...expectedState(current), ...extra };
-    if (Array.isArray(body.lines)) {
-      body.lines = procurementLinesPayload(body.lines as ProcurementLineInput[]);
-    }
-    if (Array.isArray(body.alternative_proposal)) {
-      body.alternative_proposal = procurementLinesPayload(
-        body.alternative_proposal as ProcurementLineInput[],
+    if (!current || mutationInFlightRef.current) return;
+
+    const command: Record<string, unknown> = {
+      expected_state_version: current.state_version,
+      expected_revision_id: current.current_revision_id,
+      ...extra,
+    };
+    if (Array.isArray(command.lines)) {
+      command.lines = procurementLinesPayload(
+        command.lines as ProcurementLineInput[],
       );
     }
-    mutation.mutate({ action, body });
+    if (Array.isArray(command.alternative_proposal)) {
+      command.alternative_proposal = procurementLinesPayload(
+        command.alternative_proposal as ProcurementLineInput[],
+      );
+    }
+
+    const fingerprint = JSON.stringify([action, command]);
+    let intent = actionIntentRef.current;
+    if (
+      intent === null
+      || intent.fingerprint !== fingerprint
+    ) {
+      intent = {
+        fingerprint,
+        clientRequestId: crypto.randomUUID(),
+      };
+      actionIntentRef.current = intent;
+    }
+
+    mutationInFlightRef.current = true;
+    mutation.mutate({
+      action,
+      body: {
+        ...command,
+        client_request_id: intent.clientRequestId,
+      },
+    });
   };
 
   if (auth.isPending || request.isPending) return <p role="status">Загрузка…</p>;

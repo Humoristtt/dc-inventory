@@ -94,6 +94,9 @@ class ProcurementServiceUnavailableError(ProcurementError):
     code = "procurement_service_unavailable"
 
 
+MAX_AGGREGATED_ITEM_QUANTITY = 2**53 - 1
+
+
 @dataclass(frozen=True, slots=True)
 class ProcurementRecord:
     request: ProcurementRequest
@@ -379,6 +382,7 @@ async def _prepare_lines(
             )
         )
 
+    _validate_aggregated_item_quantities(rows)
     return rows
 
 
@@ -1087,6 +1091,12 @@ async def bind_line(
             code="item_identity_mismatch",
         )
 
+    _validate_aggregated_item_quantities(
+        record.current_revision.lines,
+        pending_line_id=line.id,
+        pending_item_id=item.id,
+    )
+
     db.add(
         ProcurementLineCatalogBinding(
             revision_line_id=line.id,
@@ -1248,6 +1258,33 @@ def _bound_item_id(line: ProcurementRevisionLine) -> uuid.UUID | None:
     return line.binding.item_id if line.binding is not None else None
 
 
+def _validate_aggregated_item_quantities(
+    lines: Sequence[ProcurementRevisionLine],
+    *,
+    pending_line_id: uuid.UUID | None = None,
+    pending_item_id: uuid.UUID | None = None,
+) -> dict[uuid.UUID, int]:
+    quantities: defaultdict[uuid.UUID, int] = defaultdict(int)
+
+    for line in lines:
+        item_id = (
+            pending_item_id
+            if pending_line_id is not None and line.id == pending_line_id
+            else _bound_item_id(line)
+        )
+        if item_id is None:
+            continue
+
+        quantities[item_id] += line.quantity
+        if quantities[item_id] > MAX_AGGREGATED_ITEM_QUANTITY:
+            raise ProcurementValidationError(
+                "aggregated item quantity is too large",
+                code="aggregated_item_quantity_too_large",
+            )
+
+    return dict(quantities)
+
+
 async def complete_acceptance(
     db: AsyncSession,
     request_id: uuid.UUID,
@@ -1326,16 +1363,17 @@ async def complete_acceptance(
                 code="item_identity_mismatch",
             )
 
-    quantities: defaultdict[uuid.UUID, int] = defaultdict(int)
-    for line in record.current_revision.lines:
-        item_id = _bound_item_id(line)
-        if item_id is None:
-            raise ProcurementConflictError(
-                "all proposed lines must be bound", code="unbound_procurement_line"
-            )
-        quantities[item_id] += line.quantity
-        if quantities[item_id] > 2**53 - 1:
-            raise ProcurementValidationError("aggregated item quantity is too large")
+    if any(
+        _bound_item_id(line) is None
+        for line in record.current_revision.lines
+    ):
+        raise ProcurementConflictError(
+            "all proposed lines must be bound", code="unbound_procurement_line"
+        )
+
+    quantities = _validate_aggregated_item_quantities(
+        record.current_revision.lines
+    )
     movement = await create_movement(
         db,
         MovementCreate(

@@ -65,6 +65,46 @@ with tempfile.TemporaryDirectory() as tmp:
     assert result.returncode == 1
     assert "invalid env assignment" in result.stderr
 
+    production_placeholder = root / "production-placeholder.env"
+    production_placeholder.write_text(
+        "APP_ENV=production\n"
+        "POSTGRES_PASSWORD=replace-with-a-strong-owner-secret\n"
+        "TELEGRAM_BOT_TOKEN=replace-with-bot-token\n"
+    )
+
+    result = run(production_placeholder)
+    assert result.returncode == 1
+    assert (
+        "production value for POSTGRES_PASSWORD is still a placeholder"
+        in result.stderr
+    )
+    assert (
+        "production value for TELEGRAM_BOT_TOKEN is still a placeholder"
+        in result.stderr
+    )
+
+    production_unsafe_password = root / "production-unsafe-password.env"
+    production_unsafe_password.write_text(
+        "APP_ENV=production\n"
+        "POSTGRES_PASSWORD=owner:secret@unsafe\n"
+    )
+
+    result = run(production_unsafe_password)
+    assert result.returncode == 1
+    assert (
+        "production value for POSTGRES_PASSWORD must be URL-safe"
+        in result.stderr
+    )
+
+    production_safe_password = root / "production-safe-password.env"
+    production_safe_password.write_text(
+        "APP_ENV=production\n"
+        "POSTGRES_PASSWORD=owner_secret-123.~\n"
+    )
+
+    result = run(production_safe_password)
+    assert result.returncode == 0, result.stderr
+
 
 
 example = EXAMPLE.read_text()

@@ -1,7 +1,6 @@
 from app.modules.procurement.enums import ProcurementStatus
 from app.modules.procurement.state_machine import transition_allowed
 
-
 _ALLOWED = {
     (
         ProcurementStatus.AGREEMENT_PENDING_MANAGER,

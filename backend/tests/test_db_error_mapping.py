@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
+from unittest.mock import AsyncMock
 
 import pytest
 from fastapi import HTTPException
@@ -14,6 +15,12 @@ from app.modules.inventory.api import (
     _raise_integrity_conflict as raise_inventory_integrity_conflict,
 )
 from app.modules.inventory.api import _raise_retryable_db_conflict
+from app.modules.procurement.api import (
+    _mutate as mutate_procurement,
+)
+from app.modules.procurement.api import (
+    _raise_db_error as raise_procurement_db_error,
+)
 
 
 class FakePostgresError(Exception):
@@ -125,3 +132,84 @@ def test_catalog_unexpected_integrity_error_is_not_masked(
         raise_catalog_integrity_conflict(error)
 
     assert exc_info.value is error
+
+
+@pytest.mark.parametrize("sqlstate", ["40P01", "55P03", "40001"])
+def test_procurement_retryable_database_error_is_retryable_conflict(
+    sqlstate: str,
+) -> None:
+    error = make_dbapi_error(sqlstate)
+
+    with pytest.raises(HTTPException) as exc_info:
+        raise_procurement_db_error(error)
+
+    assert exc_info.value.status_code == 409
+    assert cast(object, exc_info.value.detail) == {
+        "code": "procurement_concurrency_conflict",
+        "message": "procurement operation conflicted with concurrent activity; retry",
+    }
+
+
+@pytest.mark.parametrize("sqlstate", ["23505", "23503"])
+def test_procurement_constraint_conflict_is_safe_conflict(
+    sqlstate: str,
+) -> None:
+    error = make_integrity_error(sqlstate)
+
+    with pytest.raises(HTTPException) as exc_info:
+        raise_procurement_db_error(error)
+
+    assert exc_info.value.status_code == 409
+    assert cast(object, exc_info.value.detail) == {
+        "code": "procurement_database_conflict",
+        "message": "procurement operation conflicts with current state",
+    }
+
+
+@pytest.mark.parametrize("sqlstate", ["08006", "57014", "57P03"])
+def test_procurement_database_unavailability_is_safe_503(
+    sqlstate: str,
+) -> None:
+    error = make_dbapi_error(sqlstate)
+
+    with pytest.raises(HTTPException) as exc_info:
+        raise_procurement_db_error(error)
+
+    assert exc_info.value.status_code == 503
+    assert cast(object, exc_info.value.detail) == {
+        "code": "procurement_database_unavailable",
+        "message": "procurement database is temporarily unavailable",
+    }
+
+
+@pytest.mark.parametrize("sqlstate", ["42P01", None])
+def test_procurement_unexpected_database_error_is_safe_500(
+    sqlstate: str | None,
+) -> None:
+    error = make_dbapi_error(sqlstate)
+
+    with pytest.raises(HTTPException) as exc_info:
+        raise_procurement_db_error(error)
+
+    assert exc_info.value.status_code == 500
+    assert cast(object, exc_info.value.detail) == {
+        "code": "procurement_database_error",
+        "message": "unexpected procurement database error",
+    }
+    assert "synthetic" not in str(exc_info.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_procurement_database_failure_rolls_back_before_mapping() -> None:
+    error = make_dbapi_error("08006")
+    db = AsyncMock()
+
+    async def failing_call() -> Any:
+        raise error
+
+    with pytest.raises(HTTPException) as exc_info:
+        await mutate_procurement(failing_call(), db)
+
+    assert exc_info.value.status_code == 503
+    db.rollback.assert_awaited_once_with()
+    db.commit.assert_not_awaited()

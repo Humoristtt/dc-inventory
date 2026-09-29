@@ -17,6 +17,7 @@ from app.modules.procurement.enums import ProcurementStatus
 from app.modules.procurement.models import EmailOutbox
 from app.modules.procurement.schemas import ProcurementEmailCreate
 from app.modules.procurement.service import (
+    ProcurementConflictError,
     ProcurementServiceUnavailableError,
     get_request_record,
 )
@@ -152,6 +153,131 @@ async def test_configured_email_enqueue_is_normalized_and_idempotent(
         settings=configured_email_settings(),
     )
     assert first.id == second.id
+    assert await db.scalar(select(func.count()).select_from(EmailOutbox)) == 1
+
+
+async def test_email_idempotency_accepts_recipient_order_normalization(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    row = await seed_email(db)
+    await db.delete(row)
+    await db.flush()
+    record = await get_request_record(db, row.request_id)
+    actor_id = record.request.initiator_user_id
+
+    first = await enqueue_procurement_email(
+        db,
+        record=record,
+        payload=ProcurementEmailCreate(
+            to=["first@example.test", "second@example.test"],
+            cc=["audit@example.test", "ops@example.test"],
+            client_request_id="recipient-order",
+        ),
+        actor_user_id=actor_id,
+        settings=configured_email_settings(),
+    )
+    second = await enqueue_procurement_email(
+        db,
+        record=record,
+        payload=ProcurementEmailCreate(
+            to=["second@example.test", "first@example.test"],
+            cc=["ops@example.test", "audit@example.test"],
+            client_request_id="recipient-order",
+        ),
+        actor_user_id=actor_id,
+        settings=configured_email_settings(),
+    )
+
+    assert second.id == first.id
+    assert await db.scalar(select(func.count()).select_from(EmailOutbox)) == 1
+
+
+async def test_email_idempotency_rejects_changed_recipients(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    row = await seed_email(db)
+    await db.delete(row)
+    await db.flush()
+    record = await get_request_record(db, row.request_id)
+    actor_id = record.request.initiator_user_id
+
+    first = await enqueue_procurement_email(
+        db,
+        record=record,
+        payload=ProcurementEmailCreate(
+            to=["receiver@example.test"],
+            cc=["audit@example.test"],
+            client_request_id="recipient-conflict",
+        ),
+        actor_user_id=actor_id,
+        settings=configured_email_settings(),
+    )
+
+    with pytest.raises(ProcurementConflictError) as exc_info:
+        await enqueue_procurement_email(
+            db,
+            record=record,
+            payload=ProcurementEmailCreate(
+                to=["other@example.test"],
+                cc=["audit@example.test"],
+                client_request_id="recipient-conflict",
+            ),
+            actor_user_id=actor_id,
+            settings=configured_email_settings(),
+        )
+
+    assert exc_info.value.code == "email_idempotency_conflict"
+    stored = await db.get(EmailOutbox, first.id)
+    assert stored is not None
+    assert stored.to_addresses == ["receiver@example.test"]
+    assert await db.scalar(select(func.count()).select_from(EmailOutbox)) == 1
+
+
+async def test_email_idempotency_rejects_changed_generated_content(
+    warehouse_db: AsyncSession,
+) -> None:
+    db = warehouse_db
+    row = await seed_email(db)
+    await db.delete(row)
+    await db.flush()
+    record = await get_request_record(db, row.request_id)
+    actor_id = record.request.initiator_user_id
+    first_settings = configured_email_settings()
+    changed_settings = first_settings.model_copy(
+        update={
+            "telegram_web_app_url": "https://changed.example.test",
+        }
+    )
+
+    first = await enqueue_procurement_email(
+        db,
+        record=record,
+        payload=ProcurementEmailCreate(
+            to=["receiver@example.test"],
+            client_request_id="content-conflict",
+        ),
+        actor_user_id=actor_id,
+        settings=first_settings,
+    )
+
+    with pytest.raises(ProcurementConflictError) as exc_info:
+        await enqueue_procurement_email(
+            db,
+            record=record,
+            payload=ProcurementEmailCreate(
+                to=["receiver@example.test"],
+                client_request_id="content-conflict",
+            ),
+            actor_user_id=actor_id,
+            settings=changed_settings,
+        )
+
+    assert exc_info.value.code == "email_idempotency_conflict"
+    stored = await db.get(EmailOutbox, first.id)
+    assert stored is not None
+    assert "changed.example.test" not in stored.text_body
     assert await db.scalar(select(func.count()).select_from(EmailOutbox)) == 1
 
 

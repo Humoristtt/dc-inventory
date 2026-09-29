@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import html
+import json
 import logging
 import uuid
 from dataclasses import dataclass
@@ -48,6 +49,29 @@ def email_dedupe_key(
     return hashlib.sha256(raw.encode()).hexdigest()
 
 
+def _email_command_fingerprint(
+    *,
+    to: list[str],
+    cc: list[str],
+    subject: str,
+    text_body: str,
+    html_body: str,
+) -> str:
+    canonical = json.dumps(
+        {
+            "to": sorted(to),
+            "cc": sorted(cc),
+            "subject": subject,
+            "text_body": text_body,
+            "html_body": html_body,
+        },
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 async def enqueue_procurement_email(
     db: AsyncSession,
     *,
@@ -87,6 +111,14 @@ async def enqueue_procurement_email(
         f"<ul>{html_lines}</ul>"
         f'<p><a href="{html.escape(link, quote=True)}">Открыть заявку</a></p>'
     )
+    command_fingerprint = _email_command_fingerprint(
+        to=payload.to,
+        cc=payload.cc,
+        subject=subject,
+        text_body=text_body,
+        html_body=html_body,
+    )
+
     await db.execute(
         pg_insert(EmailOutbox)
         .values(
@@ -104,6 +136,20 @@ async def enqueue_procurement_email(
     row = await db.scalar(select(EmailOutbox).where(EmailOutbox.dedupe_key == key))
     if row is None:
         raise RuntimeError("email outbox insert was not visible")
+
+    stored_fingerprint = _email_command_fingerprint(
+        to=list(row.to_addresses),
+        cc=list(row.cc_addresses),
+        subject=row.subject,
+        text_body=row.text_body,
+        html_body=row.html_body,
+    )
+    if stored_fingerprint != command_fingerprint:
+        raise ProcurementConflictError(
+            "client_request_id was already used for a different email command",
+            code="email_idempotency_conflict",
+        )
+
     return row
 
 

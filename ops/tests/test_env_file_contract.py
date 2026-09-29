@@ -11,13 +11,21 @@ VALIDATOR = ROOT / "ops/validate_env_file.py"
 EXAMPLE = ROOT / ".env.example"
 
 
-def run(path: Path) -> subprocess.CompletedProcess[str]:
+def run(
+    path: Path,
+    *,
+    production: bool = False,
+) -> subprocess.CompletedProcess[str]:
+    arguments = [
+        "python3",
+        str(VALIDATOR),
+    ]
+    if production:
+        arguments.append("--production")
+    arguments.append(str(path))
+
     return subprocess.run(
-        [
-            "python3",
-            str(VALIDATOR),
-            str(path),
-        ],
+        arguments,
         cwd=ROOT,
         text=True,
         capture_output=True,
@@ -72,7 +80,7 @@ with tempfile.TemporaryDirectory() as tmp:
         "TELEGRAM_BOT_TOKEN=replace-with-bot-token\n"
     )
 
-    result = run(production_placeholder)
+    result = run(production_placeholder, production=True)
     assert result.returncode == 1
     assert (
         "production value for POSTGRES_PASSWORD is still a placeholder"
@@ -93,7 +101,7 @@ with tempfile.TemporaryDirectory() as tmp:
         "POSTGRES_MAINTENANCE_PASSWORD=maintenance:secret@unsafe\n"
     )
 
-    result = run(production_unsafe_password)
+    result = run(production_unsafe_password, production=True)
     assert result.returncode == 1
     for key in (
         "POSTGRES_PASSWORD",
@@ -117,7 +125,7 @@ with tempfile.TemporaryDirectory() as tmp:
         "POSTGRES_MAINTENANCE_PASSWORD=maintenance_secret-123.~\n"
     )
 
-    result = run(production_safe_password)
+    result = run(production_safe_password, production=True)
     assert result.returncode == 0, result.stderr
 
 

@@ -1,3 +1,4 @@
+import { Button, Input, Select } from "../../shared/ui";
 import {
   useMutation,
   useQueryClient,
@@ -13,11 +14,6 @@ import {
   type Movement,
   type MovementInput,
 } from "../../shared/api/inventory";
-import {
-  Button,
-  Input,
-  Select,
-} from "../../shared/ui";
 
 type CorrectionDirection = "ADD" | "REMOVE";
 

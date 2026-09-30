@@ -1,3 +1,4 @@
+import { Button, Input, Select } from "../../shared/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -6,11 +7,6 @@ import { hasCapability } from "../../shared/api/auth";
 import { createMovement, getInventorySummary, getLocations, inventoryError, type MovementType } from "../../shared/api/inventory";
 import "./inventory.css";
 import { refreshAfterMovement } from "../../shared/api/inventoryCache";
-import {
-  Button,
-  Input,
-  Select,
-} from "../../shared/ui";
 
 const actionNames = { ISSUE: "Взять", RETURN: "Вернуть", TRANSFER: "Переместить", RECEIPT: "Приход", WRITE_OFF: "Списать" } as const;
 type Action = keyof typeof actionNames;

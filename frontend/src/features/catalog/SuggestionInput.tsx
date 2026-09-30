@@ -1,12 +1,9 @@
+import { Button, Input } from "../../shared/ui";
 import {
   useId,
   useState,
   type ReactNode,
 } from "react";
-import {
-  Button,
-  Input,
-} from "../../shared/ui";
 
 export type SuggestionOption = {
   key: string;

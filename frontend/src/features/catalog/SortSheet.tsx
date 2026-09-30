@@ -1,10 +1,8 @@
+import { Button } from "../../shared/ui";
 import type {
   SortOption,
   SortSelection,
 } from "./catalogSort";
-import {
-  Button,
-} from "../../shared/ui";
 
 type SortSheetProps = {
   active: SortSelection;

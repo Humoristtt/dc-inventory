@@ -323,7 +323,7 @@ jobs:
           NOTIFICATION_TELEGRAM_USER_ID=43434343
           SUPPORT_TELEGRAM_USERNAME=Humoristttt
           TELEGRAM_WEBHOOK_SECRET=ci-runtime-webhook-secret
-          TELEGRAM_WEB_APP_URL=http://127.0.0.1:8080
+          TELEGRAM_WEB_APP_URL=https://app.spik-inventory.ru
           TELEGRAM_GATEWAY_URL=https://gateway.invalid
           TELEGRAM_GATEWAY_SECRET=ci-runtime-gateway-secret
           EOF

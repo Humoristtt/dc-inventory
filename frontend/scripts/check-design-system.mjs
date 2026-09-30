@@ -344,3 +344,84 @@ if (violations.length > 0) {
 console.log(
   "DESIGN_SYSTEM_ARCHITECTURE=PASS",
 );
+
+
+/*
+ * Production UI primitives are centralized. Test files may use raw DOM
+ * controls in fixtures, but application code must go through shared/ui.
+ */
+for (const path of files) {
+  if (
+    !path.endsWith(".tsx")
+    || path.endsWith(".test.tsx")
+    || path.includes(`${join("src", "test")}/`)
+    || resolve(path) === resolve(
+      src,
+      "shared/ui/controls.tsx",
+    )
+  ) {
+    continue;
+  }
+
+  const content = readFileSync(path, "utf8");
+
+  for (const rawTag of [
+    "<button",
+    "<input",
+    "<select",
+    "<textarea",
+  ]) {
+    if (content.includes(rawTag)) {
+      violations.push(
+        `${relative(root, path)}: raw ${rawTag.slice(1)} must use shared/ui controls`,
+      );
+    }
+  }
+}
+
+const controlGeometryProperties = [
+  "height:",
+  "min-height:",
+  "padding:",
+  "border:",
+  "border-radius:",
+  "font-size:",
+  "font-weight:",
+];
+
+const controlSelectorPattern =
+  /([^{}]*(?:\.ds-control|\.ds-input|\.ds-select|\.ds-textarea|\binput\b|\bselect\b|\btextarea\b)[^{}]*)\{([^{}]*)\}/g;
+
+for (const path of files) {
+  if (!path.endsWith(".css") || resolve(path) === canonicalCss) {
+    continue;
+  }
+
+  const content = readFileSync(path, "utf8");
+  let match;
+
+  while ((match = controlSelectorPattern.exec(content)) !== null) {
+    const selector = match[1].trim();
+    const body = match[2];
+
+    const semanticException =
+      selector.includes("input[type=")
+      || selector.includes(".filter-option input")
+      || selector.includes(".catalog-switch input")
+      || selector.includes("::-webkit-")
+      || selector.includes(":focus")
+      || selector.includes("::placeholder");
+
+    if (semanticException) {
+      continue;
+    }
+
+    for (const property of controlGeometryProperties) {
+      if (body.includes(property)) {
+        violations.push(
+          `${relative(root, path)}: control geometry ${property} in ${selector}; use shared/ui`,
+        );
+      }
+    }
+  }
+}

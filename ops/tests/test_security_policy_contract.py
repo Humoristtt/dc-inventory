@@ -68,7 +68,7 @@ for marker in (
 ):
     assert marker in compose, marker
 
-assert "REAL_INVENTORY_MUTATIONS_ENABLED" in config
+assert "real_inventory_mutations_enabled: bool = False" in config
 assert "email_delivery_enabled: bool = False" in config
 
 assert "MAX_BODY_BYTES = 64 * 1024" in gateway

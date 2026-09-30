@@ -75,6 +75,32 @@ def test_runtime_database_permission_source_is_least_privilege() -> None:
     )
 
 
+def test_procurement_publication_guard_needs_no_revision_update_grant() -> None:
+    root = Path(__file__).resolve().parents[2]
+    permissions = (
+        root / "backend/scripts/apply_database_permissions.sql"
+    ).read_text()
+    migration = (
+        root
+        / "backend/migrations/versions/"
+        "e3f4a5b6c7d8_fix_procurement_publication_runtime_lock.py"
+    ).read_text()
+
+    upgrade = migration.split("def downgrade()", 1)[0]
+
+    assert (
+        "'GRANT SELECT, INSERT ON TABLE procurement_revisions, '"
+        in permissions
+    )
+    assert "UPDATE ON TABLE procurement_revisions" not in permissions
+    assert (
+        "CREATE OR REPLACE FUNCTION "
+        "validate_procurement_revision_publication()" in upgrade
+    )
+    assert "FROM procurement_revisions" in upgrade
+    assert "FOR KEY SHARE" not in upgrade
+
+
 def test_runtime_outbox_recovery_update_is_column_scoped() -> None:
     permissions = (
         Path(__file__).resolve().parents[1] / "scripts" / "apply_database_permissions.sql"

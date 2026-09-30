@@ -233,7 +233,7 @@ technical acceptance
 
 ## 11. Notification path
 
-Backend не вызывает Telegram/Graph внутри основной предметной транзакции.
+Система использует **transactional outbox**. Backend не вызывает Telegram/Graph внутри основной предметной транзакции.
 
 ```text
 domain transaction

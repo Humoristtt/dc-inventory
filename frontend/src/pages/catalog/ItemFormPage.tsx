@@ -1,35 +1,39 @@
 import {
+  Button,
+  Input,
+  Select,
+  type AttributeDraft,
+  type SuggestionOption,
   useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import {
-  useEffect,
-  useRef,
-  useState,
-} from "react";
-import {
-  Navigate,
   useNavigate,
   useParams,
+  useQuery,
+  useQueryClient,
+  useRef,
   useSearchParams,
-} from "react-router-dom";
+  useState,
+  validateDraftAttributes,
+  } from "../../features/catalog/SuggestionInput";
+import {
+  draftAttributesFromItem,
+  } from "../../features/catalog/itemForm";
+import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
+import { ApiRequestError } from "../../shared/api/auth";
+import { PageHeader,
+  } from "@tanstack/react-query";
+import {
+  useEffect,
+  } from "react";
+import {
+  Navigate,
+  } from "react-router-dom";
 
 import { useAuthState } from "../../features/auth/useAuthState";
 import { hasCapability } from "../../shared/api/auth";
 import { AttributeControl } from "../../features/catalog/AttributeControl";
 import {
   SuggestionInput,
-  type SuggestionOption,
-} from "../../features/catalog/SuggestionInput";
-import {
-  draftAttributesFromItem,
-  validateDraftAttributes,
-  type AttributeDraft,
-} from "../../features/catalog/itemForm";
-import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
-import { ApiRequestError } from "../../shared/api/auth";
-import { PageHeader } from "../../shared/ui";
+} from "../../shared/ui";
 import {
   createAndBindProcurementLine,
   getProcurementRequest,
@@ -568,9 +572,9 @@ export function ItemFormPage() {
     return (
       <p role="alert">
         Не удалось загрузить оборудование.{" "}
-        <button onClick={() => void item.refetch()}>
+        <Button onClick={() => void item.refetch()}>
           Повторить
-        </button>
+        </Button>
       </p>
     );
   }
@@ -671,7 +675,7 @@ export function ItemFormPage() {
               <>
                 <label className="catalog-form__field">
                   Раздел
-                  <select
+                  <Select
                     onChange={(event) => {
                       setFamily(event.target.value);
                       setManufacturerInput("");
@@ -711,12 +715,12 @@ export function ItemFormPage() {
                           {category.display_name}
                         </option>
                       ))}
-                  </select>
+                  </Select>
                 </label>
 
                 <label className="catalog-form__field">
                   Категория
-                  <select
+                  <Select
                     onChange={(event) => {
                       setManufacturerInput("");
                       update({
@@ -739,7 +743,7 @@ export function ItemFormPage() {
                         {category.display_name}
                       </option>
                     ))}
-                  </select>
+                  </Select>
                 </label>
               </>
             ) : (
@@ -749,12 +753,12 @@ export function ItemFormPage() {
             {categories.isError ? (
               <p role="alert">
                 Не удалось загрузить категории.{" "}
-                <button
+                <Button
                   onClick={() => void categories.refetch()}
                   type="button"
                 >
                   Повторить
-                </button>
+                </Button>
               </p>
             ) : null}
 
@@ -786,14 +790,14 @@ export function ItemFormPage() {
                 {manufacturers.isError ? (
                   <p role="alert">
                     Не удалось загрузить производителей.{" "}
-                    <button
+                    <Button
                       onClick={() =>
                         void manufacturers.refetch()
                       }
                       type="button"
                     >
                       Повторить
-                    </button>
+                    </Button>
                   </p>
                 ) : null}
 
@@ -816,7 +820,7 @@ export function ItemFormPage() {
 
                   <label className="catalog-form__field">
                     Название производителя
-                    <input
+                    <Input
                       autoComplete="off"
                       maxLength={255}
                       onChange={(event) =>
@@ -828,7 +832,7 @@ export function ItemFormPage() {
                     />
                   </label>
 
-                  <button
+                  <Button
                     className="button button--dark catalog-form__manufacturer-create"
                     disabled={
                       !manufacturerName.trim()
@@ -840,7 +844,7 @@ export function ItemFormPage() {
                     type="button"
                   >
                     Создать производителя
-                  </button>
+                  </Button>
 
                   {makerMutation.isError ? (
                     <p role="alert">
@@ -884,12 +888,12 @@ export function ItemFormPage() {
               {schema.isError ? (
                 <p role="alert">
                   Не удалось загрузить поля.{" "}
-                  <button
+                  <Button
                     onClick={() => void schema.refetch()}
                     type="button"
                   >
                     Повторить
-                  </button>
+                  </Button>
                 </p>
               ) : null}
 
@@ -938,7 +942,7 @@ export function ItemFormPage() {
             </p>
           ) : null}
 
-          <button
+          <Button
             className="button button--dark catalog-form__submit"
             disabled={
               mutation.isPending
@@ -949,7 +953,7 @@ export function ItemFormPage() {
             {mutation.isPending
               ? "Сохраняем…"
               : "Сохранить"}
-          </button>
+          </Button>
         </form>
       </div>
     </main>

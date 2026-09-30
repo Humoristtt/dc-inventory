@@ -1,26 +1,34 @@
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
-import { Link, Navigate, useSearchParams } from "react-router-dom";
+import {
+  Button,
+  Navigate,
+  Select,
+  getMovement,
+  hasCapability,
+  inventoryRequest,
+  movementLabels,
+  type Movement,
+  type MovementCursorPage,
+  useQuery } from "@tanstack/react-query";
+import { useEffect,
+  useRef,
+  useSearchParams } from "react-router-dom";
 
 import { useAuthState } from "../../features/auth/useAuthState";
 import { MovementAdminActions } from "../../features/inventory/MovementAdminActions";
 import {
   hasAnyCapability,
-  hasCapability,
-} from "../../shared/api/auth";
+  useState } from "react";
+import { Link,
+  } from "../../shared/api/auth";
 import {
   getCatalogCategories,
-} from "../../shared/api/catalog";
+  } from "../../shared/api/catalog";
 import {
   getLocations,
-  getMovement,
-  inventoryRequest,
-  movementLabels,
-  type Movement,
-  type MovementCursorPage,
-} from "../../shared/api/inventory";
+  } from "../../shared/api/inventory";
 import "../../features/inventory/inventory.css";
-import { PageHeader } from "../../shared/ui";
+import { PageHeader,
+} from "../../shared/ui";
 
 const PAGE_SIZE = 30;
 const UUID_PATTERN =
@@ -218,13 +226,13 @@ export function MovementsPage() {
         ) : null}
 
         {hasValidMovementLink ? (
-          <button
+          <Button
             className="button button--ghost"
             onClick={() => setSearchParams({}, { replace: true })}
             type="button"
           >
             Показать весь журнал
-          </button>
+          </Button>
         ) : null}
 
         {hasValidMovementLink && focusedMovement.isPending ? (
@@ -238,7 +246,7 @@ export function MovementsPage() {
         <div className="history-filters form-surface">
           <label>
             Период
-            <select
+            <Select
               value={period}
               onChange={(event) =>
                 changeFilter(
@@ -261,12 +269,12 @@ export function MovementsPage() {
                   {label}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
           <label>
             Тип движения
-            <select
+            <Select
               value={movementType}
               onChange={(event) =>
                 changeFilter(
@@ -288,13 +296,13 @@ export function MovementsPage() {
                   {label}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
           {canReadAll ? (
             <label>
               Сотрудник
-              <select
+              <Select
                 value={actor}
                 onChange={(event) =>
                   changeFilter(
@@ -314,13 +322,13 @@ export function MovementsPage() {
                     {item.name}
                   </option>
                 ))}
-              </select>
+              </Select>
             </label>
           ) : null}
 
           <label>
             Оборудование
-            <select
+            <Select
               value={equipment}
               onChange={(event) =>
                 changeFilter(
@@ -370,12 +378,12 @@ export function MovementsPage() {
                     ) : null}
                   </optgroup>
                 ))}
-            </select>
+            </Select>
           </label>
 
           <label>
             Место хранения
-            <select
+            <Select
               value={location}
               onChange={(event) =>
                 changeFilter(
@@ -398,7 +406,7 @@ export function MovementsPage() {
                     : ""}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
         </div>
 
@@ -407,7 +415,7 @@ export function MovementsPage() {
         || locations.isError ? (
           <p role="alert">
             Не удалось загрузить часть фильтров.{" "}
-            <button
+            <Button
               onClick={() => {
                 void actors.refetch();
                 void hierarchy.refetch();
@@ -415,7 +423,7 @@ export function MovementsPage() {
               }}
             >
               Повторить
-            </button>
+            </Button>
           </p>
         ) : null}
 
@@ -428,13 +436,13 @@ export function MovementsPage() {
         {!hasValidMovementLink && history.isError ? (
           <p role="alert">
             Не удалось загрузить журнал.{" "}
-            <button
+            <Button
               onClick={() =>
                 void history.refetch()
               }
             >
               Повторить
-            </button>
+            </Button>
           </p>
         ) : null}
 
@@ -525,21 +533,21 @@ export function MovementsPage() {
 
         {!hasValidMovementLink ? <div className="warehouse-actions">
           {cursorStack.length > 1 ? (
-            <button
+            <Button
               className="button"
               onClick={goBack}
             >
               Назад
-            </button>
+            </Button>
           ) : null}
 
           {history.data?.next_cursor ? (
-            <button
+            <Button
               className="button"
               onClick={goNext}
             >
               Следующая страница
-            </button>
+            </Button>
           ) : null}
         </div> : null}
       </div>

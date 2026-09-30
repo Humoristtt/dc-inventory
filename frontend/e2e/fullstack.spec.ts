@@ -83,6 +83,29 @@ function createSignedTelegramInitData(userId = telegramUserId): string {
 }
 
 
+async function installConfiguredOriginProxy(
+  page: Page,
+  localBaseURL: string,
+): Promise<void> {
+  await page.route(
+    `${configuredWebAppOrigin}/**`,
+    async (route) => {
+      const request = route.request();
+      const sourceURL = new URL(request.url());
+      const targetURL = new URL(localBaseURL);
+
+      targetURL.pathname = sourceURL.pathname;
+      targetURL.search = sourceURL.search;
+
+      const response = await route.fetch({
+        url: targetURL.toString(),
+      });
+
+      await route.fulfill({ response });
+    },
+  );
+}
+
 async function installTelegramContext(
   page: Page,
   initData: string,
@@ -386,30 +409,13 @@ test("isolated HTTP acceptance covers RBAC, warehouse and procurement", async ({
     expect((await historyResponse.json() as { items: unknown[] }).items).toHaveLength(4);
     expect((await engineer.api.get(`/api/inventory/movements/${receipt.id}`)).status()).toBe(403);
 
-    await page.route(
-      "**/api/procurement/requests",
-      async (route) => {
-        const request = route.request();
-
-        if (request.method() !== "POST") {
-          await route.continue();
-          return;
-        }
-
-        await route.continue({
-          headers: {
-            ...request.headers(),
-            origin: configuredWebAppOrigin,
-          },
-        });
-      },
-    );
+    await installConfiguredOriginProxy(page, baseURL);
     await installTelegramContext(
       page,
       createSignedTelegramInitData(telegramUserId),
     );
     await waitForSensitiveAuthBudget();
-    await page.goto("/procurement/new");
+    await page.goto(`${configuredWebAppOrigin}/procurement/new`);
     await expect(
       page.getByRole("heading", { name: "Новая заявка" }),
     ).toBeVisible();
@@ -501,7 +507,9 @@ test("isolated HTTP acceptance covers RBAC, warehouse and procurement", async ({
       data: { client_request_id: randomUUID() },
     })).status()).toBe(409);
 
-    await page.goto(`/procurement/${procurement.id}`);
+    await page.goto(
+      `${configuredWebAppOrigin}/procurement/${procurement.id}`,
+    );
     await expect(
       page.getByRole("heading", {
         name: String(procurement.request_number),

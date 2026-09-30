@@ -102,7 +102,7 @@ Production backend требует `TELEGRAM_BOT_TOKEN`, `ADMIN_TELEGRAM_USER_ID`
 Обычным API нельзя сменить OWNER. При необходимости запланировать отдельное maintenance окно, остановить runtime/workers, убедиться в healthy PostgreSQL, доступности verified off-VM backup, существовании целевой TelegramIdentity и отсутствии custody. Утверждённая команда выполняется из **точного целевого backend image**:
 
 ```bash
-docker compose --env-file .env -f compose.yaml run --rm --no-deps backend \
+docker compose --env-file .env -f compose.yaml run --rm --no-deps --no-TTY --interactive=false backend \
   python -m app.bootstrap.recovery_owner_rotation \
   --current-telegram-user-id CURRENT_TELEGRAM_ID \
   --target-telegram-user-id TARGET_TELEGRAM_ID \

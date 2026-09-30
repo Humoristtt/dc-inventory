@@ -408,6 +408,7 @@ for (const path of files) {
       selector.includes("input[type=")
       || selector.includes(".filter-option input")
       || selector.includes(".catalog-switch input")
+      || selector.includes(".search-field input")
       || selector.includes("::-webkit-")
       || selector.includes(":focus")
       || selector.includes("::placeholder");
@@ -420,6 +421,43 @@ for (const path of files) {
       if (body.includes(property)) {
         violations.push(
           `${relative(root, path)}: control geometry ${property} in ${selector}; use shared/ui`,
+        );
+      }
+    }
+  }
+}
+
+
+const buttonGeometryProperties = [
+  "height:",
+  "min-height:",
+  "padding:",
+  "padding-inline:",
+  "padding-block:",
+  "border-radius:",
+  "font-size:",
+  "font-weight:",
+];
+
+const buttonSelectorPattern =
+  /([^{}]*(?:\.button\b|\.ds-button\b)[^{}]*)\{([^{}]*)\}/g;
+
+for (const path of files) {
+  if (!path.endsWith(".css") || resolve(path) === canonicalCss) {
+    continue;
+  }
+
+  const content = readFileSync(path, "utf8");
+  let match;
+
+  while ((match = buttonSelectorPattern.exec(content)) !== null) {
+    const selector = match[1].trim();
+    const body = match[2];
+
+    for (const property of buttonGeometryProperties) {
+      if (body.includes(property)) {
+        violations.push(
+          `${relative(root, path)}: button geometry ${property} in ${selector}; use shared/ui`,
         );
       }
     }

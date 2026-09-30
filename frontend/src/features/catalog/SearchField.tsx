@@ -21,6 +21,7 @@ export function SearchField({
       <span className="visually-hidden">{label}</span>
       <span className="search-field__icon" aria-hidden="true">⌕</span>
       <Input
+        appearance="bare"
         aria-label={label}
         autoCapitalize="none"
         autoComplete="off"

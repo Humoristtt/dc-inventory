@@ -51,11 +51,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
   },
 );
 
-export type InputProps = InputHTMLAttributes<HTMLInputElement>;
+export type InputProps = InputHTMLAttributes<HTMLInputElement> & {
+  appearance?: "standard" | "bare";
+};
 
 export const Input = forwardRef<HTMLInputElement, InputProps>(
   function Input(
     {
+      appearance = "standard",
       autoCapitalize: _autoCapitalize,
       autoComplete: _autoComplete,
       autoCorrect: _autoCorrect,
@@ -74,7 +77,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         {...props}
         {...TEXT_ASSISTANCE_DISABLED}
         className={classNames(
-          !choiceControl && "ds-control ds-input",
+          !choiceControl
+            && appearance === "standard"
+            && "ds-control ds-input",
           className,
         )}
         ref={ref}

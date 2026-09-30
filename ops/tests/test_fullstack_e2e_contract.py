@@ -90,6 +90,8 @@ assert "/api/catalog/categories" in spec
 assert "/api/inventory/locations" in spec
 assert "/api/procurement/requests" in spec
 assert "isolated HTTP acceptance covers RBAC, warehouse and procurement" in spec
+assert 'page.goto("/procurement/new")' in spec
+assert 'getByRole("button", { name: "Отправить заявку" })' in spec
 assert "page.waitForResponse" in spec
 
 # Telegram WebApp context may be injected, but API transport
@@ -101,6 +103,8 @@ for required in (
     "Verify full-stack database side effects",
     "FULLSTACK_TELEGRAM_BOT_TOKEN",
     "FULLSTACK_TELEGRAM_USER_ID",
+    'FULLSTACK_MUTATIONS_ENABLED: "true"',
+    "REAL_INVENTORY_MUTATIONS_ENABLED=true",
     "npm run test:e2e:fullstack",
     "FULLSTACK_DATABASE_SIDE_EFFECTS=PASS",
 ):

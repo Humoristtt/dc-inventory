@@ -1,7 +1,4 @@
-import {
-  Button,
-  Input,
-} from "../../shared/ui";
+import { Button, Input } from "../../shared/ui";
 type SearchFieldProps = {
   value: string;
   onChange: (value: string) => void;

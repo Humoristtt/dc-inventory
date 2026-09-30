@@ -1,3 +1,4 @@
+import { Button } from "../../shared/ui";
 import {
   useMutation,
   useQuery,
@@ -33,9 +34,6 @@ import {
   prepareTelegramWebApp,
 } from "../../shared/telegram/webApp";
 import "./access-gate.css";
-import {
-  Button,
-} from "../../shared/ui";
 
 function accessQueryKey(userId: string | undefined) {
   return ["access", "me", userId] as const;

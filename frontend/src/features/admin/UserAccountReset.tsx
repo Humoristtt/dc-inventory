@@ -1,3 +1,4 @@
+import { Button, Input } from "../../shared/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -7,10 +8,6 @@ import {
   resetAdminUserError,
 } from "../../shared/api/adminUsers";
 import "./user-account-reset.css";
-import {
-  Button,
-  Input,
-} from "../../shared/ui";
 
 const CONFIRMATION = "СБРОСИТЬ";
 

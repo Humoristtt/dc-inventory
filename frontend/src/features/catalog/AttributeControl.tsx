@@ -1,14 +1,9 @@
+import { Button, Input, Select, Textarea } from "../../shared/ui";
 import type { CategoryAttribute } from "../../shared/api/catalog";
 import {
   SuggestionInput,
   type SuggestionOption,
 } from "./SuggestionInput";
-import {
-  Button,
-  Input,
-  Select,
-  Textarea,
-} from "../../shared/ui";
 
 type AttributeControlProps = {
   attribute: CategoryAttribute;

@@ -1,7 +1,5 @@
+import { Button } from "../../shared/ui";
 import type { ReactNode } from "react";
-import {
-  Button,
-} from "../../shared/ui";
 
 export function CatalogErrorState({
   title = "Не удалось загрузить данные",

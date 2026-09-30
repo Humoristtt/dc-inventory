@@ -1,3 +1,4 @@
+import { Button, Input } from "../../shared/ui";
 import { useEffect, useMemo, useState } from "react";
 
 import type {
@@ -10,10 +11,6 @@ import {
   defaultCatalogFilterState,
   type CatalogFilterState,
 } from "./catalogQuery";
-import {
-  Button,
-  Input,
-} from "../../shared/ui";
 
 type FilterSheetProps = {
   active: CatalogFilterState;

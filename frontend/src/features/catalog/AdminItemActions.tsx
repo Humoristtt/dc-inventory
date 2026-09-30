@@ -1,3 +1,4 @@
+import { Button } from "../../shared/ui";
 import {
   useMutation,
   useQueryClient,
@@ -19,9 +20,6 @@ import {
 } from "../../shared/api/auth";
 import { useAuthState } from "../auth/useAuthState";
 import "./admin-catalog.css";
-import {
-  Button,
-} from "../../shared/ui";
 
 type ConfirmationAction = "archive" | "delete";
 

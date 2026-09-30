@@ -1,11 +1,9 @@
+import { Button } from "../shared/ui";
 import {
   Component,
   Suspense,
   type ReactNode,
 } from "react";
-import {
-  Button,
-} from "../shared/ui";
 
 type RouteContentProps = {
   children: ReactNode;

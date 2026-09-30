@@ -1,52 +1,48 @@
-import { Link, Outlet, useLocation } from "react-router-dom";
+import {
+  Link,
+  Navigate,
+  Outlet,
+  useLocation,
+} from "react-router-dom";
 
 import { useAuthState } from "../features/auth/useAuthState";
 import { useTelegramNavigation } from "../features/navigation/useTelegramNavigation";
-import { hasAnyCapability } from "../shared/api/auth";
 import "./styles/app-shell.css";
+import {
+  isNavigationItemActive,
+  isNavigationItemVisible,
+  PRIMARY_NAVIGATION,
+  routeAccessRedirect,
+} from "./appRoutes";
 import { RouteContent } from "./RouteContent";
-
-const navigationItems = [
-  { to: "/catalog", label: "Каталог", icon: "▦" },
-  { to: "/movements", label: "Движения", icon: "↔" },
-  { to: "/procurement", label: "Закупки", icon: "◫" },
-  { to: "/more", label: "Ещё", icon: "•••" },
-] as const;
-
-function isActive(pathname: string, target: string): boolean {
-  if (target === "/catalog") {
-    return pathname === "/catalog" || pathname.startsWith("/catalog/");
-  }
-
-  if (target === "/more") {
-    return pathname === "/more" || pathname.startsWith("/more/");
-  }
-
-  if (target === "/procurement") {
-    return pathname === target || pathname.startsWith("/procurement/");
-  }
-
-  return pathname === target;
-}
 
 export function ApplicationShell() {
   const auth = useAuthState();
   const location = useLocation();
   useTelegramNavigation();
 
-  const canReadMovements = hasAnyCapability(
-    auth.data?.user,
-    ["movement.read_own", "movement.read_all"],
-  );
-  const canReadProcurement = hasAnyCapability(
-    auth.data?.user,
-    ["procurement.read"],
-  );
+  const accessRedirect = auth.data === undefined
+    ? undefined
+    : routeAccessRedirect(
+        location.pathname,
+        auth.data.user,
+      );
 
-  const visibleNavigationItems = navigationItems.filter(
+  if (accessRedirect !== undefined) {
+    return (
+      <Navigate
+        replace
+        to={accessRedirect}
+      />
+    );
+  }
+
+  const visibleNavigationItems = PRIMARY_NAVIGATION.filter(
     (item) =>
-      (item.to !== "/movements" || canReadMovements)
-      && (item.to !== "/procurement" || canReadProcurement),
+      isNavigationItemVisible(
+        item,
+        auth.data?.user,
+      ),
   );
 
   return (
@@ -60,7 +56,10 @@ export function ApplicationShell() {
       <nav aria-label="Основная навигация" className="bottom-nav">
         <div className="bottom-nav__inner">
           {visibleNavigationItems.map((item) => {
-            const active = isActive(location.pathname, item.to);
+            const active = isNavigationItemActive(
+              location.pathname,
+              item,
+            );
 
             return (
               <Link

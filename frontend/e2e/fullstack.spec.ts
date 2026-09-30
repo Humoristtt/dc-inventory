@@ -16,7 +16,7 @@ const telegramUserId = Number(
 );
 
 const configuredWebAppOrigin =
-  "https://app.spik-inventory.ru";
+  "http://127.0.0.1:8080";
 
 test.describe.configure({
   mode: "serial",

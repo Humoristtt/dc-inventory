@@ -3,6 +3,9 @@ import {
   Suspense,
   type ReactNode,
 } from "react";
+import {
+  Button,
+} from "../shared/ui";
 
 type RouteContentProps = {
   children: ReactNode;
@@ -47,12 +50,12 @@ export class RouteContent extends Component<
         <main className="route-status" role="alert">
           <h1>Не удалось открыть страницу</h1>
           <p>Проверьте соединение и загрузите приложение заново.</p>
-          <button
+          <Button
             type="button"
             onClick={() => window.location.reload()}
           >
             Обновить приложение
-          </button>
+          </Button>
         </main>
       );
     }

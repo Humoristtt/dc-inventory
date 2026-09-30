@@ -10,6 +10,10 @@ import {
   defaultCatalogFilterState,
   type CatalogFilterState,
 } from "./catalogQuery";
+import {
+  Button,
+  Input,
+} from "../../shared/ui";
 
 type FilterSheetProps = {
   active: CatalogFilterState;
@@ -278,7 +282,7 @@ export function FilterSheet({
             <span className="section-kicker">Отбор оборудования</span>
             <h2 id="filter-sheet-title">Фильтры</h2>
           </div>
-          <button
+          <Button
             aria-label="Закрыть фильтры"
             className="icon-button"
             data-escape-dismiss=""
@@ -286,7 +290,7 @@ export function FilterSheet({
             type="button"
           >
             ×
-          </button>
+          </Button>
         </header>
 
         <div className="sheet__body">
@@ -301,9 +305,9 @@ export function FilterSheet({
             <div className="filter-inline-error" role="alert">
               <p>Не удалось загрузить варианты фильтров.</p>
               {onRetry ? (
-                <button className="text-button" onClick={onRetry} type="button">
+                <Button className="text-button" onClick={onRetry} type="button">
                   Повторить
-                </button>
+                </Button>
               ) : null}
             </div>
           ) : null}
@@ -327,7 +331,7 @@ export function FilterSheet({
                   <div className="range-filter">
                     <label>
                       <span>От</span>
-                      <input
+                      <Input
                         aria-label={`${label}: от`}
                         inputMode="decimal"
                         max={facet.max ?? undefined}
@@ -346,7 +350,7 @@ export function FilterSheet({
                     <span aria-hidden="true">—</span>
                     <label>
                       <span>До</span>
-                      <input
+                      <Input
                         aria-label={`${label}: до`}
                         inputMode="decimal"
                         max={facet.max ?? undefined}
@@ -402,7 +406,7 @@ export function FilterSheet({
                         className={disabled ? "filter-option filter-option--disabled" : "filter-option"}
                         key={machineValue}
                       >
-                        <input
+                        <Input
                           aria-label={facetValueLabel(facet, value)}
                           checked={checked}
                           disabled={disabled}
@@ -429,7 +433,7 @@ export function FilterSheet({
                   })}
                 </div>
                 {hasMore && onLoadMore !== undefined ? (
-                  <button
+                  <Button
                     aria-label={`Показать ещё: ${label}`}
                     className="text-button"
                     disabled={loadingFacetKey === facet.key}
@@ -441,7 +445,7 @@ export function FilterSheet({
                       : facetLoadErrors[facet.key]
                         ? "Повторить загрузку"
                         : "Показать ещё"}
-                  </button>
+                  </Button>
                 ) : null}
                 {facetLoadErrors[facet.key] ? (
                   <p className="filter-inline-error" role="alert">
@@ -454,21 +458,21 @@ export function FilterSheet({
         </div>
 
         <footer className="sheet__footer">
-          <button
+          <Button
             className="button button--ghost"
             onClick={() => setDraft(cloneState(defaultCatalogFilterState))}
             type="button"
           >
             Сбросить
-          </button>
-          <button
+          </Button>
+          <Button
             className="button button--accent"
             disabled={loading || error}
             onClick={() => onApply(cloneState(draft))}
             type="button"
           >
             Применить
-          </button>
+          </Button>
         </footer>
       </section>
     </div>

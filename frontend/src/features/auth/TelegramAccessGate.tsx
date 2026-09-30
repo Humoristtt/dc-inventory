@@ -33,6 +33,9 @@ import {
   prepareTelegramWebApp,
 } from "../../shared/telegram/webApp";
 import "./access-gate.css";
+import {
+  Button,
+} from "../../shared/ui";
 
 function accessQueryKey(userId: string | undefined) {
   return ["access", "me", userId] as const;
@@ -179,14 +182,14 @@ function RequestAccessScreen({
       title="Нужен доступ"
       support={support}
       action={
-        <button
+        <Button
           className="button button--dark access-gate__button"
           disabled={pending}
           onClick={onRequest}
           type="button"
         >
           {pending ? "Отправляем запрос…" : "ОК, запросить доступ"}
-        </button>
+        </Button>
       }
     >
       <p>
@@ -223,14 +226,14 @@ function RejectedAccessScreen({
       title="Запрос отклонён"
       support={support}
       action={
-        <button
+        <Button
           className="button button--dark access-gate__button"
           disabled={pending}
           onClick={onRequest}
           type="button"
         >
           {pending ? "Отправляем запрос…" : "Запросить доступ снова"}
-        </button>
+        </Button>
       }
     >
       <p>
@@ -284,13 +287,13 @@ function ErrorScreen({
         eyebrow="Spikatel Inventory"
         title="Не удалось загрузить Telegram"
         action={
-          <button
+          <Button
             className="button button--dark access-gate__button"
             onClick={retry}
             type="button"
           >
             Повторить
-          </button>
+          </Button>
         }
       >
         <p>
@@ -320,9 +323,9 @@ function ErrorScreen({
       eyebrow="Spikatel Inventory"
       title="Не удалось проверить доступ"
       action={
-        <button className="button button--dark access-gate__button" onClick={retry} type="button">
+        <Button className="button button--dark access-gate__button" onClick={retry} type="button">
           Повторить
-        </button>
+        </Button>
       }
     >
       <p>Проверьте соединение и попробуйте ещё раз.</p>

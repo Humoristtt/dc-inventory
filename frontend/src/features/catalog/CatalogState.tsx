@@ -1,4 +1,7 @@
 import type { ReactNode } from "react";
+import {
+  Button,
+} from "../../shared/ui";
 
 export function CatalogErrorState({
   title = "Не удалось загрузить данные",
@@ -14,9 +17,9 @@ export function CatalogErrorState({
         <strong>{title}</strong>
         <p>Проверьте соединение и попробуйте ещё раз.</p>
       </div>
-      <button className="button button--dark" onClick={onRetry} type="button">
+      <Button className="button button--dark" onClick={onRetry} type="button">
         Повторить
-      </button>
+      </Button>
     </div>
   );
 }

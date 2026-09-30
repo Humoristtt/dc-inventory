@@ -15,6 +15,22 @@ const telegramUserId = Number(
   process.env.FULLSTACK_TELEGRAM_USER_ID ?? "42424242",
 );
 
+const configuredWebAppOrigin =
+  "https://app.spik-inventory.ru";
+
+test.describe.configure({
+  mode: "serial",
+  retries: 0,
+});
+
+const sensitiveAuthIntervalMs = 6_500;
+
+async function waitForSensitiveAuthBudget(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    setTimeout(resolve, sensitiveAuthIntervalMs);
+  });
+}
+
 
 function createSignedTelegramInitData(userId = telegramUserId): string {
   if (botToken === "") {
@@ -31,7 +47,7 @@ function createSignedTelegramInitData(userId = telegramUserId): string {
 
   const fields: Record<string, string> = {
     auth_date: String(Math.floor(Date.now() / 1000)),
-    query_id: "fullstack-ci-query",
+    query_id: `fullstack-ci-${randomUUID()}`,
     user: JSON.stringify({
       id: userId,
       first_name: "Fullstack",
@@ -66,6 +82,29 @@ function createSignedTelegramInitData(userId = telegramUserId): string {
   }).toString();
 }
 
+
+async function installConfiguredOriginProxy(
+  page: Page,
+  localBaseURL: string,
+): Promise<void> {
+  await page.route(
+    `${configuredWebAppOrigin}/**`,
+    async (route) => {
+      const request = route.request();
+      const sourceURL = new URL(request.url());
+      const targetURL = new URL(localBaseURL);
+
+      targetURL.pathname = sourceURL.pathname;
+      targetURL.search = sourceURL.search;
+
+      const response = await route.fetch({
+        url: targetURL.toString(),
+      });
+
+      await route.fulfill({ response });
+    },
+  );
+}
 
 async function installTelegramContext(
   page: Page,
@@ -102,6 +141,7 @@ test(
   async ({ page }) => {
     const initData = createSignedTelegramInitData();
 
+    await waitForSensitiveAuthBudget();
     await installTelegramContext(page, initData);
 
     const authentication = page.waitForResponse(
@@ -209,7 +249,8 @@ test(
   },
 );
 
-test("isolated HTTP acceptance covers RBAC, warehouse and procurement", async ({ playwright }) => {
+test("isolated HTTP acceptance covers RBAC, warehouse and procurement", async ({ playwright, page }) => {
+  test.setTimeout(120_000);
   test.skip(
     process.env.FULLSTACK_MUTATIONS_ENABLED !== "true",
     "mutations require the disposable-database runner",
@@ -221,18 +262,39 @@ test("isolated HTTP acceptance covers RBAC, warehouse and procurement", async ({
     api: APIRequestContext;
     user: { id: string; role: string; access_status: string };
   }> {
-    const api = await playwright.request.newContext({
+    await waitForSensitiveAuthBudget();
+
+    const authenticationApi = await playwright.request.newContext({
       baseURL,
-      extraHTTPHeaders: { Origin: baseURL },
+      extraHTTPHeaders: { Origin: configuredWebAppOrigin },
     });
-    contexts.push(api);
-    const response = await api.post("/api/auth/telegram", {
+    contexts.push(authenticationApi);
+
+    const response = await authenticationApi.post("/api/auth/telegram", {
       data: { init_data: createSignedTelegramInitData(userId) },
     });
-    expect(response.status()).toBe(200);
+    expect(
+      response.status(),
+      `/api/auth/telegram: ${await response.text()}`,
+    ).toBe(200);
+
     const body = await response.json() as {
       user: { id: string; role: string; access_status: string };
     };
+    const setCookie = response.headers()["set-cookie"];
+    const sessionCookie = setCookie?.split(";", 1)[0];
+
+    expect(sessionCookie).toBeTruthy();
+
+    const api = await playwright.request.newContext({
+      baseURL,
+      extraHTTPHeaders: {
+        Origin: configuredWebAppOrigin,
+        Cookie: sessionCookie ?? "",
+      },
+    });
+    contexts.push(api);
+
     return { api, user: body.user };
   }
 
@@ -347,14 +409,64 @@ test("isolated HTTP acceptance covers RBAC, warehouse and procurement", async ({
     expect((await historyResponse.json() as { items: unknown[] }).items).toHaveLength(4);
     expect((await engineer.api.get(`/api/inventory/movements/${receipt.id}`)).status()).toBe(403);
 
-    const requestPayload = {
-      assigned_manager_user_id: manager.user.id,
-      general_comment: "CP14 synthetic procurement",
-      client_request_id: randomUUID(),
-      lines: [{ line_type: "EXISTING_ITEM", item_id: item.id, quantity: 4 }],
-    };
-    let procurement = await post(owner.api, "/api/procurement/requests", requestPayload, 201);
-    const requestReplay = await post(owner.api, "/api/procurement/requests", requestPayload, 201);
+    await installConfiguredOriginProxy(page, baseURL);
+    await installTelegramContext(
+      page,
+      createSignedTelegramInitData(telegramUserId),
+    );
+    await waitForSensitiveAuthBudget();
+    await page.goto(`${configuredWebAppOrigin}/procurement/new`);
+    await expect(
+      page.getByRole("heading", { name: "Новая заявка" }),
+    ).toBeVisible();
+
+    await page
+      .getByRole("combobox", {
+        name: "Менеджер",
+        exact: true,
+      })
+      .selectOption(manager.user.id);
+    await page
+      .getByRole("combobox", {
+        name: "Позиция",
+        exact: true,
+      })
+      .selectOption(item.id);
+    await page
+      .getByRole("button", { name: "Добавить позицию" })
+      .click();
+    await page
+      .getByLabel("Общий комментарий")
+      .fill("CP14 synthetic procurement");
+
+    const browserCreate = page.waitForResponse(
+      (response) => (
+        new URL(response.url()).pathname
+          === "/api/procurement/requests"
+        && response.request().method() === "POST"
+      ),
+    );
+    await page
+      .getByRole("button", { name: "Отправить заявку" })
+      .click();
+
+    const browserCreateResponse = await browserCreate;
+    expect(browserCreateResponse.status()).toBe(201);
+
+    let procurement = await browserCreateResponse.json() as Record<string, any>;
+    const requestPayload =
+      browserCreateResponse.request().postDataJSON() as Record<string, any>;
+
+    await expect(page).toHaveURL(
+      new RegExp(`/procurement/${procurement.id}$`),
+    );
+
+    const requestReplay = await post(
+      owner.api,
+      "/api/procurement/requests",
+      requestPayload,
+      201,
+    );
     expect(requestReplay.id).toBe(procurement.id);
     const path = `/api/procurement/requests/${procurement.id}`;
     const expected = () => ({
@@ -394,6 +506,20 @@ test("isolated HTTP acceptance covers RBAC, warehouse and procurement", async ({
     expect((await owner.api.post(`/api/admin/inventory/movements/${procurement.final_movement_id}/reversal`, {
       data: { client_request_id: randomUUID() },
     })).status()).toBe(409);
+
+    await page.goto(
+      `${configuredWebAppOrigin}/procurement/${procurement.id}`,
+    );
+    await expect(
+      page.getByRole("heading", {
+        name: String(procurement.request_number),
+      }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", {
+        name: "Открыть складской приход",
+      }),
+    ).toBeVisible();
   } finally {
     await Promise.all(contexts.map((api) => api.dispose()));
   }

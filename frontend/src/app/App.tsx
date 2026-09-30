@@ -1,5 +1,3 @@
-import { lazy } from "react";
-
 import {
   BrowserRouter,
   Navigate,
@@ -9,54 +7,50 @@ import {
 
 import { ApplicationShell } from "./ApplicationShell";
 import {
-  loadAdminUsersPage,
-  loadCatalogLandingPage,
-  loadCategoryPage,
-  loadItemDetailPage,
-  loadItemFormPage,
-  loadLocationsPage,
-  loadMorePage,
-  loadMovementsPage,
-  loadProcurementCreatePage,
-  loadProcurementDetailPage,
-  loadProcurementListPage,
-} from "./routeModules";
+  APP_DEFAULT_PATH,
+  APP_ROUTES,
+} from "./appRoutes";
 import "../features/catalog/catalog.css";
 import "../features/catalog/catalog-responsive.css";
 import "../features/inventory/inventory-responsive.css";
 import "../features/admin/access-admin-responsive.css";
 import "../features/procurement/procurement-responsive.css";
 
-const CategoryPage = lazy(loadCategoryPage);
-const CatalogLandingPage = lazy(loadCatalogLandingPage);
-const ItemDetailPage = lazy(loadItemDetailPage);
-const ItemFormPage = lazy(loadItemFormPage);
-const MovementsPage = lazy(loadMovementsPage);
-const LocationsPage = lazy(loadLocationsPage);
-const MorePage = lazy(loadMorePage);
-const AdminUsersPage = lazy(loadAdminUsersPage);
-const ProcurementListPage = lazy(loadProcurementListPage);
-const ProcurementDetailPage = lazy(loadProcurementDetailPage);
-const ProcurementCreatePage = lazy(loadProcurementCreatePage);
-
 export function ApplicationRoutes() {
   return (
     <Routes>
       <Route element={<ApplicationShell />}>
-        <Route index element={<Navigate replace to="/catalog" />} />
-        <Route path="catalog" element={<CatalogLandingPage />} />
-        <Route path="catalog/new" element={<ItemFormPage />} />
-        <Route path="catalog/items/:itemId/edit" element={<ItemFormPage />} />
-        <Route path="catalog/items/:itemId" element={<ItemDetailPage />} />
-        <Route path="catalog/:categoryKey" element={<CategoryPage />} />
-        <Route path="movements" element={<MovementsPage />} />
-        <Route path="procurement" element={<ProcurementListPage />} />
-        <Route path="procurement/new" element={<ProcurementCreatePage />} />
-        <Route path="procurement/:requestId" element={<ProcurementDetailPage />} />
-        <Route path="more" element={<MorePage />} />
-        <Route path="more/locations" element={<LocationsPage />} />
-        <Route path="more/users" element={<AdminUsersPage />} />
-        <Route path="*" element={<Navigate replace to="/catalog" />} />
+        <Route
+          index
+          element={
+            <Navigate
+              replace
+              to={APP_DEFAULT_PATH}
+            />
+          }
+        />
+
+        {APP_ROUTES.map((definition) => {
+          const Page = definition.component;
+
+          return (
+            <Route
+              element={<Page />}
+              key={definition.id}
+              path={definition.path.slice(1)}
+            />
+          );
+        })}
+
+        <Route
+          path="*"
+          element={
+            <Navigate
+              replace
+              to={APP_DEFAULT_PATH}
+            />
+          }
+        />
       </Route>
     </Routes>
   );

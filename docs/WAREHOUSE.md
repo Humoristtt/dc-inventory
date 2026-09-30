@@ -112,7 +112,7 @@ Catalog/warehouse mutations дополнительно требуют:
 REAL_INVENTORY_MUTATIONS_ENABLED=true
 ```
 
-Default — false. При false API возвращает 423 для защищённых mutation paths.
+Default safety state — `REAL_INVENTORY_MUTATIONS_ENABLED=false`. При false API возвращает 423 для защищённых mutation paths.
 
 ## 12. Procurement integration
 

@@ -64,7 +64,7 @@ PostgreSQL 18
 
 - PostgreSQL — каноническое хранилище.
 - Складской журнал `movements/movement_lines` не редактируется задним числом.
-- `stock_balances` и `user_item_custody_balances` — производные проекции, а не независимый источник истины.
+- `StockBalance` (`stock_balances`) и `UserItemCustodyBalance` (`user_item_custody_balances`) — производные проекции, а не независимый источник истины.
 - Catalog identity защищена нормализацией, signature и PostgreSQL-trigger invariants.
 - Procurement revisions/events и line bindings защищены от обычного изменения после публикации.
 - Финальная приёмка Procurement создаёт Warehouse RECEIPT в той же транзакции.

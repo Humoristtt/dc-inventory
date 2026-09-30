@@ -70,7 +70,7 @@ PostgreSQL 18
 - Финальная приёмка Procurement создаёт Warehouse RECEIPT в той же транзакции.
 - Backend проверяет capabilities; скрытие элементов frontend не является контролем доступа.
 - Изменения role/access сопровождаются immutable audit events.
-- Штатные inventory/catalog mutations дополнительно закрыты флагом `REAL_INVENTORY_MUTATIONS_ENABLED`, default — `false`.
+- Штатные inventory/catalog mutations дополнительно закрыты флагом `REAL_INVENTORY_MUTATIONS_ENABLED=false`.
 - Email delivery default — `EMAIL_DELIVERY_ENABLED=false`.
 - Внешняя доставка Telegram/email имеет семантику **at-least-once**, а не exactly-once.
 - Runtime database identities разделены по назначению и получают least-privilege grants.

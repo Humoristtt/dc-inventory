@@ -8,6 +8,9 @@ import {
 import {
   TelegramFullscreenButton,
 } from "../telegram/TelegramFullscreenButton";
+import {
+  Button,
+} from "./controls";
 
 export type PageHeaderProps = {
   actions?: ReactNode;
@@ -51,14 +54,14 @@ export function PageHeader({
       <div className={headingRowClasses}>
         <div className="ds-page-header__back-slot">
           {onBack ? (
-            <button
+            <Button
               aria-label={backLabel}
               className="icon-button icon-button--light ds-page-header__back"
               onClick={onBack}
               type="button"
             >
               ←
-            </button>
+            </Button>
           ) : null}
         </div>
 

@@ -1,11 +1,15 @@
-import { useInfiniteQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { Link, Navigate } from "react-router-dom";
+import {
+  Button,
+  Navigate } from "react-router-dom";
 
 import { useAuthState } from "../../features/auth/useAuthState";
 import { hasCapability } from "../../shared/api/auth";
 import { getProcurementRequests } from "../../shared/api/procurement";
-import { PageHeader } from "../../shared/ui";
+import { PageHeader,
+  useInfiniteQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { Link,
+} from "../../shared/ui";
 import "../../features/procurement/procurement.css";
 
 type View = "my" | "active" | "history";
@@ -77,31 +81,31 @@ export function ProcurementListPage() {
           role="tablist"
         >
           {manager ? (
-            <button
+            <Button
               aria-selected={view === "my"}
               onClick={() => setSelectedView("my")}
               role="tab"
               type="button"
             >
               Мои
-            </button>
+            </Button>
           ) : null}
-          <button
+          <Button
             aria-selected={view === "active"}
             onClick={() => setSelectedView("active")}
             role="tab"
             type="button"
           >
             {manager ? "Все активные" : "Активные"}
-          </button>
-          <button
+          </Button>
+          <Button
             aria-selected={view === "history"}
             onClick={() => setSelectedView("history")}
             role="tab"
             type="button"
           >
             История
-          </button>
+          </Button>
         </div>
 
         {list.isPending ? (
@@ -111,12 +115,12 @@ export function ProcurementListPage() {
         {list.isError ? (
           <p role="alert">
             Не удалось загрузить заявки.{" "}
-            <button
+            <Button
               onClick={() => void list.refetch()}
               type="button"
             >
               Повторить
-            </button>
+            </Button>
           </p>
         ) : null}
 
@@ -154,7 +158,7 @@ export function ProcurementListPage() {
         </div>
 
         {list.hasNextPage ? (
-          <button
+          <Button
             className="button button--load-more"
             disabled={list.isFetchingNextPage}
             onClick={() => void list.fetchNextPage()}
@@ -163,7 +167,7 @@ export function ProcurementListPage() {
             {list.isFetchingNextPage
               ? "Загружаем…"
               : "Показать ещё"}
-          </button>
+          </Button>
         ) : null}
       </div>
     </main>

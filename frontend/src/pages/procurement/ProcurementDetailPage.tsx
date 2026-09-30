@@ -1,18 +1,21 @@
 import {
-  useInfiniteQuery,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import {
-  useEffect,
-  useId,
-  useMemo,
-  useRef,
-  useState,
+  Button,
+  Input,
+  Navigate,
+  Select,
+  Textarea,
+  getProcurementRequest,
+  mutateProcurement,
+  procurementError,
+  procurementLinesPayload,
+  type ProcurementLine,
+  type ProcurementLineInput,
   type ReactNode,
-} from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+  useId,
+  useInfiniteQuery,
+  useMemo,
+  useMutation,
+  useParams } from "react-router-dom";
 
 import { LineComposer } from "../../features/procurement/LineComposer";
 import { useAuthState } from "../../features/auth/useAuthState";
@@ -20,14 +23,18 @@ import { getCatalogItems } from "../../shared/api/catalog";
 import { getLocations } from "../../shared/api/inventory";
 import {
   getProcurementManagers,
-  getProcurementRequest,
-  mutateProcurement,
-  procurementError,
-  procurementLinesPayload,
-  type ProcurementLine,
-  type ProcurementLineInput,
-} from "../../shared/api/procurement";
-import { PageHeader } from "../../shared/ui";
+  useQuery,
+  useQueryClient,
+  useRef,
+  useState,
+  } from "../../shared/api/procurement";
+import { PageHeader,
+  } from "@tanstack/react-query";
+import {
+  useEffect,
+  } from "react";
+import { Link,
+} from "../../shared/ui";
 import "../../features/procurement/procurement.css";
 
 const eventLabels: Record<string, string> = {
@@ -177,13 +184,13 @@ function Dialog({
       >
         <div className="procurement-dialog__heading">
           <h2 id={titleId}>{title}</h2>
-          <button
+          <Button
             aria-label="Закрыть"
             onClick={onClose}
             type="button"
           >
             ×
-          </button>
+          </Button>
         </div>
         {children}
       </section>
@@ -379,7 +386,7 @@ export function ProcurementDetailPage() {
     return (
       <p role="alert">
         Не удалось открыть закупку.{" "}
-        <button onClick={() => void request.refetch()} type="button">Повторить</button>
+        <Button onClick={() => void request.refetch()} type="button">Повторить</Button>
       </p>
     );
   }
@@ -416,9 +423,9 @@ export function ProcurementDetailPage() {
                 </div>
                 {actions.has("bind_lines") && !line.bound_item_id ? (
                   <div className="procurement-line-actions">
-                    <button className="button" disabled={mutation.isPending} onClick={() => setBindingLine(line.id)} type="button">
+                    <Button className="button" disabled={mutation.isPending} onClick={() => setBindingLine(line.id)} type="button">
                       Связать
-                    </button>
+                    </Button>
                     <Link
                       className="button button--accent"
                       to={`/catalog/new?procurementRequestId=${current.id}&procurementLineId=${line.id}`}
@@ -434,14 +441,14 @@ export function ProcurementDetailPage() {
         </section>
 
         <div className="procurement-actions">
-          {actions.has("take_ownership") ? <button className="button" disabled={mutation.isPending} onClick={() => act("take-ownership", { expected_assigned_manager_user_id: current.assigned_manager.id })} type="button">Взять на себя</button> : null}
-          {actions.has("transfer_manager") ? <button className="button" disabled={mutation.isPending} onClick={() => setDialog("transfer")} type="button">Передать менеджеру</button> : null}
-          {actions.has("manager_accept") ? <button className="button button--dark" disabled={mutation.isPending} onClick={() => act("manager-accept")} type="button">Принять в работу</button> : null}
-          {actions.has("return_for_correction") ? <button className="button button--danger" disabled={mutation.isPending} onClick={() => setDialog("correction")} type="button">Вернуть на корректировку</button> : null}
-          {actions.has("transfer_to_acceptance") ? <button className="button button--dark" disabled={mutation.isPending} onClick={() => act("transfer-to-acceptance")} type="button">Передать на приёмку</button> : null}
-          {actions.has("submit_revision") ? <button className="button button--accent" disabled={mutation.isPending} onClick={openRevision} type="button">Создать новую редакцию</button> : null}
-          {actions.has("report_discrepancy") ? <button className="button button--danger" disabled={mutation.isPending} onClick={() => setDialog("discrepancy")} type="button">Есть расхождения</button> : null}
-          {actions.has("complete_acceptance") ? <button className="button button--accent" disabled={mutation.isPending} onClick={() => setDialog("accept")} type="button">Подтвердить приёмку</button> : null}
+          {actions.has("take_ownership") ? <Button className="button" disabled={mutation.isPending} onClick={() => act("take-ownership", { expected_assigned_manager_user_id: current.assigned_manager.id })} type="button">Взять на себя</Button> : null}
+          {actions.has("transfer_manager") ? <Button className="button" disabled={mutation.isPending} onClick={() => setDialog("transfer")} type="button">Передать менеджеру</Button> : null}
+          {actions.has("manager_accept") ? <Button className="button button--dark" disabled={mutation.isPending} onClick={() => act("manager-accept")} type="button">Принять в работу</Button> : null}
+          {actions.has("return_for_correction") ? <Button className="button button--danger" disabled={mutation.isPending} onClick={() => setDialog("correction")} type="button">Вернуть на корректировку</Button> : null}
+          {actions.has("transfer_to_acceptance") ? <Button className="button button--dark" disabled={mutation.isPending} onClick={() => act("transfer-to-acceptance")} type="button">Передать на приёмку</Button> : null}
+          {actions.has("submit_revision") ? <Button className="button button--accent" disabled={mutation.isPending} onClick={openRevision} type="button">Создать новую редакцию</Button> : null}
+          {actions.has("report_discrepancy") ? <Button className="button button--danger" disabled={mutation.isPending} onClick={() => setDialog("discrepancy")} type="button">Есть расхождения</Button> : null}
+          {actions.has("complete_acceptance") ? <Button className="button button--accent" disabled={mutation.isPending} onClick={() => setDialog("accept")} type="button">Подтвердить приёмку</Button> : null}
         </div>
         {mutation.isPending ? <p role="status">Сохраняем…</p> : null}
         {mutation.isError ? <p role="alert">{procurementError(mutation.error)}</p> : null}
@@ -480,7 +487,7 @@ export function ProcurementDetailPage() {
       >
         <label>
           Поиск менеджера
-          <input
+          <Input
             value={managerSearch}
             onChange={(event) => {
               setManagerSearch(
@@ -497,12 +504,12 @@ export function ProcurementDetailPage() {
         {managers.isError ? (
           <p role="alert">
             Не удалось загрузить менеджеров.{" "}
-            <button
+            <Button
               onClick={() => void managers.refetch()}
               type="button"
             >
               Повторить
-            </button>
+            </Button>
           </p>
         ) : null}
         {!managers.isPending
@@ -513,7 +520,7 @@ export function ProcurementDetailPage() {
 
         <label>
           Новый менеджер
-          <select
+          <Select
             disabled={
               managers.isPending
               || managers.isError
@@ -542,11 +549,11 @@ export function ProcurementDetailPage() {
                   {entry.display_name}
                 </option>
               ))}
-          </select>
+          </Select>
         </label>
 
         {managers.hasNextPage ? (
-          <button
+          <Button
             className="button button--load-more"
             disabled={
               managers.isFetchingNextPage
@@ -559,10 +566,10 @@ export function ProcurementDetailPage() {
             {managers.isFetchingNextPage
               ? "Загружаем менеджеров…"
               : "Показать ещё менеджеров"}
-          </button>
+          </Button>
         ) : null}
 
-        <button
+        <Button
           className="button button--dark"
           disabled={
             !managerId
@@ -581,24 +588,24 @@ export function ProcurementDetailPage() {
           type="button"
         >
           Передать
-        </button>
+        </Button>
       </Dialog>
 
       <Dialog open={dialog === "correction"} title="Вернуть на корректировку" onClose={() => setDialog(null)}>
-        <label>Комментарий<textarea maxLength={4000} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
+        <label>Комментарий<Textarea maxLength={4000} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
         <details><summary>Добавить альтернативный состав</summary><LineComposer lines={proposal} onChange={setProposal} /></details>
-        <button className="button button--danger" disabled={!comment.trim() || mutation.isPending} onClick={() => act("return-for-correction", { comment, alternative_proposal: proposal.length ? proposal : null })} type="button">Вернуть</button>
+        <Button className="button button--danger" disabled={!comment.trim() || mutation.isPending} onClick={() => act("return-for-correction", { comment, alternative_proposal: proposal.length ? proposal : null })} type="button">Вернуть</Button>
       </Dialog>
 
       <Dialog open={dialog === "revision"} title="Новая редакция" onClose={() => setDialog(null)}>
         <LineComposer lines={revisionLines} onChange={setRevisionLines} />
-        <label>Комментарий<textarea maxLength={4000} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
-        <button className="button button--accent" disabled={!revisionLines.length || mutation.isPending} onClick={() => act("revisions", { lines: revisionLines, general_comment: comment.trim() || null })} type="button">Отправить редакцию</button>
+        <label>Комментарий<Textarea maxLength={4000} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
+        <Button className="button button--accent" disabled={!revisionLines.length || mutation.isPending} onClick={() => act("revisions", { lines: revisionLines, general_comment: comment.trim() || null })} type="button">Отправить редакцию</Button>
       </Dialog>
 
       <Dialog open={dialog === "discrepancy"} title="Есть расхождения" onClose={() => setDialog(null)}>
-        <label>Что отличается<textarea maxLength={4000} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
-        <button className="button button--danger" disabled={!comment.trim() || mutation.isPending} onClick={() => act("discrepancies", { comment })} type="button">Зафиксировать</button>
+        <label>Что отличается<Textarea maxLength={4000} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
+        <Button className="button button--danger" disabled={!comment.trim() || mutation.isPending} onClick={() => act("discrepancies", { comment })} type="button">Зафиксировать</Button>
       </Dialog>
 
       <Dialog open={dialog === "accept"} title="Подтвердить приёмку" onClose={() => setDialog(null)}>
@@ -610,9 +617,9 @@ export function ProcurementDetailPage() {
         {locations.isError ? (
           <p role="alert">
             Не удалось загрузить места приёмки.{" "}
-            <button onClick={() => void locations.refetch()} type="button">
+            <Button onClick={() => void locations.refetch()} type="button">
               Повторить
-            </button>
+            </Button>
           </p>
         ) : null}
         {!locations.isPending
@@ -622,7 +629,7 @@ export function ProcurementDetailPage() {
           ) : null}
         <label>
           Место приёмки
-          <select
+          <Select
             disabled={
               locations.isPending
               || locations.isError
@@ -637,9 +644,9 @@ export function ProcurementDetailPage() {
                 {entry.name} · {entry.code}
               </option>
             ))}
-          </select>
+          </Select>
         </label>
-        <button
+        <Button
           className="button button--accent"
           disabled={
             !locationId
@@ -657,7 +664,7 @@ export function ProcurementDetailPage() {
           type="button"
         >
           Подтвердить и оприходовать
-        </button>
+        </Button>
       </Dialog>
 
       <Dialog
@@ -667,7 +674,7 @@ export function ProcurementDetailPage() {
       >
         <label>
           Поиск
-          <input
+          <Input
             value={bindingSearch}
             onChange={(event) =>
               setBindingSearch(
@@ -685,12 +692,12 @@ export function ProcurementDetailPage() {
         {bindingItems.isError ? (
           <p role="alert">
             Не удалось загрузить оборудование.{" "}
-            <button
+            <Button
               onClick={() => void bindingItems.refetch()}
               type="button"
             >
               Повторить
-            </button>
+            </Button>
           </p>
         ) : null}
         {bindingSearch.trim().length >= 2
@@ -703,7 +710,7 @@ export function ProcurementDetailPage() {
         <div className="procurement-binding-results">
           {bindingItemOptions.map(
             (item) => (
-              <button
+              <Button
                 className="button"
                 disabled={mutation.isPending}
                 key={item.id}
@@ -726,13 +733,13 @@ export function ProcurementDetailPage() {
                 ]
                   .filter(Boolean)
                   .join(" · ")}
-              </button>
+              </Button>
             ),
           )}
         </div>
 
         {bindingItems.hasNextPage ? (
-          <button
+          <Button
             className="button button--load-more"
             disabled={
               bindingItems.isFetchingNextPage
@@ -745,7 +752,7 @@ export function ProcurementDetailPage() {
             {bindingItems.isFetchingNextPage
               ? "Загружаем…"
               : "Показать ещё"}
-          </button>
+          </Button>
         ) : null}
       </Dialog>
     </main>

@@ -9,6 +9,9 @@ import {
 } from "./webApp";
 
 import { useTelegramWebApp } from "./useTelegramWebApp";
+import {
+  Button,
+} from "../ui";
 
 export function TelegramFullscreenButton() {
   const webApp = useTelegramWebApp();
@@ -53,7 +56,7 @@ export function TelegramFullscreenButton() {
     : "На весь экран";
 
   return (
-    <button
+    <Button
       aria-label={label}
       className="telegram-fullscreen-button"
       onClick={() => {
@@ -93,6 +96,6 @@ export function TelegramFullscreenButton() {
       </svg>
 
       <span>{label}</span>
-    </button>
+    </Button>
   );
 }

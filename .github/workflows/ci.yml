@@ -317,6 +317,7 @@ jobs:
           DATABASE_POOL_TIMEOUT_SECONDS=5
           DATABASE_STATEMENT_TIMEOUT_SECONDS=30
           DATABASE_LOCK_TIMEOUT_SECONDS=5
+          REAL_INVENTORY_MUTATIONS_ENABLED=true
           TELEGRAM_BOT_TOKEN=ci-runtime-only-token
           ADMIN_TELEGRAM_USER_ID=42424242
           NOTIFICATION_TELEGRAM_USER_ID=43434343
@@ -468,6 +469,7 @@ jobs:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:8080
           FULLSTACK_TELEGRAM_BOT_TOKEN: ci-runtime-only-token
           FULLSTACK_TELEGRAM_USER_ID: "42424242"
+          FULLSTACK_MUTATIONS_ENABLED: "true"
         run: npm run test:e2e:fullstack
 
       - name: Verify full-stack database side effects
@@ -506,11 +508,44 @@ jobs:
                   (SELECT count(*) FROM items),
                   (SELECT count(*) FROM stock_balances),
                   (SELECT count(*) FROM movements),
-                  (SELECT count(*) FROM movement_lines);
+                  (SELECT count(*) FROM movement_lines),
+                  (SELECT COALESCE(sum(quantity), 0) FROM stock_balances),
+                  (SELECT COALESCE(sum(quantity), 0) FROM user_item_custody_balances);
               "
           )"
 
-          test "$inventory_counts" = "0|0|0|0"
+          test "$inventory_counts" = "1|2|5|5|12|2"
+
+          procurement_invariants="$(
+            docker compose --env-file .env.ci -f compose.yaml               exec -T postgres               psql               -U dc_inventory               -d dc_inventory               -AtF '|'               -v ON_ERROR_STOP=1               -c "
+                SELECT
+                  (SELECT count(*) = 1 FROM procurement_requests),
+                  (SELECT count(*) = 2 FROM procurement_revisions),
+                  (SELECT count(*) = 6 FROM procurement_events),
+                  (
+                    SELECT count(*) = 1
+                    FROM procurement_requests
+                    WHERE status = 'COMPLETED'
+                      AND final_movement_id IS NOT NULL
+                      AND completed_at IS NOT NULL
+                  ),
+                  (
+                    SELECT count(*) = 1
+                    FROM procurement_requests pr
+                    JOIN movements m
+                      ON m.id = pr.final_movement_id
+                    JOIN movement_lines ml
+                      ON ml.movement_id = m.id
+                    WHERE pr.status = 'COMPLETED'
+                      AND m.movement_type = 'RECEIPT'
+                      AND ml.quantity = 4
+                  ),
+                  (SELECT count(*) > 0 FROM notification_outbox),
+                  (SELECT count(*) = 0 FROM email_outbox);
+              "
+          )"
+
+          test "$procurement_invariants" = "t|t|t|t|t|t|t"
 
           echo "FULLSTACK_DATABASE_SIDE_EFFECTS=PASS"
 

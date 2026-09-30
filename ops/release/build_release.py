@@ -46,6 +46,54 @@ def validate_release_env(env_file: Path) -> None:
         )
 
 
+def verified_image(
+    service: str,
+    reference: str,
+    revision: str,
+) -> dict[str, object]:
+    metadata = json.loads(
+        output(
+            "docker",
+            "image",
+            "inspect",
+            reference,
+            "--format",
+            "{{json .}}",
+        )
+    )
+    if (
+        metadata["Config"]["Labels"].get(
+            "org.opencontainers.image.revision"
+        )
+        != revision
+    ):
+        raise RuntimeError(
+            f"{service}: revision mismatch"
+        )
+
+    image_id = metadata["Id"]
+    if (
+        re.fullmatch(
+            r"sha256:[0-9a-f]{64}",
+            image_id,
+        )
+        is None
+    ):
+        raise RuntimeError(
+            f"{service}: invalid image ID"
+        )
+
+    return {
+        "reference": reference,
+        "image_id": image_id,
+        "source_revision": revision,
+        "repo_digests": metadata.get(
+            "RepoDigests",
+            [],
+        ),
+    }
+
+
 def build(env_file: Path, destination: Path) -> None:
     if destination.exists():
         raise FileExistsError(f"release output already exists: {destination}")
@@ -55,27 +103,59 @@ def build(env_file: Path, destination: Path) -> None:
     refs = release_refs(revision)
     # Check the daemon first: a failed inspect must not mask an unavailable daemon.
     output("docker", "info", "--format", "{{.ServerVersion}}")
-    existing = set(output("docker", "image", "ls", "--format", "{{.Repository}}:{{.Tag}}").splitlines())
-    if existing.intersection(refs.values()):
-        raise RuntimeError("release tag already exists; reuse retained artifacts, do not rebuild")
+    existing = set(
+        output(
+            "docker",
+            "image",
+            "ls",
+            "--format",
+            "{{.Repository}}:{{.Tag}}",
+        ).splitlines()
+    )
+
+    retained: dict[str, dict[str, object]] = {}
+    missing: list[str] = []
+
+    for service, variable in SERVICES.items():
+        reference = refs[variable]
+        if reference in existing:
+            retained[service] = verified_image(
+                service,
+                reference,
+                revision,
+            )
+        else:
+            missing.append(service)
+
     validate_release_env(env_file)
     environment = {**os.environ, **refs, "APP_REVISION": revision}
-    subprocess.run(
-        ["docker", "compose", "--env-file", str(env_file.resolve()), "-f", "compose.yaml",
-         "build", "backend", "web", "postgres"],
-        cwd=ROOT, env=environment, check=True,
-    )
-    images = {}
+
+    if missing:
+        subprocess.run(
+            [
+                "docker",
+                "compose",
+                "--env-file",
+                str(env_file.resolve()),
+                "-f",
+                "compose.yaml",
+                "build",
+                *missing,
+            ],
+            cwd=ROOT,
+            env=environment,
+            check=True,
+        )
+
+    images: dict[str, dict[str, object]] = {}
     for service, variable in SERVICES.items():
-        metadata = json.loads(output("docker", "image", "inspect", refs[variable], "--format",
-                                     "{{json .}}"))
-        if metadata["Config"]["Labels"].get("org.opencontainers.image.revision") != revision:
-            raise RuntimeError(f"{service}: revision mismatch")
-        image_id = metadata["Id"]
-        if re.fullmatch(r"sha256:[0-9a-f]{64}", image_id) is None:
-            raise RuntimeError(f"{service}: invalid image ID")
-        images[service] = {"reference": refs[variable], "image_id": image_id,
-                           "source_revision": revision, "repo_digests": metadata.get("RepoDigests", [])}
+        images[service] = retained.get(
+            service
+        ) or verified_image(
+            service,
+            refs[variable],
+            revision,
+        )
     destination.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".release-", dir=destination.parent) as staging:
         staged = Path(staging)

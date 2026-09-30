@@ -490,6 +490,10 @@ require(
     "docs/DEPLOYMENT.md",
     "EMAIL_DELIVERY_ENABLED=false",
 )
+require(
+    "docs/DEPLOYMENT.md",
+    "run --rm --no-deps --no-TTY --interactive=false backend",
+)
 
 for name, stale_value in (
     (

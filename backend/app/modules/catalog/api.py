@@ -16,6 +16,7 @@ from app.modules.auth.dependencies import (
     CatalogRead,
     DbSession,
 )
+from app.modules.catalog.configuration import MANUFACTURED_LEAVES
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Category, CategoryAttribute, Manufacturer
 from app.modules.catalog.query import (

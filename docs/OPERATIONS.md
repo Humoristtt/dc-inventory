@@ -1,106 +1,354 @@
 # Эксплуатация Spikatel Inventory
 
-Этот документ — рабочая карта сопровождения: какие сервисы ожидаются, как проверить их состояние и когда остановить опасную операцию. Пошаговый выпуск выполняется только по [DEPLOYMENT.md](DEPLOYMENT.md), изолированное восстановление — по [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md), правила склада — по [WAREHOUSE_DOMAIN.md](WAREHOUSE_DOMAIN.md). Записи ниже **не означают**, что сервер проверен в момент чтения файла.
+Этот документ описывает **как измерять и сопровождать live runtime**. Он намеренно не содержит старых production SHA и не считает прошлую приёмку доказательством текущего состояния.
 
-Актуализация документа: 25.09.2026. Подтверждённый production checkout/runtime — `593ddec0c9100b0df2eafe4f324c7bb600d75cba`, Alembic — `b0c1d2e3f4a5`. Post-deploy acceptance подтвердил совпадение release/runtime provenance, отдельные PostgreSQL runtime roles, zero-drift reconciliation и healthy ingress/readiness. Post-deploy off-VM backup также проверен.
+## 1. Source и live production — разные состояния
+
+Git отвечает на вопрос «что должно быть в release». Live production проверяется отдельно.
+
+Нельзя выводить из Git:
+
+- какой checkout сейчас на VM;
+- какие image IDs реально запущены;
+- какой Alembic head реально в production DB;
+- включён ли mutation/email flag;
+- свежая ли последняя backup;
+- какой webhook/Tunnel route фактически активен.
+
+Перед изменением production эти значения измеряются заново.
+
+## 2. Ожидаемый runtime
+
+Штатные services:
+
+- postgres;
+- backend;
+- web;
+- telegram-worker;
+- maintenance-worker;
+- optional email-worker.
+
+One-shot jobs:
+
+- migrate;
+- db-permissions.
+
+Нормально, если one-shot jobs завершены и не находятся в running state.
+
+## 3. Health endpoints
+
+### Web
 
 ```text
-PRODUCTION_REVISION=593ddec0c9100b0df2eafe4f324c7bb600d75cba
-ALEMBIC_HEAD=b0c1d2e3f4a5
-RELEASE_RUNTIME_MATCH=PASS
-CP_R7_POST_DEPLOY_ACCEPTANCE=PASS
-CP_R7_POST_DEPLOY_BACKUP=PASS
-CP17_TELEGRAM_WEBHOOK=PASS
-REAL_INVENTORY_MUTATIONS_ENABLED=false
+GET /healthz
 ```
 
-## 1. Граница работы с production
+Ожидается `200` и `ok`.
 
-VM не является development environment. Изменения runtime требуют approved SHA, CI/review, immutable images, verified off-VM backup, maintenance plan, критерии отката и явное разрешение. Source-only синхронизация docs/host-side `ops/` не запускает контейнеры и допускается без rebuild **только** при неизменных Docker build contexts/application runtime source; host scripts проверяем отдельно. Не принимать Git HEAD за фактическую версию запущенного образа.
+### Backend liveness
 
-CP-07 production cutover завершён. Пользовательский HTTPS ingress больше не зависит от Cloudflare Tunnel: `app.spik-inventory.ru` приходит напрямую на host Nginx, который терминирует TLS и проксирует запросы в web через защищённый Unix socket `/var/lib/dc-inventory-ingress/ingress.sock`. Production web не имеет host TCP bindings и не подключён к внешней `ingress_net`. Cloudflare Tunnel сохранён как отдельный транспорт только для входящего Telegram webhook; подробности и rollback-контекст — в [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md).
+```text
+GET /api/health/live
+```
 
-## 2. Какие контейнеры и состояния ожидаем
+Показывает, что application process жив.
 
-| Компонент | Состояние после успешного выпуска | Что проверяем |
-|---|---|---|
-| PostgreSQL | `healthy`, постоянный volume | Readiness, Alembic head, доступ только из нужной Docker-сети. |
-| `migrate` | exited `0` | Схема точно соответствует approved release. |
-| `db-permissions` | exited `0` | Фактические права ролей и отсутствие активных legacy sessions после разрешённого cutover. |
-| Backend | `healthy` | `/api/health/live` и `/api/health/ready`, настоящий image ID/revision, OWNER/auth. |
-| Web/Nginx | `healthy` | `/healthz`, loopback/Unix ingress согласно текущему approved плану, заголовки и rate limit. |
-| Telegram worker | Работает, heartbeat актуален | Outbox claim/retry, Gateway HTTPS, отсутствие прямого Bot API token у worker. |
-| Maintenance worker | Работает, heartbeat актуален | Одна успешная bounded retention iteration. |
-| Email worker | Необязателен | Только при утверждённом профиле `email` и `EMAIL_DELIVERY_ENABLED=true`. |
+### Backend readiness
 
-В принятом production overlay PostgreSQL, backend и web не имеют host-published application ports. Публичный HTTPS принимает host Nginx и передаёт запросы в web через `/var/lib/dc-inventory-ingress/ingress.sock`; production web состоит только в `app_net`. `/healthz`, `/api/health/live`, `/api/health/ready` должны отвечать HTTP 200 в здоровом состоянии. При недоступной БД `live` остаётся доступным (200), `ready` возвращает 503; после восстановления БД `ready` должен вернуться к 200 без рестарта backend. Нельзя считать зелёный `/healthz` доказательством корректности БД или outbox.
+```text
+GET /api/health/ready
+```
 
-Сервисные Docker image revisions проверяем непосредственно по immutable image IDs и label `org.opencontainers.image.revision`; сравниваем с approved release manifest, а не только со строкой Git HEAD на VM. Исторический rollback image не является текущим runtime только потому, что его tag остался в Docker daemon.
+Readiness проверяет:
 
-## 3. PostgreSQL identities и права
+- database connection;
+- DB Alembic head == source image head;
+- критические columns;
+- критические triggers/functions/collation.
 
-В source-контракте пять отдельных login identities: owner/migrator (`POSTGRES_USER`), backend, Telegram worker, optional email worker и maintenance. Owner credentials не передаются обычным сервисам. Backend не получает broad UPDATE/DELETE для immutable warehouse journal и не имеет прямых `INSERT/UPDATE/DELETE` на `stock_balances` / `user_item_custody_balances`: projection DML выполняется только через `refresh_warehouse_projection(uuid, uuid)`, которая выводит состояние из immutable journal. Изменение `telegram_updates` ограничено необходимым processed state. Telegram worker получает SELECT на `notification_outbox` и UPDATE только delivery-state колонок `status/attempts/available_at/claimed_at/claim_token/sent_at/last_error/updated_at`; `payload`, `method`, `dedupe_key`, идентификаторы и timestamps создания worker менять не может. Telegram и email workers не имеют взаимных outbox и складских привилегий. Maintenance ограничен сроками/объёмом удаления технических данных, не затрагивает immutable складской журнал.
+При несовместимой DB ready обязан вернуть 503, даже если process жив.
 
-Последний принятый production runtime `593ddec0...` предшествует этому CP-18 source-исправлению. До отдельного deployment нельзя переносить новый column-scoped grant на фактические production privileges; при следующем cutover их требуется проверить непосредственно в PostgreSQL.
+## 4. Runtime provenance
 
-`db-permissions` применяет SQL через `psql -X --single-transaction -v ON_ERROR_STOP=1`. При неудаче SQL должна откатиться выдача прав. Legacy-роль (`POSTGRES_LEGACY_WORKER_USER`, фактическое прежнее имя сверить отдельно) получает NOLOGIN/REVOKE **внутри транзакции**. `pg_terminate_backend()` завершает её прежние сессии **только после COMMIT**; это необратимый побочный эффект, который нельзя компенсировать SQL rollback. Проверка миграции/прав входит в утверждённый deployment, а не в ежедневную диагностику «на всякий случай».
+Собрать:
 
-## 4. Безопасность host и доступ
+```bash
+python3 ops/backup/runtime_provenance.py   --root /path/to/checkout   --env-file /path/to/production.env   --output /restricted/path/runtime-provenance.json   --production-checkout-sha <measured-full-sha>
+```
 
-Последний исторически принятый host baseline нужно измерить повторно перед выпуском:
+Файл содержит runtime image IDs/revision labels. Не публиковать его в публичный Git, если он содержит private/runtime-only identifiers.
+
+Сравнение с approved release:
+
+```bash
+python3 ops/release/verify_release_runtime.py   --release-manifest /restricted/path/release.json   --runtime-provenance /restricted/path/runtime-provenance.json
+```
+
+## 5. Ingress
+
+Ожидаемая production topology:
+
+```text
+Internet
+  │
+  ▼
+host Nginx
+  │
+  ▼
+/var/lib/dc-inventory-ingress/ingress.sock
+  │
+  ▼
+web Nginx
+  │
+  ▼
+backend
+```
+
+Read-only host verification:
+
+```bash
+sudo python3 ops/host_ingress/verify.py
+```
+
+Verifier проверяет installed Nginx config/hook, service state, certificate paths, ingress directory/socket ownership/mode и отсутствие unexpected container port bindings.
+
+Public user ingress не должен зависеть от client-provided forwarded headers.
+
+## 6. Host security
+
+Перед release/incident response **измерить повторно**, а не ссылаться на старый audit.
+
+Ожидаемый baseline:
 
 - UFW active;
-- входящие соединения по умолчанию запрещены, исходящие разрешены, SSH `22/tcp` ограничен утверждёнными адресами;
 - `PermitRootLogin no`;
 - `PasswordAuthentication no`;
-- `PubkeyAuthentication yes`;
 - `X11Forwarding no`;
 - `GatewayPorts no`;
-- `AllowTcpForwarding yes` сохраняется для контролируемых административных SSH tunnels.
+- `AllowTcpForwarding yes` допускается только если нужен операторский SSH forwarding;
+- PostgreSQL, backend и production web не имеют публичных application ports.
 
-Это список требований/последних принятых настроек, а не результат нового чтения `sshd_config` и UFW. Не менять SSH/UFW без плана сохранения доступа. Loopback-only Docker ports обязательны независимо от состояния firewall.
+Если live state отличается, это отдельный security finding.
 
-По последнему документированному состоянию репозиторий публичный: `REPOSITORY_VISIBILITY_CURRENT=public`. В нём не должно быть `.env`, ключей, дампов, real inventory datasets, workbook contents и private/runtime-only идентификаторов. Public service identifiers, включая `https://app.spik-inventory.ru` и публичный support username, допустимы по назначению. `main` защищён required CI; merged topic branches удаляются после acceptance. Изменять видимость репозитория — отдельное security/operational решение, не часть технической чистки Markdown.
+## 7. Docker boundaries
 
-## 5. Telegram: вход и отправка
+Проверить:
 
-Входящий путь разделён с пользовательским ingress: Telegram → `telegram-webhook.spik-inventory.ru/api/telegram/webhook` → Cloudflare edge → dedicated Tunnel → `cloudflared` → `https://localhost:443` → host Nginx → Unix socket → FastAPI webhook → PostgreSQL dedupe. Tunnel route задаёт `HTTP Host Header` и TLS `Origin Server Name` как `app.spik-inventory.ru`; интерактивный Cloudflare Access на webhook не используется. `cloudflared` работает отдельным системным пользователем; каталог `/etc/cloudflared` ограничен группой сервиса, token-файл не хранится в Git. Исходящий путь: транзакционный notification outbox → Telegram worker → HTTPS Cloudflare Worker Gateway → Telegram Bot API. Production VM не требует прямого выхода к `api.telegram.org:443`; worker не получает bot token.
+- `read_only`;
+- `cap_drop=ALL`;
+- `no-new-privileges`;
+- pids/resource limits;
+- network membership;
+- host port bindings;
+- image IDs;
+- OCI revision labels.
 
-После изменений runtime проверить настоящим Telegram клиентом `/start`: входящее сообщение удаляется best-effort, новое брендированное приветствие отправляется как `sendPhoto` с caption и WebApp button, публичный `/telegram/start-welcome.png` доступен. Проверить request → ADMIN notification → approve/reject → user notification → APPROVED login, включая фактические роли. Локальный Playwright с синтетически подписанным `initData` **не** заменяет CP-17 real Telegram acceptance.
+Telegram/email workers имеют egress; backend и maintenance — нет.
 
-Принятый пользовательский контракт: Telegram/mobile shell использует expand/viewport APIs; desktop-capable runtime автоматически запрашивает fullscreen там, где Telegram Desktop это поддерживает. Кнопка fullscreen находится в общей панели заголовка; Escape сначала закрывает `[data-escape-dismiss]`, затем fullscreen. Вопрос первого клика WebView после fullscreen исторически исследован в [FRONTEND_PERFORMANCE.md](FRONTEND_PERFORMANCE.md); не вводим автоматическое повторение пользовательского действия.
+## 8. PostgreSQL identities
 
-Telegram и Microsoft Graph email доставляются **at-least-once**, а не exactly-once. Dedupe key предотвращает дублирование outbox intent; при потере ответа внешнего провайдера сообщение/письмо может повториться. После исчерпания лимита попыток запись становится `DEAD`, а повторная постановка регулируется отдельной процедурой. Email по умолчанию выключен (`EMAIL_DELIVERY_ENABLED=false`); реальные Graph secrets, профиль `email` и live delivery acceptance ещё открыты в CP-08.
+Отдельно измерить effective privileges для:
 
-## 6. Retention и контроль данных
+- owner;
+- application runtime;
+- Telegram worker;
+- email worker;
+- maintenance worker.
 
-Defaults исходного кода: auth sessions — 7 дней; обработанные Telegram updates — 30 дней; terminal notification/email outbox — 90 дней; access callbacks — 30 дней. Размер batch — 1000, интервал maintenance — 3600 секунд. Worker использует PostgreSQL advisory transaction lock для одиночного выполнения. Immutable Warehouse journal не входит в техническое удаление.
+Критичные отрицательные проверки:
 
-`backend/scripts/reconcile_inventory_projections.sql` пересчитывает stock и custody **только для чтения** по immutable журналу. После миграций склада, восстановления, рискованного обслуживания или сообщения о несоответствии запускать сверку из совместимого runtime-контекста. Нормальный результат — ноль строк. При drift остановить опасные мутации, зафиксировать evidence/backup и выяснить причину; автоматического пересоздания остатков нет.
+- runtime не создаёт objects в schema;
+- runtime не UPDATE/DELETE warehouse history;
+- runtime не DML-ит stock/custody projection напрямую;
+- Telegram worker не читает email outbox;
+- email worker не читает Telegram/domain tables;
+- maintenance не читает/удаляет movements;
+- legacy delivery role не имеет LOGIN/старых grants.
 
-## 7. S3 backup и восстановление
+## 9. Mutation state
 
-Stage15A automated off-VM backup и исторический Stage15B isolated restore были приняты, но не заменяют свежую проверку текущего backup перед новым cutover. По последнему документированному состоянию provider — StorageGRID, endpoint `https://s3-msk-1.cloudstack.ru`, bucket `dc-inventory-prod-backups`, prefix `postgres/`. Object Lock GOVERNANCE — 7 дней; lifecycle текущих версий — 30 дней, нетекущих — 1 день. У backup identity нет DeleteObject, обхода retention и права менять lifecycle. Это **исторические сведения о конфигурации**, а не проверка S3 прямо сейчас.
-
-Backup timer ежедневно в 02:30 Europe/Moscow с `Persistent=true`, state хранится в `/var/lib/dc-inventory-backup`. Постоянно накапливать локальные дампы на VM запрещено. Используются `ops/backup/dc-inventory-backup-s3`, `ops/backup/s3_stage15.py` и штатные systemd units. После неуспешного backup проверять код выхода, journal, last-success/last-failure state и совпадение remote artifact/checksum; не объявлять успех только по факту запуска timer.
-
-CP-11 локально усилил manifest validation (schema, hash, size, runtime provenance), очистку только своих контейнеров, изоляцию credentials и отзыв восстановленных auth sessions. Настоящий повторный S3 rehearsal после CP-11 и восстановление утверждённой конфигурации Cloudflare/Telegram/Graph **ещё не выполнены**. Restore использует точный backend image и соответствующий его схеме reconciliation SQL, не монтирует production volume и не запускает старые активные сессии. Процедура и критерии ABORT — [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md).
-
-## 8. Initial production inventory bootstrap — accepted
+Проверить фактическое значение:
 
 ```text
-INITIAL_PRODUCTION_BOOTSTRAP=PASS
-POST_IMPORT_RECONCILIATION=ZERO_DRIFT
-POST_IMPORT_BACKUP=PASS
-TELEGRAM_VISUAL_ACCEPTANCE=PASS
-INITIAL_PRODUCTION_BOOTSTRAP=DO_NOT_RERUN
-REAL_INVENTORY_MUTATIONS_ENABLED=false
+REAL_INVENTORY_MUTATIONS_ENABLED
 ```
 
-Внешний операторский workbook прошёл проверку, защищённый one-shot bootstrap создал локацию и opening RECEIPT. Были проверены counts/quantity, zero drift, health, off-VM backup и реальный Telegram display. Сами workbook/data identifiers не публикуются. Повторный initial bootstrap запрещён. Обычные Warehouse mutation API требуют отдельного go-live решения, а не запуска уже выполненного импортного CLI.
+Default configuration — `false`.
 
-## 9. Порядок реакции на неисправность
+Нельзя временно включать флаг «для проверки» на production, если это не часть утверждённого business operation.
 
-Сначала установить точный контур и изменение: baseline image/HEAD, Alembic, health, workers и время последнего успешного backup. При проблемах авторизации проверить серверную сессию и роли; при сообщении об остатке — read-only reconciliation и журнал; при `DEAD` — lease/attempts и состояние внешнего Gateway; при ошибке готовности БД — PostgreSQL и сети. Не исправлять проблему изменением production `.env`, прямым SQL UPDATE проекций или открытием mutation gate без отдельного решения.
+## 10. Warehouse consistency
 
-Если необходимы миграции, изменение direct ingress/Cloudflare webhook route, ротация OWNER или восстановление, остановить рутинную диагностику и перейти к соответствующему согласованному runbook. По состоянию на 25.09.2026 CP-07 production ingress и CP-17 real Telegram acceptance имеют фактическое production evidence; отдельные email/restore и финальные audit gates отслеживаются в [AUDIT_0_12_REMEDIATION.md](AUDIT_0_12_REMEDIATION.md).
+Read-only reconciliation:
+
+```text
+backend/scripts/reconcile_inventory_projections.sql
+```
+
+Нормальный результат — zero drift между immutable journal и:
+
+- stock_balances;
+- user_item_custody_balances.
+
+Любой drift — incident. Не чинить projection ручным UPDATE; сначала установить root cause и использовать корректный repair path.
+
+## 11. Workers
+
+Каждый long-running worker имеет container healthcheck на heartbeat file.
+
+Контролировать:
+
+- container health;
+- последнюю worker iteration;
+- restart count;
+- error logs;
+- queue age.
+
+### Telegram delivery
+
+Telegram использует **at-least-once** delivery. Exactly-once не обещается: при **потере ответа внешнего провайдера** worker не может знать, был ли side effect выполнен, и retry способен создать повторное внешнее сообщение.
+
+Dedupe key предотвращает дублирование outbox intent, но не внешнего side effect после потерянного response.
+
+Контролировать PENDING/PROCESSING/DEAD и attempts.
+
+### Email
+
+Email worker должен отсутствовать или быть stopped, пока:
+
+```text
+EMAIL_DELIVERY_ENABLED=false
+```
+
+Включение требует отдельного Graph config и реального delivery smoke.
+
+## 12. Telegram webhook
+
+Webhook endpoint проверяет dedicated secret и входящие update IDs дедуплицируются в PostgreSQL.
+
+При incident проверять:
+
+- внешний webhook route;
+- backend response;
+- очередь Telegram;
+- `telegram_updates.processed_at`;
+- notification worker отдельно от inbound webhook.
+
+Не смешивать «бот не получает updates» и «worker не может отправить сообщения»: это два независимых пути.
+
+## 13. Retention
+
+Maintenance worker удаляет только технические старые records согласно config, например:
+
+- expired/revoked auth sessions;
+- processed old Telegram updates;
+- terminal notification outbox;
+- expired decision callbacks.
+
+Он не получает право удалять Warehouse journal, Procurement history или projections.
+
+Retention выполняется bounded batches под advisory lock.
+
+## 14. Backup readiness
+
+Read-only check:
+
+```bash
+python3 ops/backup/check_status.py
+```
+
+Exit:
+
+- 0 — ready;
+- 1 — unhealthy/stale;
+- 2 — usage error.
+
+Status должен учитывать age recovery point и факт неуспешной последней попытки.
+
+Наличие старого dump-файла само по себе не означает готовность к восстановлению.
+
+## 15. Backup content
+
+Successful backup state должен связывать:
+
+- started/verified timestamps;
+- clean checkout SHA;
+- runtime provenance;
+- database/Alembic metadata;
+- dump size;
+- dump SHA-256;
+- S3 object key;
+- dump VersionId;
+- manifest VersionId.
+
+Удалённая версия объекта важнее mutable «последнего имени».
+
+## 16. Recovery rehearsal
+
+Для проверки backup использовать только [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md).
+
+Rehearsal не должен:
+
+- останавливать production Compose;
+- использовать production database volume;
+- менять mutation gate;
+- подменять live containers.
+
+## 17. Incident triage
+
+### UI недоступен
+
+Порядок:
+
+1. DNS/TLS;
+2. host Nginx;
+3. Unix socket;
+4. web `/healthz`;
+5. backend live;
+6. backend ready;
+7. container state/logs.
+
+### Ready = 503
+
+Проверить:
+
+1. PostgreSQL connectivity;
+2. Alembic head;
+3. critical trigger/function contract;
+4. runtime role access к readiness query.
+
+Не обходить readiness ручным снятием checks.
+
+### Складская ошибка
+
+Проверить:
+
+1. mutation flag;
+2. user capability/access;
+3. movement payload/idempotency key;
+4. stock/custody;
+5. DB conflict SQLSTATE;
+6. zero-drift reconciliation.
+
+### Уведомления
+
+Разделить:
+
+- enqueue issue;
+- worker claim issue;
+- gateway/provider issue;
+- stale/retry/dead issue.
+
+## 18. Repository data policy
+
+`REPOSITORY_VISIBILITY_CURRENT=public`.
+
+В публичном Git не хранить **private/runtime-only production identifiers**, real inventory data, dumps и credentials.
+
+**Public service identifiers** допустимы, если являются публичной частью архитектуры. Публичный application URL: `https://app.spik-inventory.ru`.
+
+## 19. Branch hygiene
+
+Рабочие ветки не являются эксплуатационным архивом. После merge/acceptance merged topic branches удаляются по обычной Git-политике.
+
+История технических решений остаётся в Git history и current audit findings, а не в отдельных Markdown journals.

@@ -90,13 +90,29 @@ assert "/api/catalog/categories" in spec
 assert "/api/inventory/locations" in spec
 assert "/api/procurement/requests" in spec
 assert "isolated HTTP acceptance covers RBAC, warehouse and procurement" in spec
-assert 'page.goto("/procurement/new")' in spec
+assert (
+    'page.goto(`${configuredWebAppOrigin}/procurement/new`)' in spec
+)
 assert 'getByRole("button", { name: "Отправить заявку" })' in spec
 assert "page.waitForResponse" in spec
 
-# Telegram WebApp context may be injected, but API transport
-# itself must never be mocked in this integrated scenario.
-assert "page.route(" not in spec
+# Telegram WebApp context may be injected. For the mutation-enabled
+# browser flow, the browser must keep the configured HTTPS origin while
+# transport is redirected only to the disposable local runtime. The proxy
+# must forward the real request and fulfill with the real runtime response.
+for required in (
+    "installConfiguredOriginProxy",
+    "page.route(",
+    "route.fetch({",
+    "url: targetURL.toString()",
+    "route.fulfill({ response })",
+    "configuredWebAppOrigin",
+):
+    assert required in spec, required
+
+assert "route.abort(" not in spec
+assert "route.fulfill({ body:" not in spec
+assert "route.fulfill({ json:" not in spec
 
 for required in (
     "Full-stack browser acceptance",

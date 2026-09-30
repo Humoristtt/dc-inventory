@@ -16,6 +16,7 @@ from app.modules.auth.dependencies import (
     CatalogRead,
     DbSession,
 )
+from app.modules.catalog.configuration import MANUFACTURED_LEAVES
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Category, CategoryAttribute, Manufacturer
 from app.modules.catalog.query import (
@@ -111,6 +112,9 @@ def _category_summary(category: Category) -> CategorySummaryOut:
         parent_id=category.parent_id,
         sort_order=category.sort_order,
         is_system=category.is_system,
+        requires_manufacturer_model=(
+            category.key in MANUFACTURED_LEAVES
+        ),
     )
 
 

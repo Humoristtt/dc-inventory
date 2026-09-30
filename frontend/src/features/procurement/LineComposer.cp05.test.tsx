@@ -28,6 +28,7 @@ const category = {
   sort_order: 10,
   is_system: true,
   parent_id: null,
+  requires_manufacturer_model: true,
 };
 
 const manufacturerRequests: string[] = [];

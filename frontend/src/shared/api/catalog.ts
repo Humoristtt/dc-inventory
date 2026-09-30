@@ -28,6 +28,7 @@ export type CategorySummary = {
   sort_order: number;
   is_system: boolean;
   parent_id: string | null;
+  requires_manufacturer_model: boolean;
 };
 
 export type CategoryAttribute = {

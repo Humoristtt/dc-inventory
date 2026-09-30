@@ -35,6 +35,7 @@ const transceiversFamily: CategorySummary = {
   parent_id: null,
   sort_order: 10,
   is_system: true,
+  requires_manufacturer_model: false,
 };
 
 const category: CategorySummary = {
@@ -45,6 +46,7 @@ const category: CategorySummary = {
   parent_id: transceiversFamily.id,
   sort_order: 10,
   is_system: true,
+  requires_manufacturer_model: false,
 };
 
 const secondCategory: CategorySummary = {
@@ -55,6 +57,7 @@ const secondCategory: CategorySummary = {
   parent_id: null,
   sort_order: 20,
   is_system: true,
+  requires_manufacturer_model: false,
 };
 
 const categoryDetail: CategoryDetail = {

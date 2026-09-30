@@ -36,6 +36,7 @@ const family: CategorySummary = {
   parent_id: null,
   sort_order: 10,
   is_system: true,
+  requires_manufacturer_model: false,
 };
 
 const leaf: CategoryDetail = {
@@ -46,6 +47,7 @@ const leaf: CategoryDetail = {
   parent_id: family.id,
   sort_order: 10,
   is_system: true,
+  requires_manufacturer_model: true,
   attributes: [
     {
       id: "attr-speed",

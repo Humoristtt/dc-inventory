@@ -1,60 +1,59 @@
+import { Button } from "../../shared/ui";
 import {
-  Button,
-  CatalogErrorState,
-  CatalogListSkeleton,
-  catalogFiltersFromViewState,
-  defaultCatalogFilterState,
-  getCatalogCategories,
-  getCatalogCategory,
-  getCatalogFacetPage,
-  getCatalogFacets,
-  isSpeedBucketSelected,
-  nextQuickSort,
-  quickSortOptions,
-  sortLabel,
-  sortOptionsForContext,
-  speedFacetValuesForBucket,
-  toCatalogQuery,
-  toggleSpeedBucket,
-  useLocation,
-  useParams,
   useQuery,
   useQueryClient,
+} from "@tanstack/react-query";
+import {
+  useEffect,
   useState,
-  } from "../../features/catalog/CatalogState";
+} from "react";
+import {
+  Link,
+  useLocation,
+  useParams,
+} from "react-router-dom";
+
+import {
+  catalogQueryCacheKey,
+  getCatalogCategory,
+  getCatalogCategories,
+  getCatalogFacetPage,
+  getCatalogFacets,
+} from "../../shared/api/catalog";
+import {
+  activeFilterCount,
+  catalogFiltersFromViewState,
+  defaultCatalogFilterState,
+  toCatalogQuery,
+} from "../../features/catalog/catalogQuery";
+import {
+  CatalogEmptyState,
+  CatalogErrorState,
+  CatalogListSkeleton,
+} from "../../features/catalog/CatalogState";
 import { EquipmentList } from "../../features/catalog/EquipmentList";
 import { FilterSheet } from "../../features/catalog/FilterSheet";
 import { DebouncedSearchField } from "../../features/catalog/DebouncedSearchField";
 import {
   catalogDefaultSort,
-  } from "../../features/catalog/SortSheet";
+  nextQuickSort,
+  quickSortOptions,
+  sortLabel,
+  sortOptionsForContext,
+} from "../../features/catalog/catalogSort";
+import {
+  SortSheet,
+} from "../../features/catalog/SortSheet";
 import { useCatalogItems } from "../../features/catalog/useCatalogItems";
 import {
   ETHERNET_SPEED_BUCKETS,
-  } from "../../features/catalog/catalogQuery";
-import {
-  CatalogEmptyState,
-  } from "../../features/catalog/catalogSort";
-import {
-  SortSheet,
-  } from "../../features/catalog/transceiverFilters";
+  isSpeedBucketSelected,
+  speedFacetValuesForBucket,
+  toggleSpeedBucket,
+} from "../../features/catalog/transceiverFilters";
 import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
-import { PageHeader,
-  } from "../../shared/api/catalog";
-import {
-  activeFilterCount,
-  } from "@tanstack/react-query";
-import {
-  useEffect,
-  } from "react";
-import {
-  Link,
-  } from "react-router-dom";
-
-import {
-  catalogQueryCacheKey,
-} from "../../shared/ui";
+import { PageHeader } from "../../shared/ui";
 import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
 
 export function CategoryPage() {

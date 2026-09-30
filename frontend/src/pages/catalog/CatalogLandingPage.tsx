@@ -1,30 +1,28 @@
-import {
-  Button,
-  CatalogErrorState,
-  CatalogListSkeleton,
-  useAuthState } from "../../features/auth/useAuthState";
+import { Button } from "../../shared/ui";
+import { useAuthState } from "../../features/auth/useAuthState";
 import { hasCapability } from "../../shared/api/auth";
 import { useQuery } from "@tanstack/react-query";
 import {
   Link,
   useLocation,
-  } from "../../features/catalog/CatalogState";
+} from "react-router-dom";
+
+import {
+  getCatalogCategories,
+} from "../../shared/api/catalog";
+import {
+  toCatalogQuery,
+} from "../../features/catalog/catalogQuery";
+import {
+  CatalogEmptyState,
+  CatalogErrorState,
+  CatalogListSkeleton,
+} from "../../features/catalog/CatalogState";
 import { EquipmentList } from "../../features/catalog/EquipmentList";
 import { DebouncedSearchField } from "../../features/catalog/DebouncedSearchField";
 import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useCatalogItems } from "../../features/catalog/useCatalogItems";
-import { PageHeader,
-  } from "../../features/catalog/catalogQuery";
-import {
-  CatalogEmptyState,
-  } from "../../shared/api/catalog";
-import {
-  toCatalogQuery,
-  } from "react-router-dom";
-
-import {
-  getCatalogCategories,
-} from "../../shared/ui";
+import { PageHeader } from "../../shared/ui";
 
 export function CatalogLandingPage() {
   const auth = useAuthState();

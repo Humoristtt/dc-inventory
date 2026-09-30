@@ -1,3 +1,4 @@
+import { Button, Input, Select } from "../../shared/ui";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
@@ -14,11 +15,6 @@ import {
   type CatalogItemListEntry,
 } from "../../shared/api/catalog";
 import type { ProcurementLineInput } from "../../shared/api/procurement";
-import {
-  Button,
-  Input,
-  Select,
-} from "../../shared/ui";
 
 const MAX_PROCUREMENT_LINES = 500;
 

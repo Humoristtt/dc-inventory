@@ -1,8 +1,20 @@
+import { Button, Input, Select } from "../../shared/ui";
 import {
-  Button,
-  Input,
-  ROLE_LABELS,
-  Select,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
+  type FormEvent,
+  useState,
+} from "react";
+import { Navigate } from "react-router-dom";
+
+import "../../features/admin/access-admin.css";
+import { UserAccountReset } from "../../features/admin/UserAccountReset";
+import { useAuthState } from "../../features/auth/useAuthState";
+import {
+  adminUserError,
   decideAdminUserAccessRequest,
   getAdminUsers,
   getUserAccessEvents,
@@ -11,29 +23,14 @@ import {
   setAdminUserRole,
   type AdminAccessRequestDecision,
   type AdminUser,
-  type UserAccessStatus,
-  type UserRole,
-  useMutation,
-  useQuery,
-  useQueryClient,
-  useState,
-  } from "../../shared/api/adminUsers";
+} from "../../shared/api/adminUsers";
 import {
   hasCapability,
-  } from "../../shared/api/auth";
-import { PageHeader,
-  } from "@tanstack/react-query";
-import {
-  type FormEvent,
-  } from "react";
-import { Navigate } from "react-router-dom";
-
-import "../../features/admin/access-admin.css";
-import { UserAccountReset } from "../../features/admin/UserAccountReset";
-import { useAuthState } from "../../features/auth/useAuthState";
-import {
-  adminUserError,
-} from "../../shared/ui";
+  ROLE_LABELS,
+  type UserAccessStatus,
+  type UserRole,
+} from "../../shared/api/auth";
+import { PageHeader } from "../../shared/ui";
 
 const accessLabels: Record<UserAccessStatus, string> = {
   PENDING: "Ожидает подтверждения",

@@ -2,7 +2,7 @@
  * Canonical shared visual primitives.
  *
  * Normative contract:
- * docs/FRONTEND_DESIGN_SYSTEM.md
+ * docs/FRONTEND.md
  *
  * Feature CSS may position shared primitives but must not redefine their
  * base visual geometry.

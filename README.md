@@ -1,87 +1,142 @@
-# Spikatel Inventory — учёт оборудования и материалов ЦОД
+# Spikatel Inventory
 
-Spikatel Inventory — Telegram Mini App для ведения номенклатуры, остатков оборудования и расходных материалов, складских движений и закупок. Система отвечает на вопросы: **что числится на складе, где находится количество каждой позиции, каким движением оно изменилось и какое количество выдано сотруднику**. Это количественный учёт, а не CMDB с жизненным циклом отдельного серийного устройства.
+Spikatel Inventory — внутреннее приложение для количественного учёта оборудования и материалов ЦОД. Оно объединяет каталог номенклатуры, складские остатки, персональную custody, неизменяемый журнал движений, заявки на закупку, управление доступом и уведомления Telegram.
 
-Я описываю ниже устройство текущего исходного кода и отдельно — подтверждённое состояние работающего сервиса. Описание ветки Git не является свидетельством того, что новая версия уже развёрнута.
+Этот репозиторий описывается только через **текущее состояние кода**. Исторические этапы, старые remediation-планы и прежние production SHA не являются частью нормативной документации.
 
-## 1. Как устроена система
+## Что система учитывает
 
-Пользователь открывает интерфейс в Telegram. React-приложение обращается к FastAPI через HTTPS и Nginx; FastAPI проверяет авторизацию и выполняет предметные операции в PostgreSQL. Внешние сообщения не отправляются внутри складской транзакции: backend записывает намерение доставки в PostgreSQL outbox, а отдельные workers отправляют его через Telegram Gateway или, при отдельном включении, Microsoft Graph.
+Система отвечает на четыре основных вопроса:
+
+1. какая номенклатура существует;
+2. сколько единиц каждой позиции находится в каждой StorageLocation;
+3. сколько единиц закреплено за конкретным сотрудником;
+4. какими неизменяемыми движениями получено текущее состояние.
+
+`Item` — номенклатурная позиция, а не отдельный серийный экземпляр. Serial/WWN-level CMDB в текущий продукт не входит.
+
+Основные предметные области:
+
+- **Catalog** — категории, производители, технические атрибуты и identity позиции;
+- **Warehouse** — места хранения, движения, stock projection и custody projection;
+- **Procurement** — согласование закупки, immutable revisions/events и техническая приёмка;
+- **Identity / Access** — Telegram identity, серверные сессии, статусы доступа, роли и capabilities;
+- **Notifications** — transactional outbox для Telegram и optional Microsoft Graph email;
+- **Maintenance** — ограниченное удаление только технических данных по retention policy.
+
+## Архитектура в одном экране
 
 ```text
 Telegram Mini App / браузер
-          │ HTTPS
-          ▼
-app.spik-inventory.ru (direct ingress)
-          │
-          ▼
-host Nginx → Unix socket → web Nginx → FastAPI ──→ PostgreSQL
-                                                  │             ▲
-                                                  └─ outbox ────┘
-                                                                   │
-                                                       Telegram / email workers
-                                                                   │
-                                                    Cloudflare Gateway / Graph
-
-Telegram Bot API → telegram-webhook.spik-inventory.ru
-                 → Cloudflare Tunnel → host Nginx → Unix socket → FastAPI webhook
+        │ HTTPS
+        ▼
+host Nginx
+        │ Unix socket в production
+        ▼
+web Nginx ───────────────► статический React/Vite frontend
+        │ /api/*
+        ▼
+FastAPI
+        │
+        ├── auth / access / identity
+        ├── catalog
+        ├── inventory
+        ├── procurement
+        ├── telegram webhook
+        └── health
+        │
+        ▼
+PostgreSQL 18
+        │
+        ├── предметные таблицы и DB invariants
+        ├── immutable journals/events
+        └── transactional outbox
+                │
+                ├── Telegram worker ─► Cloudflare Gateway ─► Telegram Bot API
+                └── Email worker ────► Microsoft Graph
 ```
 
-Backend — модульный монолит на Python 3.12, FastAPI, SQLAlchemy 2, asyncpg и Alembic. Предметные модули разделены на `auth`, `access`, `identity`, `catalog`, `inventory`, `procurement`, `notifications`, `telegram_bot` и `maintenance`. Frontend — React, TypeScript и Vite. Окружение использует PostgreSQL 18, Docker Compose, Nginx и Cloudflare. Непосредственно к PostgreSQL из браузера не обращаемся. Структура и границы доверия подробно описаны в [архитектуре](docs/ARCHITECTURE.md).
+Входящий Telegram webhook идёт отдельным маршрутом через Cloudflare Tunnel к FastAPI. Пользовательский web ingress и исходящая Telegram-доставка — разные границы.
 
-## 2. Что хранится и почему остаток нельзя редактировать вручную
+Подробная схема: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
-`Item` — карточка номенклатуры: категория, производитель, модель и технические характеристики. Она **не** является отдельным экземпляром оборудования. Позиции относятся к фиксированным категориям-листьям: трансиверы Ethernet/FC, оптика, сетевые адаптеры, SSD/HDD, RAM, PCIe-адаптеры и кабели питания. Схема полей задаётся приложением и миграциями; создание пользовательских типов характеристик во время работы не предусмотрено. См. [схему каталога](docs/CATALOG_SCHEMA.md).
+## Ключевые инварианты
 
-Количество формируется только складскими операциями. `Movement` и `MovementLine` образуют неизменяемый журнал; текущие остатки — транзакционная проекция `StockBalance` по сочетанию Item и StorageLocation. `UserItemCustodyBalance` отдельно учитывает количество, закреплённое за сотрудником и номенклатурой. `actor_user_id` фиксирует исполнителя движения, `custody_user_id` — сотрудника, за которым возникает или уменьшается ответственность. Это разные поля и разные смыслы.
+- PostgreSQL — каноническое хранилище.
+- Складской журнал `movements/movement_lines` не редактируется задним числом.
+- `stock_balances` и `user_item_custody_balances` — производные проекции, а не независимый источник истины.
+- Catalog identity защищена нормализацией, signature и PostgreSQL-trigger invariants.
+- Procurement revisions/events и line bindings защищены от обычного изменения после публикации.
+- Финальная приёмка Procurement создаёт Warehouse RECEIPT в той же транзакции.
+- Backend проверяет capabilities; скрытие элементов frontend не является контролем доступа.
+- Изменения role/access сопровождаются immutable audit events.
+- Штатные inventory/catalog mutations дополнительно закрыты флагом `REAL_INVENTORY_MUTATIONS_ENABLED`, default — `false`.
+- Email delivery default — `EMAIL_DELIVERY_ENABLED=false`.
+- Внешняя доставка Telegram/email имеет семантику **at-least-once**, а не exactly-once.
+- Runtime database identities разделены по назначению и получают least-privilege grants.
+- Release связывает Git SHA с immutable Docker image IDs и OCI revision labels.
+- Backup содержит provenance, Alembic head, SHA-256 и versioned S3 object IDs.
 
-Пример: инженер берёт две одинаковые позиции со склада. ISSUE уменьшает остаток конкретной локации на два и увеличивает его custody на два. RETURN выполняет обратную операцию в допустимом количестве. Передача между локациями меняет распределение, а не суммарное количество. Нельзя получить отрицательный остаток или отрицательную custody; нулевые строки проекций удаляются. История не переписывается ради исправления ошибки: предусмотрены допустимые CORRECTION и REVERSAL с отдельными ограничениями. Истинность проекций проверяем read-only SQL-сверкой по журналу; нормальный результат — ноль строк расхождений.
+## Роли
 
-Warehouse Domain V2 ранее принят в production. Активного учёта serial/WWN конкретного экземпляра и отдельного пользовательского экрана «Моё оборудование» в текущей версии нет. Подробные транзакции, блокировки, идемпотентность и запрет обычного исправления финального прихода закупки — в [складском контракте](docs/WAREHOUSE_DOMAIN.md).
+Серверная политика использует пять ролей:
 
-## 3. Кто и что может делать
-
-По последней подтверждённой проверке production и source используют capability-based five-role RBAC: `ENGINEER`, `SENIOR_ENGINEER`, `MANAGER`, `ADMIN`, `OWNER`. Роль и статус доступа хранятся в PostgreSQL. Backend проверяет capabilities на каждом защищённом действии; скрытая кнопка frontend не служит защитой.
-
-Инженер выполняет разрешённые складские действия и видит свою историю. Старший инженер дополнительно управляет каталогом, видит общий журнал и принимает закупки технически. Менеджер работает с закупками, но не получает право изменять склад. Администратор управляет доступом и административными операциями; OWNER — единственная recovery-роль. Назначенный менеджер отвечает за заявку, но это не ограничение доступа других допущенных менеджеров. Точную матрицу и защиту OWNER используем из [RBAC и закупок](docs/RBAC_PROCUREMENT.md).
-
-Закупка живёт отдельно от склада: согласование, корректировки, смена менеджера и передача на приёмку не изменяют остаток. Только финальная техническая приёмка с подтверждёнными позициями и локацией атомарно создаёт один Warehouse RECEIPT и завершает закупку. Этот итоговый приход нельзя отменить обычной складской коррекцией; для отмены завершённой закупки понадобится отдельный бизнес-процесс.
-
-## 4. Авторизация и доставка
-
-Backend проверяет подпись и срок действия Telegram `initData`, затем выдаёт серверную сессию через HttpOnly cookie. Статус пользователя (`PENDING`, `APPROVED`, `REJECTED`, `BLOCKED`) не подменяется ролью. Webhook проверяет свой secret token и дедуплицирует входящие обновления.
-
-Складское движение и outbox intent записываются одной транзакцией. Telegram worker доставляет сообщение через HTTPS Cloudflare Worker Gateway; optional email worker обращается к Microsoft Graph из отдельного контура доступа к БД. Доставка **at-least-once**: ключ дедупликации предотвращает повторную запись намерения, но потеря подтверждения внешнего сервиса может привести к повторному сообщению или письму. Exactly-once не обещаем. Email по умолчанию выключен (`EMAIL_DELIVERY_ENABLED=false`); секреты, запуск и реальная доставка требуют отдельной приёмки.
-
-## 5. Текущее состояние исходников и production
-
-Актуальность этой записи: **25.09.2026**. Различаем исходный код, подтверждённый production baseline и фактическое live-состояние, которое перед следующим выпуском всё равно проверяется заново.
-
-| Контур | Последние подтверждённые сведения |
+| Роль | Основное назначение |
 |---|---|
-| Исходники / `main` | Merge release `593ddec0c9100b0df2eafe4f324c7bb600d75cba`; source Alembic head `b0c1d2e3f4a5`. Документационные изменения после release не меняют runtime сами по себе. |
-| Подтверждённый production baseline | Checkout/runtime `593ddec0c9100b0df2eafe4f324c7bb600d75cba`; Alembic `b0c1d2e3f4a5`; release/runtime provenance, runtime DB roles, zero-drift reconciliation, ingress/readiness и post-deploy backup — PASS. |
-| Склад | По последнему зафиксированному состоянию `REAL_INVENTORY_MUTATIONS_ENABLED=false`: обычные мутации запрещены до отдельного решения. |
+| `ENGINEER` | чтение каталога, базовые складские операции, собственная история движений |
+| `SENIOR_ENGINEER` | инженер + управление каталогом, общий журнал, техническая приёмка закупки |
+| `MANAGER` | работа с процессом закупок |
+| `ADMIN` | каталог, складские административные операции, создание закупок, управление пользователями |
+| `OWNER` | ADMIN + назначение ADMIN; singleton recovery identity |
+
+Точная capability-матрица и ограничения изменения ролей: [docs/ACCESS_AND_RBAC.md](docs/ACCESS_AND_RBAC.md).
+
+## Текущий проверенный source baseline
+
+Чистый аудит выполнен по `main`:
 
 ```text
-PRODUCTION_REVISION=593ddec0c9100b0df2eafe4f324c7bb600d75cba
-ALEMBIC_HEAD=b0c1d2e3f4a5
-RELEASE_RUNTIME_MATCH=PASS
-CP17_TELEGRAM_WEBHOOK=PASS
+SOURCE_SHA=2ba1fa1b1ca60bbbe4f75bf40e41f826581222c3
+SOURCE_DATE=2026-09-30
+ALEMBIC_HEAD=e3f4a5b6c7d8
 ```
 
-Первоначальное production-наполнение склада также завершено:
+На этом SHA GitHub CI завершён успешно:
 
-- внешний операторский workbook проверен вне Git;
-- guarded one-shot CLI создал начальную локацию и opening RECEIPT;
-- выполнены проверка количества, zero-drift reconciliation, health, резервная копия вне VM и визуальная приёмка через Telegram.
+- backend: Ruff PASS, mypy PASS для 212 source files, migration check PASS, `648 passed, 1 skipped`;
+- frontend: lint/typecheck/build PASS, `165 passed` unit tests;
+- browser acceptance: `142 passed, 12 skipped`;
+- production-shaped full-stack: `2 passed` + проверка фактических DB side effects;
+- Telegram Gateway: `7 passed`;
+- runtime provenance и least-privilege DB checks: PASS;
+- Trivy repository/image HIGH+CRITICAL gates: PASS.
 
-Повторный initial bootstrap запрещён. Его успешное выполнение не снимает защиту обычных складских операций.
+Это **source/CI evidence**, а не утверждение о текущем live production. Фактическое состояние production проверяется только runtime-командами из [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
-CP-16 production deployment и CP-17 real Telegram acceptance закрыты. Пользовательский `app.spik-inventory.ru` обслуживается direct ingress через host Nginx и Unix socket; отдельный Cloudflare Tunnel выделен только для входящего `telegram-webhook.spik-inventory.ru/api/telegram/webhook`. При переключении webhook накопленная очередь была сохранена и доставлена, после чего `pending_update_count=0` и `last_error=NONE`. Следующий обязательный этап — CP-18 independent Audit 0–12; email остаётся выключенным, а restore/rehearsal остаётся отдельным эксплуатационным gate. Подробные статусы и evidence — в [журнале исправлений](docs/AUDIT_0_12_REMEDIATION.md) и [плане работ](docs/ROADMAP.md).
+Полный результат аудита и открытые технические риски: [docs/CURRENT_STATE_AUDIT.md](docs/CURRENT_STATE_AUDIT.md).
 
-## 6. Где искать инструкции
+## Документация
 
-Начальная точка для разработчика и оператора — [карта документации](docs/README.md), которая перечисляет **все** Markdown и их назначение. Для изменения исходников: [DEVELOPMENT](docs/DEVELOPMENT.md). Для выпуска: [DEPLOYMENT](docs/DEPLOYMENT.md); принятый ingress baseline и история CP-07 — в [CP07_HTTP_SOCKET_MIGRATION](docs/CP07_HTTP_SOCKET_MIGRATION.md). Для сопровождения: [OPERATIONS](docs/OPERATIONS.md). Для аварийного восстановления: [RECOVERY_RUNBOOK](docs/RECOVERY_RUNBOOK.md). Для истории завершённых работ: [HISTORY](docs/HISTORY.md). Команды production не копируем из локального dev-сценария.
+Начальная карта: [docs/README.md](docs/README.md).
 
-Реальные наборы оборудования, содержимое workbook, секреты, дампы БД и private/runtime-only production identifiers не помещаем в публичный Git. Публичные service identifiers (например, адрес Mini App и публичный support username) допустимы по назначению. Source-only sync, Git push или обновление документации **не** обновляют контейнеры, миграции и внешний Tunnel. Production меняем только по явно согласованному release-плану.
+Основные документы:
+
+- [ARCHITECTURE](docs/ARCHITECTURE.md) — компоненты, сети, доверие и пути взаимодействия;
+- [PRODUCT_REQUIREMENTS](docs/PRODUCT_REQUIREMENTS.md) — фактический продуктовый контракт;
+- [ACCESS_AND_RBAC](docs/ACCESS_AND_RBAC.md) — auth, access, roles и capabilities;
+- [CATALOG](docs/CATALOG.md) — схема и identity каталога;
+- [WAREHOUSE](docs/WAREHOUSE.md) — складской журнал, stock/custody и блокировки;
+- [PROCUREMENT](docs/PROCUREMENT.md) — lifecycle закупки и связь со складом;
+- [NOTIFICATIONS](docs/NOTIFICATIONS.md) — outbox, Telegram и email;
+- [FRONTEND](docs/FRONTEND.md) — frontend architecture, navigation и design system;
+- [SECURITY](docs/SECURITY.md) — trust boundaries, secrets, DB privileges и supply chain;
+- [DEVELOPMENT](docs/DEVELOPMENT.md) — локальная разработка и проверки;
+- [DEPLOYMENT](docs/DEPLOYMENT.md) — controlled release/deploy;
+- [OPERATIONS](docs/OPERATIONS.md) — эксплуатация и runtime verification;
+- [RECOVERY_RUNBOOK](docs/RECOVERY_RUNBOOK.md) — backup restore rehearsal и cutover boundary.
+
+## Данные и секреты
+
+Репозиторий публичный. В Git не должны попадать реальные `.env`, токены, пароли, private keys, дампы БД, production inventory datasets и **private/runtime-only production identifiers**.
+
+**Публичные service identifiers** — например публичный hostname приложения — допустимы, если они необходимы для конфигурации и документации. Политика подробно описана в [docs/SECURITY.md](docs/SECURITY.md).

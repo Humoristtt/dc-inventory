@@ -1,98 +1,302 @@
 # Архитектура Spikatel Inventory
 
-Система — модульный монолит: один FastAPI backend обслуживает Telegram Mini App, каталог, склад, пользователей и закупки; PostgreSQL хранит предметные данные и транзакционный журнал. Отдельные процессы выполняют отправку уведомлений и ограниченное техническое обслуживание. Этот документ отвечает на вопрос **как устроена система и где проходят границы доверия**. Команды локального запуска — в [DEVELOPMENT.md](DEVELOPMENT.md), выпуска — в [DEPLOYMENT.md](DEPLOYMENT.md), восстановления — в [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md).
+Spikatel Inventory — модульный монолит: один FastAPI backend содержит предметную логику, PostgreSQL является каноническим хранилищем, React/Vite отвечает за интерфейс, а отдельные workers выполняют внешнюю доставку и retention.
 
-## 1. Компоненты и запрос пользователя
+Документ описывает **текущую архитектуру и пути взаимодействия**. Команды разработчика находятся в [DEVELOPMENT.md](DEVELOPMENT.md), deployment — в [DEPLOYMENT.md](DEPLOYMENT.md), эксплуатация — в [OPERATIONS.md](OPERATIONS.md).
+
+## 1. Компоненты
 
 ```text
-Telegram WebView / браузер
-          │ HTTPS
-          ▼
-app.spik-inventory.ru — direct public ingress
-          │
-          ▼
-host Nginx (TLS)
-          │ Unix socket
-          ▼
-web Nginx (React + reverse proxy + rate limits)
-          │ /api/*
-          ▼
-FastAPI → auth/access/identity → catalog/inventory/procurement
-          │                          │
-          └──────────── SQLAlchemy async ──────────→ PostgreSQL
-                                                       │
-                                             transactional outbox
-                                                       │
-                                      Telegram / email workers
-                                                       │
-                                  Cloudflare Gateway / Microsoft Graph
+┌───────────────────────────┐
+│ Telegram Mini App/browser │
+└─────────────┬─────────────┘
+              │ HTTPS
+              ▼
+┌───────────────────────────┐
+│ host Nginx                │
+│ TLS + host allowlist      │
+└─────────────┬─────────────┘
+              │ Unix socket
+              ▼
+┌───────────────────────────┐
+│ web Nginx                 │
+│ React static + /api proxy │
+│ rate limits + headers     │
+└─────────────┬─────────────┘
+              │ internal app_net
+              ▼
+┌───────────────────────────┐
+│ FastAPI backend           │
+│ auth/access/catalog/etc.  │
+└─────────────┬─────────────┘
+              │ internal db_net
+              ▼
+┌───────────────────────────┐
+│ PostgreSQL 18             │
+│ canonical data + outbox   │
+└───────┬──────────┬────────┘
+        │          │
+        │          └── maintenance worker (db_net only)
+        │
+        ├── telegram worker (db_net + egress_net)
+        │          └── HTTPS Cloudflare Gateway ─► Telegram Bot API
+        │
+        └── email worker, optional (db_net + egress_net)
+                   └── HTTPS Microsoft Graph
+```
 
+Отдельно:
+
+```text
 Telegram Bot API
-          │ webhook HTTPS
-          ▼
-telegram-webhook.spik-inventory.ru
-          │ Cloudflare Tunnel
-          ▼
-cloudflared → host Nginx → Unix socket → web Nginx → FastAPI webhook
+   │ webhook
+   ▼
+telegram-webhook public hostname
+   │ Cloudflare Tunnel
+   ▼
+host/web ingress
+   │
+   ▼
+POST /api/telegram/webhook
 ```
 
-`backend/app/main.py` создаёт FastAPI-приложение, проверяет production-конфигурацию, подключает `TrustedHostMiddleware`, регистрирует маршруты через `backend/app/api/router.py` и на время жизни приложения открывает async SQLAlchemy engine. Маршруты распределены между `auth`, `access`, административным `identity`, `catalog`, `inventory`, `procurement`, `telegram_bot` и `health`. В production Swagger/OpenAPI endpoints отключены. Для доступа снаружи backend не публикует host port: его вызывает только внутренний Nginx.
+Cloudflare Gateway для **исходящей** Telegram-доставки и Cloudflare Tunnel для **входящего** webhook — разные компоненты.
 
-Frontend построен на React/TypeScript/Vite. Он получает JSON через API; прямых подключений к PostgreSQL не имеет. Внешний интерфейс не является источником истины ни для ролей, ни для доступного количества. Postgres 18 развёрнут отдельным сервисом Docker Compose. Alembic управляет схемой, а отдельный шаг `db-permissions` применяет least-privilege права runtime identities после миграции.
+## 2. Runtime services
 
-## 2. Аутентификация и авторизация
+Production-shaped `compose.yaml` определяет:
 
-При входе клиент передаёт Telegram `initData` в `/api/auth/telegram`. Backend сверяет криптографическую подпись и срок действия, связывает TelegramIdentity с User и выдаёт серверную сессию через HttpOnly cookie. При последующих запросах backend проверяет сессию, статус доступа и capability. Статус `PENDING`/`APPROVED`/`REJECTED`/`BLOCKED` хранится отдельно от роли; скрытие кнопки в React не даёт доступ к API.
+- `postgres` — PostgreSQL;
+- `migrate` — one-shot `alembic upgrade head`;
+- `db-permissions` — one-shot установка runtime grants;
+- `backend` — FastAPI/uvicorn;
+- `telegram-worker` — Telegram outbox consumer;
+- `email-worker` — optional profile, email outbox consumer;
+- `maintenance-worker` — technical retention;
+- `web` — Nginx + собранный frontend.
 
-Source roles: `ENGINEER`, `SENIOR_ENGINEER`, `MANAGER`, `ADMIN`, `OWNER`. Список capabilities задаёт серверная политика, а не числовое сравнение ролей: MANAGER — отдельная предметная ветка. OWNER — единственная recovery-identity, не назначаемая обычным API. Изменения доступа и ролей имеют транзакционный audit; custody и доступ сотрудника согласованы блокировками PostgreSQL. Полная матрица и порядок смены OWNER — в [RBAC_PROCUREMENT.md](RBAC_PROCUREMENT.md).
+Миграции выполняются DB owner identity. Runtime processes не должны использовать owner connection string.
 
-## 3. Каталог: номенклатура, не экземпляры
+## 3. Сети и egress
 
-`Category` образует фиксированную и версионированную иерархию family → leaf. `Item` относится только к листу и содержит технические характеристики из типизированных EAV-записей. Нормализация имени, модели и сигнатуры позиции защищена на уровне приложения и PostgreSQL; изменение схемы категорий требует миграции. Технические характеристики и каноническая сигнатура **не** равны текущему количеству.
+Логическое разделение:
 
-Поиск, выборка и фасеты работают в контексте выбранной категории, поисковой строки и производной области. `CatalogQuerySpec` содержит параметры отбора и metadata; сервер выполняет сортировку/пагинацию, а наличие на складе получает из складских проекций. Frontend не предполагает, что первая страница API содержит весь каталог. Для трансиверов производная область «Дальние» основана на нормализованной дальности, не является отдельной категорией. Поля и правила идентификации — в [CATALOG_SCHEMA.md](CATALOG_SCHEMA.md).
+| Сеть | Кто подключён | Назначение |
+|---|---|---|
+| `app_net` | web, backend | HTTP между reverse proxy и API |
+| `db_net` | postgres, backend, delivery/maintenance workers, one-shot DB jobs | доступ к PostgreSQL |
+| `ingress_net` | web в base compose | локальный TCP ingress; production override удаляет сеть |
+| `egress_net` | Telegram/email workers | внешний HTTPS egress |
 
-## 4. Склад: журнал и проекции
+`app_net` и `db_net` internal. Backend не подключён к egress network. Telegram/email secrets не передаются backend, если они не нужны его роли.
 
-История изменений хранится в неизменяемых `Movement` и `MovementLine`. Актуальное состояние выводится транзакционно в двух проекциях:
+Production `compose.ingress-unix.yaml` удаляет host TCP publication web-контейнера и ingress network, монтируя контролируемый каталог Unix socket.
+
+## 4. HTTP path пользователя
+
+1. TLS завершается на host Nginx.
+2. Host Nginx принимает только ожидаемый hostname и проксирует в Unix socket.
+3. Web Nginx:
+   - отдаёт статические React assets;
+   - проксирует `/api/*` в backend;
+   - перезаписывает forwarded/IP headers;
+   - применяет rate limits;
+   - добавляет security headers.
+4. FastAPI:
+   - применяет TrustedHost в production;
+   - добавляет `Cache-Control: no-store` к API;
+   - проверяет session/access/capability;
+   - выполняет domain transaction в PostgreSQL.
+5. JSON response возвращается тем же путём.
+
+Browser никогда не обращается к PostgreSQL напрямую.
+
+## 5. Authentication path
 
 ```text
-stock_balances(Item, Location, quantity)
-user_item_custody_balances(User, Item, quantity)
+frontend
+  │ GET /api/auth/me
+  ├── valid cookie session ─────────────► AuthState
+  │
+  └── 401
+      │
+      ├── load vendored Telegram SDK
+      ├── read initData
+      └── POST /api/auth/telegram
+             │
+             ├── verify HMAC/freshness
+             ├── reconcile TelegramIdentity/User
+             ├── create server session
+             └── HttpOnly cookie + AuthState
 ```
 
-`actor_user_id` означает исполнителя операции; `custody_user_id` — сотрудника, за которым числится агрегированное количество. Выдача/возврат ENGINEER или SENIOR_ENGINEER изменяет его custody; административные движения ADMIN/OWNER не создают персональную ответственность автоматически. Нельзя получить отрицательный остаток/custody, а нулевые строки не сохраняются. Активного жизненного цикла отдельного serial/WWN оборудования нет.
+Cookie-authenticated state-changing requests дополнительно проверяются по `Origin` против configured Mini App origin.
 
-Запись операции идёт в одной транзакции: нормализация `client_request_id` → advisory lock и проверка idempotent replay/fingerprint → блокировка затронутого движения, пользователя, локаций и Item в согласованном порядке → запись immutable Movement/lines → вызов DB-controlled `refresh_warehouse_projection(uuid, uuid)` → COMMIT. Runtime principal читает stock/custody, но не имеет прямого DML к projection tables; SECURITY DEFINER writer выводит точное состояние из журнала и тем самым делает повторный refresh идемпотентным. Совпадающий повтор запроса возвращает исходное движение, несовместимые данные — conflict; любая ошибка откатывает журнал и проекции вместе. Движения поддерживают RECEIPT, ISSUE, RETURN, TRANSFER, WRITE_OFF, CORRECTION, REVERSAL с различными правилами. Финальный procurement RECEIPT нельзя отменить обычным CORRECTION/REVERSAL.
+Access status и role — разные оси. Подробнее: [ACCESS_AND_RBAC.md](ACCESS_AND_RBAC.md).
 
-Журнал читается через серверный MVCC snapshot и HMAC-подписанный opaque cursor, связанный с пользователем и фильтрами. Клиент не получает права задавать произвольные внутренние `snapshot_at` или `before_journal_seq`. Read-only `backend/scripts/reconcile_inventory_projections.sql` пересчитывает stock/custody по журналу; нулевое число строк результата означает отсутствие найденного дрейфа. Полный контракт — [WAREHOUSE_DOMAIN.md](WAREHOUSE_DOMAIN.md).
+## 6. Transaction ownership
 
-## 5. Закупки: отдельный жизненный цикл
+`DbSession` создаёт request-scoped `AsyncSession`, но не делает commit автоматически. Commit/rollback принадлежит API/use-case boundary.
 
-`ProcurementRequest` хранит текущий статус, активную immutable revision, позиции и историю immutable events. Назначенный Manager отвечает за заявку, но это не ACL: допущенные MANAGER могут работать с активными заявками в рамках общей серверной политики. Предложенная позиция не создаёт Item автоматически. Согласование, возврат на корректировку, выбор менеджера, расхождения и передача на приёмку не меняют склад.
+Это принципиально для cross-domain операций:
 
-При окончательной технической приёмке сервер блокирует закупку, повторно проверяет статус, текущую revision, связи позиций с Item и локацию; в **той же транзакции** создаёт один Warehouse RECEIPT, связывает `final_movement_id`, записывает событие/уведомления и переводит заявку в `COMPLETED`. Уникальность финальной операции и неизменяемость истории защищены также DB-инвариантами текущих миграций. Partial acceptance текущая версия не предусматривает. Подробности — [RBAC_PROCUREMENT.md](RBAC_PROCUREMENT.md).
+- Procurement acceptance вызывает Warehouse service и завершает закупку в одной транзакции;
+- access decision обновляет User/AccessRequest и enqueue notification в одной транзакции;
+- Catalog item create/update меняет Item и EAV как единое изменение.
 
-## 6. Уведомления и внешние границы
+Service-функции не должны скрыто commit-ить внутри себя.
 
-API не вызывает Telegram Bot API или Microsoft Graph в середине складской/закупочной транзакции. Вместо этого он записывает intent в PostgreSQL outbox с детерминированным dedupe key. Отдельный worker забирает сообщение по lease/claim, отправляет и фиксирует результат либо retry/DEAD. `/start` welcome проверяет актуальность claim token до изменения состояния чата и сохраняет результат в согласованной БД-транзакции.
+## 7. PostgreSQL как вторая граница корректности
 
-Входящие Telegram updates проходят отдельный hostname `telegram-webhook.spik-inventory.ru` через выделенный Cloudflare Tunnel, затем `cloudflared` обращается к `https://localhost:443`; host Nginx передаёт запрос в тот же Unix ingress web-контейнера, а FastAPI проверяет webhook secret и выполняет dedupe. Пользовательский `app.spik-inventory.ru` через Tunnel не проходит. Исходящие запросы Telegram worker направляет в Cloudflare Worker Gateway по HTTPS; Bot API token находится в отдельной доверенной границе. Email worker опционален, использует Microsoft Graph и отдельные права PostgreSQL; `EMAIL_DELIVERY_ENABLED=false` по умолчанию. Внешняя отправка **at-least-once**: outbox исключает дублирование намерений при replay, но при потерянном подтверждении Gateway/Graph возможно повторное внешнее сообщение. Exactly-once для такой границы не заявляется.
+Критичные правила не оставлены только на Python-уровне. Readiness проверяет:
 
-## 7. Frontend: скорость не меняет доверие
+- единственный ожидаемый Alembic head;
+- наличие/включённость критичных triggers;
+- функции Catalog identity и Warehouse projection;
+- требуемую collation;
+- наличие колонок критических таблиц.
 
-React access shell появляется без ожидания загрузки Telegram SDK. Проверка cookie-сессии и загрузка route chunk могут идти параллельно; unauthenticated Telegram auth exchange требует корректного контекста SDK. После APPROVED прогреваются несколько фиксированных lazy-маршрутов. Список каталога может загружаться параллельно метаданным leaf, а карточка Item сначала отображает placeholder из списка и затем перепроверяется каноническим endpoint. Query cache — только в памяти. Это оптимизация порядка запросов, а не обход access gate. Визуальные компоненты принадлежат `shared/ui`; детали — в [FRONTEND_DESIGN_SYSTEM.md](FRONTEND_DESIGN_SYSTEM.md) и [FRONTEND_PERFORMANCE.md](FRONTEND_PERFORMANCE.md).
+DB triggers защищают:
 
-## 8. Ingress и сетевое доверие
+- category/leaf consistency;
+- typed/required EAV;
+- derived catalog identity;
+- warehouse append-only history и movement shape;
+- custody holder eligibility;
+- procurement immutable revisions/events/bindings;
+- current revision/final movement integrity;
+- role/access audit coupling.
 
-В production release `593ddec0c9100b0df2eafe4f324c7bb600d75cba` web-контейнер не публикует TCP-порт на host и состоит только в `app_net`. Host Nginx терминирует публичный TLS и проксирует приложение через защищённый host Unix socket `/var/lib/dc-inventory-ingress/ingress.sock`; внутри web используется Unix ingress Nginx. Direct ingress не доверяет произвольному `CF-Connecting-IP` как клиентскому адресу.
+## 8. Catalog path
 
-Cloudflare Tunnel больше не является пользовательским ingress. Он выделен только под Telegram webhook: route `telegram-webhook.spik-inventory.ru/api/telegram/webhook` ведёт к `https://localhost:443`, с `HTTP Host Header=app.spik-inventory.ru` и TLS `Origin Server Name=app.spik-inventory.ru`; unmatched routes закрываются fallback 404. Сервис `cloudflared` работает отдельным системным пользователем. CP-07 production migration закрыта фактической приёмкой; исторический переход и rollback-контекст сохранены в [CP07_HTTP_SOCKET_MIGRATION.md](CP07_HTTP_SOCKET_MIGRATION.md).
+```text
+Category configuration/migrations
+        │
+        ▼
+Category + CategoryAttribute
+        │
+create/update Item
+        ▼
+validation → normalization → identity_signature
+        │
+        ├── Item
+        └── typed ItemAttributeValue
+```
 
-## 9. Безопасность данных, provenance и восстановление
+Catalog identity — technical identity номенклатуры. Она используется Procurement для проверки, что согласованная proposed line связывается именно с эквивалентным Item.
 
-Образы содержат label `org.opencontainers.image.revision`. Проверка runtime provenance сравнивает заявленный checkout SHA с реальным HEAD и отдельно считывает immutable image ID/revision из **образа**, а не только из контейнерных labels. Документационный source-only sync может изменить Git HEAD без пересборки image при неизменном runtime source/контексте сборки. `ops/release/build_release.py` публикует release artifacts только после проверки полного набора. Git push не мигрирует БД и не разворачивает образы.
+Подробнее: [CATALOG.md](CATALOG.md).
 
-Initial production inventory был выполнен один раз через `app.bootstrap.production_inventory`: внешний workbook, closed gate, пустой Warehouse domain, существующий APPROVED ADMIN, одна транзакция создания локации и opening RECEIPT, контроль counts и zero-drift до COMMIT. Повторный bootstrap запрещён. Обычная граница — `REAL_INVENTORY_MUTATIONS_ENABLED`. Production default остаётся `false`.
+## 9. Warehouse path
 
-Восстановление проводится по manifest, проверенному dump и точному application artifact в изолированной БД. SQL сверки должен соответствовать restored schema и извлекаться из exact backend image backup, а не из произвольно более нового checkout. Подтверждённый production release на 25.09.2026 — `593ddec0c9100b0df2eafe4f324c7bb600d75cba`, Alembic `b0c1d2e3f4a5`; release/runtime provenance, runtime DB roles, zero-drift reconciliation, post-deploy backup и real Telegram webhook acceptance прошли. Отдельные restore/email и финальные audit gates остаются самостоятельными задачами. Статусы и доказательства — [AUDIT_0_12_REMEDIATION.md](AUDIT_0_12_REMEDIATION.md).
+```text
+API mutation
+  │
+  ├── capability + mutation safety gate
+  ├── idempotency key/fingerprint
+  ├── deterministic locks
+  ├── validate stock/custody/location/item
+  ├── INSERT Movement + MovementLine
+  └── refresh_warehouse_projection(...)
+           │
+           ├── StockBalance
+           └── UserItemCustodyBalance
+```
+
+History — source of truth; projections пересчитываются в той же транзакции. Подробнее: [WAREHOUSE.md](WAREHOUSE.md).
+
+## 10. Procurement path
+
+```text
+create request
+  │
+  ▼
+immutable revision #1
+  │
+manager actions / corrections / new immutable revisions
+  │
+  ▼
+AWAITING_ACCEPTANCE
+  │
+  ├── bind proposed lines to matching Catalog Item
+  └── report discrepancy
+  │
+technical acceptance
+  │ same DB transaction
+  ├── create Warehouse RECEIPT
+  ├── bind final_movement_id
+  ├── set COMPLETED
+  └── append ProcurementEvent + notifications
+```
+
+Подробнее: [PROCUREMENT.md](PROCUREMENT.md).
+
+## 11. Notification path
+
+Backend не вызывает Telegram/Graph внутри основной предметной транзакции.
+
+```text
+domain transaction
+    │
+    └── INSERT outbox intent + COMMIT
+                         │
+                         ▼
+worker claim with SKIP LOCKED
+                         │
+                  external provider
+                         │
+                 finalize claim token
+```
+
+Dedupe ограничивает повторное создание intent. Потерянный внешний response может привести к повторной доставке, поэтому guarantee — at-least-once.
+
+Подробнее: [NOTIFICATIONS.md](NOTIFICATIONS.md).
+
+## 12. Frontend path
+
+Startup:
+
+1. начинается lazy preload requested route;
+2. `TelegramAccessGate` сначала пробует существующую cookie session;
+3. при 401 загружается локальная vendored копия Telegram Web App SDK;
+4. после APPROVED рендерится router;
+5. page data загружается React Query.
+
+Frontend содержит UX capability guards, но API остаётся security boundary.
+
+Подробнее: [FRONTEND.md](FRONTEND.md).
+
+## 13. Release и provenance
+
+Каждый production image имеет:
+
+- reference с full Git SHA;
+- immutable Docker image ID;
+- OCI label `org.opencontainers.image.revision`.
+
+Release manifest связывает source SHA и image IDs. Runtime provenance собирает фактически запущенные image IDs/revision labels и сравнивает их с approved release.
+
+## 14. Backup и recovery boundary
+
+Backup фиксирует:
+
+- clean production checkout SHA;
+- runtime image provenance;
+- Alembic head;
+- PostgreSQL tool version;
+- dump object key, size и SHA-256;
+- S3 VersionId dump и manifest.
+
+Recovery rehearsal использует конкретные versioned objects и точные runtime artifacts из manifest в изолированных Docker network/volume/container. Production cutover — отдельная операция.
+
+## 15. Failure model
+
+Система fail-closed в основных границах:
+
+- несоответствие schema head/critical triggers → readiness 503;
+- отсутствующие production auth secrets → backend startup error;
+- отсутствующий Telegram Gateway/email config → соответствующий worker не стартует;
+- mutation gate false → catalog/inventory mutations 423;
+- DB conflict/serialization/deadlock → контролируемый conflict/retryable response;
+- stale outbox claim → finalization игнорируется;
+- unknown public host → host ingress не обслуживает приложение.

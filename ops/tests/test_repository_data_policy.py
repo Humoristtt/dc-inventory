@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+"""Public-repository data and secret policy."""
+
+from __future__ import annotations
+
 import re
 import subprocess
 from pathlib import Path
@@ -18,11 +22,9 @@ def tracked_files() -> list[str]:
 
 
 def require(path: str, value: str) -> None:
-    text = (ROOT / path).read_text()
+    text = (ROOT / path).read_text(encoding="utf-8")
     if value not in text:
-        raise RuntimeError(
-            f"{path}: missing repository data policy assertion {value!r}"
-        )
+        raise RuntimeError(f"{path}: missing policy assertion {value!r}")
 
 
 tracked = tracked_files()
@@ -34,9 +36,7 @@ for name in tracked:
     base = Path(name).name
 
     if base == ".env" or base.startswith(".env."):
-        raise RuntimeError(
-            f"tracked environment file is forbidden: {name}"
-        )
+        raise RuntimeError(f"tracked environment file is forbidden: {name}")
 
 require(
     "README.md",
@@ -47,12 +47,16 @@ require(
     "Публичные service identifiers",
 )
 require(
+    "docs/SECURITY.md",
+    "Репозиторий рассматривается как публичный",
+)
+require(
     "docs/OPERATIONS.md",
     "REPOSITORY_VISIBILITY_CURRENT=public",
 )
 require(
     "docs/OPERATIONS.md",
-    "private/runtime-only идентификаторов",
+    "private/runtime-only production identifiers",
 )
 require(
     "docs/OPERATIONS.md",
@@ -64,10 +68,10 @@ require(
 )
 require(
     "docs/DEPLOYMENT.md",
-    "TELEGRAM_WEB_APP_URL",
+    "Секреты не печатать",
 )
 
-env_example = (ROOT / ".env.example").read_text()
+env_example = (ROOT / ".env.example").read_text(encoding="utf-8")
 
 placeholder_keys = (
     "POSTGRES_PASSWORD",
@@ -88,24 +92,19 @@ for key in placeholder_keys:
     )
 
     if match is None:
-        raise RuntimeError(
-            f".env.example: missing {key}"
-        )
+        raise RuntimeError(f".env.example: missing {key}")
 
     if "replace-with-" not in match.group(1):
         raise RuntimeError(
             f".env.example: {key} must remain an obvious placeholder"
         )
 
-if "ADMIN_TELEGRAM_USER_ID=123456789" not in env_example:
-    raise RuntimeError(
-        ".env.example: recovery Telegram ID must remain a placeholder"
-    )
-
-if "NOTIFICATION_TELEGRAM_USER_ID=987654321" not in env_example:
-    raise RuntimeError(
-        ".env.example: notification Telegram ID must remain a placeholder"
-    )
+for key, placeholder in (
+    ("ADMIN_TELEGRAM_USER_ID", "123456789"),
+    ("NOTIFICATION_TELEGRAM_USER_ID", "987654321"),
+):
+    if f"{key}={placeholder}" not in env_example:
+        raise RuntimeError(f".env.example: {key} must remain a placeholder")
 
 bot_token_pattern = re.compile(
     r"\b\d{6,12}:[A-Za-z0-9_-]{30,}\b"
@@ -122,18 +121,18 @@ for name in tracked:
     path = ROOT / name
 
     try:
-        content = path.read_text()
+        value = path.read_text(encoding="utf-8")
     except (UnicodeDecodeError, OSError):
         continue
 
-    if bot_token_pattern.search(content):
+    if bot_token_pattern.search(value):
         raise RuntimeError(
             f"possible real Telegram bot token in tracked file: {name}"
         )
 
     for key_type in private_key_types:
         marker = "-----BEGIN " + key_type + "-----"
-        if marker in content:
+        if marker in value:
             raise RuntimeError(
                 f"private key material in tracked file: {name}"
             )

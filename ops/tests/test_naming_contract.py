@@ -17,7 +17,7 @@ dependencies = (
 ).read_text()
 
 rbac_docs = (
-    ROOT / "docs/RBAC_PROCUREMENT.md"
+    ROOT / "docs/ACCESS_AND_RBAC.md"
 ).read_text()
 
 config = (

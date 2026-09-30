@@ -1,6 +1,6 @@
 # Правила инженерной работы над Spikatel Inventory
 
-Этот файл задаёт рабочие ограничения для автоматизированного помощника и разработчика, который меняет репозиторий. Он не заменяет [архитектуру](docs/ARCHITECTURE.md), [план работ](docs/ROADMAP.md), [инструкцию разработки](docs/DEVELOPMENT.md), [производительность frontend](docs/FRONTEND_PERFORMANCE.md) и [контракт ролей и закупок](docs/RBAC_PROCUREMENT.md).
+Этот файл задаёт рабочие ограничения для автоматизированного помощника и разработчика, который меняет репозиторий. Он не заменяет [архитектуру](docs/ARCHITECTURE.md), [текущий аудит](docs/CURRENT_STATE_AUDIT.md), [инструкцию разработки](docs/DEVELOPMENT.md), [frontend-контракт](docs/FRONTEND.md), [RBAC](docs/ACCESS_AND_RBAC.md) и [закупки](docs/PROCUREMENT.md).
 
 ## 1. Подход к разработке
 

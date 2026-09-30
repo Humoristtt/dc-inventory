@@ -4,6 +4,7 @@ import {
   useNavigate,
 } from "react-router-dom";
 
+import { APP_DEFAULT_PATH } from "../../app/appRoutes";
 import { bindTelegramBackButton } from "../../shared/telegram/webApp";
 
 import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
@@ -17,7 +18,7 @@ export function useInternalBackNavigation(): () => void {
       navigate(-1);
       return;
     }
-    navigate("/catalog", { replace: true });
+    navigate(APP_DEFAULT_PATH, { replace: true });
   }, [location.key, navigate]);
 }
 
@@ -27,7 +28,7 @@ export function useTelegramNavigation(): {
 } {
   const location = useLocation();
   const webApp = useTelegramWebApp();
-  const showBack = location.pathname !== "/catalog";
+  const showBack = location.pathname !== APP_DEFAULT_PATH;
   const navigateBack = useInternalBackNavigation();
 
   useEffect(

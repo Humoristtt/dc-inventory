@@ -91,17 +91,17 @@ PostgreSQL 18
 
 Точная capability-матрица и ограничения изменения ролей: [docs/ACCESS_AND_RBAC.md](docs/ACCESS_AND_RBAC.md).
 
-## Текущий проверенный source baseline
+## Проверенный application baseline
 
-Чистый аудит выполнен по `main`:
+Чистый аудит application/runtime-кода выполнен на baseline, который предшествовал документационной замене и не изменялся ею:
 
 ```text
-SOURCE_SHA=2ba1fa1b1ca60bbbe4f75bf40e41f826581222c3
-SOURCE_DATE=2026-09-30
+AUDITED_APPLICATION_SHA=2ba1fa1b1ca60bbbe4f75bf40e41f826581222c3
+AUDIT_DATE=2026-09-30
 ALEMBIC_HEAD=e3f4a5b6c7d8
 ```
 
-На этом SHA GitHub CI завершён успешно:
+GitHub CI на этом application baseline и полный CI документационного change-set завершились успешно. Для application baseline подтверждено:
 
 - backend: Ruff PASS, mypy PASS для 212 source files, migration check PASS, `648 passed, 1 skipped`;
 - frontend: lint/typecheck/build PASS, `165 passed` unit tests;
@@ -111,7 +111,7 @@ ALEMBIC_HEAD=e3f4a5b6c7d8
 - runtime provenance и least-privilege DB checks: PASS;
 - Trivy repository/image HIGH+CRITICAL gates: PASS.
 
-Это **source/CI evidence**, а не утверждение о текущем live production. Фактическое состояние production проверяется только runtime-командами из [docs/OPERATIONS.md](docs/OPERATIONS.md).
+Это **application/source + CI evidence**, а не утверждение о текущем Git HEAD или live production. Фактическое состояние production проверяется только runtime-командами из [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 Полный результат аудита и открытые технические риски: [docs/CURRENT_STATE_AUDIT.md](docs/CURRENT_STATE_AUDIT.md).
 

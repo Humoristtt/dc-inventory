@@ -34,14 +34,136 @@ class ReleaseTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 module.release_refs(value)
 
-    def test_dirty_or_existing_release_never_builds(self):
+    def test_dirty_checkout_never_builds(self):
+        with patch.object(module, "output", side_effect=[" M file"]), \
+                patch.object(module.subprocess, "run") as build:
+            with self.assertRaisesRegex(
+                RuntimeError,
+                "clean checkout",
+            ):
+                module.build(
+                    Path("unused.env"),
+                    ROOT / "tmp/should-not-exist",
+                )
+            build.assert_not_called()
+
+    def test_complete_revision_images_are_reused_without_rebuild(self):
         sha = "a" * 40
-        for replies in ([" M file"], ["", sha, "29", f"dc-inventory-backend:{sha}"]):
+        refs = module.release_refs(sha)
+        existing = "\n".join(refs.values())
+        metadata = json.dumps({
+            "Config": {
+                "Labels": {
+                    "org.opencontainers.image.revision": sha,
+                },
+            },
+            "Id": "sha256:" + "c" * 64,
+            "RepoDigests": [],
+        })
+
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "release"
+            replies = [
+                "",
+                sha,
+                "29",
+                existing,
+                metadata,
+                metadata,
+                metadata,
+            ]
             with patch.object(module, "output", side_effect=replies), \
-                    patch.object(module.subprocess, "run") as build:
-                with self.assertRaises(RuntimeError):
-                    module.build(Path("unused.env"), ROOT / "tmp/should-not-exist")
-                build.assert_not_called()
+                    patch.object(module, "validate_release_env"), \
+                    patch.object(module.subprocess, "run") as compose:
+                module.build(
+                    Path("unused.env"),
+                    destination,
+                )
+
+            compose.assert_not_called()
+            manifest = json.loads(
+                (destination / "release.json").read_text()
+            )
+            self.assertEqual(
+                set(manifest["images"]),
+                set(module.SERVICES),
+            )
+
+    def test_partial_revision_images_resume_only_missing_services(self):
+        sha = "a" * 40
+        refs = module.release_refs(sha)
+        metadata = json.dumps({
+            "Config": {
+                "Labels": {
+                    "org.opencontainers.image.revision": sha,
+                },
+            },
+            "Id": "sha256:" + "c" * 64,
+            "RepoDigests": [],
+        })
+
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "release"
+            replies = [
+                "",
+                sha,
+                "29",
+                refs["BACKEND_IMAGE"],
+                metadata,
+                metadata,
+                metadata,
+            ]
+            with patch.object(module, "output", side_effect=replies), \
+                    patch.object(module, "validate_release_env"), \
+                    patch.object(module.subprocess, "run") as compose:
+                module.build(
+                    Path("unused.env"),
+                    destination,
+                )
+
+            compose.assert_called_once()
+            command = compose.call_args.args[0]
+            self.assertEqual(
+                command[-3:],
+                ["build", "web", "postgres"],
+            )
+            self.assertTrue(destination.is_dir())
+
+    def test_retained_revision_tag_must_match_source_revision(self):
+        sha = "a" * 40
+        refs = module.release_refs(sha)
+        bad_metadata = json.dumps({
+            "Config": {
+                "Labels": {
+                    "org.opencontainers.image.revision": "b" * 40,
+                },
+            },
+            "Id": "sha256:" + "c" * 64,
+            "RepoDigests": [],
+        })
+
+        with tempfile.TemporaryDirectory() as temporary:
+            destination = Path(temporary) / "release"
+            replies = [
+                "",
+                sha,
+                "29",
+                refs["BACKEND_IMAGE"],
+                bad_metadata,
+            ]
+            with patch.object(module, "output", side_effect=replies), \
+                    patch.object(module.subprocess, "run") as compose:
+                with self.assertRaisesRegex(
+                    RuntimeError,
+                    "backend: revision mismatch",
+                ):
+                    module.build(
+                        Path("unused.env"),
+                        destination,
+                    )
+
+            compose.assert_not_called()
+            self.assertFalse(destination.exists())
 
     def test_build_writes_verified_artifacts(self):
         sha = "a" * 40

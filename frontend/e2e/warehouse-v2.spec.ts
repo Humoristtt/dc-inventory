@@ -2,8 +2,8 @@ import { expect, type Page, type Route, test } from "@playwright/test";
 
 const userId = "00000000-0000-4000-8000-000000000111";
 const now = "2026-09-07T12:00:00Z";
-const family = {id:"family",key:"transceivers",display_name:"Трансиверы",description:"Оптические трансиверы",parent_id:null,sort_order:0,is_system:true};
-const category = {id:"leaf",key:"transceiver_ethernet",display_name:"Ethernet",description:null,parent_id:family.id,sort_order:0,is_system:true};
+const family = {id:"family",key:"transceivers",display_name:"Трансиверы",description:"Оптические трансиверы",parent_id:null,sort_order:0,is_system:true,requires_manufacturer_model:false};
+const category = {id:"leaf",key:"transceiver_ethernet",display_name:"Ethernet",description:null,parent_id:family.id,sort_order:0,is_system:true,requires_manufacturer_model:true};
 const attributes = {speed:"10 Гбит/с",wavelength:"1310 нм",reach:"до 10 км",form_factor:"SFP+",fiber:"SMF",connector:"LC"};
 const labels: Record<string,string> = {speed:"Скорость",wavelength:"Длина волны",reach:"Дальность",form_factor:"Форм-фактор",fiber:"Волокно / среда",connector:"Разъём"};
 const categoryDetail = {...category,attributes:Object.keys(attributes).map((key,index)=>({id:key,key,label:labels[key],data_type:"TEXT",unit:null,required:true,filterable:true,searchable:true,card_visible:true,detail_visible:true,table_visible:true,excel_visible:true,sort_order:index,filter_type:"EXACT",allowed_values:null,validation_metadata:{max_length:2000},is_system:true}))};

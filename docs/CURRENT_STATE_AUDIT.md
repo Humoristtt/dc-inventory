@@ -149,7 +149,7 @@ GitHub Actions run для audited SHA завершён успешно во вс�
 
 **Решение в этом change-set:** исторические audit/stage/history/roadmap документы удалены; текущие документы переписаны от кода; documentation contracts переписаны под current-state модель.
 
-Статус: **CLOSED в данной ветке после зелёного CI**.
+Статус: **CLOSED**. Legacy documentation удалена; current-state documentation contracts прошли полный CI.
 
 ### F-02 — P2 — знания о frontend routes дублируются
 

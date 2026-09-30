@@ -1,34 +1,27 @@
-import {
-  Button,
-  Navigate,
-  Select,
-  getMovement,
-  hasCapability,
-  inventoryRequest,
-  movementLabels,
-  type Movement,
-  type MovementCursorPage,
-  useQuery } from "@tanstack/react-query";
-import { useEffect,
-  useRef,
-  useSearchParams } from "react-router-dom";
+import { Button, Select } from "../../shared/ui";
+import { useQuery } from "@tanstack/react-query";
+import { useEffect, useRef, useState } from "react";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 
 import { useAuthState } from "../../features/auth/useAuthState";
 import { MovementAdminActions } from "../../features/inventory/MovementAdminActions";
 import {
   hasAnyCapability,
-  useState } from "react";
-import { Link,
-  } from "../../shared/api/auth";
+  hasCapability,
+} from "../../shared/api/auth";
 import {
   getCatalogCategories,
-  } from "../../shared/api/catalog";
+} from "../../shared/api/catalog";
 import {
   getLocations,
-  } from "../../shared/api/inventory";
+  getMovement,
+  inventoryRequest,
+  movementLabels,
+  type Movement,
+  type MovementCursorPage,
+} from "../../shared/api/inventory";
 import "../../features/inventory/inventory.css";
-import { PageHeader,
-} from "../../shared/ui";
+import { PageHeader } from "../../shared/ui";
 
 const PAGE_SIZE = 30;
 const UUID_PATTERN =

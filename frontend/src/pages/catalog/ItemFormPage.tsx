@@ -1,39 +1,36 @@
+import { Button, Input, Select } from "../../shared/ui";
 import {
-  Button,
-  Input,
-  Select,
-  type AttributeDraft,
-  type SuggestionOption,
   useMutation,
-  useNavigate,
-  useParams,
   useQuery,
   useQueryClient,
-  useRef,
-  useSearchParams,
-  useState,
-  validateDraftAttributes,
-  } from "../../features/catalog/SuggestionInput";
-import {
-  draftAttributesFromItem,
-  } from "../../features/catalog/itemForm";
-import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
-import { ApiRequestError } from "../../shared/api/auth";
-import { PageHeader,
-  } from "@tanstack/react-query";
+} from "@tanstack/react-query";
 import {
   useEffect,
-  } from "react";
+  useRef,
+  useState,
+} from "react";
 import {
   Navigate,
-  } from "react-router-dom";
+  useNavigate,
+  useParams,
+  useSearchParams,
+} from "react-router-dom";
 
 import { useAuthState } from "../../features/auth/useAuthState";
 import { hasCapability } from "../../shared/api/auth";
 import { AttributeControl } from "../../features/catalog/AttributeControl";
 import {
   SuggestionInput,
-} from "../../shared/ui";
+  type SuggestionOption,
+} from "../../features/catalog/SuggestionInput";
+import {
+  draftAttributesFromItem,
+  validateDraftAttributes,
+  type AttributeDraft,
+} from "../../features/catalog/itemForm";
+import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
+import { ApiRequestError } from "../../shared/api/auth";
+import { PageHeader } from "../../shared/ui";
 import {
   createAndBindProcurementLine,
   getProcurementRequest,

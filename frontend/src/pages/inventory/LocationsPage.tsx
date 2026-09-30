@@ -1,30 +1,26 @@
+import { Button, Input, Select, Textarea } from "../../shared/ui";
 import {
-  Button,
-  Input,
-  Select,
-  Textarea,
-  inventoryError,
-  inventoryRequest,
-  type StorageLocation,
   useEffect,
+  useState,
+} from "react";
+import {
+  useMutation,
   useQuery,
   useQueryClient,
-  useState,
-  } from "../../shared/api/inventory";
-import { refreshAfterLocationEdit } from "../../shared/api/inventoryCache";
-import "../../features/inventory/inventory.css";
-import { PageHeader,
-  } from "@tanstack/react-query";
+} from "@tanstack/react-query";
 import { Link } from "react-router-dom";
 
 import { useAuthState } from "../../features/auth/useAuthState";
 import { hasCapability } from "../../shared/api/auth";
 import {
   getLocations,
-  } from "react";
-import {
-  useMutation,
-} from "../../shared/ui";
+  inventoryError,
+  inventoryRequest,
+  type StorageLocation,
+} from "../../shared/api/inventory";
+import { refreshAfterLocationEdit } from "../../shared/api/inventoryCache";
+import "../../features/inventory/inventory.css";
+import { PageHeader } from "../../shared/ui";
 
 type LocationDraft = {
   code: string;

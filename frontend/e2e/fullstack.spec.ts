@@ -16,7 +16,7 @@ const telegramUserId = Number(
 );
 
 const configuredWebAppOrigin =
-  "http://127.0.0.1:8080";
+  "https://app.spik-inventory.ru";
 
 test.describe.configure({
   mode: "serial",
@@ -119,9 +119,6 @@ test(
     const initData = createSignedTelegramInitData();
 
     await waitForSensitiveAuthBudget();
-    await page.setExtraHTTPHeaders({
-      Origin: configuredWebAppOrigin,
-    });
     await installTelegramContext(page, initData);
 
     const authentication = page.waitForResponse(
@@ -389,9 +386,24 @@ test("isolated HTTP acceptance covers RBAC, warehouse and procurement", async ({
     expect((await historyResponse.json() as { items: unknown[] }).items).toHaveLength(4);
     expect((await engineer.api.get(`/api/inventory/movements/${receipt.id}`)).status()).toBe(403);
 
-    await page.setExtraHTTPHeaders({
-      Origin: configuredWebAppOrigin,
-    });
+    await page.route(
+      "**/api/procurement/requests",
+      async (route) => {
+        const request = route.request();
+
+        if (request.method() !== "POST") {
+          await route.continue();
+          return;
+        }
+
+        await route.continue({
+          headers: {
+            ...request.headers(),
+            origin: configuredWebAppOrigin,
+          },
+        });
+      },
+    );
     await installTelegramContext(
       page,
       createSignedTelegramInitData(telegramUserId),

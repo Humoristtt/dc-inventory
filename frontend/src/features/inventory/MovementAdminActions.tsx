@@ -13,6 +13,11 @@ import {
   type Movement,
   type MovementInput,
 } from "../../shared/api/inventory";
+import {
+  Button,
+  Input,
+  Select,
+} from "../../shared/ui";
 
 type CorrectionDirection = "ADD" | "REMOVE";
 
@@ -245,23 +250,23 @@ export function MovementAdminActions({
     <>
       <div className="warehouse-actions">
         {canCorrect ? (
-          <button
+          <Button
             className="button button--ghost"
             onClick={openCorrection}
             type="button"
           >
             Корректировать остаток
-          </button>
+          </Button>
         ) : null}
 
         {canReverse ? (
-          <button
+          <Button
             className="button button--danger"
             onClick={openReversal}
             type="button"
           >
             Отменить операцию
-          </button>
+          </Button>
         ) : null}
       </div>
 
@@ -286,7 +291,7 @@ export function MovementAdminActions({
                 </h2>
               </div>
 
-              <button
+              <Button
                 aria-label="Закрыть корректировку"
                 className="icon-button"
                 data-escape-dismiss=""
@@ -297,7 +302,7 @@ export function MovementAdminActions({
                 type="button"
               >
                 ×
-              </button>
+              </Button>
             </header>
 
             <div className="sheet__body">
@@ -310,7 +315,7 @@ export function MovementAdminActions({
 
               <label>
                 Изменение остатка
-                <select
+                <Select
                   value={correction.direction}
                   onChange={(event) =>
                     setCorrection((current) =>
@@ -330,13 +335,13 @@ export function MovementAdminActions({
                   <option value="REMOVE">
                     Уменьшить остаток
                   </option>
-                </select>
+                </Select>
               </label>
 
               {availableLocations.length > 1 ? (
                 <label>
                   Место хранения
-                  <select
+                  <Select
                     value={correction.locationId}
                     onChange={(event) =>
                       setCorrection((current) =>
@@ -360,7 +365,7 @@ export function MovementAdminActions({
                         </option>
                       ),
                     )}
-                  </select>
+                  </Select>
                 </label>
               ) : (
                 <p>
@@ -379,7 +384,7 @@ export function MovementAdminActions({
                   <label key={line.id}>
                     Количество:{" "}
                     {line.item_name_snapshot}
-                    <input
+                    <Input
                       inputMode="numeric"
                       min="0"
                       step="1"
@@ -427,7 +432,7 @@ export function MovementAdminActions({
             </div>
 
             <footer className="sheet__footer">
-              <button
+              <Button
                 className="button button--ghost"
                 disabled={
                   correctionMutation.isPending
@@ -436,9 +441,9 @@ export function MovementAdminActions({
                 type="button"
               >
                 Отмена
-              </button>
+              </Button>
 
-              <button
+              <Button
                 className="button button--dark"
                 disabled={
                   correctionMutation.isPending
@@ -449,7 +454,7 @@ export function MovementAdminActions({
                 {correctionMutation.isPending
                   ? "Сохраняем…"
                   : "Создать корректировку"}
-              </button>
+              </Button>
             </footer>
           </section>
         </div>
@@ -477,7 +482,7 @@ export function MovementAdminActions({
                 </h2>
               </div>
 
-              <button
+              <Button
                 aria-label="Закрыть отмену операции"
                 className="icon-button"
                 data-escape-dismiss=""
@@ -488,7 +493,7 @@ export function MovementAdminActions({
                 type="button"
               >
                 ×
-              </button>
+              </Button>
             </header>
 
             <div className="sheet__body">
@@ -508,7 +513,7 @@ export function MovementAdminActions({
             </div>
 
             <footer className="sheet__footer">
-              <button
+              <Button
                 className="button button--ghost"
                 disabled={
                   reversalMutation.isPending
@@ -517,9 +522,9 @@ export function MovementAdminActions({
                 type="button"
               >
                 Не отменять
-              </button>
+              </Button>
 
-              <button
+              <Button
                 className="button button--danger"
                 disabled={
                   reversalMutation.isPending
@@ -534,7 +539,7 @@ export function MovementAdminActions({
                 {reversalMutation.isPending
                   ? "Отменяем…"
                   : "Создать отмену"}
-              </button>
+              </Button>
             </footer>
           </section>
         </div>

@@ -14,6 +14,11 @@ import {
   type CatalogItemListEntry,
 } from "../../shared/api/catalog";
 import type { ProcurementLineInput } from "../../shared/api/procurement";
+import {
+  Button,
+  Input,
+  Select,
+} from "../../shared/ui";
 
 const MAX_PROCUREMENT_LINES = 500;
 
@@ -427,13 +432,13 @@ export function LineComposer({ lines, onChange }: Props) {
               <span>
                 {lineLabel(line)} — {line.quantity} шт.
               </span>
-              <button
+              <Button
                 className="button button--ghost"
                 onClick={() => onChange(lines.filter((_, row) => row !== index))}
                 type="button"
               >
                 Удалить
-              </button>
+              </Button>
             </li>
           ))}
         </ol>
@@ -442,27 +447,27 @@ export function LineComposer({ lines, onChange }: Props) {
       )}
 
       <div className="procurement-mode" role="group" aria-label="Тип позиции">
-        <button
+        <Button
           className={mode === "EXISTING_ITEM" ? "button button--dark" : "button"}
           onClick={() => setMode("EXISTING_ITEM")}
           type="button"
         >
           Из каталога
-        </button>
-        <button
+        </Button>
+        <Button
           className={mode === "PROPOSED_ITEM" ? "button button--dark" : "button"}
           onClick={() => setMode("PROPOSED_ITEM")}
           type="button"
         >
           Новая позиция
-        </button>
+        </Button>
       </div>
 
       {mode === "EXISTING_ITEM" ? (
         <div className="procurement-fields">
           <label>
             Категория
-            <select
+            <Select
               value={catalogCategory}
               onChange={(event) => {
                 setCatalogCategory(event.target.value);
@@ -482,12 +487,12 @@ export function LineComposer({ lines, onChange }: Props) {
                   ))}
                 </optgroup>
               ))}
-            </select>
+            </Select>
           </label>
 
           <label>
             Поиск по каталогу
-            <input
+            <Input
               autoCapitalize="none"
               autoComplete="off"
               autoCorrect="off"
@@ -502,7 +507,7 @@ export function LineComposer({ lines, onChange }: Props) {
 
           <label>
             Позиция
-            <select
+            <Select
               value={existingItemId}
               onChange={(event) => setExistingItemId(event.target.value)}
             >
@@ -519,7 +524,7 @@ export function LineComposer({ lines, onChange }: Props) {
                   {catalogItemLabel(item)}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
 
           {search.trim().length >= 2
@@ -531,7 +536,7 @@ export function LineComposer({ lines, onChange }: Props) {
             ) : null}
 
           {activeItemsQuery.hasNextPage ? (
-            <button
+            <Button
               className="button button--load-more"
               disabled={
                 activeItemsQuery.isFetchingNextPage
@@ -544,14 +549,14 @@ export function LineComposer({ lines, onChange }: Props) {
               {activeItemsQuery.isFetchingNextPage
                 ? "Загружаем…"
                 : "Показать ещё"}
-            </button>
+            </Button>
           ) : null}
         </div>
       ) : (
         <div className="procurement-fields">
           <label>
             Категория
-            <select
+            <Select
               value={category}
               onChange={(event) => {
                 setCategory(event.target.value);
@@ -566,13 +571,13 @@ export function LineComposer({ lines, onChange }: Props) {
                   {entry.display_name}
                 </option>
               ))}
-            </select>
+            </Select>
           </label>
           {identityRequired ? (
             <>
               <label>
                 Поиск производителя
-                <input
+                <Input
                   value={manufacturerSearch}
                   onChange={(event) => {
                     setManufacturerSearch(
@@ -585,7 +590,7 @@ export function LineComposer({ lines, onChange }: Props) {
 
               <label>
                 Производитель
-                <select
+                <Select
                   value={manufacturerId}
                   onChange={(event) =>
                     setManufacturerId(
@@ -605,11 +610,11 @@ export function LineComposer({ lines, onChange }: Props) {
                       </option>
                     ),
                   )}
-                </select>
+                </Select>
               </label>
 
               {manufacturers.hasNextPage ? (
-                <button
+                <Button
                   className="button button--load-more"
                   disabled={
                     manufacturers.isFetchingNextPage
@@ -622,18 +627,18 @@ export function LineComposer({ lines, onChange }: Props) {
                   {manufacturers.isFetchingNextPage
                     ? "Загружаем производителей…"
                     : "Показать ещё производителей"}
-                </button>
+                </Button>
               ) : null}
             </>
           ) : null}
           <label>
             Название
-            <input maxLength={255} value={name} onChange={(event) => setName(event.target.value)} />
+            <Input maxLength={255} value={name} onChange={(event) => setName(event.target.value)} />
           </label>
           {identityRequired ? (
             <label>
               Модель
-              <input maxLength={255} value={model} onChange={(event) => setModel(event.target.value)} />
+              <Input maxLength={255} value={model} onChange={(event) => setModel(event.target.value)} />
             </label>
           ) : null}
           {(schema.data?.attributes ?? [])
@@ -658,16 +663,16 @@ export function LineComposer({ lines, onChange }: Props) {
       <div className="procurement-add-row">
         <label>
           Количество
-          <input inputMode="numeric" value={qty} onChange={(event) => setQty(event.target.value)} />
+          <Input inputMode="numeric" value={qty} onChange={(event) => setQty(event.target.value)} />
         </label>
-        <button
+        <Button
           className="button button--accent"
           disabled={lines.length >= MAX_PROCUREMENT_LINES}
           onClick={add}
           type="button"
         >
           Добавить позицию
-        </button>
+        </Button>
       </div>
       {lines.length >= MAX_PROCUREMENT_LINES ? (
         <p role="alert">В одной заявке может быть не более 500 позиций.</p>

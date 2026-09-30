@@ -1,58 +1,60 @@
 import {
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import {
-  useEffect,
-  useState,
-} from "react";
-import {
-  Link,
-  useLocation,
-  useParams,
-} from "react-router-dom";
-
-import {
-  catalogQueryCacheKey,
-  getCatalogCategory,
-  getCatalogCategories,
-  getCatalogFacetPage,
-  getCatalogFacets,
-} from "../../shared/api/catalog";
-import {
-  activeFilterCount,
-  catalogFiltersFromViewState,
-  defaultCatalogFilterState,
-  toCatalogQuery,
-} from "../../features/catalog/catalogQuery";
-import {
-  CatalogEmptyState,
+  Button,
   CatalogErrorState,
   CatalogListSkeleton,
-} from "../../features/catalog/CatalogState";
+  catalogFiltersFromViewState,
+  defaultCatalogFilterState,
+  getCatalogCategories,
+  getCatalogCategory,
+  getCatalogFacetPage,
+  getCatalogFacets,
+  isSpeedBucketSelected,
+  nextQuickSort,
+  quickSortOptions,
+  sortLabel,
+  sortOptionsForContext,
+  speedFacetValuesForBucket,
+  toCatalogQuery,
+  toggleSpeedBucket,
+  useLocation,
+  useParams,
+  useQuery,
+  useQueryClient,
+  useState,
+  } from "../../features/catalog/CatalogState";
 import { EquipmentList } from "../../features/catalog/EquipmentList";
 import { FilterSheet } from "../../features/catalog/FilterSheet";
 import { DebouncedSearchField } from "../../features/catalog/DebouncedSearchField";
 import {
   catalogDefaultSort,
-  nextQuickSort,
-  quickSortOptions,
-  sortLabel,
-  sortOptionsForContext,
-} from "../../features/catalog/catalogSort";
-import {
-  SortSheet,
-} from "../../features/catalog/SortSheet";
+  } from "../../features/catalog/SortSheet";
 import { useCatalogItems } from "../../features/catalog/useCatalogItems";
 import {
   ETHERNET_SPEED_BUCKETS,
-  isSpeedBucketSelected,
-  speedFacetValuesForBucket,
-  toggleSpeedBucket,
-} from "../../features/catalog/transceiverFilters";
+  } from "../../features/catalog/catalogQuery";
+import {
+  CatalogEmptyState,
+  } from "../../features/catalog/catalogSort";
+import {
+  SortSheet,
+  } from "../../features/catalog/transceiverFilters";
 import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
-import { PageHeader } from "../../shared/ui";
+import { PageHeader,
+  } from "../../shared/api/catalog";
+import {
+  activeFilterCount,
+  } from "@tanstack/react-query";
+import {
+  useEffect,
+  } from "react";
+import {
+  Link,
+  } from "react-router-dom";
+
+import {
+  catalogQueryCacheKey,
+} from "../../shared/ui";
 import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
 
 export function CategoryPage() {
@@ -318,7 +320,7 @@ export function CategoryPage() {
                         );
 
                       return (
-                        <button
+                        <Button
                           aria-pressed={selected}
                           className={
                             selected
@@ -347,23 +349,23 @@ export function CategoryPage() {
                           type="button"
                         >
                           {bucket}
-                        </button>
+                        </Button>
                       );
                     })}
                   </div>
                 ) : null}
 
                 {ethernetSpeedView ? (
-                  <button
+                  <Button
                     className="tool-button"
                     disabled={filtersCount === 0}
                     onClick={clearAllFilters}
                     type="button"
                   >
                     Сбросить фильтры
-                  </button>
+                  </Button>
                 ) : (
-                  <button
+                  <Button
                     className={
                       filtersCount > 0
                         ? "tool-button tool-button--active"
@@ -376,7 +378,7 @@ export function CategoryPage() {
                     {filtersCount > 0 ? (
                       <span>{filtersCount}</span>
                     ) : null}
-                  </button>
+                  </Button>
                 )}
 
                 <div
@@ -392,7 +394,7 @@ export function CategoryPage() {
                       : option.defaultOrder;
 
                     return (
-                      <button
+                      <Button
                         aria-pressed={selected}
                         className={
                           selected
@@ -414,12 +416,12 @@ export function CategoryPage() {
                         <span aria-hidden="true">
                           {order === "asc" ? "↑" : "↓"}
                         </span>
-                      </button>
+                      </Button>
                     );
                   })}
 
                   {!ethernetSpeedView ? (
-                    <button
+                    <Button
                       aria-label="Другие варианты сортировки"
                       aria-pressed={!quickSortHasSelection}
                       className={
@@ -434,7 +436,7 @@ export function CategoryPage() {
                         ? "Ещё"
                         : sortLabel(viewState)}
                       <span aria-hidden="true">•••</span>
-                    </button>
+                    </Button>
                   ) : null}
                 </div>
               </div>
@@ -447,9 +449,9 @@ export function CategoryPage() {
             {!categoryContentPending && !itemsQuery.isError && itemsQuery.items.length === 0 ? (
               <CatalogEmptyState
                 action={filtersCount > 0 ? (
-                  <button className="button button--ghost" onClick={clearAllFilters} type="button">
+                  <Button className="button button--ghost" onClick={clearAllFilters} type="button">
                     Сбросить фильтры
-                  </button>
+                  </Button>
                 ) : undefined}
                 title={filtersCount > 0 ? "По фильтрам ничего нет" : viewState.q ? "Ничего не найдено" : "В категории пока пусто"}
               >
@@ -471,14 +473,14 @@ export function CategoryPage() {
                   returnTo={returnTo}
                 />
                 {itemsQuery.hasNextPage ? (
-                  <button
+                  <Button
                     className="button button--load-more"
                     disabled={itemsQuery.isFetchingNextPage}
                     onClick={() => void itemsQuery.fetchNextPage()}
                     type="button"
                   >
                     {itemsQuery.isFetchingNextPage ? "Загружаем…" : "Показать ещё"}
-                  </button>
+                  </Button>
                 ) : null}
               </>
             ) : null}

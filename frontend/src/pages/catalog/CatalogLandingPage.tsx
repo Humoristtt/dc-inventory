@@ -1,27 +1,30 @@
-import { useAuthState } from "../../features/auth/useAuthState";
+import {
+  Button,
+  CatalogErrorState,
+  CatalogListSkeleton,
+  useAuthState } from "../../features/auth/useAuthState";
 import { hasCapability } from "../../shared/api/auth";
 import { useQuery } from "@tanstack/react-query";
 import {
   Link,
   useLocation,
-} from "react-router-dom";
-
-import {
-  getCatalogCategories,
-} from "../../shared/api/catalog";
-import {
-  toCatalogQuery,
-} from "../../features/catalog/catalogQuery";
-import {
-  CatalogEmptyState,
-  CatalogErrorState,
-  CatalogListSkeleton,
-} from "../../features/catalog/CatalogState";
+  } from "../../features/catalog/CatalogState";
 import { EquipmentList } from "../../features/catalog/EquipmentList";
 import { DebouncedSearchField } from "../../features/catalog/DebouncedSearchField";
 import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
 import { useCatalogItems } from "../../features/catalog/useCatalogItems";
-import { PageHeader } from "../../shared/ui";
+import { PageHeader,
+  } from "../../features/catalog/catalogQuery";
+import {
+  CatalogEmptyState,
+  } from "../../shared/api/catalog";
+import {
+  toCatalogQuery,
+  } from "react-router-dom";
+
+import {
+  getCatalogCategories,
+} from "../../shared/ui";
 
 export function CatalogLandingPage() {
   const auth = useAuthState();
@@ -91,14 +94,14 @@ export function CatalogLandingPage() {
                 ) : null}
                 <EquipmentList items={itemsQuery.items} returnTo={returnTo} />
                 {itemsQuery.hasNextPage ? (
-                  <button
+                  <Button
                     className="button button--load-more"
                     disabled={itemsQuery.isFetchingNextPage}
                     onClick={() => void itemsQuery.fetchNextPage()}
                     type="button"
                   >
                     {itemsQuery.isFetchingNextPage ? "Загружаем…" : "Показать ещё"}
-                  </button>
+                  </Button>
                 ) : null}
               </>
             ) : null}

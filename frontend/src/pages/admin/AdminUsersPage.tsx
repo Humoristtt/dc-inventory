@@ -1,19 +1,8 @@
 import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from "@tanstack/react-query";
-import {
-  type FormEvent,
-  useState,
-} from "react";
-import { Navigate } from "react-router-dom";
-
-import "../../features/admin/access-admin.css";
-import { UserAccountReset } from "../../features/admin/UserAccountReset";
-import { useAuthState } from "../../features/auth/useAuthState";
-import {
-  adminUserError,
+  Button,
+  Input,
+  ROLE_LABELS,
+  Select,
   decideAdminUserAccessRequest,
   getAdminUsers,
   getUserAccessEvents,
@@ -22,14 +11,29 @@ import {
   setAdminUserRole,
   type AdminAccessRequestDecision,
   type AdminUser,
-} from "../../shared/api/adminUsers";
-import {
-  hasCapability,
-  ROLE_LABELS,
   type UserAccessStatus,
   type UserRole,
-} from "../../shared/api/auth";
-import { PageHeader } from "../../shared/ui";
+  useMutation,
+  useQuery,
+  useQueryClient,
+  useState,
+  } from "../../shared/api/adminUsers";
+import {
+  hasCapability,
+  } from "../../shared/api/auth";
+import { PageHeader,
+  } from "@tanstack/react-query";
+import {
+  type FormEvent,
+  } from "react";
+import { Navigate } from "react-router-dom";
+
+import "../../features/admin/access-admin.css";
+import { UserAccountReset } from "../../features/admin/UserAccountReset";
+import { useAuthState } from "../../features/auth/useAuthState";
+import {
+  adminUserError,
+} from "../../shared/ui";
 
 const accessLabels: Record<UserAccessStatus, string> = {
   PENDING: "Ожидает подтверждения",
@@ -85,23 +89,23 @@ function PaginationControls({
       </span>
 
       <div className="admin-pagination__actions">
-        <button
+        <Button
           className="button button--ghost"
           disabled={!hasPrevious}
           onClick={onPrevious}
           type="button"
         >
           {previousLabel}
-        </button>
+        </Button>
 
-        <button
+        <Button
           className="button button--ghost"
           disabled={!hasNext}
           onClick={onNext}
           type="button"
         >
           {nextLabel}
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -481,7 +485,7 @@ export function AdminUsersPage() {
         >
           <label>
             Поиск
-            <input
+            <Input
               autoCapitalize="none"
               autoComplete="off"
               autoCorrect="off"
@@ -499,7 +503,7 @@ export function AdminUsersPage() {
 
           <label>
             Статус
-            <select
+            <Select
               value={accessFilter}
               onChange={(event) => {
                 setAccessFilter(
@@ -516,26 +520,26 @@ export function AdminUsersPage() {
               <option value="BLOCKED">Заблокированы</option>
               <option value="PENDING">Ожидают подтверждения</option>
               <option value="REJECTED">Отклонены</option>
-            </select>
+            </Select>
           </label>
 
-          <button
+          <Button
             className="button button--dark"
             type="submit"
           >
             Найти
-          </button>
+          </Button>
         </form>
 
         {usersQuery.isError ? (
           <p role="alert">
             Не удалось загрузить пользователей.{" "}
-            <button
+            <Button
               type="button"
               onClick={() => void usersQuery.refetch()}
             >
               Повторить
-            </button>
+            </Button>
           </p>
         ) : null}
 
@@ -585,7 +589,7 @@ export function AdminUsersPage() {
                 {roleMutable ? (
                   <label>
                     Роль пользователя
-                    <select
+                    <Select
                       disabled={roleMutation.isPending}
                       value={user.role}
                       onChange={(event) =>
@@ -603,14 +607,14 @@ export function AdminUsersPage() {
                           {ROLE_LABELS[role]}
                         </option>
                       ))}
-                    </select>
+                    </Select>
                   </label>
                 ) : null}
 
                 <div className="admin-user-card__actions">
                   {pendingDecisionMutable ? (
                     <>
-                      <button
+                      <Button
                         className="button button--dark"
                         disabled={
                           accessDecisionMutation.isPending
@@ -624,9 +628,9 @@ export function AdminUsersPage() {
                         type="button"
                       >
                         Разрешить
-                      </button>
+                      </Button>
 
-                      <button
+                      <Button
                         className="button button--danger"
                         disabled={
                           accessDecisionMutation.isPending
@@ -640,12 +644,12 @@ export function AdminUsersPage() {
                         type="button"
                       >
                         Отклонить
-                      </button>
+                      </Button>
                     </>
                   ) : null}
 
                   {accessMutable ? (
-                    <button
+                    <Button
                       className={
                         user.access_status === "APPROVED"
                           ? "button button--danger"
@@ -658,10 +662,10 @@ export function AdminUsersPage() {
                       {user.access_status === "APPROVED"
                         ? "Заблокировать"
                         : "Разблокировать"}
-                    </button>
+                    </Button>
                   ) : null}
 
-                  <button
+                  <Button
                     className="button button--ghost"
                     onClick={() =>
                       toggleHistory(user.id)
@@ -671,7 +675,7 @@ export function AdminUsersPage() {
                     {historyUserId === user.id
                       ? "Скрыть историю"
                       : "История изменений"}
-                  </button>
+                  </Button>
                 </div>
 
                 <UserAccountReset

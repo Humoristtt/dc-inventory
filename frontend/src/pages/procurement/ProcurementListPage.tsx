@@ -1,15 +1,12 @@
-import {
-  Button,
-  Navigate } from "react-router-dom";
+import { Button } from "../../shared/ui";
+import { useInfiniteQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { Link, Navigate } from "react-router-dom";
 
 import { useAuthState } from "../../features/auth/useAuthState";
 import { hasCapability } from "../../shared/api/auth";
 import { getProcurementRequests } from "../../shared/api/procurement";
-import { PageHeader,
-  useInfiniteQuery } from "@tanstack/react-query";
-import { useState } from "react";
-import { Link,
-} from "../../shared/ui";
+import { PageHeader } from "../../shared/ui";
 import "../../features/procurement/procurement.css";
 
 type View = "my" | "active" | "history";

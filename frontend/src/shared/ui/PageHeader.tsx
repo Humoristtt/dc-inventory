@@ -1,3 +1,4 @@
+import { Button } from "./controls";
 import type {
   ReactNode,
 } from "react";
@@ -8,9 +9,6 @@ import {
 import {
   TelegramFullscreenButton,
 } from "../telegram/TelegramFullscreenButton";
-import {
-  Button,
-} from "./controls";
 
 export type PageHeaderProps = {
   actions?: ReactNode;

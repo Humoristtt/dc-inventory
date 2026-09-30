@@ -1,21 +1,19 @@
+import { Button, Input, Select, Textarea } from "../../shared/ui";
 import {
-  Button,
-  Input,
-  Navigate,
-  Select,
-  Textarea,
-  getProcurementRequest,
-  mutateProcurement,
-  procurementError,
-  procurementLinesPayload,
-  type ProcurementLine,
-  type ProcurementLineInput,
-  type ReactNode,
-  useId,
   useInfiniteQuery,
-  useMemo,
   useMutation,
-  useParams } from "react-router-dom";
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import {
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { Link, Navigate, useParams } from "react-router-dom";
 
 import { LineComposer } from "../../features/procurement/LineComposer";
 import { useAuthState } from "../../features/auth/useAuthState";
@@ -23,18 +21,14 @@ import { getCatalogItems } from "../../shared/api/catalog";
 import { getLocations } from "../../shared/api/inventory";
 import {
   getProcurementManagers,
-  useQuery,
-  useQueryClient,
-  useRef,
-  useState,
-  } from "../../shared/api/procurement";
-import { PageHeader,
-  } from "@tanstack/react-query";
-import {
-  useEffect,
-  } from "react";
-import { Link,
-} from "../../shared/ui";
+  getProcurementRequest,
+  mutateProcurement,
+  procurementError,
+  procurementLinesPayload,
+  type ProcurementLine,
+  type ProcurementLineInput,
+} from "../../shared/api/procurement";
+import { PageHeader } from "../../shared/ui";
 import "../../features/procurement/procurement.css";
 
 const eventLabels: Record<string, string> = {

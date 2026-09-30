@@ -1,3 +1,4 @@
+import { Button } from "../ui";
 import {
   useEffect,
   useState,
@@ -9,9 +10,6 @@ import {
 } from "./webApp";
 
 import { useTelegramWebApp } from "./useTelegramWebApp";
-import {
-  Button,
-} from "../ui";
 
 export function TelegramFullscreenButton() {
   const webApp = useTelegramWebApp();

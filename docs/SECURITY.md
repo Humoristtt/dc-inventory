@@ -161,6 +161,9 @@ Readiness fail-closed проверяет наличие критических D
 
 ## 11. External delivery
 
+Внешняя доставка Telegram/email имеет семантику **at-least-once**. Dedupe защищает запись intent, но не превращает внешний provider side effect в exactly-once.
+
+
 Telegram Gateway:
 
 - whitelist Bot API methods;

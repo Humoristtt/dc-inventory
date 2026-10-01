@@ -12,7 +12,6 @@ import { Navigate } from "react-router-dom";
 
 import "../../features/admin/access-admin.css";
 import {
-  ACCESS_LABELS,
   AdminUserCard,
   AdminUserFilters,
   HISTORY_PAGE_SIZE,

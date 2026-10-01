@@ -47,12 +47,10 @@ import {
   createCatalogManufacturer,
   getCatalogCategories,
   getCatalogCategory,
-  getCatalogFacetPage,
   getCatalogItem,
   getCatalogItems,
   getCatalogManufacturers,
   patchCatalogItem,
-  type CatalogItem,
   type ItemWritePayload,
 } from "../../shared/api/catalog";
 import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
@@ -392,7 +390,7 @@ export function ItemFormPage() {
     },
   });
 
-  const update = (next: Partial<Draft>) => {
+  const update = (next: Partial<ItemFormDraft>) => {
     setState({
       ...draft,
       ...next,

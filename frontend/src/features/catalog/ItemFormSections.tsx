@@ -9,7 +9,9 @@ import {
 } from "./SuggestionInput";
 import {
   SmartAttributeControl,
-  type ItemFormDraft,
+} from "./SmartAttributeControl";
+import type {
+  ItemFormDraft,
 } from "./itemFormSupport";
 import type {
   CategoryAttribute,

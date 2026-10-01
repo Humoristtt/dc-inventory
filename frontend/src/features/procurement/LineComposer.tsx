@@ -1,8 +1,7 @@
-import { Button, Input, Select } from "../../shared/ui";
+import { Button, Input } from "../../shared/ui";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 
-import { AttributeControl } from "../catalog/AttributeControl";
 import {
   validateDraftAttributes,
   type AttributeDraft,
@@ -17,6 +16,10 @@ import {
   catalogItemLabel,
   fuzzyScore,
 } from "./catalogItemSearch";
+import {
+  ExistingItemFields,
+  ProposedItemFields,
+} from "./LineComposerFields";
 import type { ProcurementLineInput } from "../../shared/api/procurement";
 
 const MAX_PROCUREMENT_LINES = 500;
@@ -373,200 +376,129 @@ export function LineComposer({ lines, onChange }: Props) {
       </div>
 
       {mode === "EXISTING_ITEM" ? (
-        <div className="procurement-fields">
-          <label>
-            Категория
-            <Select
-              value={catalogCategory}
-              onChange={(event) => {
-                setCatalogCategory(event.target.value);
-                setExistingItemId("");
-              }}
-            >
-              <option value="">Все категории и подкатегории</option>
-              {categoryGroups.map(({ family, children }) => (
-                <optgroup key={family.id} label={family.display_name}>
-                  <option value={family.key}>
-                    Все: {family.display_name}
-                  </option>
-                  {children.map((entry) => (
-                    <option key={entry.id} value={entry.key}>
-                      {entry.display_name}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </Select>
-          </label>
-
-          <label>
-            Поиск по каталогу
-            <Input
-              autoCapitalize="none"
-              autoComplete="off"
-              autoCorrect="off"
-              spellCheck={false}
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setExistingItemId("");
-              }}
-            />
-          </label>
-
-          <label>
-            Позиция
-            <Select
-              value={existingItemId}
-              onChange={(event) => setExistingItemId(event.target.value)}
-            >
-              <option value="">
-                {browseItems.isPending
-                  ? "Загружаем каталог…"
-                  : "Выберите"}
-              </option>
-              {itemOptions.map((item) => (
-                <option
-                  key={item.id}
-                  value={item.id}
-                >
-                  {catalogItemLabel(item)}
-                </option>
-              ))}
-            </Select>
-          </label>
-
-          {search.trim().length >= 2
+        <ExistingItemFields
+          catalogCategory={
+            catalogCategory
+          }
+          categoryGroups={
+            categoryGroups
+          }
+          existingItemId={
+            existingItemId
+          }
+          hasNextPage={
+            activeItemsQuery.hasNextPage
+            ?? false
+          }
+          itemOptions={itemOptions}
+          loading={
+            browseItems.isPending
+          }
+          loadingNext={
+            activeItemsQuery
+              .isFetchingNextPage
+          }
+          onCatalogCategoryChange={
+            (value) => {
+              setCatalogCategory(value);
+              setExistingItemId("");
+            }
+          }
+          onExistingItemChange={
+            setExistingItemId
+          }
+          onLoadMore={() =>
+            void activeItemsQuery
+              .fetchNextPage()
+          }
+          onSearchChange={(value) => {
+            setSearch(value);
+            setExistingItemId("");
+          }}
+          search={search}
+          searchEmpty={
+            search.trim().length >= 2
             && !searchItems.isFetching
-            && itemOptions.length === 0 ? (
-              <p className="empty-state">
-                Совпадений и похожих позиций не найдено.
-              </p>
-            ) : null}
-
-          {activeItemsQuery.hasNextPage ? (
-            <Button
-              className="button button--load-more"
-              disabled={
-                activeItemsQuery.isFetchingNextPage
-              }
-              onClick={() =>
-                void activeItemsQuery.fetchNextPage()
-              }
-              type="button"
-            >
-              {activeItemsQuery.isFetchingNextPage
-                ? "Загружаем…"
-                : "Показать ещё"}
-            </Button>
-          ) : null}
-        </div>
+            && itemOptions.length === 0
+          }
+        />
       ) : (
-        <div className="procurement-fields">
-          <label>
-            Категория
-            <Select
-              value={category}
-              onChange={(event) => {
-                setCategory(event.target.value);
-                setManufacturerId("");
-                setManufacturerSearch("");
-                setAttributes({});
-              }}
-            >
-              <option value="">Выберите</option>
-              {leaves.map((entry) => (
-                <option key={entry.id} value={entry.key}>
-                  {entry.display_name}
-                </option>
-              ))}
-            </Select>
-          </label>
-          {identityRequired ? (
-            <>
-              <label>
-                Поиск производителя
-                <Input
-                  value={manufacturerSearch}
-                  onChange={(event) => {
-                    setManufacturerSearch(
-                      event.target.value,
-                    );
-                    setManufacturerId("");
-                  }}
-                />
-              </label>
+        <ProposedItemFields
+          attributes={attributes}
+          category={category}
+          definitions={
+            schema.data?.attributes
+              .filter(
+                (definition) =>
+                  definition.key
+                  !== "reach_m",
+              ) ?? []
+          }
+          identityRequired={
+            identityRequired
+          }
+          leaves={leaves}
+          manufacturerId={
+            manufacturerId
+          }
+          manufacturerOptions={
+            manufacturerOptions
+          }
+          manufacturerSearch={
+            manufacturerSearch
+          }
+          manufacturersHaveNextPage={
+            manufacturers.hasNextPage
+            ?? false
+          }
+          manufacturersLoadingNext={
+            manufacturers
+              .isFetchingNextPage
+          }
+          model={model}
+          name={name}
+          onAttributeChange={
+            (key, value) => {
+              const next = {
+                ...attributes,
+              };
 
-              <label>
-                Производитель
-                <Select
-                  value={manufacturerId}
-                  onChange={(event) =>
-                    setManufacturerId(
-                      event.target.value,
-                    )}
-                >
-                  <option value="">
-                    Выберите
-                  </option>
-                  {manufacturerOptions.map(
-                    (entry) => (
-                      <option
-                        key={entry.id}
-                        value={entry.id}
-                      >
-                        {entry.name}
-                      </option>
-                    ),
-                  )}
-                </Select>
-              </label>
+              if (
+                value === undefined
+              ) {
+                delete next[key];
+              } else {
+                next[key] = value;
+              }
 
-              {manufacturers.hasNextPage ? (
-                <Button
-                  className="button button--load-more"
-                  disabled={
-                    manufacturers.isFetchingNextPage
-                  }
-                  onClick={() =>
-                    void manufacturers.fetchNextPage()
-                  }
-                  type="button"
-                >
-                  {manufacturers.isFetchingNextPage
-                    ? "Загружаем производителей…"
-                    : "Показать ещё производителей"}
-                </Button>
-              ) : null}
-            </>
-          ) : null}
-          <label>
-            Название
-            <Input maxLength={255} value={name} onChange={(event) => setName(event.target.value)} />
-          </label>
-          {identityRequired ? (
-            <label>
-              Модель
-              <Input maxLength={255} value={model} onChange={(event) => setModel(event.target.value)} />
-            </label>
-          ) : null}
-          {(schema.data?.attributes ?? [])
-            .filter((definition) => definition.key !== "reach_m")
-            .map((definition) => (
-              <AttributeControl
-                attribute={definition}
-                error={undefined}
-                key={definition.id}
-                onChange={(value) => {
-                  const next = { ...attributes };
-                  if (value === undefined) delete next[definition.key];
-                  else next[definition.key] = value;
-                  setAttributes(next);
-                }}
-                value={attributes[definition.key]}
-              />
-            ))}
-        </div>
+              setAttributes(next);
+            }
+          }
+          onCategoryChange={(value) => {
+            setCategory(value);
+            setManufacturerId("");
+            setManufacturerSearch("");
+            setAttributes({});
+          }}
+          onLoadMoreManufacturers={
+            () =>
+              void manufacturers
+                .fetchNextPage()
+          }
+          onManufacturerChange={
+            setManufacturerId
+          }
+          onManufacturerSearchChange={
+            (value) => {
+              setManufacturerSearch(
+                value,
+              );
+              setManufacturerId("");
+            }
+          }
+          onModelChange={setModel}
+          onNameChange={setName}
+        />
       )}
 
       <div className="procurement-add-row">

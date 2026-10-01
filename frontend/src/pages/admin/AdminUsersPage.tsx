@@ -26,6 +26,11 @@ import {
   USERS_PAGE_SIZE,
   displayAdminUserName,
 } from "../../features/admin/adminUserPresentation";
+import {
+  canDecidePendingAccess,
+  canManageTargetAccess,
+  canManageTargetRole,
+} from "../../features/admin/adminUserPolicy";
 import { useAuthState } from "../../features/auth/useAuthState";
 import {
   adminUserError,
@@ -77,11 +82,22 @@ export function AdminUsersPage() {
     "access.assign_admin",
   );
 
-  const assignableRoles: readonly UserRole[] = canAssignAdmin
-    ? [...STANDARD_ASSIGNABLE_ROLES, "ADMIN"]
-    : canAssignStandardRoles
-      ? STANDARD_ASSIGNABLE_ROLES
-      : [];
+  const assignableRoles: readonly UserRole[] =
+    canAssignAdmin
+      ? [
+          ...STANDARD_ASSIGNABLE_ROLES,
+          "ADMIN",
+        ]
+      : canAssignStandardRoles
+        ? STANDARD_ASSIGNABLE_ROLES
+        : [];
+
+  const targetPolicy = {
+    currentUserId:
+      currentUser?.id,
+    canAssignAdmin,
+    assignableRoles,
+  } as const;
 
   const usersQuery = useQuery({
     queryKey: [
@@ -265,63 +281,11 @@ export function AdminUsersPage() {
     );
   };
 
-  const canDecidePendingAccess = (
-    user: AdminUser,
-  ): boolean => {
-    if (
-      user.access_status !== "PENDING"
-      || user.id === currentUser?.id
-      || user.role === "OWNER"
-    ) {
-      return false;
-    }
-
-    if (
-      user.role === "ADMIN"
-      && !canAssignAdmin
-    ) {
-      return false;
-    }
-
-    return true;
-  };
-
-  const canManageTargetAccess = (user: AdminUser): boolean => {
-    if (user.id === currentUser?.id || user.role === "OWNER") {
-      return false;
-    }
-
-    if (user.role === "ADMIN" && !canAssignAdmin) {
-      return false;
-    }
-
-    return (
-      user.access_status === "APPROVED"
-      || user.access_status === "BLOCKED"
-    );
-  };
-
-  const canManageTargetRole = (user: AdminUser): boolean => {
-    if (
-      user.id === currentUser?.id
-      || user.role === "OWNER"
-      || assignableRoles.length === 0
-    ) {
-      return false;
-    }
-
-    if (user.role === "ADMIN" && !canAssignAdmin) {
-      return false;
-    }
-
-    return true;
-  };
-
   const decidePendingAccess = (
     user: AdminUser,
     decision: AdminAccessRequestDecision,
   ) => {
-    if (!canDecidePendingAccess(user)) {
+    if (!canDecidePendingAccess(user, targetPolicy)) {
       return;
     }
 
@@ -341,7 +305,7 @@ export function AdminUsersPage() {
   };
 
   const changeAccess = (user: AdminUser) => {
-    if (!canManageTargetAccess(user)) {
+    if (!canManageTargetAccess(user, targetPolicy)) {
       return;
     }
 
@@ -370,7 +334,7 @@ export function AdminUsersPage() {
     nextRole: UserRole,
   ) => {
     if (
-      !canManageTargetRole(user)
+      !canManageTargetRole(user, targetPolicy)
       || nextRole === user.role
       || !assignableRoles.includes(nextRole)
     ) {
@@ -433,7 +397,7 @@ export function AdminUsersPage() {
           {usersQuery.data?.items.map(
             (user) => {
               const roleMutable =
-                canManageTargetRole(user);
+                canManageTargetRole(user, targetPolicy);
               const accessMutable =
                 canManageTargetAccess(
                   user,

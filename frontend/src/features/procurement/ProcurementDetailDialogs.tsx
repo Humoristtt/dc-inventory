@@ -1,15 +1,15 @@
 import {
-  Button,
-  Input,
-  Select,
-  Textarea,
-} from "../../shared/ui";
+  ProcurementAcceptanceDialog,
+} from "./ProcurementAcceptanceDialog";
 import {
-  LineComposer,
-} from "./LineComposer";
+  ProcurementBindingDialog,
+} from "./ProcurementBindingDialog";
 import {
-  ProcurementDialog,
-} from "./ProcurementDialog";
+  ProcurementEditDialogs,
+} from "./ProcurementEditDialogs";
+import {
+  ProcurementManagerDialog,
+} from "./ProcurementManagerDialog";
 import type {
   CatalogItemListEntry,
 } from "../../shared/api/catalog";
@@ -24,58 +24,11 @@ import type {
 import type {
   ProcurementDialogKind,
 } from "./ProcurementActionBar";
-import {
-  procurementLineTitle,
-} from "./procurementDetailModel";
+import type {
+  ProcurementAction,
+} from "./procurementDetailDialogTypes";
 
-export type ProcurementAction =
-  (
-    action: string,
-    extra?:
-      Record<string, unknown>,
-  ) => void;
-
-export function ProcurementDetailDialogs({
-  activeLocations,
-  bindingItemsError,
-  bindingItemsHasNextPage,
-  bindingItemsLoading,
-  bindingItemsLoadingNext,
-  bindingItemOptions,
-  bindingLine,
-  bindingSearch,
-  comment,
-  current,
-  dialog,
-  locationId,
-  locationsError,
-  locationsLoading,
-  managerId,
-  managerOptions,
-  managerSearch,
-  managersError,
-  managersHasNextPage,
-  managersLoading,
-  managersLoadingNext,
-  mutationPending,
-  proposal,
-  revisionLines,
-  onAction,
-  onBindingSearchChange,
-  onCloseDialog,
-  onCommentChange,
-  onFetchMoreBindingItems,
-  onFetchMoreManagers,
-  onLocationChange,
-  onManagerChange,
-  onManagerSearchChange,
-  onProposalChange,
-  onRetryBindingItems,
-  onRetryLocations,
-  onRetryManagers,
-  onRevisionLinesChange,
-  onSetBindingLine,
-}: {
+export function ProcurementDetailDialogs(props: {
   activeLocations:
     readonly StorageLocation[];
   bindingItemsError: boolean;
@@ -148,514 +101,150 @@ export function ProcurementDetailDialogs({
 }) {
   return (
     <>
-      <ProcurementDialog
-        onClose={onCloseDialog}
-        open={
-          dialog === "transfer"
+      <ProcurementManagerDialog
+        current={props.current}
+        managerId={props.managerId}
+        managerOptions={
+          props.managerOptions
         }
-        title="Передать менеджеру"
-      >
-        <label>
-          Поиск менеджера
-          <Input
-            onChange={(event) =>
-              onManagerSearchChange(
-                event.target.value,
-              )
-            }
-            value={managerSearch}
-          />
-        </label>
-
-        {managersLoading ? (
-          <p role="status">
-            Загружаем менеджеров…
-          </p>
-        ) : null}
-
-        {managersError ? (
-          <p role="alert">
-            Не удалось загрузить
-            менеджеров.{" "}
-            <Button
-              onClick={
-                onRetryManagers
-              }
-            >
-              Повторить
-            </Button>
-          </p>
-        ) : null}
-
-        {!managersLoading
-        && !managersError
-        && managerOptions.length
-          === 0 ? (
-            <p>
-              Менеджеры не найдены.
-            </p>
-          ) : null}
-
-        <label>
-          Новый менеджер
-          <Select
-            disabled={
-              managersLoading
-              || managersError
-              || mutationPending
-            }
-            onChange={(event) =>
-              onManagerChange(
-                event.target.value,
-              )
-            }
-            value={managerId}
-          >
-            <option value="">
-              Выберите
-            </option>
-
-            {managerOptions
-              .filter(
-                (entry) =>
-                  entry.id
-                  !== current
-                    .assigned_manager
-                    .id,
-              )
-              .map((entry) => (
-                <option
-                  key={entry.id}
-                  value={entry.id}
-                >
-                  {
-                    entry.display_name
-                  }
-                </option>
-              ))}
-          </Select>
-        </label>
-
-        {managersHasNextPage ? (
-          <Button
-            className="button button--load-more"
-            disabled={
-              managersLoadingNext
-            }
-            onClick={
-              onFetchMoreManagers
-            }
-          >
-            {
-              managersLoadingNext
-                ? "Загружаем менеджеров…"
-                : "Показать ещё менеджеров"
-            }
-          </Button>
-        ) : null}
-
-        <Button
-          className="button button--dark"
-          disabled={
-            !managerId
-            || managersError
-            || mutationPending
-          }
-          onClick={() =>
-            onAction(
-              "transfer-manager",
-              {
-                expected_assigned_manager_user_id:
-                  current
-                    .assigned_manager
-                    .id,
-                manager_user_id:
-                  managerId,
-              },
-            )
-          }
-        >
-          Передать
-        </Button>
-      </ProcurementDialog>
-
-      <ProcurementDialog
-        onClose={onCloseDialog}
-        open={
-          dialog === "correction"
+        managerSearch={
+          props.managerSearch
         }
-        title="Вернуть на корректировку"
-      >
-        <label>
-          Комментарий
-          <Textarea
-            maxLength={4000}
-            onChange={(event) =>
-              onCommentChange(
-                event.target.value,
-              )
-            }
-            value={comment}
-          />
-        </label>
-
-        <details>
-          <summary>
-            Добавить альтернативный
-            состав
-          </summary>
-          <LineComposer
-            lines={proposal}
-            onChange={
-              onProposalChange
-            }
-          />
-        </details>
-
-        <Button
-          className="button button--danger"
-          disabled={
-            !comment.trim()
-            || mutationPending
-          }
-          onClick={() =>
-            onAction(
-              "return-for-correction",
-              {
-                comment,
-                alternative_proposal:
-                  proposal.length
-                    ? proposal
-                    : null,
-              },
-            )
-          }
-        >
-          Вернуть
-        </Button>
-      </ProcurementDialog>
-
-      <ProcurementDialog
-        onClose={onCloseDialog}
-        open={
-          dialog === "revision"
+        managersError={
+          props.managersError
         }
-        title="Новая редакция"
-      >
-        <LineComposer
-          lines={revisionLines}
-          onChange={
-            onRevisionLinesChange
-          }
-        />
-
-        <label>
-          Комментарий
-          <Textarea
-            maxLength={4000}
-            onChange={(event) =>
-              onCommentChange(
-                event.target.value,
-              )
-            }
-            value={comment}
-          />
-        </label>
-
-        <Button
-          className="button button--accent"
-          disabled={
-            !revisionLines.length
-            || mutationPending
-          }
-          onClick={() =>
-            onAction(
-              "revisions",
-              {
-                lines:
-                  revisionLines,
-                general_comment:
-                  comment.trim()
-                  || null,
-              },
-            )
-          }
-        >
-          Отправить редакцию
-        </Button>
-      </ProcurementDialog>
-
-      <ProcurementDialog
-        onClose={onCloseDialog}
-        open={
-          dialog
-          === "discrepancy"
+        managersHasNextPage={
+          props.managersHasNextPage
         }
-        title="Есть расхождения"
-      >
-        <label>
-          Что отличается
-          <Textarea
-            maxLength={4000}
-            onChange={(event) =>
-              onCommentChange(
-                event.target.value,
-              )
-            }
-            value={comment}
-          />
-        </label>
-
-        <Button
-          className="button button--danger"
-          disabled={
-            !comment.trim()
-            || mutationPending
-          }
-          onClick={() =>
-            onAction(
-              "discrepancies",
-              { comment },
-            )
-          }
-        >
-          Зафиксировать
-        </Button>
-      </ProcurementDialog>
-
-      <ProcurementDialog
-        onClose={onCloseDialog}
-        open={
-          dialog === "accept"
+        managersLoading={
+          props.managersLoading
         }
-        title="Подтвердить приёмку"
-      >
-        <p>
-          После подтверждения на склад
-          будет добавлено:
-        </p>
+        managersLoadingNext={
+          props.managersLoadingNext
+        }
+        mutationPending={
+          props.mutationPending
+        }
+        onAction={props.onAction}
+        onClose={
+          props.onCloseDialog
+        }
+        onFetchMore={
+          props.onFetchMoreManagers
+        }
+        onManagerChange={
+          props.onManagerChange
+        }
+        onManagerSearchChange={
+          props.onManagerSearchChange
+        }
+        onRetry={
+          props.onRetryManagers
+        }
+        open={
+          props.dialog
+          === "transfer"
+        }
+      />
 
-        <ul>
-          {current
-            .current_revision
-            .lines
-            .map((line) => (
-              <li key={line.id}>
-                {
-                  procurementLineTitle(
-                    line,
-                  )
-                }
-                {" — "}
-                {line.quantity} шт.
-              </li>
-            ))}
-        </ul>
+      <ProcurementEditDialogs
+        comment={props.comment}
+        dialog={props.dialog}
+        mutationPending={
+          props.mutationPending
+        }
+        onAction={props.onAction}
+        onClose={
+          props.onCloseDialog
+        }
+        onCommentChange={
+          props.onCommentChange
+        }
+        onProposalChange={
+          props.onProposalChange
+        }
+        onRevisionLinesChange={
+          props.onRevisionLinesChange
+        }
+        proposal={props.proposal}
+        revisionLines={
+          props.revisionLines
+        }
+      />
 
-        {locationsLoading ? (
-          <p role="status">
-            Загружаем места приёмки…
-          </p>
-        ) : null}
+      <ProcurementAcceptanceDialog
+        activeLocations={
+          props.activeLocations
+        }
+        current={props.current}
+        locationId={
+          props.locationId
+        }
+        locationsError={
+          props.locationsError
+        }
+        locationsLoading={
+          props.locationsLoading
+        }
+        mutationPending={
+          props.mutationPending
+        }
+        onAction={props.onAction}
+        onClose={
+          props.onCloseDialog
+        }
+        onLocationChange={
+          props.onLocationChange
+        }
+        onRetryLocations={
+          props.onRetryLocations
+        }
+        open={
+          props.dialog === "accept"
+        }
+      />
 
-        {locationsError ? (
-          <p role="alert">
-            Не удалось загрузить
-            места приёмки.{" "}
-            <Button
-              onClick={
-                onRetryLocations
-              }
-            >
-              Повторить
-            </Button>
-          </p>
-        ) : null}
-
-        {!locationsLoading
-        && !locationsError
-        && activeLocations.length
-          === 0 ? (
-            <p>
-              Нет доступных мест
-              приёмки.
-            </p>
-          ) : null}
-
-        <label>
-          Место приёмки
-          <Select
-            disabled={
-              locationsLoading
-              || locationsError
-              || mutationPending
-            }
-            onChange={(event) =>
-              onLocationChange(
-                event.target.value,
-              )
-            }
-            value={locationId}
-          >
-            <option value="">
-              Выберите
-            </option>
-
-            {activeLocations.map(
-              (entry) => (
-                <option
-                  key={entry.id}
-                  value={entry.id}
-                >
-                  {entry.name}
-                  {" · "}
-                  {entry.code}
-                </option>
-              ),
-            )}
-          </Select>
-        </label>
-
-        <Button
-          className="button button--accent"
-          disabled={
-            !locationId
-            || locationsError
-            || mutationPending
-            || current
-              .current_revision
-              .lines.some(
-                (line) =>
-                  !line.bound_item_id,
-              )
-          }
-          onClick={() =>
-            onAction(
-              "acceptance",
-              {
-                receiving_location_id:
-                  locationId,
-              },
-            )
-          }
-        >
-          Подтвердить и оприходовать
-        </Button>
-      </ProcurementDialog>
-
-      <ProcurementDialog
+      <ProcurementBindingDialog
+        bindingItemsError={
+          props.bindingItemsError
+        }
+        bindingItemsHasNextPage={
+          props.bindingItemsHasNextPage
+        }
+        bindingItemsLoading={
+          props.bindingItemsLoading
+        }
+        bindingItemsLoadingNext={
+          props.bindingItemsLoadingNext
+        }
+        bindingItemOptions={
+          props.bindingItemOptions
+        }
+        bindingLine={
+          props.bindingLine
+        }
+        bindingSearch={
+          props.bindingSearch
+        }
+        mutationPending={
+          props.mutationPending
+        }
+        onAction={props.onAction}
+        onBindingSearchChange={
+          props.onBindingSearchChange
+        }
         onClose={() =>
-          onSetBindingLine(null)
+          props.onSetBindingLine(
+            null,
+          )
         }
-        open={
-          bindingLine !== null
+        onFetchMore={
+          props.onFetchMoreBindingItems
         }
-        title="Связать с каталогом"
-      >
-        <label>
-          Поиск
-          <Input
-            onChange={(event) =>
-              onBindingSearchChange(
-                event.target.value,
-              )
-            }
-            value={bindingSearch}
-          />
-        </label>
-
-        {bindingSearch.trim().length
-        < 2 ? (
-          <p>
-            Введите минимум 2 символа
-            для поиска.
-          </p>
-        ) : null}
-
-        {bindingItemsLoading ? (
-          <p role="status">
-            Ищем оборудование…
-          </p>
-        ) : null}
-
-        {bindingItemsError ? (
-          <p role="alert">
-            Не удалось загрузить
-            оборудование.{" "}
-            <Button
-              onClick={
-                onRetryBindingItems
-              }
-            >
-              Повторить
-            </Button>
-          </p>
-        ) : null}
-
-        {bindingSearch.trim().length
-          >= 2
-        && !bindingItemsLoading
-        && !bindingItemsError
-        && bindingItemOptions.length
-          === 0 ? (
-            <p>
-              Оборудование
-              не найдено.
-            </p>
-          ) : null}
-
-        <div className="procurement-binding-results">
-          {bindingItemOptions.map(
-            (item) => (
-              <Button
-                className="button"
-                disabled={
-                  mutationPending
-                }
-                key={item.id}
-                onClick={() =>
-                  onAction(
-                    "bind-line",
-                    {
-                      line_id:
-                        bindingLine,
-                      item_id:
-                        item.id,
-                    },
-                  )
-                }
-              >
-                {[
-                  item.manufacturer
-                    ?.name,
-                  item.name,
-                  item.model,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </Button>
-            ),
-          )}
-        </div>
-
-        {bindingItemsHasNextPage ? (
-          <Button
-            className="button button--load-more"
-            disabled={
-              bindingItemsLoadingNext
-            }
-            onClick={
-              onFetchMoreBindingItems
-            }
-          >
-            {
-              bindingItemsLoadingNext
-                ? "Загружаем…"
-                : "Показать ещё"
-            }
-          </Button>
-        ) : null}
-      </ProcurementDialog>
+        onRetry={
+          props.onRetryBindingItems
+        }
+      />
     </>
   );
 }

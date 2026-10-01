@@ -27,14 +27,18 @@ import {
 } from "../../shared/api/procurement";
 import {
   ProcurementActionBar,
+  type ProcurementDialogKind,
+} from "../../features/procurement/ProcurementActionBar";
+import {
   ProcurementCurrentLines,
   ProcurementHistory,
   ProcurementOverview,
   ProcurementRevisions,
+} from "../../features/procurement/ProcurementSummarySections";
+import {
   procurementInputFromLine,
   procurementLineTitle,
-  type ProcurementDialogKind,
-} from "../../features/procurement/ProcurementDetailPresentation";
+} from "../../features/procurement/procurementDetailModel";
 import { PageHeader } from "../../shared/ui";
 import "../../features/procurement/procurement.css";
 

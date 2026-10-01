@@ -1,4 +1,4 @@
-import { Button, Input, Select } from "../../shared/ui";
+import { Button } from "../../shared/ui";
 import {
   useMutation,
   useQuery,
@@ -11,7 +11,16 @@ import {
 import { Navigate } from "react-router-dom";
 
 import "../../features/admin/access-admin.css";
-import { UserAccountReset } from "../../features/admin/UserAccountReset";
+import {
+  ACCESS_LABELS,
+  AdminUserCard,
+  AdminUserFilters,
+  HISTORY_PAGE_SIZE,
+  PaginationControls,
+  STANDARD_ASSIGNABLE_ROLES,
+  USERS_PAGE_SIZE,
+  displayAdminUserName,
+} from "../../features/admin/AdminUserComponents";
 import { useAuthState } from "../../features/auth/useAuthState";
 import {
   adminUserError,
@@ -31,97 +40,6 @@ import {
   type UserRole,
 } from "../../shared/api/auth";
 import { PageHeader } from "../../shared/ui";
-
-const accessLabels: Record<UserAccessStatus, string> = {
-  PENDING: "Ожидает подтверждения",
-  APPROVED: "Доступ разрешён",
-  REJECTED: "Запрос отклонён",
-  BLOCKED: "Заблокирован",
-};
-
-const standardAssignableRoles: readonly UserRole[] = [
-  "ENGINEER",
-  "SENIOR_ENGINEER",
-  "MANAGER",
-];
-
-const USERS_PAGE_SIZE = 50;
-const HISTORY_PAGE_SIZE = 20;
-
-type PaginationControlsProps = {
-  label: string;
-  offset: number;
-  limit: number;
-  total: number;
-  previousLabel: string;
-  nextLabel: string;
-  onPrevious: () => void;
-  onNext: () => void;
-};
-
-function PaginationControls({
-  label,
-  offset,
-  limit,
-  total,
-  previousLabel,
-  nextLabel,
-  onPrevious,
-  onNext,
-}: PaginationControlsProps) {
-  const hasPrevious = offset > 0;
-  const hasNext = offset + limit < total;
-
-  if (!hasPrevious && !hasNext) {
-    return null;
-  }
-
-  const start = total === 0 ? 0 : offset + 1;
-  const end = Math.min(offset + limit, total);
-
-  return (
-    <div className="admin-pagination">
-      <span>
-        {label}: {start}–{end} из {total}
-      </span>
-
-      <div className="admin-pagination__actions">
-        <Button
-          className="button button--ghost"
-          disabled={!hasPrevious}
-          onClick={onPrevious}
-          type="button"
-        >
-          {previousLabel}
-        </Button>
-
-        <Button
-          className="button button--ghost"
-          disabled={!hasNext}
-          onClick={onNext}
-          type="button"
-        >
-          {nextLabel}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function displayName(user: AdminUser): string {
-  const fullName = [
-    user.first_name,
-    user.last_name,
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  if (user.username) {
-    return `${fullName} · @${user.username}`;
-  }
-
-  return fullName;
-}
 
 export function AdminUsersPage() {
   const auth = useAuthState();
@@ -155,9 +73,9 @@ export function AdminUsersPage() {
   );
 
   const assignableRoles: readonly UserRole[] = canAssignAdmin
-    ? [...standardAssignableRoles, "ADMIN"]
+    ? [...STANDARD_ASSIGNABLE_ROLES, "ADMIN"]
     : canAssignStandardRoles
-      ? standardAssignableRoles
+      ? STANDARD_ASSIGNABLE_ROLES
       : [];
 
   const usersQuery = useQuery({
@@ -405,7 +323,7 @@ export function AdminUsersPage() {
     if (
       decision === "REJECT"
       && !window.confirm(
-        `Отклонить запрос доступа для ${displayName(user)}?`,
+        `Отклонить запрос доступа для ${displayAdminUserName(user)}?`,
       )
     ) {
       return;
@@ -430,7 +348,7 @@ export function AdminUsersPage() {
     if (
       nextStatus === "BLOCKED"
       && !window.confirm(
-        `Заблокировать доступ для ${displayName(user)}? Активные сессии будут завершены.`,
+        `Заблокировать доступ для ${displayAdminUserName(user)}? Активные сессии будут завершены.`,
       )
     ) {
       return;
@@ -456,7 +374,7 @@ export function AdminUsersPage() {
 
     if (
       !window.confirm(
-        `Изменить роль для ${displayName(user)}: ${ROLE_LABELS[user.role]} → ${ROLE_LABELS[nextRole]}?`,
+        `Изменить роль для ${displayAdminUserName(user)}: ${ROLE_LABELS[user.role]} → ${ROLE_LABELS[nextRole]}?`,
       )
     ) {
       return;
@@ -476,57 +394,19 @@ export function AdminUsersPage() {
       />
 
       <div className="admin-users-page__body">
-        <form
-          className="admin-users__filters form-surface"
+        <AdminUserFilters
+          accessFilter={accessFilter}
+          onAccessFilterChange={(value) => {
+            setAccessFilter(value);
+            setUsersOffset(0);
+            resetHistory();
+          }}
+          onSearchDraftChange={
+            setSearchDraft
+          }
           onSubmit={submitSearch}
-        >
-          <label>
-            Поиск
-            <Input
-              autoCapitalize="none"
-              autoComplete="off"
-              autoCorrect="off"
-              data-gramm="false"
-              data-gramm_editor="false"
-              maxLength={100}
-              placeholder="Имя, username или Telegram ID"
-              spellCheck={false}
-              value={searchDraft}
-              onChange={(event) =>
-                setSearchDraft(event.target.value)
-              }
-            />
-          </label>
-
-          <label>
-            Статус
-            <Select
-              value={accessFilter}
-              onChange={(event) => {
-                setAccessFilter(
-                  event.target.value as
-                    | UserAccessStatus
-                    | "ALL",
-                );
-                setUsersOffset(0);
-                resetHistory();
-              }}
-            >
-              <option value="ALL">Все</option>
-              <option value="APPROVED">Доступ разрешён</option>
-              <option value="BLOCKED">Заблокированы</option>
-              <option value="PENDING">Ожидают подтверждения</option>
-              <option value="REJECTED">Отклонены</option>
-            </Select>
-          </label>
-
-          <Button
-            className="button button--dark"
-            type="submit"
-          >
-            Найти
-          </Button>
-        </form>
+          searchDraft={searchDraft}
+        />
 
         {usersQuery.isError ? (
           <p role="alert">
@@ -545,265 +425,97 @@ export function AdminUsersPage() {
         ) : null}
 
         <div className="admin-users__list">
-          {usersQuery.data?.items.map((user) => {
-            const isCurrentUser =
-              user.id === currentUser?.id;
-            const roleMutable =
-              canManageTargetRole(user);
-            const accessMutable =
-              canManageTargetAccess(user);
-            const pendingDecisionMutable =
-              canDecidePendingAccess(user);
+          {usersQuery.data?.items.map(
+            (user) => {
+              const roleMutable =
+                canManageTargetRole(user);
+              const accessMutable =
+                canManageTargetAccess(
+                  user,
+                );
+              const pendingDecisionMutable =
+                canDecidePendingAccess(
+                  user,
+                );
+              const historyOpen =
+                historyUserId === user.id;
 
-            return (
-              <section
-                className="admin-user-card"
-                key={user.id}
-              >
-                <div className="admin-user-card__heading">
-                  <div>
-                    <h2>{displayName(user)}</h2>
-                    <p>Telegram ID: {user.telegram_user_id}</p>
-                  </div>
-
-                  <span
-                    className={`admin-user-card__status admin-user-card__status--${user.access_status.toLowerCase()}`}
-                  >
-                    {accessLabels[user.access_status]}
-                  </span>
-                </div>
-
-                <p className="admin-user-card__meta">
-                  Роль: {ROLE_LABELS[user.role]}
-                  {user.is_recovery_identity
-                    ? " · Recovery OWNER"
-                    : ""}
-                  {isCurrentUser
-                    ? " · Текущая учётная запись"
-                    : ""}
-                </p>
-
-                {roleMutable ? (
-                  <label>
-                    Роль пользователя
-                    <Select
-                      disabled={roleMutation.isPending}
-                      value={user.role}
-                      onChange={(event) =>
-                        changeRole(
-                          user,
-                          event.target.value as UserRole,
-                        )
-                      }
-                    >
-                      {assignableRoles.map((role) => (
-                        <option
-                          key={role}
-                          value={role}
-                        >
-                          {ROLE_LABELS[role]}
-                        </option>
-                      ))}
-                    </Select>
-                  </label>
-                ) : null}
-
-                <div className="admin-user-card__actions">
-                  {pendingDecisionMutable ? (
-                    <>
-                      <Button
-                        className="button button--dark"
-                        disabled={
-                          accessDecisionMutation.isPending
+              return (
+                <AdminUserCard
+                  accessDecisionPending={
+                    accessDecisionMutation.isPending
+                  }
+                  accessMutable={
+                    accessMutable
+                  }
+                  accessMutationPending={
+                    accessMutation.isPending
+                  }
+                  assignableRoles={
+                    assignableRoles
+                  }
+                  canAssignAdmin={
+                    canAssignAdmin
+                  }
+                  currentUserId={
+                    currentUser?.id
+                  }
+                  history={
+                    historyOpen
+                      ? {
+                          accessData:
+                            accessHistoryQuery.data,
+                          accessError:
+                            accessHistoryQuery.isError,
+                          accessFetching:
+                            accessHistoryQuery.isFetching,
+                          accessOffset:
+                            accessHistoryOffset,
+                          onAccessOffsetChange:
+                            setAccessHistoryOffset,
+                          onRoleOffsetChange:
+                            setRoleHistoryOffset,
+                          roleData:
+                            roleHistoryQuery.data,
+                          roleError:
+                            roleHistoryQuery.isError,
+                          roleFetching:
+                            roleHistoryQuery.isFetching,
+                          roleOffset:
+                            roleHistoryOffset,
                         }
-                        onClick={() =>
-                          decidePendingAccess(
-                            user,
-                            "APPROVE",
-                          )
-                        }
-                        type="button"
-                      >
-                        Разрешить
-                      </Button>
-
-                      <Button
-                        className="button button--danger"
-                        disabled={
-                          accessDecisionMutation.isPending
-                        }
-                        onClick={() =>
-                          decidePendingAccess(
-                            user,
-                            "REJECT",
-                          )
-                        }
-                        type="button"
-                      >
-                        Отклонить
-                      </Button>
-                    </>
-                  ) : null}
-
-                  {accessMutable ? (
-                    <Button
-                      className={
-                        user.access_status === "APPROVED"
-                          ? "button button--danger"
-                          : "button button--dark"
-                      }
-                      disabled={accessMutation.isPending}
-                      onClick={() => changeAccess(user)}
-                      type="button"
-                    >
-                      {user.access_status === "APPROVED"
-                        ? "Заблокировать"
-                        : "Разблокировать"}
-                    </Button>
-                  ) : null}
-
-                  <Button
-                    className="button button--ghost"
-                    onClick={() =>
-                      toggleHistory(user.id)
-                    }
-                    type="button"
-                  >
-                    {historyUserId === user.id
-                      ? "Скрыть историю"
-                      : "История изменений"}
-                  </Button>
-                </div>
-
-                <UserAccountReset
+                      : undefined
+                  }
+                  historyOpen={
+                    historyOpen
+                  }
+                  key={user.id}
+                  onAccessChange={
+                    changeAccess
+                  }
+                  onDecision={
+                    decidePendingAccess
+                  }
+                  onRoleChange={
+                    changeRole
+                  }
+                  onToggleHistory={
+                    toggleHistory
+                  }
+                  pendingDecisionMutable={
+                    pendingDecisionMutable
+                  }
+                  roleMutable={
+                    roleMutable
+                  }
+                  roleMutationPending={
+                    roleMutation.isPending
+                  }
                   user={user}
-                  currentUserId={currentUser?.id}
-                  canAssignAdmin={canAssignAdmin}
                 />
-
-                {historyUserId === user.id ? (
-                  <div className="admin-user-history">
-                    {accessHistoryQuery.isFetching
-                    || roleHistoryQuery.isFetching ? (
-                      <p role="status">
-                        Загружаем историю…
-                      </p>
-                    ) : null}
-
-                    {accessHistoryQuery.isError ? (
-                      <p role="alert">
-                        Не удалось загрузить историю доступа.
-                      </p>
-                    ) : null}
-
-                    {roleHistoryQuery.isError ? (
-                      <p role="alert">
-                        Не удалось загрузить историю ролей.
-                      </p>
-                    ) : null}
-
-                    <h3>Роли</h3>
-
-                    <PaginationControls
-                      label="Роли"
-                      limit={HISTORY_PAGE_SIZE}
-                      nextLabel="Следующая страница ролей"
-                      offset={roleHistoryOffset}
-                      onNext={() =>
-                        setRoleHistoryOffset(
-                          roleHistoryOffset + HISTORY_PAGE_SIZE,
-                        )
-                      }
-                      onPrevious={() =>
-                        setRoleHistoryOffset(
-                          Math.max(
-                            0,
-                            roleHistoryOffset - HISTORY_PAGE_SIZE,
-                          ),
-                        )
-                      }
-                      previousLabel="Предыдущая страница ролей"
-                      total={roleHistoryQuery.data?.total ?? 0}
-                    />
-
-                    {roleHistoryQuery.data?.items.length === 0 ? (
-                      <p>Изменений роли пока нет.</p>
-                    ) : null}
-
-                    {roleHistoryQuery.data?.items.map((event) => (
-                      <div
-                        className="admin-user-history__event"
-                        key={event.id}
-                      >
-                        <strong>
-                          {ROLE_LABELS[event.before_role]}
-                          {" → "}
-                          {ROLE_LABELS[event.after_role]}
-                        </strong>
-                        <span>
-                          Кем: {event.actor_display_name}
-                        </span>
-                        <span>
-                          {new Date(
-                            event.occurred_at,
-                          ).toLocaleString("ru-RU")}
-                        </span>
-                      </div>
-                    ))}
-
-                    <h3>Доступ</h3>
-
-                    <PaginationControls
-                      label="Доступ"
-                      limit={HISTORY_PAGE_SIZE}
-                      nextLabel="Следующая страница доступа"
-                      offset={accessHistoryOffset}
-                      onNext={() =>
-                        setAccessHistoryOffset(
-                          accessHistoryOffset + HISTORY_PAGE_SIZE,
-                        )
-                      }
-                      onPrevious={() =>
-                        setAccessHistoryOffset(
-                          Math.max(
-                            0,
-                            accessHistoryOffset - HISTORY_PAGE_SIZE,
-                          ),
-                        )
-                      }
-                      previousLabel="Предыдущая страница доступа"
-                      total={accessHistoryQuery.data?.total ?? 0}
-                    />
-
-                    {accessHistoryQuery.data?.items.length === 0 ? (
-                      <p>Изменений доступа пока нет.</p>
-                    ) : null}
-
-                    {accessHistoryQuery.data?.items.map((event) => (
-                      <div
-                        className="admin-user-history__event"
-                        key={event.id}
-                      >
-                        <strong>
-                          {accessLabels[event.before_access_status]}
-                          {" → "}
-                          {accessLabels[event.after_access_status]}
-                        </strong>
-                        <span>
-                          Кем: {event.actor_display_name}
-                        </span>
-                        <span>
-                          {new Date(
-                            event.occurred_at,
-                          ).toLocaleString("ru-RU")}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : null}
-              </section>
-            );
-          })}
+              );
+            },
+          )}
         </div>
 
         <PaginationControls

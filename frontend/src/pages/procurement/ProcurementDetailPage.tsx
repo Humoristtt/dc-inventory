@@ -10,7 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Navigate, useParams } from "react-router-dom";
 
 import { LineComposer } from "../../features/procurement/LineComposer";
 import { ProcurementDialog } from "../../features/procurement/ProcurementDialog";

@@ -101,14 +101,14 @@ export function procurementInputFromLine(
         === "string"
         ? snapshot.model
         : null,
-    attributes:
-      (snapshot.attributes ?? {})
-        as Record<
-          string,
-          | string
-          | number
-          | boolean
-        >,
+    attributes: (
+      snapshot.attributes ?? {}
+    ) as Record<
+      string,
+      | string
+      | number
+      | boolean
+    >,
     quantity: line.quantity,
   };
 }

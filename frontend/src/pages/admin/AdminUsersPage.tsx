@@ -13,13 +13,19 @@ import { Navigate } from "react-router-dom";
 import "../../features/admin/access-admin.css";
 import {
   AdminUserCard,
+} from "../../features/admin/AdminUserCard";
+import {
   AdminUserFilters,
-  HISTORY_PAGE_SIZE,
+} from "../../features/admin/AdminUserFilters";
+import {
   PaginationControls,
+} from "../../features/admin/AdminPagination";
+import {
+  HISTORY_PAGE_SIZE,
   STANDARD_ASSIGNABLE_ROLES,
   USERS_PAGE_SIZE,
   displayAdminUserName,
-} from "../../features/admin/AdminUserComponents";
+} from "../../features/admin/adminUserPresentation";
 import { useAuthState } from "../../features/auth/useAuthState";
 import {
   adminUserError,

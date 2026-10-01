@@ -163,7 +163,7 @@ for (const path of files) {
 
 const requiredFormSurfaces = [
   "pages/catalog/ItemFormPage.tsx",
-  "features/admin/AdminUserComponents.tsx",
+  "features/admin/AdminUserFilters.tsx",
   "pages/inventory/LocationsPage.tsx",
   "pages/inventory/MovementsPage.tsx",
   "features/inventory/ItemInventoryPanel.tsx",

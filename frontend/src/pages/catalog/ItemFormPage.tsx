@@ -18,16 +18,21 @@ import {
 
 import { useAuthState } from "../../features/auth/useAuthState";
 import { hasCapability } from "../../shared/api/auth";
-import { AttributeControl } from "../../features/catalog/AttributeControl";
 import {
   SuggestionInput,
   type SuggestionOption,
 } from "../../features/catalog/SuggestionInput";
 import {
-  draftAttributesFromItem,
   validateDraftAttributes,
-  type AttributeDraft,
 } from "../../features/catalog/itemForm";
+import {
+  EMPTY_ITEM_FORM_DRAFT,
+  SmartAttributeControl,
+  itemDraft,
+  textSuggestions,
+  useDebouncedValue,
+  type ItemFormDraft,
+} from "../../features/catalog/itemFormSupport";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
 import { ApiRequestError } from "../../shared/api/auth";
 import { PageHeader } from "../../shared/ui";
@@ -53,165 +58,6 @@ import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
 import "../../features/catalog/admin-catalog.css";
 import "../../features/inventory/inventory.css";
 
-type Draft = {
-  category: string;
-  manufacturer: string;
-  model: string;
-  name: string;
-  attributes: AttributeDraft;
-};
-
-const empty: Draft = {
-  category: "",
-  manufacturer: "",
-  model: "",
-  name: "",
-  attributes: {},
-};
-
-function itemDraft(item: CatalogItem): Draft {
-  return {
-    category: item.category.key,
-    manufacturer: item.manufacturer?.id ?? "",
-    model: item.model ?? "",
-    name: item.name,
-    attributes: draftAttributesFromItem(item),
-  };
-}
-
-function useDebouncedValue(value: string, delay = 180) {
-  const [debounced, setDebounced] = useState(value);
-
-  useEffect(() => {
-    const timer = window.setTimeout(
-      () => setDebounced(value),
-      delay,
-    );
-
-    return () => window.clearTimeout(timer);
-  }, [delay, value]);
-
-  return debounced;
-}
-
-type SmartAttributeControlProps = {
-  attribute: Parameters<typeof AttributeControl>[0]["attribute"];
-  category: string;
-  error: string | undefined;
-  onChange: (value: string | boolean | undefined) => void;
-  value: string | boolean | undefined;
-};
-
-function SmartAttributeControl({
-  attribute,
-  category,
-  error,
-  onChange,
-  value,
-}: SmartAttributeControlProps) {
-  const rawValue = typeof value === "string" ? value : "";
-
-  const debouncedValue = useDebouncedValue(
-    rawValue.trim(),
-  );
-
-  const suggestible =
-    attribute.data_type === "TEXT"
-    && attribute.filterable
-    && attribute.filter_type === "EXACT"
-    && attribute.searchable;
-
-  const suggestionsQuery = useQuery({
-    queryKey: [
-      "catalog",
-      "form-attribute-suggestions",
-      category,
-      attribute.key,
-      debouncedValue,
-    ],
-    queryFn: async ({ signal }) => {
-      const page = await getCatalogFacetPage(
-        {
-          category,
-          q: debouncedValue,
-        },
-        {
-          facet: attribute.key,
-          limit: 50,
-          offset: 0,
-        },
-        signal,
-      );
-
-      const facet = page.facets.find(
-        (candidate) =>
-          candidate.key === attribute.key,
-      );
-
-      return facet?.values.map(
-        (entry) => String(entry.value),
-      ) ?? [];
-    },
-    enabled:
-      suggestible
-      && category !== ""
-      && debouncedValue.length >= 1,
-  });
-
-  return (
-    <AttributeControl
-      attribute={attribute}
-      error={error}
-      onChange={onChange}
-      suggestions={suggestionsQuery.data ?? []}
-      suggestionsLoading={suggestionsQuery.isFetching}
-      value={value}
-    />
-  );
-}
-
-function textSuggestions(
-  values: Array<string | null>,
-  query: string,
-): SuggestionOption[] {
-  const needle = query.trim().toLocaleLowerCase("ru-RU");
-
-  if (!needle) {
-    return [];
-  }
-
-  const unique = [
-    ...new Set(
-      values.filter(
-        (value): value is string => Boolean(value?.trim()),
-      ),
-    ),
-  ];
-
-  return unique
-    .filter((value) =>
-      value.toLocaleLowerCase("ru-RU").includes(needle),
-    )
-    .sort((left, right) => {
-      const normalizedLeft = left.toLocaleLowerCase("ru-RU");
-      const normalizedRight = right.toLocaleLowerCase("ru-RU");
-
-      const leftPrefix = normalizedLeft.startsWith(needle) ? 0 : 1;
-      const rightPrefix = normalizedRight.startsWith(needle) ? 0 : 1;
-
-      if (leftPrefix !== rightPrefix) {
-        return leftPrefix - rightPrefix;
-      }
-
-      return left.localeCompare(right, "ru");
-    })
-    .slice(0, 8)
-    .map((value) => ({
-      key: value,
-      label: value,
-    }));
-}
-
 export function ItemFormPage() {
   const webApp = useTelegramWebApp();
   const { itemId } = useParams();
@@ -221,7 +67,7 @@ export function ItemFormPage() {
   const back = useInternalBackNavigation();
   const client = useQueryClient();
 
-  const [state, setState] = useState<Draft | null>(null);
+  const [state, setState] = useState<ItemFormDraft | null>(null);
   const [family, setFamily] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [manufacturerName, setManufacturerName] = useState("");
@@ -251,7 +97,7 @@ export function ItemFormPage() {
     (line) => line.id === procurementLineId,
   );
   const procurementSnapshot = procurementLine?.display_snapshot;
-  const procurementDraft: Draft | null = procurementSnapshot
+  const procurementDraft: ItemFormDraft | null = procurementSnapshot
     ? {
         category: String(procurementSnapshot.category_key ?? ""),
         manufacturer:
@@ -287,7 +133,7 @@ export function ItemFormPage() {
         : procurementDraft
           ? procurementDraft
         : {
-            ...empty,
+            ...EMPTY_ITEM_FORM_DRAFT,
             category: params.get("category") ?? "",
           }
     );
@@ -685,7 +531,7 @@ export function ItemFormPage() {
                         ) ?? [];
 
                       update({
-                        ...empty,
+                        ...EMPTY_ITEM_FORM_DRAFT,
                         category:
                           options.length === 1
                             ? options[0].key
@@ -721,7 +567,7 @@ export function ItemFormPage() {
                     onChange={(event) => {
                       setManufacturerInput("");
                       update({
-                        ...empty,
+                        ...EMPTY_ITEM_FORM_DRAFT,
                         category: event.target.value,
                       });
                     }}

@@ -6,16 +6,14 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import {
-  useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
 import { Link, Navigate, useParams } from "react-router-dom";
 
 import { LineComposer } from "../../features/procurement/LineComposer";
+import { ProcurementDialog } from "../../features/procurement/ProcurementDialog";
 import { useAuthState } from "../../features/auth/useAuthState";
 import { getCatalogItems } from "../../shared/api/catalog";
 import { getLocations } from "../../shared/api/inventory";
@@ -39,122 +37,6 @@ import {
 } from "../../features/procurement/ProcurementDetailPresentation";
 import { PageHeader } from "../../shared/ui";
 import "../../features/procurement/procurement.css";
-
-function Dialog({
-  open,
-  title,
-  children,
-  onClose,
-}: {
-  open: boolean;
-  title: string;
-  children: ReactNode;
-  onClose: () => void;
-}) {
-  const titleId = useId();
-  const dialogRef = useRef<HTMLElement>(null);
-  const onCloseRef = useRef(onClose);
-
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const previousFocus =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-    const dialogElement = dialogRef.current;
-    const focusableSelector =
-      'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-    const firstFocusable =
-      dialogElement?.querySelector<HTMLElement>(focusableSelector);
-
-    if (firstFocusable) {
-      firstFocusable.focus();
-    } else {
-      dialogElement?.focus();
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-
-      if (event.key !== "Tab" || !dialogElement) return;
-
-      const focusables = Array.from(
-        dialogElement.querySelectorAll<HTMLElement>(focusableSelector),
-      );
-      const first = focusables[0];
-      const last = focusables.at(-1);
-
-      if (!first || !last) {
-        event.preventDefault();
-        dialogElement.focus();
-        return;
-      }
-
-      if (!dialogElement.contains(document.activeElement)) {
-        event.preventDefault();
-        first.focus();
-        return;
-      }
-
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      previousFocus?.focus();
-    };
-  }, [open]);
-
-  if (!open) return null;
-
-  return (
-    <div
-      className="procurement-dialog-backdrop"
-      role="presentation"
-      onMouseDown={onClose}
-    >
-      <section
-        aria-labelledby={titleId}
-        aria-modal="true"
-        className="procurement-dialog form-surface"
-        ref={dialogRef}
-        role="dialog"
-        tabIndex={-1}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="procurement-dialog__heading">
-          <h2 id={titleId}>{title}</h2>
-          <Button
-            aria-label="Закрыть"
-            onClick={onClose}
-            type="button"
-          >
-            ×
-          </Button>
-        </div>
-        {children}
-      </section>
-    </div>
-  );
-}
 
 export function ProcurementDetailPage() {
   const { requestId = "" } = useParams();
@@ -420,7 +302,7 @@ export function ProcurementDetailPage() {
         />
       </div>
 
-      <Dialog
+      <ProcurementDialog
         open={dialog === "transfer"}
         title="Передать менеджеру"
         onClose={() => setDialog(null)}
@@ -529,26 +411,26 @@ export function ProcurementDetailPage() {
         >
           Передать
         </Button>
-      </Dialog>
+      </ProcurementDialog>
 
-      <Dialog open={dialog === "correction"} title="Вернуть на корректировку" onClose={() => setDialog(null)}>
+      <ProcurementDialog open={dialog === "correction"} title="Вернуть на корректировку" onClose={() => setDialog(null)}>
         <label>Комментарий<Textarea maxLength={4000} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
         <details><summary>Добавить альтернативный состав</summary><LineComposer lines={proposal} onChange={setProposal} /></details>
         <Button className="button button--danger" disabled={!comment.trim() || mutation.isPending} onClick={() => act("return-for-correction", { comment, alternative_proposal: proposal.length ? proposal : null })} type="button">Вернуть</Button>
-      </Dialog>
+      </ProcurementDialog>
 
-      <Dialog open={dialog === "revision"} title="Новая редакция" onClose={() => setDialog(null)}>
+      <ProcurementDialog open={dialog === "revision"} title="Новая редакция" onClose={() => setDialog(null)}>
         <LineComposer lines={revisionLines} onChange={setRevisionLines} />
         <label>Комментарий<Textarea maxLength={4000} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
         <Button className="button button--accent" disabled={!revisionLines.length || mutation.isPending} onClick={() => act("revisions", { lines: revisionLines, general_comment: comment.trim() || null })} type="button">Отправить редакцию</Button>
-      </Dialog>
+      </ProcurementDialog>
 
-      <Dialog open={dialog === "discrepancy"} title="Есть расхождения" onClose={() => setDialog(null)}>
+      <ProcurementDialog open={dialog === "discrepancy"} title="Есть расхождения" onClose={() => setDialog(null)}>
         <label>Что отличается<Textarea maxLength={4000} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
         <Button className="button button--danger" disabled={!comment.trim() || mutation.isPending} onClick={() => act("discrepancies", { comment })} type="button">Зафиксировать</Button>
-      </Dialog>
+      </ProcurementDialog>
 
-      <Dialog open={dialog === "accept"} title="Подтвердить приёмку" onClose={() => setDialog(null)}>
+      <ProcurementDialog open={dialog === "accept"} title="Подтвердить приёмку" onClose={() => setDialog(null)}>
         <p>После подтверждения на склад будет добавлено:</p>
         <ul>{current.current_revision.lines.map((line) => <li key={line.id}>{procurementLineTitle(line)} — {line.quantity} шт.</li>)}</ul>
         {locations.isPending ? (
@@ -605,9 +487,9 @@ export function ProcurementDetailPage() {
         >
           Подтвердить и оприходовать
         </Button>
-      </Dialog>
+      </ProcurementDialog>
 
-      <Dialog
+      <ProcurementDialog
         open={bindingLine !== null}
         title="Связать с каталогом"
         onClose={() => setBindingLine(null)}
@@ -694,7 +576,7 @@ export function ProcurementDetailPage() {
               : "Показать ещё"}
           </Button>
         ) : null}
-      </Dialog>
+      </ProcurementDialog>
     </main>
   );
 }

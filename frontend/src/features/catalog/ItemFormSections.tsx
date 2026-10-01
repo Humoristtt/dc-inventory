@@ -21,6 +21,7 @@ type BasicFieldsProps = {
   categoriesError: boolean;
   creatingManufacturer: boolean;
   createManufacturerError: boolean;
+  disabled: boolean;
   draft: ItemFormDraft;
   editing: boolean;
   familyId: string;
@@ -53,6 +54,7 @@ export function ItemFormBasicFields({
   categoriesError,
   creatingManufacturer,
   createManufacturerError,
+  disabled,
   draft,
   editing,
   familyId,
@@ -80,7 +82,10 @@ export function ItemFormBasicFields({
   onRetryManufacturers,
 }: BasicFieldsProps) {
   return (
-    <fieldset className="detail-panel">
+    <fieldset
+      className="detail-panel"
+      disabled={disabled}
+    >
       <h2 className="catalog-form__panel-title">
         Основное
       </h2>
@@ -270,6 +275,7 @@ export function ItemFormBasicFields({
 type AttributeFieldsProps = {
   category: string;
   definitions: readonly CategoryAttribute[];
+  disabled: boolean;
   errors: Readonly<Record<string, string>>;
   loading: boolean;
   loadError: boolean;
@@ -287,6 +293,7 @@ type AttributeFieldsProps = {
 export function ItemFormAttributeFields({
   category,
   definitions,
+  disabled,
   errors,
   loading,
   loadError,
@@ -299,7 +306,10 @@ export function ItemFormAttributeFields({
   }
 
   return (
-    <fieldset className="detail-panel">
+    <fieldset
+      className="detail-panel"
+      disabled={disabled}
+    >
       <h2 className="catalog-form__panel-title">
         Характеристики
       </h2>

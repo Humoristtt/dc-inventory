@@ -1,4 +1,4 @@
-import { Button, Input, Select } from "../../shared/ui";
+import { Button } from "../../shared/ui";
 import {
   useMutation,
   useQuery,
@@ -521,6 +521,7 @@ export function ItemFormPage() {
             creatingManufacturer={
               makerMutation.isPending
             }
+            disabled={mutation.isPending}
             draft={draft}
             editing={Boolean(itemId)}
             familyId={familyId}
@@ -627,6 +628,7 @@ export function ItemFormPage() {
           <ItemFormAttributeFields
             category={draft.category}
             definitions={definitions}
+            disabled={mutation.isPending}
             errors={errors}
             loading={schema.isPending}
             loadError={schema.isError}

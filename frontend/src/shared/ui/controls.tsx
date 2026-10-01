@@ -6,25 +6,15 @@ import {
   type TextareaHTMLAttributes,
 } from "react";
 
+import {
+  TEXT_ASSISTANCE_DISABLED,
+} from "./textAssistance";
+
 function classNames(
   ...values: Array<string | false | null | undefined>
 ): string {
   return values.filter(Boolean).join(" ");
 }
-
-/**
- * Browser-level hints that suppress spell-check, autocomplete, autocorrect
- * and automatic capitalization for free-text controls.
- *
- * Mobile operating systems may still expose their own keyboard UI, but the
- * application never opts into predictive assistance.
- */
-export const TEXT_ASSISTANCE_DISABLED = {
-  autoCapitalize: "none",
-  autoComplete: "off",
-  autoCorrect: "off",
-  spellCheck: false,
-} as const;
 
 export type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement>;
 

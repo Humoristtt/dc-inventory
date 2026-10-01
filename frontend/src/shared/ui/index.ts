@@ -8,9 +8,12 @@ export {
   Input,
   Select,
   Textarea,
-  TEXT_ASSISTANCE_DISABLED,
   type ButtonProps,
   type InputProps,
   type SelectProps,
   type TextareaProps,
 } from "./controls";
+
+export {
+  TEXT_ASSISTANCE_DISABLED,
+} from "./textAssistance";

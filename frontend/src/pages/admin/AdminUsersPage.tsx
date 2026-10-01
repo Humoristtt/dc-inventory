@@ -1,8 +1,6 @@
 import { Button } from "../../shared/ui";
 import {
-  useMutation,
   useQuery,
-  useQueryClient,
 } from "@tanstack/react-query";
 import {
   type FormEvent,
@@ -31,15 +29,15 @@ import {
   canManageTargetAccess,
   canManageTargetRole,
 } from "../../features/admin/adminUserPolicy";
+import {
+  useAdminUserMutations,
+} from "../../features/admin/useAdminUserMutations";
 import { useAuthState } from "../../features/auth/useAuthState";
 import {
   adminUserError,
-  decideAdminUserAccessRequest,
   getAdminUsers,
   getUserAccessEvents,
   getUserRoleEvents,
-  setAdminUserAccess,
-  setAdminUserRole,
   type AdminAccessRequestDecision,
   type AdminUser,
 } from "../../shared/api/adminUsers";
@@ -53,7 +51,6 @@ import { PageHeader } from "../../shared/ui";
 
 export function AdminUsersPage() {
   const auth = useAuthState();
-  const queryClient = useQueryClient();
 
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
@@ -171,81 +168,11 @@ export function AdminUsersPage() {
     enabled: canManageUsers && historyUserId !== null,
   });
 
-  const accessMutation = useMutation({
-    mutationFn: ({
-      userId,
-      accessStatus,
-    }: {
-      userId: string;
-      accessStatus: UserAccessStatus;
-    }) => setAdminUserAccess(userId, accessStatus),
-
-    onSuccess: async (_, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: ["admin", "users"],
-      });
-
-      await queryClient.invalidateQueries({
-        queryKey: [
-          "admin",
-          "user-access-events",
-          variables.userId,
-        ],
-      });
-    },
-  });
-
-  const accessDecisionMutation = useMutation({
-    mutationFn: ({
-      userId,
-      decision,
-    }: {
-      userId: string;
-      decision: AdminAccessRequestDecision;
-    }) =>
-      decideAdminUserAccessRequest(
-        userId,
-        decision,
-      ),
-
-    onSuccess: async (_, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: ["admin", "users"],
-      });
-
-      await queryClient.invalidateQueries({
-        queryKey: [
-          "admin",
-          "user-access-events",
-          variables.userId,
-        ],
-      });
-    },
-  });
-
-  const roleMutation = useMutation({
-    mutationFn: ({
-      userId,
-      role,
-    }: {
-      userId: string;
-      role: UserRole;
-    }) => setAdminUserRole(userId, role),
-
-    onSuccess: async (_, variables) => {
-      await queryClient.invalidateQueries({
-        queryKey: ["admin", "users"],
-      });
-
-      await queryClient.invalidateQueries({
-        queryKey: [
-          "admin",
-          "user-role-events",
-          variables.userId,
-        ],
-      });
-    },
-  });
+  const {
+    accessDecisionMutation,
+    accessMutation,
+    roleMutation,
+  } = useAdminUserMutations();
 
   if (auth.data === undefined) {
     return null;

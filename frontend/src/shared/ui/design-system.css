@@ -255,6 +255,11 @@
 
 /* Shared application controls. */
 
+.ds-button {
+  font-family: var(--font-sans);
+  font-weight: var(--font-weight-bold);
+}
+
 .button {
   display: inline-flex;
   min-height: var(--form-control-height);
@@ -379,6 +384,19 @@
   padding:
     0
     var(--form-control-padding-inline);
+}
+
+.ds-select {
+  padding-right: 48px;
+  appearance: none;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--color-ink) 50%),
+    linear-gradient(135deg, var(--color-ink) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) 50%,
+    calc(100% - 13px) 50%;
+  background-repeat: no-repeat;
+  background-size: 5px 5px, 5px 5px;
 }
 
 .ds-textarea {

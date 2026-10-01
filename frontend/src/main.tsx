@@ -5,7 +5,7 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./app/App";
 import { AppProviders } from "./app/providers/AppProviders";
-import { preloadRouteForPath } from "./app/routeModules";
+import { preloadRouteForPath } from "./app/appRoutes";
 import "./app/styles/tokens.css";
 import "./app/styles/global.css";
 import "./shared/ui/design-system.css";

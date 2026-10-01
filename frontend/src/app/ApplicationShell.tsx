@@ -1,88 +1,82 @@
-import { Link, Outlet, useLocation } from "react-router-dom";
+import {
+  Link,
+  Outlet,
+  useLocation,
+} from "react-router-dom";
 
 import { useAuthState } from "../features/auth/useAuthState";
 import { useTelegramNavigation } from "../features/navigation/useTelegramNavigation";
-import { hasAnyCapability } from "../shared/api/auth";
 import "./styles/app-shell.css";
+import {
+  isNavigationItemActive,
+  isNavigationItemVisible,
+  PRIMARY_NAVIGATION,
+} from "./appRoutes";
 import { RouteContent } from "./RouteContent";
-
-const navigationItems = [
-  { to: "/catalog", label: "Каталог", icon: "▦" },
-  { to: "/movements", label: "Движения", icon: "↔" },
-  { to: "/procurement", label: "Закупки", icon: "◫" },
-  { to: "/more", label: "Ещё", icon: "•••" },
-] as const;
-
-function isActive(pathname: string, target: string): boolean {
-  if (target === "/catalog") {
-    return pathname === "/catalog" || pathname.startsWith("/catalog/");
-  }
-
-  if (target === "/more") {
-    return pathname === "/more" || pathname.startsWith("/more/");
-  }
-
-  if (target === "/procurement") {
-    return pathname === target || pathname.startsWith("/procurement/");
-  }
-
-  return pathname === target;
-}
 
 export function ApplicationShell() {
   const auth = useAuthState();
   const location = useLocation();
   useTelegramNavigation();
 
-  const canReadMovements = hasAnyCapability(
-    auth.data?.user,
-    ["movement.read_own", "movement.read_all"],
-  );
-  const canReadProcurement = hasAnyCapability(
-    auth.data?.user,
-    ["procurement.read"],
-  );
-
-  const visibleNavigationItems = navigationItems.filter(
-    (item) =>
-      (item.to !== "/movements" || canReadMovements)
-      && (item.to !== "/procurement" || canReadProcurement),
-  );
+  const visibleNavigationItems =
+    PRIMARY_NAVIGATION.filter(
+      (item) =>
+        isNavigationItemVisible(
+          item,
+          auth.data?.user,
+        ),
+    );
 
   return (
     <div className="app-shell">
       <div className="app-shell__content">
-        <RouteContent resetKey={location.pathname}>
+        <RouteContent
+          resetKey={location.pathname}
+        >
           <Outlet />
         </RouteContent>
       </div>
 
-      <nav aria-label="Основная навигация" className="bottom-nav">
+      <nav
+        aria-label="Основная навигация"
+        className="bottom-nav"
+      >
         <div className="bottom-nav__inner">
-          {visibleNavigationItems.map((item) => {
-            const active = isActive(location.pathname, item.to);
+          {visibleNavigationItems.map(
+            (item) => {
+              const active =
+                isNavigationItemActive(
+                  location.pathname,
+                  item,
+                );
 
-            return (
-              <Link
-                aria-current={active ? "page" : undefined}
-                className={
-                  active
-                    ? "bottom-nav__item bottom-nav__item--active"
-                    : "bottom-nav__item"
-                }
-                key={item.to}
-                to={item.to}
-              >
-                <span
-                  className="bottom-nav__icon"
-                  aria-hidden="true"
+              return (
+                <Link
+                  aria-current={
+                    active
+                      ? "page"
+                      : undefined
+                  }
+                  className={
+                    active
+                      ? "bottom-nav__item bottom-nav__item--active"
+                      : "bottom-nav__item"
+                  }
+                  key={item.routeId}
+                  to={item.to}
                 >
-                  {item.icon}
-                </span>
-                <span>{item.label}</span>
-              </Link>
-            );
-          })}
+                  <span
+                    aria-hidden="true"
+                    className="bottom-nav__icon"
+                  >
+                    {item.icon}
+                  </span>
+                  <span>{item.label}</span>
+                </Link>
+              );
+            },
+          )}
         </div>
       </nav>
     </div>

@@ -25,56 +25,20 @@ import {
   mutateProcurement,
   procurementError,
   procurementLinesPayload,
-  type ProcurementLine,
   type ProcurementLineInput,
 } from "../../shared/api/procurement";
+import {
+  ProcurementActionBar,
+  ProcurementCurrentLines,
+  ProcurementHistory,
+  ProcurementOverview,
+  ProcurementRevisions,
+  procurementInputFromLine,
+  procurementLineTitle,
+  type ProcurementDialogKind,
+} from "../../features/procurement/ProcurementDetailPresentation";
 import { PageHeader } from "../../shared/ui";
 import "../../features/procurement/procurement.css";
-
-const eventLabels: Record<string, string> = {
-  REQUEST_CREATED: "Заявка создана",
-  REVISION_SUBMITTED: "Отправлена новая редакция",
-  MANAGER_ACCEPTED: "Менеджер принял в работу",
-  CORRECTION_REQUESTED: "Возвращено на корректировку",
-  ASSIGNMENT_TAKEN: "Менеджер взял заявку на себя",
-  ASSIGNMENT_TRANSFERRED: "Назначен другой менеджер",
-  TRANSFERRED_TO_ACCEPTANCE: "Передано на приёмку",
-  LINE_BOUND: "Позиция связана с каталогом",
-  DISCREPANCY_REPORTED: "Зафиксированы расхождения",
-  COMPLETED: "Приёмка завершена",
-};
-
-function inputFromLine(line: ProcurementLine): ProcurementLineInput {
-  if (line.line_type === "EXISTING_ITEM" && line.catalog_item_id) {
-    return {
-      line_type: "EXISTING_ITEM",
-      item_id: line.catalog_item_id,
-      display_name: lineTitle(line),
-      quantity: line.quantity,
-    };
-  }
-  const snapshot = line.display_snapshot;
-  return {
-    line_type: "PROPOSED_ITEM",
-    category_key: String(snapshot.category_key ?? ""),
-    manufacturer_id:
-      typeof snapshot.manufacturer_id === "string" ? snapshot.manufacturer_id : null,
-    name: String(snapshot.name ?? ""),
-    model: typeof snapshot.model === "string" ? snapshot.model : null,
-    attributes: (snapshot.attributes ?? {}) as Record<string, string | number | boolean>,
-    quantity: line.quantity,
-  };
-}
-
-function lineTitle(line: ProcurementLine): string {
-  return [
-    line.display_snapshot.manufacturer_name,
-    line.display_snapshot.name,
-    line.display_snapshot.model,
-  ]
-    .filter((value): value is string => typeof value === "string" && Boolean(value))
-    .join(" · ");
-}
 
 function Dialog({
   open,
@@ -257,7 +221,7 @@ export function ProcurementDetailPage() {
     queryFn: ({ signal }) => getLocations(signal),
     enabled: Boolean(request.data?.available_actions.includes("complete_acceptance")),
   });
-  const [dialog, setDialog] = useState<"correction" | "revision" | "transfer" | "discrepancy" | "accept" | null>(null);
+  const [dialog, setDialog] = useState<ProcurementDialogKind | null>(null);
   const [comment, setComment] = useState("");
   const [proposal, setProposal] = useState<ProcurementLineInput[]>([]);
   const [revisionLines, setRevisionLines] = useState<ProcurementLineInput[]>([]);
@@ -386,7 +350,11 @@ export function ProcurementDetailPage() {
   }
 
   const openRevision = () => {
-    setRevisionLines(current.current_revision.lines.map(inputFromLine));
+    setRevisionLines(
+      current.current_revision.lines.map(
+        procurementInputFromLine,
+      ),
+    );
     setDialog("revision");
   };
 
@@ -394,84 +362,62 @@ export function ProcurementDetailPage() {
     <main className="procurement-page">
       <PageHeader kicker="Закупка" title={current.request_number} description={current.status_label} />
       <div className="procurement-page__body">
-        <section className="detail-panel procurement-overview">
-          <div><span>Инициатор</span><strong>{current.initiator.display_name}</strong></div>
-          <div><span>Менеджер</span><strong>{current.assigned_manager.display_name}</strong></div>
-          <div><span>Редакция</span><strong>№ {current.revision_number}</strong></div>
-          {current.final_movement_id && canReadMovements ? (
-            <Link to={`/movements?movement=${current.final_movement_id}`}>Открыть складской приход</Link>
-          ) : null}
-        </section>
+        <ProcurementOverview
+          canReadMovements={
+            canReadMovements
+          }
+          request={current}
+        />
 
-        <section className="detail-panel">
-          <h2>Текущий состав</h2>
-          <ol className="procurement-lines procurement-lines--detail">
-            {current.current_revision.lines.map((line) => (
-              <li key={line.id}>
-                <div>
-                  <strong>{lineTitle(line)}</strong>
-                  <span>{line.quantity} шт.</span>
-                  {line.line_type === "PROPOSED_ITEM" ? (
-                    <small>{line.bound_item_id ? "Связана с каталогом" : "Нужна карточка каталога"}</small>
-                  ) : null}
-                </div>
-                {actions.has("bind_lines") && !line.bound_item_id ? (
-                  <div className="procurement-line-actions">
-                    <Button className="button" disabled={mutation.isPending} onClick={() => setBindingLine(line.id)} type="button">
-                      Связать
-                    </Button>
-                    <Link
-                      className="button button--accent"
-                      to={`/catalog/new?procurementRequestId=${current.id}&procurementLineId=${line.id}`}
-                    >
-                      Создать карточку
-                    </Link>
-                  </div>
-                ) : null}
-              </li>
-            ))}
-          </ol>
-          {current.current_revision.general_comment ? <p>{current.current_revision.general_comment}</p> : null}
-        </section>
+        <ProcurementCurrentLines
+          actions={actions}
+          mutationPending={
+            mutation.isPending
+          }
+          onBindLine={
+            setBindingLine
+          }
+          request={current}
+        />
 
-        <div className="procurement-actions">
-          {actions.has("take_ownership") ? <Button className="button" disabled={mutation.isPending} onClick={() => act("take-ownership", { expected_assigned_manager_user_id: current.assigned_manager.id })} type="button">Взять на себя</Button> : null}
-          {actions.has("transfer_manager") ? <Button className="button" disabled={mutation.isPending} onClick={() => setDialog("transfer")} type="button">Передать менеджеру</Button> : null}
-          {actions.has("manager_accept") ? <Button className="button button--dark" disabled={mutation.isPending} onClick={() => act("manager-accept")} type="button">Принять в работу</Button> : null}
-          {actions.has("return_for_correction") ? <Button className="button button--danger" disabled={mutation.isPending} onClick={() => setDialog("correction")} type="button">Вернуть на корректировку</Button> : null}
-          {actions.has("transfer_to_acceptance") ? <Button className="button button--dark" disabled={mutation.isPending} onClick={() => act("transfer-to-acceptance")} type="button">Передать на приёмку</Button> : null}
-          {actions.has("submit_revision") ? <Button className="button button--accent" disabled={mutation.isPending} onClick={openRevision} type="button">Создать новую редакцию</Button> : null}
-          {actions.has("report_discrepancy") ? <Button className="button button--danger" disabled={mutation.isPending} onClick={() => setDialog("discrepancy")} type="button">Есть расхождения</Button> : null}
-          {actions.has("complete_acceptance") ? <Button className="button button--accent" disabled={mutation.isPending} onClick={() => setDialog("accept")} type="button">Подтвердить приёмку</Button> : null}
-        </div>
-        {mutation.isPending ? <p role="status">Сохраняем…</p> : null}
-        {mutation.isError ? <p role="alert">{procurementError(mutation.error)}</p> : null}
+        <ProcurementActionBar
+          actions={actions}
+          mutationPending={
+            mutation.isPending
+          }
+          onAction={act}
+          onOpenDialog={
+            setDialog
+          }
+          onOpenRevision={
+            openRevision
+          }
+          request={current}
+        />
 
-        <section className="detail-panel">
-          <h2>История</h2>
-          <ol className="procurement-timeline">
-            {[...current.events].reverse().map((event) => (
-              <li key={event.id}>
-                <strong>{eventLabels[event.event_type] ?? event.event_type}</strong>
-                <span>{event.actor.display_name} · {new Date(event.occurred_at).toLocaleString("ru-RU")}</span>
-                {event.comment ? <p>{event.comment}</p> : null}
-                {Array.isArray(event.metadata?.alternative_proposal) ? (
-                  <p>Альтернативное предложение: {event.metadata.alternative_proposal.length} поз.</p>
-                ) : null}
-              </li>
-            ))}
-          </ol>
-        </section>
+        {mutation.isPending ? (
+          <p role="status">
+            Сохраняем…
+          </p>
+        ) : null}
 
-        <section className="detail-panel">
-          <h2>Редакции</h2>
-          {current.revisions.map((revision) => (
-            <details key={revision.id} open={revision.id === current.current_revision_id}>
-              <summary>Редакция №{revision.revision_number} · {revision.lines.length} поз.</summary>
-              <ul>{revision.lines.map((line) => <li key={line.id}>{lineTitle(line)} — {line.quantity} шт.</li>)}</ul>
-            </details>
-          ))}
-        </section>
+        {mutation.isError ? (
+          <p role="alert">
+            {
+              procurementError(
+                mutation.error,
+              )
+            }
+          </p>
+        ) : null}
+
+        <ProcurementHistory
+          events={current.events}
+        />
+
+        <ProcurementRevisions
+          request={current}
+        />
       </div>
 
       <Dialog
@@ -604,7 +550,7 @@ export function ProcurementDetailPage() {
 
       <Dialog open={dialog === "accept"} title="Подтвердить приёмку" onClose={() => setDialog(null)}>
         <p>После подтверждения на склад будет добавлено:</p>
-        <ul>{current.current_revision.lines.map((line) => <li key={line.id}>{lineTitle(line)} — {line.quantity} шт.</li>)}</ul>
+        <ul>{current.current_revision.lines.map((line) => <li key={line.id}>{procurementLineTitle(line)} — {line.quantity} шт.</li>)}</ul>
         {locations.isPending ? (
           <p role="status">Загружаем места приёмки…</p>
         ) : null}

@@ -1,8 +1,5 @@
 import { Button } from "../../shared/ui";
-import {
-  useMutation,
-  useQueryClient,
-} from "@tanstack/react-query";
+
 import {
   useEffect,
   useRef,
@@ -36,17 +33,13 @@ import {
   useItemFormBaseQueries,
   useItemFormSuggestions,
 } from "../../features/catalog/useItemFormQueries";
+import {
+  useItemFormMutations,
+} from "../../features/catalog/useItemFormMutations";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
 import { ApiRequestError } from "../../shared/api/auth";
 import { PageHeader } from "../../shared/ui";
 import {
-  createAndBindProcurementLine,
-} from "../../shared/api/procurement";
-import {
-  createCatalogItem,
-  createCatalogManufacturer,
-  patchCatalogItem,
-  type ItemWritePayload,
 } from "../../shared/api/catalog";
 import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
 
@@ -60,7 +53,6 @@ export function ItemFormPage() {
   const auth = useAuthState();
   const navigate = useNavigate();
   const back = useInternalBackNavigation();
-  const client = useQueryClient();
 
   const [state, setState] = useState<ItemFormDraft | null>(null);
   const [family, setFamily] = useState("");
@@ -68,11 +60,6 @@ export function ItemFormPage() {
   const [manufacturerName, setManufacturerName] = useState("");
   const [manufacturerInput, setManufacturerInput] = useState("");
   const manufacturerInitialized = useRef(false);
-  const procurementIntentRef = useRef<{
-    fingerprint: string;
-    clientRequestId: string;
-  } | null>(null);
-  const mutationInFlightRef = useRef(false);
 
   const procurementRequestId =
     params.get(
@@ -136,116 +123,29 @@ export function ItemFormPage() {
     manufacturerInput,
   });
 
-  const makerMutation = useMutation({
-    mutationFn: () =>
-      createCatalogManufacturer(manufacturerName),
-    onSuccess: (maker) => {
-      setState({
-        ...draft,
-        manufacturer: maker.id,
-      });
-      setManufacturerInput(maker.name);
-      setManufacturerName("");
-
-      void client.invalidateQueries({
-        queryKey: ["catalog", "manufacturer-suggestions"],
-      });
-    },
-  });
-
-  const mutation = useMutation({
-    mutationFn: async (payload: ItemWritePayload) => {
-      if (itemId) {
-        const {
-          category_key: _categoryKey,
-          ...patch
-        } = payload;
-
-        return {
-          kind: "item" as const,
-          saved: await patchCatalogItem(itemId, patch),
-        };
-      }
-
-      if (procurement.data && procurementLineId && procurementRequestId) {
-        const fingerprint = JSON.stringify({
-          requestId: procurement.data.id,
-          stateVersion: procurement.data.state_version,
-          revisionId: procurement.data.current_revision_id,
-          lineId: procurementLineId,
-          item: payload,
+  const {
+    makerMutation,
+    mutation,
+    save,
+  } = useItemFormMutations({
+    itemId,
+    manufacturerName,
+    procurement:
+      procurement.data,
+    procurementLineId,
+    procurementRequestId,
+    onManufacturerCreated:
+      (maker) => {
+        setState({
+          ...draft,
+          manufacturer:
+            maker.id,
         });
-        let intent = procurementIntentRef.current;
-
-        if (
-          intent === null
-          || intent.fingerprint !== fingerprint
-        ) {
-          intent = {
-            fingerprint,
-            clientRequestId: crypto.randomUUID(),
-          };
-          procurementIntentRef.current = intent;
-        }
-
-        return {
-          kind: "procurement" as const,
-          saved: await createAndBindProcurementLine(
-            procurement.data,
-            procurementLineId,
-            payload,
-            intent.clientRequestId,
-          ),
-        };
-      }
-
-      return {
-        kind: "item" as const,
-        saved: await createCatalogItem(payload),
-      };
-    },
-    onSuccess: ({ kind, saved }) => {
-      if (kind === "procurement") {
-        procurementIntentRef.current = null;
-        client.setQueryData(
-          ["procurement", "request", saved.id],
-          saved,
+        setManufacturerInput(
+          maker.name,
         );
-        void client.invalidateQueries({ queryKey: ["catalog"] });
-        navigate(`/procurement/${saved.id}`, { replace: true });
-        return;
-      }
-
-      client.setQueryData(
-        ["catalog", "item", saved.id],
-        saved,
-      );
-
-      void client.invalidateQueries({
-        queryKey: ["catalog", "items"],
-      });
-
-      void client.invalidateQueries({
-        queryKey: ["catalog", "facets"],
-      });
-
-      void client.invalidateQueries({
-        queryKey: ["catalog", "form-model-suggestions"],
-      });
-
-      void client.invalidateQueries({
-        queryKey: ["catalog", "form-name-suggestions"],
-      });
-
-      void client.invalidateQueries({
-        queryKey: ["catalog", "form-attribute-suggestions"],
-      });
-
-      navigate(`/catalog/items/${saved.id}`, { replace: true });
-    },
-    onSettled: () => {
-      mutationInFlightRef.current = false;
-    },
+        setManufacturerName("");
+      },
   });
 
   const update = (next: Partial<ItemFormDraft>) => {
@@ -345,13 +245,11 @@ export function ItemFormPage() {
               Object.keys(next).length
               || !schema.isSuccess
               || mutation.isPending
-              || mutationInFlightRef.current
             ) {
               return;
             }
 
-            mutationInFlightRef.current = true;
-            mutation.mutate({
+            save({
               category_key: draft.category,
               manufacturer_id: identityRequired
                 ? draft.manufacturer || null

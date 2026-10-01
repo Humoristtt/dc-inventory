@@ -18,7 +18,7 @@ TRIVY_ACTION = (
 
 def pinned_arg(text: str, name: str) -> str:
     match = re.search(
-        rf"^ARG {re.escape(name)}=([^\\s]+)$",
+        rf"^ARG {re.escape(name)}=([^\s]+)$",
         text,
         flags=re.MULTILINE,
     )
@@ -33,7 +33,7 @@ def pinned_arg(text: str, name: str) -> str:
 assert CI.count(TRIVY_ACTION) == 4
 assert CI.count("version: v0.74.0") == 4
 assert CI.count("severity: HIGH,CRITICAL") == 4
-assert "severity: CRITICAL\\n" not in CI
+assert "severity: CRITICAL\n" not in CI
 assert CI.count('exit-code: "1"') == 4
 assert CI.count("scanners: vuln") == 4
 assert CI.count('ignore-unfixed: "true"') == 3
@@ -67,8 +67,8 @@ assert re.fullmatch(r"[0-9a-f]{40}", gosu_commit)
 
 openssl_version = pinned_arg(POSTGRES_DOCKERFILE, "OPENSSL_VERSION")
 postgres_pcre2_version = pinned_arg(POSTGRES_DOCKERFILE, "PCRE2_VERSION")
-assert re.fullmatch(r"\\d+\\.\\d+\\.\\d+-[^\\s]+", openssl_version)
-assert re.fullmatch(r"\\d+\\.\\d+-[^\\s]+", postgres_pcre2_version)
+assert re.fullmatch(r"\d+\.\d+\.\d+-[^\s]+", openssl_version)
+assert re.fullmatch(r"\d+\.\d+-[^\s]+", postgres_pcre2_version)
 
 for package in (
     "openssl",
@@ -83,17 +83,17 @@ assert 'test "$(git rev-parse HEAD)" = "${GOSU_COMMIT}"' in POSTGRES_DOCKERFILE
 assert "gosu nobody true" in POSTGRES_DOCKERFILE
 
 backend_pcre2_version = pinned_arg(BACKEND_DOCKERFILE, "PCRE2_VERSION")
-assert re.fullmatch(r"\\d+\\.\\d+-[^\\s]+", backend_pcre2_version)
+assert re.fullmatch(r"\d+\.\d+-[^\s]+", backend_pcre2_version)
 assert '"libpcre2-8-0=${PCRE2_VERSION}"' in BACKEND_DOCKERFILE
 assert "apt-get update" in BACKEND_DOCKERFILE
 assert "rm -rf /var/lib/apt/lists/*" in BACKEND_DOCKERFILE
 
-assert re.search(r"libexpat=[^\\s\\\\]+", WEB_DOCKERFILE)
-assert re.search(r"libuuid=[^\\s\\\\]+", WEB_DOCKERFILE)
+assert re.search(r"libexpat=[^\s\\]+", WEB_DOCKERFILE)
+assert re.search(r"libuuid=[^\s\\]+", WEB_DOCKERFILE)
 assert "apk add --no-cache --upgrade" in WEB_DOCKERFILE
 
 action_refs = re.findall(
-    r"^\\s+- uses:\\s+([^@\\s]+)@([^\\s#]+)",
+    r"^\s+- uses:\s+([^@\s]+)@([^\s#]+)",
     CI,
     flags=re.MULTILINE,
 )

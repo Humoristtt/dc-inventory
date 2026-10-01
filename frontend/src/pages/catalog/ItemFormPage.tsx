@@ -19,15 +19,17 @@ import {
 import { useAuthState } from "../../features/auth/useAuthState";
 import { hasCapability } from "../../shared/api/auth";
 import {
-  SuggestionInput,
   type SuggestionOption,
 } from "../../features/catalog/SuggestionInput";
+import {
+  ItemFormAttributeFields,
+  ItemFormBasicFields,
+} from "../../features/catalog/ItemFormSections";
 import {
   validateDraftAttributes,
 } from "../../features/catalog/itemForm";
 import {
   EMPTY_ITEM_FORM_DRAFT,
-  SmartAttributeControl,
   itemDraft,
   textSuggestions,
   useDebouncedValue,
@@ -506,266 +508,148 @@ export function ItemFormPage() {
             });
           }}
         >
-          <fieldset
-            className="detail-panel"
-            disabled={mutation.isPending}
-          >
-            <h2 className="catalog-form__panel-title">
-              Основное
-            </h2>
+          <ItemFormBasicFields
+            categories={
+              categories.data ?? []
+            }
+            categoriesError={
+              categories.isError
+            }
+            createManufacturerError={
+              makerMutation.isError
+            }
+            creatingManufacturer={
+              makerMutation.isPending
+            }
+            draft={draft}
+            editing={Boolean(itemId)}
+            familyId={familyId}
+            identityRequired={
+              identityRequired
+            }
+            leaves={leaves}
+            manufacturerInput={
+              manufacturerInput
+            }
+            manufacturerLoading={
+              manufacturers.isFetching
+            }
+            manufacturerName={
+              manufacturerName
+            }
+            manufacturerOptions={
+              manufacturerOptions
+            }
+            manufacturerSuggestionsError={
+              manufacturers.isError
+            }
+            modelLoading={
+              modelMatches.isFetching
+            }
+            modelOptions={modelOptions}
+            nameLoading={
+              nameMatches.isFetching
+            }
+            nameOptions={nameOptions}
+            onCategoryChange={(value) => {
+              setManufacturerInput("");
+              update({
+                ...EMPTY_ITEM_FORM_DRAFT,
+                category: value,
+              });
+            }}
+            onCreateManufacturer={() =>
+              makerMutation.mutate()
+            }
+            onFamilyChange={(value) => {
+              setFamily(value);
+              setManufacturerInput("");
 
-            {!itemId ? (
-              <>
-                <label className="catalog-form__field">
-                  Раздел
-                  <Select
-                    onChange={(event) => {
-                      setFamily(event.target.value);
-                      setManufacturerInput("");
+              const options =
+                categories.data?.filter(
+                  (category) =>
+                    category.parent_id
+                    === value,
+                ) ?? [];
 
-                      const options =
-                        categories.data?.filter(
-                          (category) =>
-                            category.parent_id
-                            === event.target.value,
-                        ) ?? [];
+              update({
+                ...EMPTY_ITEM_FORM_DRAFT,
+                category:
+                  options.length === 1
+                    ? options[0].key
+                    : "",
+              });
+            }}
+            onManufacturerInputChange={
+              (value) => {
+                setManufacturerInput(value);
 
-                      update({
-                        ...EMPTY_ITEM_FORM_DRAFT,
-                        category:
-                          options.length === 1
-                            ? options[0].key
-                            : "",
-                      });
-                    }}
-                    required
-                    value={familyId}
-                  >
-                    <option value="">
-                      Выберите раздел
-                    </option>
-
-                    {categories.data
-                      ?.filter(
-                        (category) =>
-                          category.parent_id === null,
-                      )
-                      .map((category) => (
-                        <option
-                          key={category.id}
-                          value={category.id}
-                        >
-                          {category.display_name}
-                        </option>
-                      ))}
-                  </Select>
-                </label>
-
-                <label className="catalog-form__field">
-                  Категория
-                  <Select
-                    onChange={(event) => {
-                      setManufacturerInput("");
-                      update({
-                        ...EMPTY_ITEM_FORM_DRAFT,
-                        category: event.target.value,
-                      });
-                    }}
-                    required
-                    value={draft.category}
-                  >
-                    <option value="">
-                      Выберите категорию
-                    </option>
-
-                    {leaves.map((category) => (
-                      <option
-                        key={category.id}
-                        value={category.key}
-                      >
-                        {category.display_name}
-                      </option>
-                    ))}
-                  </Select>
-                </label>
-              </>
-            ) : (
-              <p>{selected?.display_name}</p>
-            )}
-
-            {categories.isError ? (
-              <p role="alert">
-                Не удалось загрузить категории.{" "}
-                <Button
-                  onClick={() => void categories.refetch()}
-                  type="button"
-                >
-                  Повторить
-                </Button>
-              </p>
-            ) : null}
-
-            {identityRequired ? (
-              <>
-                <SuggestionInput
-                  label="Производитель"
-                  loading={manufacturers.isFetching}
-                  onChange={(value) => {
-                    setManufacturerInput(value);
-
-                    if (draft.manufacturer) {
-                      update({
-                        manufacturer: "",
-                      });
-                    }
-                  }}
-                  onSelect={(option) => {
-                    setManufacturerInput(option.label);
-                    update({
-                      manufacturer: option.key,
-                    });
-                  }}
-                  options={manufacturerOptions}
-                  required
-                  value={manufacturerInput}
-                />
-
-                {manufacturers.isError ? (
-                  <p role="alert">
-                    Не удалось загрузить производителей.{" "}
-                    <Button
-                      onClick={() =>
-                        void manufacturers.refetch()
-                      }
-                      type="button"
-                    >
-                      Повторить
-                    </Button>
-                  </p>
-                ) : null}
-
-                <SuggestionInput
-                  label="Модель"
-                  loading={modelMatches.isFetching}
-                  maxLength={255}
-                  onChange={(value) =>
-                    update({
-                      model: value,
-                    })
-                  }
-                  options={modelOptions}
-                  required
-                  value={draft.model}
-                />
-
-                <details>
-                  <summary>Добавить производителя</summary>
-
-                  <label className="catalog-form__field">
-                    Название производителя
-                    <Input
-                      autoComplete="off"
-                      maxLength={255}
-                      onChange={(event) =>
-                        setManufacturerName(
-                          event.target.value,
-                        )
-                      }
-                      value={manufacturerName}
-                    />
-                  </label>
-
-                  <Button
-                    className="button button--dark catalog-form__manufacturer-create"
-                    disabled={
-                      !manufacturerName.trim()
-                      || makerMutation.isPending
-                    }
-                    onClick={() =>
-                      makerMutation.mutate()
-                    }
-                    type="button"
-                  >
-                    Создать производителя
-                  </Button>
-
-                  {makerMutation.isError ? (
-                    <p role="alert">
-                      Не удалось создать производителя.
-                      Возможно, он уже существует.
-                    </p>
-                  ) : null}
-                </details>
-              </>
-            ) : null}
-
-            <SuggestionInput
-              className="catalog-form__field--wide"
-              label="Название оборудования"
-              loading={nameMatches.isFetching}
-              maxLength={255}
-              onChange={(value) =>
-                update({
-                  name: value,
-                })
+                if (draft.manufacturer) {
+                  update({
+                    manufacturer: "",
+                  });
+                }
               }
-              options={nameOptions}
-              required
-              value={draft.name}
-            />
-          </fieldset>
+            }
+            onManufacturerNameChange={
+              setManufacturerName
+            }
+            onManufacturerSelect={
+              (option) => {
+                setManufacturerInput(
+                  option.label,
+                );
+                update({
+                  manufacturer:
+                    option.key,
+                });
+              }
+            }
+            onModelChange={(value) =>
+              update({
+                model: value,
+              })
+            }
+            onNameChange={(value) =>
+              update({
+                name: value,
+              })
+            }
+            onRetryCategories={() =>
+              void categories.refetch()
+            }
+            onRetryManufacturers={() =>
+              void manufacturers.refetch()
+            }
+            selected={selected}
+          />
 
-          {draft.category ? (
-            <fieldset
-              className="detail-panel"
-              disabled={mutation.isPending}
-            >
-              <h2 className="catalog-form__panel-title">
-                Характеристики
-              </h2>
+          <ItemFormAttributeFields
+            category={draft.category}
+            definitions={definitions}
+            errors={errors}
+            loading={schema.isPending}
+            loadError={schema.isError}
+            onChange={(key, value) => {
+              const attributes = {
+                ...draft.attributes,
+              };
 
-              {schema.isPending ? (
-                <p>Загружаем поля…</p>
-              ) : null}
+              if (value === undefined) {
+                delete attributes[key];
+              } else {
+                attributes[key] = value;
+              }
 
-              {schema.isError ? (
-                <p role="alert">
-                  Не удалось загрузить поля.{" "}
-                  <Button
-                    onClick={() => void schema.refetch()}
-                    type="button"
-                  >
-                    Повторить
-                  </Button>
-                </p>
-              ) : null}
-
-              {definitions.map((attribute) => (
-                <SmartAttributeControl
-                  attribute={attribute}
-                  category={draft.category}
-                  error={errors[attribute.key]}
-                  key={attribute.key}
-                  onChange={(value) => {
-                    const attributes = {
-                      ...draft.attributes,
-                    };
-
-                    if (value === undefined) {
-                      delete attributes[attribute.key];
-                    } else {
-                      attributes[attribute.key] = value;
-                    }
-
-                    update({
-                      attributes,
-                    });
-                  }}
-                  value={draft.attributes[attribute.key]}
-                />
-              ))}
-            </fieldset>
-          ) : null}
+              update({
+                attributes,
+              });
+            }}
+            onRetry={() =>
+              void schema.refetch()
+            }
+            values={draft.attributes}
+          />
 
           {Object.keys(errors).length ? (
             <p role="alert">

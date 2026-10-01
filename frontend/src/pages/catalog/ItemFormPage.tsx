@@ -1,7 +1,6 @@
 import { Button } from "../../shared/ui";
 import {
   useMutation,
-  useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
 import {
@@ -31,25 +30,21 @@ import {
 import {
   EMPTY_ITEM_FORM_DRAFT,
   itemDraft,
-  textSuggestions,
-  useDebouncedValue,
   type ItemFormDraft,
 } from "../../features/catalog/itemFormSupport";
+import {
+  useItemFormBaseQueries,
+  useItemFormSuggestions,
+} from "../../features/catalog/useItemFormQueries";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
 import { ApiRequestError } from "../../shared/api/auth";
 import { PageHeader } from "../../shared/ui";
 import {
   createAndBindProcurementLine,
-  getProcurementRequest,
 } from "../../shared/api/procurement";
 import {
   createCatalogItem,
   createCatalogManufacturer,
-  getCatalogCategories,
-  getCatalogCategory,
-  getCatalogItem,
-  getCatalogItems,
-  getCatalogManufacturers,
   patchCatalogItem,
   type ItemWritePayload,
 } from "../../shared/api/catalog";
@@ -79,51 +74,26 @@ export function ItemFormPage() {
   } | null>(null);
   const mutationInFlightRef = useRef(false);
 
-  const item = useQuery({
-    queryKey: ["catalog", "item", itemId],
-    queryFn: ({ signal }) => getCatalogItem(itemId ?? "", signal),
-    enabled: Boolean(itemId),
-  });
+  const procurementRequestId =
+    params.get(
+      "procurementRequestId",
+    );
+  const procurementLineId =
+    params.get(
+      "procurementLineId",
+    );
 
-  const procurementRequestId = params.get("procurementRequestId");
-  const procurementLineId = params.get("procurementLineId");
-  const procurement = useQuery({
-    queryKey: ["procurement", "request", procurementRequestId],
-    queryFn: ({ signal }) =>
-      getProcurementRequest(procurementRequestId ?? "", signal),
-    enabled: Boolean(procurementRequestId && procurementLineId && !itemId),
-  });
-  const procurementLine = procurement.data?.current_revision.lines.find(
-    (line) => line.id === procurementLineId,
-  );
-  const procurementSnapshot = procurementLine?.display_snapshot;
-  const procurementDraft: ItemFormDraft | null = procurementSnapshot
-    ? {
-        category: String(procurementSnapshot.category_key ?? ""),
-        manufacturer:
-          typeof procurementSnapshot.manufacturer_id === "string"
-            ? procurementSnapshot.manufacturer_id
-            : "",
-        model:
-          typeof procurementSnapshot.model === "string"
-            ? procurementSnapshot.model
-            : "",
-        name: String(procurementSnapshot.name ?? ""),
-        attributes: Object.fromEntries(
-          Object.entries(
-            (procurementSnapshot.attributes ?? {}) as Record<string, unknown>,
-          ).map(([key, value]) => [
-            key,
-            typeof value === "boolean" ? value : String(value),
-          ]),
-        ),
-      }
-    : null;
-
-  const categories = useQuery({
-    staleTime: 5 * 60_000,
-    queryKey: ["catalog", "categories"],
-    queryFn: ({ signal }) => getCatalogCategories(signal),
+  const {
+    categories,
+    item,
+    procurement,
+    procurementDraft,
+    procurementLine,
+    procurementSnapshot,
+  } = useItemFormBaseQueries({
+    itemId,
+    procurementLineId,
+    procurementRequestId,
   });
 
   const draft = state
@@ -151,132 +121,20 @@ export function ItemFormPage() {
   const identityRequired =
     selected?.requires_manufacturer_model === true;
 
-  const schema = useQuery({
-    staleTime: 5 * 60_000,
-    queryKey: ["catalog", "category", draft.category],
-    queryFn: ({ signal }) =>
-      getCatalogCategory(draft.category, signal),
-    enabled: Boolean(draft.category),
+  const {
+    definitions,
+    manufacturerOptions,
+    manufacturers,
+    modelMatches,
+    modelOptions,
+    nameMatches,
+    nameOptions,
+    schema,
+  } = useItemFormSuggestions({
+    draft,
+    identityRequired,
+    manufacturerInput,
   });
-
-  const definitions = schema.data?.attributes.filter(
-    (attribute) => attribute.key !== "reach_m",
-  ) ?? [];
-
-  useEffect(() => {
-    if (
-      manufacturerInitialized.current
-      || (!item.data && !procurementSnapshot)
-    ) {
-      return;
-    }
-
-    manufacturerInitialized.current = true;
-    setManufacturerInput(
-      item.data?.manufacturer?.name
-        ?? (typeof procurementSnapshot?.manufacturer_name === "string"
-          ? procurementSnapshot.manufacturer_name
-          : ""),
-    );
-  }, [item.data, procurementSnapshot]);
-
-  const debouncedManufacturer = useDebouncedValue(
-    manufacturerInput.trim(),
-  );
-
-  const manufacturers = useQuery({
-    queryKey: [
-      "catalog",
-      "manufacturer-suggestions",
-      debouncedManufacturer,
-    ],
-    queryFn: ({ signal }) =>
-      getCatalogManufacturers(
-        {
-          q: debouncedManufacturer,
-          limit: 8,
-          offset: 0,
-        },
-        signal,
-      ),
-    enabled:
-      identityRequired
-      && debouncedManufacturer.length >= 1,
-  });
-
-  const debouncedModel = useDebouncedValue(draft.model.trim());
-
-  const modelMatches = useQuery({
-    queryKey: [
-      "catalog",
-      "form-model-suggestions",
-      draft.category,
-      draft.manufacturer,
-      debouncedModel,
-    ],
-    queryFn: ({ signal }) =>
-      getCatalogItems(
-        {
-          q: debouncedModel,
-          category: draft.category,
-          manufacturerIds: draft.manufacturer
-            ? [draft.manufacturer]
-            : undefined,
-          limit: 8,
-          offset: 0,
-        },
-        signal,
-      ),
-    enabled:
-      identityRequired
-      && Boolean(draft.category)
-      && debouncedModel.length >= 2,
-  });
-
-  const debouncedName = useDebouncedValue(draft.name.trim());
-
-  const nameMatches = useQuery({
-    queryKey: [
-      "catalog",
-      "form-name-suggestions",
-      draft.category,
-      draft.manufacturer,
-      debouncedName,
-    ],
-    queryFn: ({ signal }) =>
-      getCatalogItems(
-        {
-          q: debouncedName,
-          category: draft.category || undefined,
-          manufacturerIds: draft.manufacturer
-            ? [draft.manufacturer]
-            : undefined,
-          limit: 8,
-          offset: 0,
-        },
-        signal,
-      ),
-    enabled:
-      Boolean(draft.category)
-      && debouncedName.length >= 2,
-  });
-
-  const manufacturerOptions: SuggestionOption[] = (
-    manufacturers.data?.items ?? []
-  ).map((manufacturer) => ({
-    key: manufacturer.id,
-    label: manufacturer.name,
-  }));
-
-  const modelOptions = textSuggestions(
-    modelMatches.data?.items.map((entry) => entry.model) ?? [],
-    debouncedModel,
-  );
-
-  const nameOptions = textSuggestions(
-    nameMatches.data?.items.map((entry) => entry.name) ?? [],
-    debouncedName,
-  );
 
   const makerMutation = useMutation({
     mutationFn: () =>

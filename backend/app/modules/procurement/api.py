@@ -19,9 +19,23 @@ from app.modules.auth.dependencies import (
 from app.modules.catalog.service import CatalogError
 from app.modules.identity.policy import Capability, has_capability
 from app.modules.inventory.service import InventoryError
+from app.modules.procurement.domain import (
+    ProcurementConflictError,
+    ProcurementError,
+    ProcurementForbiddenError,
+    ProcurementNotFoundError,
+    ProcurementRecord,
+    ProcurementServiceUnavailableError,
+    ProcurementSummaryRecord,
+)
 from app.modules.procurement.email import enqueue_procurement_email
 from app.modules.procurement.enums import STATUS_LABELS
 from app.modules.procurement.models import ProcurementEvent, ProcurementRevisionLine
+from app.modules.procurement.queries import (
+    get_request_record,
+    list_managers,
+    list_requests,
+)
 from app.modules.procurement.schemas import (
     AssignmentMutation,
     CorrectionRequest,
@@ -44,20 +58,6 @@ from app.modules.procurement.schemas import (
     RevisionCreate,
     UserSummaryOut,
 )
-from app.modules.procurement.domain import (
-    ProcurementConflictError,
-    ProcurementError,
-    ProcurementForbiddenError,
-    ProcurementNotFoundError,
-    ProcurementRecord,
-    ProcurementServiceUnavailableError,
-    ProcurementSummaryRecord,
-)
-from app.modules.procurement.queries import (
-    get_request_record,
-    list_managers,
-    list_requests,
-)
 from app.modules.procurement.service import (
     available_actions,
     bind_line,
@@ -72,6 +72,7 @@ from app.modules.procurement.service import (
     transfer_manager,
     transfer_to_acceptance,
 )
+
 
 router = APIRouter(prefix="/api/procurement", tags=["procurement"])
 

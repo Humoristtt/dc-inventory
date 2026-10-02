@@ -37,7 +37,6 @@ from app.modules.procurement.domain import (
     _normalize_client_request_id,
     _normalize_comment,
 )
-from app.modules.procurement.queries import get_request_record
 from app.modules.procurement.enums import (
     ACTIVE_PROCUREMENT_STATUSES,
     ProcurementEventType,
@@ -60,6 +59,7 @@ from app.modules.procurement.notifications import (
     enqueue_procurement_notifications,
     technical_recipient_user_ids,
 )
+from app.modules.procurement.queries import get_request_record
 from app.modules.procurement.schemas import (
     AssignmentMutation,
     CorrectionRequest,

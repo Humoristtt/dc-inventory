@@ -30,10 +30,10 @@ vi.mock(
       isPending: false,
       data: {
         user: {
-          id: "cp05-admin",
+          id: "manager-lookup-admin",
           telegram_user_id: 50001,
-          username: "cp05",
-          first_name: "CP05",
+          username: "manager_lookup",
+          first_name: "Manager Lookup",
           last_name: null,
           role: "ADMIN",
           access_status: "APPROVED",

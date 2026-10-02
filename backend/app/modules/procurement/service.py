@@ -3,21 +3,18 @@ from __future__ import annotations
 import uuid
 from collections import defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
 
 from pydantic import BaseModel
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload, selectinload
-from sqlalchemy.sql.base import ExecutableOption
+from sqlalchemy.orm import joinedload
 
 from app.core.config import Settings
 from app.core.idempotency import (
     advisory_lock_key,
     canonical_fingerprint,
-    normalize_idempotency_key,
 )
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Item
@@ -34,6 +31,26 @@ from app.modules.identity.policy import Capability, has_capability
 from app.modules.inventory.enums import MovementType
 from app.modules.inventory.schemas import MovementCreate, MovementLineCreate
 from app.modules.inventory.service import create_movement
+from app.modules.procurement.domain import (
+    MAX_AGGREGATED_ITEM_QUANTITY,
+    ProcurementConflictError,
+    ProcurementError,
+    ProcurementForbiddenError,
+    ProcurementNotFoundError,
+    ProcurementPage,
+    ProcurementRecord,
+    ProcurementServiceUnavailableError,
+    ProcurementSummaryRecord,
+    ProcurementValidationError,
+    _display_name,
+    _normalize_client_request_id,
+    _normalize_comment,
+)
+from app.modules.procurement.queries import (
+    get_request_record,
+    list_managers,
+    list_requests,
+)
 from app.modules.procurement.enums import (
     ACTIVE_PROCUREMENT_STATUSES,
     ProcurementEventType,
@@ -66,197 +83,6 @@ from app.modules.procurement.schemas import (
     RevisionCreate,
 )
 from app.modules.procurement.state_machine import transition_allowed
-
-
-class ProcurementError(RuntimeError):
-    code = "procurement_error"
-
-    def __init__(self, message: str, *, code: str | None = None) -> None:
-        super().__init__(message)
-        if code is not None:
-            self.code = code
-
-
-class ProcurementValidationError(ProcurementError):
-    code = "procurement_validation_error"
-
-
-class ProcurementNotFoundError(ProcurementError):
-    code = "procurement_not_found"
-
-
-class ProcurementConflictError(ProcurementError):
-    code = "procurement_conflict"
-
-
-class ProcurementForbiddenError(ProcurementError):
-    code = "procurement_forbidden"
-
-
-class ProcurementServiceUnavailableError(ProcurementError):
-    code = "procurement_service_unavailable"
-
-
-MAX_AGGREGATED_ITEM_QUANTITY = 2**53 - 1
-
-
-@dataclass(frozen=True, slots=True)
-class ProcurementRecord:
-    request: ProcurementRequest
-    revisions: list[ProcurementRevision]
-    events: list[ProcurementEvent]
-    display_names: dict[uuid.UUID, str]
-
-    @property
-    def current_revision(self) -> ProcurementRevision:
-        for revision in self.revisions:
-            if revision.id == self.request.current_revision_id:
-                return revision
-        raise RuntimeError("procurement current revision was not loaded")
-
-
-@dataclass(frozen=True, slots=True)
-class ProcurementSummaryRecord:
-    request: ProcurementRequest
-    current_revision: ProcurementRevision
-    display_names: dict[uuid.UUID, str]
-
-
-@dataclass(frozen=True, slots=True)
-class ProcurementPage:
-    items: list[ProcurementSummaryRecord]
-    total: int
-
-
-def _normalize_client_request_id(value: str) -> str:
-    normalized = normalize_idempotency_key(value)
-    if not normalized:
-        raise ProcurementValidationError(
-            "client_request_id must not be blank", code="client_request_id_required"
-        )
-    if len(normalized) > 128:
-        raise ProcurementValidationError(
-            "client_request_id exceeds 128 characters", code="client_request_id_too_long"
-        )
-    return normalized
-
-
-def _normalize_comment(value: str | None, *, required: bool = False) -> str | None:
-    if value is None:
-        if required:
-            raise ProcurementValidationError("comment is required", code="comment_required")
-        return None
-    normalized = value.strip()
-    if not normalized:
-        if required:
-            raise ProcurementValidationError("comment is required", code="comment_required")
-        return None
-    return normalized
-
-
-def _display_name(identity: TelegramIdentity | None, user_id: uuid.UUID) -> str:
-    if identity is None:
-        return str(user_id)
-    name = " ".join(part for part in (identity.first_name, identity.last_name) if part).strip()
-    if identity.username:
-        return f"{name} (@{identity.username})" if name else f"@{identity.username}"
-    return name or str(user_id)
-
-
-async def _actor_snapshot(db: AsyncSession, user_id: uuid.UUID) -> str:
-    identity = await db.scalar(select(TelegramIdentity).where(TelegramIdentity.user_id == user_id))
-    return _display_name(identity, user_id)
-
-
-async def _validate_manager(db: AsyncSession, user_id: uuid.UUID) -> User:
-    manager = await db.scalar(select(User).where(User.id == user_id).with_for_update())
-    if manager is None:
-        raise ProcurementNotFoundError("manager not found", code="manager_not_found")
-    if manager.role != UserRole.MANAGER or manager.access_status != UserAccessStatus.APPROVED:
-        raise ProcurementValidationError(
-            "assigned user must be an active Manager", code="manager_not_active"
-        )
-    return manager
-
-
-async def list_managers(
-    db: AsyncSession,
-    *,
-    query: str | None = None,
-    limit: int,
-    offset: int,
-) -> tuple[list[User], int, dict[uuid.UUID, str]]:
-    filters = [
-        User.role == UserRole.MANAGER,
-        User.access_status == UserAccessStatus.APPROVED,
-    ]
-
-    user_query = select(User)
-    count_query = select(func.count(User.id)).select_from(User)
-
-    search = " ".join(query.split()) if query else ""
-
-    if search:
-        username_search = search.removeprefix("@") or search
-        search_pattern = f"%{search}%"
-        username_pattern = f"%{username_search}%"
-
-        identity_filter = or_(
-            TelegramIdentity.username.ilike(username_pattern),
-            TelegramIdentity.first_name.ilike(search_pattern),
-            TelegramIdentity.last_name.ilike(search_pattern),
-            func.concat_ws(
-                " ",
-                TelegramIdentity.first_name,
-                TelegramIdentity.last_name,
-            ).ilike(search_pattern),
-        )
-
-        user_query = user_query.outerjoin(
-            TelegramIdentity,
-            TelegramIdentity.user_id == User.id,
-        )
-        count_query = count_query.outerjoin(
-            TelegramIdentity,
-            TelegramIdentity.user_id == User.id,
-        )
-        filters.append(identity_filter)
-
-    total = int(await db.scalar(count_query.where(*filters)) or 0)
-
-    users = list(
-        (
-            await db.scalars(
-                user_query.where(*filters)
-                .order_by(
-                    User.created_at,
-                    User.id,
-                )
-                .limit(limit)
-                .offset(offset)
-            )
-        ).all()
-    )
-
-    names = await _display_names(
-        db,
-        {user.id for user in users},
-    )
-
-    return users, total, names
-
-
-async def _display_names(db: AsyncSession, user_ids: set[uuid.UUID]) -> dict[uuid.UUID, str]:
-    if not user_ids:
-        return {}
-    rows = (
-        await db.execute(
-            select(User.id, TelegramIdentity)
-            .outerjoin(TelegramIdentity, TelegramIdentity.user_id == User.id)
-            .where(User.id.in_(user_ids))
-        )
-    ).all()
-    return {user_id: _display_name(identity, user_id) for user_id, identity in rows}
 
 
 async def _prepare_lines(
@@ -521,89 +347,6 @@ async def create_request(
         recipient_user_ids={request.assigned_manager_user_id},
     )
     return await get_request_record(db, request.id)
-
-
-def _record_options() -> tuple[ExecutableOption, ...]:
-    return (
-        selectinload(ProcurementRequest.revisions)
-        .selectinload(ProcurementRevision.lines)
-        .selectinload(ProcurementRevisionLine.binding),
-        selectinload(ProcurementRequest.events),
-    )
-
-
-async def get_request_record(
-    db: AsyncSession, request_id: uuid.UUID, *, lock: bool = False
-) -> ProcurementRecord:
-    statement = (
-        select(ProcurementRequest)
-        .where(ProcurementRequest.id == request_id)
-        .options(*_record_options())
-        .execution_options(populate_existing=True)
-    )
-    if lock:
-        statement = statement.with_for_update()
-    request = await db.scalar(statement)
-    if request is None:
-        raise ProcurementNotFoundError("procurement request not found")
-    revisions = list(request.revisions)
-    events = list(request.events)
-    ids = {request.initiator_user_id, request.assigned_manager_user_id}
-    ids.update(revision.submitted_by_user_id for revision in revisions)
-    ids.update(event.actor_user_id for event in events)
-    names = await _display_names(db, ids)
-    return ProcurementRecord(request, revisions, events, names)
-
-
-async def list_requests(
-    db: AsyncSession,
-    *,
-    actor_user_id: uuid.UUID,
-    view: str,
-    limit: int,
-    offset: int,
-) -> ProcurementPage:
-    filters = []
-    if view == "my":
-        filters.append(ProcurementRequest.assigned_manager_user_id == actor_user_id)
-        filters.append(ProcurementRequest.status.in_(ACTIVE_PROCUREMENT_STATUSES))
-    elif view == "active":
-        filters.append(ProcurementRequest.status.in_(ACTIVE_PROCUREMENT_STATUSES))
-    elif view == "history":
-        filters.append(ProcurementRequest.status == ProcurementStatus.COMPLETED)
-    else:
-        raise ProcurementValidationError("unknown procurement view", code="view_invalid")
-    total = int(await db.scalar(select(func.count(ProcurementRequest.id)).where(*filters)) or 0)
-    rows = (
-        await db.execute(
-            select(ProcurementRequest, ProcurementRevision)
-            .join(
-                ProcurementRevision,
-                ProcurementRevision.id == ProcurementRequest.current_revision_id,
-            )
-            .where(*filters)
-            .order_by(ProcurementRequest.created_at.desc(), ProcurementRequest.id.desc())
-            .limit(limit)
-            .offset(offset)
-        )
-    ).all()
-    user_ids = {
-        user_id
-        for request, _revision in rows
-        for user_id in (request.initiator_user_id, request.assigned_manager_user_id)
-    }
-    names = await _display_names(db, user_ids)
-    return ProcurementPage(
-        items=[
-            ProcurementSummaryRecord(
-                request=request,
-                current_revision=revision,
-                display_names=names,
-            )
-            for request, revision in rows
-        ],
-        total=total,
-    )
 
 
 async def _lock_and_require_actor_capabilities(

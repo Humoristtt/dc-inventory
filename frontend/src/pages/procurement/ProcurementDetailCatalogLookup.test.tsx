@@ -30,7 +30,7 @@ vi.mock(
       isPending: false,
       data: {
         user: {
-          id: "cp05-senior",
+          id: "catalog-lookup-senior",
           telegram_user_id: 50002,
           username: "senior",
           first_name: "Senior",
@@ -82,9 +82,9 @@ const revision = {
   id: "revision-1",
   revision_number: 1,
   submitted_by: {
-    id: "cp05-admin",
+    id: "catalog-lookup-admin",
     display_name:
-      "CP05 Admin",
+      "Catalog Lookup Admin",
   },
   general_comment: null,
   created_at:
@@ -100,9 +100,9 @@ const request = {
   status_label:
     "В закупке",
   initiator: {
-    id: "cp05-admin",
+    id: "catalog-lookup-admin",
     display_name:
-      "CP05 Admin",
+      "Catalog Lookup Admin",
   },
   assigned_manager: {
     id: "manager-1",

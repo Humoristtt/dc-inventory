@@ -1,22 +1,16 @@
 import { Button } from "../../shared/ui";
 
 import {
-  useEffect,
-  useRef,
   useState,
 } from "react";
 import {
   Navigate,
-  useNavigate,
   useParams,
   useSearchParams,
 } from "react-router-dom";
 
 import { useAuthState } from "../../features/auth/useAuthState";
 import { hasCapability } from "../../shared/api/auth";
-import {
-  type SuggestionOption,
-} from "../../features/catalog/SuggestionInput";
 import {
   ItemFormAttributeFields,
   ItemFormBasicFields,
@@ -39,8 +33,6 @@ import {
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
 import { ApiRequestError } from "../../shared/api/auth";
 import { PageHeader } from "../../shared/ui";
-import {
-} from "../../shared/api/catalog";
 import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
 
 import "../../features/catalog/admin-catalog.css";
@@ -51,7 +43,6 @@ export function ItemFormPage() {
   const { itemId } = useParams();
   const [params] = useSearchParams();
   const auth = useAuthState();
-  const navigate = useNavigate();
   const back = useInternalBackNavigation();
 
   const [state, setState] = useState<ItemFormDraft | null>(null);
@@ -59,7 +50,6 @@ export function ItemFormPage() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [manufacturerName, setManufacturerName] = useState("");
   const [manufacturerInput, setManufacturerInput] = useState("");
-  const manufacturerInitialized = useRef(false);
 
   const procurementRequestId =
     params.get(
@@ -76,7 +66,6 @@ export function ItemFormPage() {
     procurement,
     procurementDraft,
     procurementLine,
-    procurementSnapshot,
   } = useItemFormBaseQueries({
     itemId,
     procurementLineId,

@@ -3,12 +3,10 @@ from __future__ import annotations
 import datetime as datetime_module
 import uuid
 from datetime import UTC, datetime
-from typing import cast
 
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-from sqlalchemy.sql.elements import ColumnElement
 
 from app.core.idempotency import (
     advisory_lock_key,

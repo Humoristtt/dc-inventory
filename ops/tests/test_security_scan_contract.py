@@ -90,6 +90,7 @@ assert "rm -rf /var/lib/apt/lists/*" in BACKEND_DOCKERFILE
 
 assert re.search(r"libexpat=[^\s\\]+", WEB_DOCKERFILE)
 assert re.search(r"libuuid=[^\s\\]+", WEB_DOCKERFILE)
+assert re.search(r"pcre2=[^\s\\]+", WEB_DOCKERFILE)
 assert "apk add --no-cache --upgrade" in WEB_DOCKERFILE
 
 action_refs = re.findall(

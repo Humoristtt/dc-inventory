@@ -44,7 +44,7 @@ from app.modules.procurement.schemas import (
     RevisionCreate,
     UserSummaryOut,
 )
-from app.modules.procurement.service import (
+from app.modules.procurement.domain import (
     ProcurementConflictError,
     ProcurementError,
     ProcurementForbiddenError,
@@ -52,14 +52,18 @@ from app.modules.procurement.service import (
     ProcurementRecord,
     ProcurementServiceUnavailableError,
     ProcurementSummaryRecord,
+)
+from app.modules.procurement.queries import (
+    get_request_record,
+    list_managers,
+    list_requests,
+)
+from app.modules.procurement.service import (
     available_actions,
     bind_line,
     complete_acceptance,
     create_and_bind_line,
     create_request,
-    get_request_record,
-    list_managers,
-    list_requests,
     manager_accept,
     report_discrepancy,
     return_for_correction,

@@ -41,8 +41,6 @@ from app.modules.catalog.validation import (
     normalize_comparison,
     normalize_inline_text,
     normalize_optional_inline_text,
-    normalize_optional_text,
-    prepare_attribute_filter_value,
     validate_attribute_values,
 )
 from app.modules.inventory.models import (

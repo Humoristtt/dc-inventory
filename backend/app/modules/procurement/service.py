@@ -13,6 +13,7 @@ from app.core.idempotency import (
     advisory_lock_key,
     canonical_fingerprint,
 )
+from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Item
 from app.modules.catalog.service import (
     create_item,
@@ -29,22 +30,14 @@ from app.modules.procurement.actors import (
 )
 from app.modules.procurement.domain import (
     ProcurementConflictError,
-    ProcurementError,
     ProcurementForbiddenError,
     ProcurementNotFoundError,
-    ProcurementPage,
     ProcurementRecord,
-    ProcurementServiceUnavailableError,
-    ProcurementSummaryRecord,
     ProcurementValidationError,
     _normalize_client_request_id,
     _normalize_comment,
 )
-from app.modules.procurement.queries import (
-    get_request_record,
-    list_managers,
-    list_requests,
-)
+from app.modules.procurement.queries import get_request_record
 from app.modules.procurement.enums import (
     ACTIVE_PROCUREMENT_STATUSES,
     ProcurementEventType,

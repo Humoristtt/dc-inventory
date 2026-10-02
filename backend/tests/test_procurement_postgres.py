@@ -23,6 +23,7 @@ from app.modules.inventory.service import (
     create_movement,
     reverse_movement,
 )
+from app.modules.procurement.domain import MAX_AGGREGATED_ITEM_QUANTITY
 from app.modules.procurement.enums import (
     ProcurementEventType,
     ProcurementLineType,
@@ -47,7 +48,6 @@ from app.modules.procurement.schemas import (
     RevisionCreate,
 )
 from app.modules.procurement.service import (
-    MAX_AGGREGATED_ITEM_QUANTITY,
     ProcurementConflictError,
     ProcurementValidationError,
     bind_line,

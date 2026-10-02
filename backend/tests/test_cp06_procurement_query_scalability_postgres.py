@@ -22,6 +22,7 @@ from app.modules.identity.enums import UserRole
 from app.modules.procurement.enums import (
     ProcurementLineType,
 )
+from app.modules.procurement.lines import _prepare_lines
 from app.modules.procurement.schemas import (
     ExistingItemLineCreate,
     ProcurementRequestCreate,
@@ -29,7 +30,6 @@ from app.modules.procurement.schemas import (
 )
 from app.modules.procurement.service import (
     ProcurementConflictError,
-    _prepare_lines,
     create_request,
     list_requests,
 )

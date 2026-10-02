@@ -9,6 +9,7 @@ from app.modules.catalog.models import Item
 from app.modules.identity.enums import UserRole
 from app.modules.identity.policy import Capability, has_capability
 from app.modules.procurement import service as procurement_service
+from app.modules.procurement.mutation_support import _lock_and_validate_expected
 from app.modules.procurement.schemas import CorrectionRequest
 from app.modules.procurement.service import (
     ProcurementError,
@@ -70,7 +71,7 @@ async def test_cp04_actor_capability_is_rechecked_after_request_serialization(
     serialized = False
     capability_checks_after_serialization = 0
 
-    original_lock = procurement_service._lock_and_validate_expected
+    original_lock = _lock_and_validate_expected
     original_has_capability = has_capability
 
     async def wrapped_lock(*args: Any, **kwargs: Any) -> Any:

@@ -143,7 +143,7 @@ async def test_cp04_revision_required_initiator_cannot_be_blocked(
         UserAccessStatus,
         UserRole,
     )
-    from tests.test_cp01_cross_domain_regressions import create_existing_request, settings
+    from tests.test_cross_domain_regressions import create_existing_request, settings
 
     db = warehouse_db
 

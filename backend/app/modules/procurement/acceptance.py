@@ -9,10 +9,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.config import Settings
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Item
-from app.modules.catalog.service import (
-    create_item,
-    validate_item_create_payload,
-)
+from app.modules.catalog.item_validation import validate_item_create_payload
+from app.modules.catalog.mutations import create_item
 from app.modules.identity.policy import Capability
 from app.modules.inventory.enums import MovementType
 from app.modules.inventory.schemas import (

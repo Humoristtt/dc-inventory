@@ -39,10 +39,10 @@ vi.mock(
       isPending: false,
       data: {
         user: {
-          id: "cp01-admin",
+          id: "retry-admin",
           telegram_user_id: 10001,
-          username: "cp01",
-          first_name: "CP01",
+          username: "retry_user",
+          first_name: "Retry",
           last_name: null,
           role: "ADMIN",
           access_status: "APPROVED",
@@ -76,14 +76,14 @@ vi.mock(
           onChange([
             {
               line_type: "EXISTING_ITEM",
-              item_id: "cp01-item",
-              display_name: "CP01 item",
+              item_id: "retry-item",
+              display_name: "Retry item",
               quantity: 1,
             },
           ]);
         }}
       >
-        ADD_CP01_LINE
+        ADD_RETRY_LINE
       </button>
     ),
   }),
@@ -133,7 +133,7 @@ function renderPage() {
           <Route
             path="/procurement/:requestId"
             element={
-              <p>CP01_DETAIL_DESTINATION</p>
+              <p>RETRY_DETAIL_DESTINATION</p>
             }
           />
         </Routes>
@@ -149,8 +149,8 @@ beforeEach(() => {
   mocks.managers.mockResolvedValue({
     items: [
       {
-        id: "cp01-manager",
-        display_name: "Менеджер CP01",
+        id: "retry-manager",
+        display_name: "Менеджер повторной отправки",
       },
     ],
     total: 1,
@@ -165,7 +165,7 @@ beforeEach(() => {
       ),
     )
     .mockResolvedValueOnce({
-      id: "cp01-request",
+      id: "retry-request",
     });
 });
 
@@ -182,7 +182,7 @@ it(
     await screen.findByRole(
       "option",
       {
-        name: "Менеджер CP01",
+        name: "Менеджер повторной отправки",
       },
     );
 
@@ -190,7 +190,7 @@ it(
       screen.getByLabelText("Менеджер"),
       {
         target: {
-          value: "cp01-manager",
+          value: "retry-manager",
         },
       },
     );
@@ -199,7 +199,7 @@ it(
       screen.getByRole(
         "button",
         {
-          name: "ADD_CP01_LINE",
+          name: "ADD_RETRY_LINE",
         },
       ),
     );

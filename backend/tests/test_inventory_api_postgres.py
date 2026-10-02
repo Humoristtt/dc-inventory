@@ -664,14 +664,18 @@ async def test_movement_feed_uses_stable_journal_cursor(
 async def test_actor_names_use_latest_journal_snapshot(warehouse_db: AsyncSession) -> None:
     from unittest.mock import patch
 
-    from app.modules.inventory import service
+    from app.modules.inventory import movements as inventory_movements
 
     db = warehouse_db
     s = await scenario(db)
     app, users = await api_context(db)
     await move(db, s, "RECEIPT", 2, destination=s[2])
     for name in ("Zulu old", "Alpha latest"):
-        with patch.object(service, "normalize_inline_text", return_value=name):
+        with patch.object(
+            inventory_movements,
+            "normalize_inline_text",
+            return_value=name,
+        ):
             await move(
                 db,
                 (users["user"][0], *s[1:]),

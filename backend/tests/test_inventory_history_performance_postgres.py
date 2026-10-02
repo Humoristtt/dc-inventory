@@ -6,10 +6,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.inventory.enums import MovementType
-from app.modules.inventory.service import (
-    MovementCursorPage,
-    list_movements_cursor,
-)
+from app.modules.inventory.domain import MovementCursorPage
+from app.modules.inventory.queries import list_movements_cursor
 from tests.sql_capture import capture_sql
 from tests.warehouse_helpers import move, scenario
 

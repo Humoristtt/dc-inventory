@@ -159,7 +159,7 @@ async def test_read_access_and_actor_scoped_journal(warehouse_db: AsyncSession) 
     # Inject the timestamp before INSERT; the journal itself cannot be edited.
     from unittest.mock import patch
 
-    from app.modules.inventory import service
+    from app.modules.inventory import movements as inventory_movements
 
     old_timestamp = datetime.now(UTC) - timedelta(days=150)
 
@@ -169,7 +169,7 @@ async def test_read_access_and_actor_scoped_journal(warehouse_db: AsyncSession) 
         return old_timestamp
 
     with patch.object(
-        service,
+        inventory_movements,
         "_movement_timestamp",
         old_movement_timestamp,
     ):

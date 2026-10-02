@@ -15,6 +15,7 @@ from app.modules.procurement.actors import (
 )
 from app.modules.procurement.domain import (
     ProcurementConflictError,
+    ProcurementForbiddenError,
     ProcurementRecord,
     _normalize_client_request_id,
     _normalize_comment,

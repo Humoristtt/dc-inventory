@@ -97,11 +97,6 @@ async def _lock_and_require_actor_capabilities(
     actor_user_id: uuid.UUID,
     capabilities: tuple[Capability, ...],
 ) -> None:
-    from app.modules.identity.enums import (
-        UserAccessStatus,
-    )
-    from app.modules.identity.models import User
-
     actor = await db.scalar(
         select(User)
         .where(User.id == actor_user_id)

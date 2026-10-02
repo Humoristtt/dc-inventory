@@ -19,6 +19,13 @@ from app.modules.auth.dependencies import (
 from app.modules.catalog.service import CatalogError
 from app.modules.identity.policy import Capability, has_capability
 from app.modules.inventory.service import InventoryError
+from app.modules.procurement.acceptance import (
+    bind_line,
+    complete_acceptance,
+    create_and_bind_line,
+    report_discrepancy,
+)
+from app.modules.procurement.actions import available_actions
 from app.modules.procurement.domain import (
     ProcurementConflictError,
     ProcurementError,
@@ -58,14 +65,9 @@ from app.modules.procurement.schemas import (
     RevisionCreate,
     UserSummaryOut,
 )
-from app.modules.procurement.service import (
-    available_actions,
-    bind_line,
-    complete_acceptance,
-    create_and_bind_line,
+from app.modules.procurement.workflow import (
     create_request,
     manager_accept,
-    report_discrepancy,
     return_for_correction,
     submit_revision,
     take_ownership,

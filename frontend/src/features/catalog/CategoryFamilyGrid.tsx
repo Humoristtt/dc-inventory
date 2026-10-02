@@ -8,15 +8,15 @@ import type {
 
 export function CategoryFamilyGrid({
   categoryKey,
-  children,
+  categories,
 }: {
   categoryKey: string;
-  children:
+  categories:
     readonly CategorySummary[];
 }) {
   return (
     <div className="category-grid">
-      {children.map((child) => (
+      {categories.map((child) => (
         <Link
           className="category-tile"
           key={child.id}

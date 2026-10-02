@@ -26,6 +26,7 @@ import {
 } from "../../features/catalog/catalogQuery";
 import { FilterSheet } from "../../features/catalog/FilterSheet";
 import { DebouncedSearchField } from "../../features/catalog/DebouncedSearchField";
+import { CatalogErrorState } from "../../features/catalog/CatalogState";
 import {
   catalogDefaultSort,
   quickSortOptions,
@@ -264,8 +265,8 @@ export function CategoryPage() {
 
         {categoryShapeKnown && family ? (
           <CategoryFamilyGrid
+            categories={children}
             categoryKey={categoryKey}
-            children={children}
           />
         ) : null}
 

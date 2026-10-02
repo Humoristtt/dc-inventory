@@ -69,7 +69,6 @@ from app.modules.procurement.service import (
     transfer_to_acceptance,
 )
 
-
 router = APIRouter(prefix="/api/procurement", tags=["procurement"])
 
 _PROCUREMENT_CONFLICT_SQLSTATES = frozenset({"23503", "23505"})

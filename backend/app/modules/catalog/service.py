@@ -9,13 +9,10 @@ Implementation is split by responsibility:
 
 from app.modules.catalog.item_validation import (
     ItemCreateValidationContext,
-    _PreparedItemIdentity,
-    _prepare_identity,
     load_item_create_validation_context,
     validate_item_create_payload,
 )
 from app.modules.catalog.mutations import (
-    _item_attribute_rows,
     create_item,
     create_manufacturer,
     delete_unused_item,
@@ -23,9 +20,6 @@ from app.modules.catalog.mutations import (
     update_item,
 )
 from app.modules.catalog.read_service import (
-    _get_category_attributes,
-    _get_manufacturer,
-    _stored_attribute_value,
     check_duplicate_candidates,
     get_category_by_key,
     get_category_record,

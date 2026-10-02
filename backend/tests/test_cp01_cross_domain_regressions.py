@@ -37,7 +37,7 @@ from app.modules.notifications.models import NotificationOutbox
 from app.modules.notifications.service import (
     notification_dedupe_key,
 )
-from app.modules.procurement import service as procurement_service
+from app.modules.procurement import lines as procurement_lines
 from app.modules.procurement.enums import (
     ProcurementLineType,
     ProcurementStatus,
@@ -270,7 +270,7 @@ async def test_cp01_archive_and_procurement_snapshot_are_serialized(
             return attributes
 
         monkeypatch.setattr(
-            procurement_service,
+            procurement_lines,
             "load_attributes_for_items",
             paused_load_attributes_for_items,
         )

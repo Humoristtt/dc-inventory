@@ -8,7 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.modules.catalog.models import Item
 from app.modules.identity.enums import UserRole
 from app.modules.identity.policy import Capability, has_capability
+from app.modules.procurement import mutation_support as procurement_mutation_support
 from app.modules.procurement import service as procurement_service
+from app.modules.procurement import workflow as procurement_workflow
 from app.modules.procurement.mutation_support import _lock_and_validate_expected
 from app.modules.procurement.schemas import CorrectionRequest
 from app.modules.procurement.service import (
@@ -101,12 +103,12 @@ async def test_cp04_actor_capability_is_rechecked_after_request_serialization(
         )
 
     monkeypatch.setattr(
-        procurement_service,
+        procurement_workflow,
         "_lock_and_validate_expected",
         wrapped_lock,
     )
     monkeypatch.setattr(
-        procurement_service,
+        procurement_mutation_support,
         "has_capability",
         capability_after_serialization,
     )

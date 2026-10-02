@@ -1258,7 +1258,7 @@ async def test_final_acceptance_rolls_back_warehouse_and_procurement_on_late_fai
 ) -> None:
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-    import app.modules.procurement.service as procurement_service
+    import app.modules.procurement.acceptance as procurement_acceptance
     from tests.migration_helpers import alembic
 
     alembic(migration_database, "upgrade", "head")
@@ -1299,7 +1299,7 @@ async def test_final_acceptance_rolls_back_warehouse_and_procurement_on_late_fai
         raise RuntimeError("synthetic late acceptance failure")
 
     monkeypatch.setattr(
-        procurement_service,
+        procurement_acceptance,
         "enqueue_procurement_notifications",
         fail_notifications,
     )

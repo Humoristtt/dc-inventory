@@ -328,10 +328,12 @@ export function AdminUsersPage() {
               const accessMutable =
                 canManageTargetAccess(
                   user,
+                  targetPolicy,
                 );
               const pendingDecisionMutable =
                 canDecidePendingAccess(
                   user,
+                  targetPolicy,
                 );
               const historyOpen =
                 historyUserId === user.id;

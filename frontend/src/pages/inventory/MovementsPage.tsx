@@ -1,10 +1,11 @@
-import { Button, Select } from "../../shared/ui";
+import { Button } from "../../shared/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
-import { Link, Navigate, useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 
 import { useAuthState } from "../../features/auth/useAuthState";
-import { MovementAdminActions } from "../../features/inventory/MovementAdminActions";
+import { MovementFeed } from "../../features/inventory/MovementFeed";
+import { MovementFilters } from "../../features/inventory/MovementFilters";
 import {
   hasAnyCapability,
   hasCapability,
@@ -16,7 +17,6 @@ import {
   getLocations,
   getMovement,
   inventoryRequest,
-  movementLabels,
   type Movement,
   type MovementCursorPage,
 } from "../../shared/api/inventory";
@@ -236,313 +236,106 @@ export function MovementsPage() {
           <p role="alert">Движение не найдено или недоступно.</p>
         ) : null}
 
-        <div className="history-filters form-surface">
-          <label>
-            Период
-            <Select
-              value={period}
-              onChange={(event) =>
-                changeFilter(
-                  setPeriod,
-                  event.target.value,
-                )
-              }
-            >
-              {[
-                ["7d", "7 дней"],
-                ["30d", "30 дней"],
-                ["3m", "3 месяца"],
-                ["year", "Год"],
-                ["all", "Всё время"],
-              ].map(([key, label]) => (
-                <option
-                  key={key}
-                  value={key}
-                >
-                  {label}
-                </option>
-              ))}
-            </Select>
-          </label>
+        <MovementFilters
+          actor={actor}
+          actors={actors.data ?? []}
+          canReadAll={canReadAll}
+          categories={
+            hierarchy.data ?? []
+          }
+          equipment={equipment}
+          hasError={
+            actors.isError
+            || hierarchy.isError
+            || locations.isError
+          }
+          location={location}
+          locations={
+            locations.data ?? []
+          }
+          movementType={movementType}
+          onActorChange={(value) =>
+            changeFilter(
+              setActor,
+              value,
+            )
+          }
+          onEquipmentChange={(value) =>
+            changeFilter(
+              setEquipment,
+              value,
+            )
+          }
+          onLocationChange={(value) =>
+            changeFilter(
+              setLocation,
+              value,
+            )
+          }
+          onMovementTypeChange={(value) =>
+            changeFilter(
+              setMovementType,
+              value,
+            )
+          }
+          onPeriodChange={(value) =>
+            changeFilter(
+              setPeriod,
+              value,
+            )
+          }
+          onRetry={() => {
+            void actors.refetch();
+            void hierarchy.refetch();
+            void locations.refetch();
+          }}
+          period={period}
+        />
 
-          <label>
-            Тип движения
-            <Select
-              value={movementType}
-              onChange={(event) =>
-                changeFilter(
-                  setMovementType,
-                  event.target.value,
-                )
-              }
-            >
-              <option value="">
-                Все типы
-              </option>
-              {Object.entries(
-                movementLabels,
-              ).map(([key, label]) => (
-                <option
-                  key={key}
-                  value={key}
-                >
-                  {label}
-                </option>
-              ))}
-            </Select>
-          </label>
-
-          {canReadAll ? (
-            <label>
-              Сотрудник
-              <Select
-                value={actor}
-                onChange={(event) =>
-                  changeFilter(
-                    setActor,
-                    event.target.value,
-                  )
-                }
-              >
-                <option value="">
-                  Все доступные
-                </option>
-                {actors.data?.map((item) => (
-                  <option
-                    key={item.id}
-                    value={item.id}
-                  >
-                    {item.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
-          ) : null}
-
-          <label>
-            Оборудование
-            <Select
-              value={equipment}
-              onChange={(event) =>
-                changeFilter(
-                  setEquipment,
-                  event.target.value,
-                )
-              }
-            >
-              <option value="">
-                Всё оборудование
-              </option>
-
-              {hierarchy.data
-                ?.filter(
-                  (item) =>
-                    item.parent_id === null,
-                )
-                .map((family) => (
-                  <optgroup
-                    label={family.display_name}
-                    key={family.id}
-                  >
-                    <option value={family.key}>
-                      {family.display_name} — всё
-                    </option>
-
-                    {hierarchy.data
-                      .filter(
-                        (item) =>
-                          item.parent_id
-                          === family.id,
-                      )
-                      .map((leaf) => (
-                        <option
-                          value={leaf.key}
-                          key={leaf.id}
-                        >
-                          {leaf.display_name}
-                        </option>
-                      ))}
-
-                    {family.key
-                    === "transceivers" ? (
-                      <option value="long-range">
-                        Дальние
-                      </option>
-                    ) : null}
-                  </optgroup>
-                ))}
-            </Select>
-          </label>
-
-          <label>
-            Место хранения
-            <Select
-              value={location}
-              onChange={(event) =>
-                changeFilter(
-                  setLocation,
-                  event.target.value,
-                )
-              }
-            >
-              <option value="">
-                Все места
-              </option>
-              {locations.data?.map((item) => (
-                <option
-                  key={item.id}
-                  value={item.id}
-                >
-                  {item.name}
-                  {item.status === "ARCHIVED"
-                    ? " (архив)"
-                    : ""}
-                </option>
-              ))}
-            </Select>
-          </label>
-        </div>
-
-        {actors.isError
-        || hierarchy.isError
-        || locations.isError ? (
-          <p role="alert">
-            Не удалось загрузить часть фильтров.{" "}
-            <Button
-              onClick={() => {
-                void actors.refetch();
-                void hierarchy.refetch();
-                void locations.refetch();
-              }}
-            >
-              Повторить
-            </Button>
-          </p>
-        ) : null}
-
-        {!hasValidMovementLink && history.isPending ? (
-          <p role="status">
-            Загружаем журнал…
-          </p>
-        ) : null}
-
-        {!hasValidMovementLink && history.isError ? (
-          <p role="alert">
-            Не удалось загрузить журнал.{" "}
-            <Button
-              onClick={() =>
-                void history.refetch()
-              }
-            >
-              Повторить
-            </Button>
-          </p>
-        ) : null}
-
-        {!hasValidMovementLink && history.data?.items.length === 0 ? (
-          <p>
-            За выбранный период движений нет.
-          </p>
-        ) : null}
-
-        {displayedMovements.map(
-          (movement) => (
-            <article
-              className="movement-entry"
-              key={movement.id}
-              ref={movement.id === requestedMovementId ? focusedMovementRef : undefined}
-              tabIndex={movement.id === requestedMovementId ? -1 : undefined}
-            >
-              <header>
-                <span>
-                  № {movement.journal_seq}
-                </span>
-                <time
-                  dateTime={
-                    movement.occurred_at
-                  }
-                >
-                  {new Date(
-                    movement.occurred_at,
-                  ).toLocaleString("ru-RU")}
-                </time>
-              </header>
-
-              <p>
-                <strong>
-                  {
-                    movement.actor_display_name_snapshot
-                  }
-                </strong>
-                {" · "}
-                {
-                  movementLabels[
-                    movement.movement_type
-                  ]
-                }
-              </p>
-
-              <ul>
-                {movement.lines.map(
-                  (line) => (
-                    <li key={line.id}>
-                      {
-                        line.item_name_snapshot
-                      }
-                      {" — "}
-                      <strong>
-                        {line.quantity} шт.
-                      </strong>
-                    </li>
-                  ),
-                )}
-              </ul>
-
-              <p>
-                {movement.source_location_name_snapshot
-                  ? `Из: ${movement.source_location_name_snapshot}`
-                  : ""}
-                {movement.source_location_name_snapshot
-                && movement.destination_location_name_snapshot
-                  ? " → "
-                  : ""}
-                {movement.destination_location_name_snapshot
-                  ? `В: ${movement.destination_location_name_snapshot}`
-                  : ""}
-              </p>
-
-              <MovementAdminActions
-                movement={movement}
-              />
-
-              {movement.procurement_request_id ? (
-                <Link to={`/procurement/${movement.procurement_request_id}`}>
-                  Открыть закупку
-                </Link>
-              ) : null}
-            </article>
-          ),
-        )}
-
-        {!hasValidMovementLink ? <div className="warehouse-actions">
-          {cursorStack.length > 1 ? (
-            <Button
-              className="button"
-              onClick={goBack}
-            >
-              Назад
-            </Button>
-          ) : null}
-
-          {history.data?.next_cursor ? (
-            <Button
-              className="button"
-              onClick={goNext}
-            >
-              Следующая страница
-            </Button>
-          ) : null}
-        </div> : null}
+        <MovementFeed
+          cursorDepth={
+            cursorStack.length
+          }
+          displayedMovements={
+            displayedMovements
+          }
+          focusedMovementError={
+            focusedMovement.isError
+          }
+          focusedMovementPending={
+            focusedMovement.isPending
+          }
+          hasNextPage={
+            Boolean(
+              history.data
+                ?.next_cursor,
+            )
+          }
+          hasValidMovementLink={
+            hasValidMovementLink
+          }
+          historyEmpty={
+            history.data
+              ?.items.length === 0
+          }
+          historyError={
+            history.isError
+          }
+          historyPending={
+            history.isPending
+          }
+          movementRef={
+            focusedMovementRef
+          }
+          onBackPage={goBack}
+          onNextPage={goNext}
+          onRetryHistory={() =>
+            void history.refetch()
+          }
+          requestedMovementId={
+            requestedMovementId
+          }
+        />
       </div>
     </main>
   );

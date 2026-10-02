@@ -19,30 +19,9 @@ from app.modules.auth.dependencies import (
 from app.modules.catalog.service import CatalogError
 from app.modules.identity.policy import Capability, has_capability
 from app.modules.inventory.service import InventoryError
-from app.modules.procurement.acceptance import (
-    bind_line,
-    complete_acceptance,
-    create_and_bind_line,
-    report_discrepancy,
-)
-from app.modules.procurement.actions import available_actions
-from app.modules.procurement.domain import (
-    ProcurementConflictError,
-    ProcurementError,
-    ProcurementForbiddenError,
-    ProcurementNotFoundError,
-    ProcurementRecord,
-    ProcurementServiceUnavailableError,
-    ProcurementSummaryRecord,
-)
 from app.modules.procurement.email import enqueue_procurement_email
 from app.modules.procurement.enums import STATUS_LABELS
 from app.modules.procurement.models import ProcurementEvent, ProcurementRevisionLine
-from app.modules.procurement.queries import (
-    get_request_record,
-    list_managers,
-    list_requests,
-)
 from app.modules.procurement.schemas import (
     AssignmentMutation,
     CorrectionRequest,
@@ -65,9 +44,24 @@ from app.modules.procurement.schemas import (
     RevisionCreate,
     UserSummaryOut,
 )
-from app.modules.procurement.workflow import (
+from app.modules.procurement.service import (
+    ProcurementConflictError,
+    ProcurementError,
+    ProcurementForbiddenError,
+    ProcurementNotFoundError,
+    ProcurementRecord,
+    ProcurementServiceUnavailableError,
+    ProcurementSummaryRecord,
+    available_actions,
+    bind_line,
+    complete_acceptance,
+    create_and_bind_line,
     create_request,
+    get_request_record,
+    list_managers,
+    list_requests,
     manager_accept,
+    report_discrepancy,
     return_for_correction,
     submit_revision,
     take_ownership,

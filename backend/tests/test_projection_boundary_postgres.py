@@ -28,7 +28,7 @@ async def _has_reconciliation_drift(db: AsyncSession) -> bool:
     return bool((await db.execute(text(sql))).all())
 
 
-async def test_d2_service_keeps_stock_and_custody_equal_to_journal(
+async def test_service_keeps_stock_and_custody_equal_to_journal(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -93,7 +93,7 @@ async def test_d2_service_keeps_stock_and_custody_equal_to_journal(
     assert not await _has_reconciliation_drift(db)
 
 
-async def test_d2_upgrade_refuses_existing_projection_drift(
+async def test_upgrade_refuses_existing_projection_drift(
     migration_database: str,
 ) -> None:
     url = migration_database

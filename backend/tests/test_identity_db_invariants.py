@@ -15,7 +15,7 @@ from tests.warehouse_helpers import actor
 pytestmark = pytest.mark.asyncio
 
 
-async def test_cp02_owner_cannot_be_inserted_non_approved(
+async def test_owner_cannot_be_inserted_non_approved(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -30,7 +30,7 @@ async def test_cp02_owner_cannot_be_inserted_non_approved(
         await db.flush()
 
 
-async def test_cp02_existing_owner_cannot_become_non_approved(
+async def test_existing_owner_cannot_become_non_approved(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -51,7 +51,7 @@ async def test_cp02_existing_owner_cannot_become_non_approved(
         )
 
 
-async def test_cp02_direct_access_status_change_without_audit_is_rejected(
+async def test_direct_access_status_change_without_audit_is_rejected(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -77,7 +77,7 @@ async def test_cp02_direct_access_status_change_without_audit_is_rejected(
         await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
 
 
-async def test_cp02_direct_role_change_without_audit_is_rejected(
+async def test_direct_role_change_without_audit_is_rejected(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -100,7 +100,7 @@ async def test_cp02_direct_role_change_without_audit_is_rejected(
         await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
 
 
-async def test_cp02_legitimate_access_service_satisfies_db_audit_coupling(
+async def test_legitimate_access_service_satisfies_db_audit_coupling(
     warehouse_db: AsyncSession,
 ) -> None:
     from sqlalchemy import select
@@ -150,7 +150,7 @@ async def test_cp02_legitimate_access_service_satisfies_db_audit_coupling(
     assert event.db_transaction_id > 0
 
 
-async def test_cp02_legitimate_role_service_satisfies_db_audit_coupling(
+async def test_legitimate_role_service_satisfies_db_audit_coupling(
     warehouse_db: AsyncSession,
 ) -> None:
     from sqlalchemy import select

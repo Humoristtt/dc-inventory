@@ -18,7 +18,7 @@ from tests.warehouse_helpers import actor, cable_payload
 pytestmark = pytest.mark.asyncio
 
 
-async def test_f7_cannot_remove_last_required_item_attribute(
+async def test_cannot_remove_last_required_item_attribute(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -47,7 +47,7 @@ async def test_f7_cannot_remove_last_required_item_attribute(
         await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
 
 
-async def test_f7_manager_cannot_receive_custody_projection(
+async def test_manager_cannot_receive_custody_projection(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -59,7 +59,7 @@ async def test_f7_manager_cannot_receive_custody_projection(
         await db.flush()
 
 
-async def test_f7_custody_blocks_audited_demotion_at_commit_boundary(
+async def test_custody_blocks_audited_demotion_at_commit_boundary(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -84,7 +84,7 @@ async def test_f7_custody_blocks_audited_demotion_at_commit_boundary(
         await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
 
 
-async def test_f7_legitimate_catalog_replaces_required_attribute_values(
+async def test_legitimate_catalog_replaces_required_attribute_values(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -99,7 +99,7 @@ async def test_f7_legitimate_catalog_replaces_required_attribute_values(
     await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
 
 
-async def test_f7_approved_engineer_can_receive_custody(
+async def test_approved_engineer_can_receive_custody(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db

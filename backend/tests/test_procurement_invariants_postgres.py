@@ -61,7 +61,7 @@ async def _create_procurement(
     return senior, item_id, location, record
 
 
-async def test_e5_published_revision_rejects_late_line_insert(
+async def test_published_revision_rejects_late_line_insert(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -88,7 +88,7 @@ async def test_e5_published_revision_rejects_late_line_insert(
             await db.flush()
 
 
-async def test_e5_adjusted_receipt_cannot_be_bound_to_procurement(
+async def test_adjusted_receipt_cannot_be_bound_to_procurement(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db

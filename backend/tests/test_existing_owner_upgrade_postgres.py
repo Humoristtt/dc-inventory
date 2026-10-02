@@ -13,7 +13,7 @@ from tests.migration_helpers import alembic
 pytestmark = pytest.mark.asyncio
 
 
-async def test_f6_upgrade_preserves_existing_owner_and_telegram_identity(
+async def test_upgrade_preserves_existing_owner_and_telegram_identity(
     migration_database: str,
 ) -> None:
     alembic(migration_database, "upgrade", "d4e5f6a7b8c9")

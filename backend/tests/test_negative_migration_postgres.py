@@ -35,7 +35,7 @@ CURRENT = "a9c0d1e2f3a4"
         "blank_required_attribute",
     ],
 )
-async def test_a9_rejects_unverifiable_historical_snapshot(
+async def test_rejects_unverifiable_historical_snapshot(
     migration_database: str, damage: str
 ) -> None:
     url = migration_database

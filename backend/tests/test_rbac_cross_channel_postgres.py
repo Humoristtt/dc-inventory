@@ -44,7 +44,7 @@ async def _telegram_user_id(
     return telegram_user_id
 
 
-async def test_cp03_owner_can_approve_pending_admin_via_telegram(
+async def test_owner_can_approve_pending_admin_via_telegram(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -114,7 +114,7 @@ async def test_cp03_owner_can_approve_pending_admin_via_telegram(
     assert events[0].after_access_status == UserAccessStatus.APPROVED
 
 
-async def test_cp03_expired_privileged_callback_is_rejected_without_mutation(
+async def test_expired_privileged_callback_is_rejected_without_mutation(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db

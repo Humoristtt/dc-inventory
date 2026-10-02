@@ -25,7 +25,7 @@ def snapshot_value(
     return value
 
 
-async def test_cp04_historical_existing_line_uses_approved_snapshot_identity(
+async def test_historical_existing_line_uses_approved_snapshot_identity(
     migration_database: str,
 ) -> None:
     url = migration_database

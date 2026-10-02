@@ -735,7 +735,7 @@ async def test_procurement_summary_three_views_and_pagination(
         ("archived", "catalog_item_archived"),
     ],
 )
-async def test_cp06_prepare_lines_negative_existing_item(
+async def test_prepare_lines_negative_existing_item(
     warehouse_db: AsyncSession,
     case: str,
     expected_code: str,
@@ -771,7 +771,7 @@ async def test_cp06_prepare_lines_negative_existing_item(
         ("required", "required_attribute_missing"),
     ],
 )
-async def test_cp06_prepare_lines_negative_proposed_item(
+async def test_prepare_lines_negative_proposed_item(
     warehouse_db: AsyncSession,
     case: str,
     expected_code: str,
@@ -806,7 +806,7 @@ async def test_cp06_prepare_lines_negative_proposed_item(
     assert error.value.code == expected_code
 
 
-async def test_cp06_prepare_lines_negative_input_order(
+async def test_prepare_lines_negative_input_order(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db

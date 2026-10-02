@@ -32,7 +32,7 @@ pytestmark = pytest.mark.asyncio
     "raw",
     ["1000.0000000000", "123000.0000000000", "0.0000001000", "-25.5000000000"],
 )
-async def test_f8_decimal_identity_matches_postgres(
+async def test_decimal_identity_matches_postgres(
     warehouse_db: AsyncSession, raw: str
 ) -> None:
     actual = await warehouse_db.scalar(
@@ -42,7 +42,7 @@ async def test_f8_decimal_identity_matches_postgres(
     assert actual == decimal_identity_text(Decimal(raw))
 
 
-async def test_f8_comparison_normalization_matches_postgres(
+async def test_comparison_normalization_matches_postgres(
     warehouse_db: AsyncSession,
 ) -> None:
     raw = "  Straße   MÖDEL  "
@@ -53,7 +53,7 @@ async def test_f8_comparison_normalization_matches_postgres(
     assert actual == normalize_comparison(raw)
 
 
-async def test_f8_nfkc_identity_normalization_matches_postgres(
+async def test_nfkc_identity_normalization_matches_postgres(
     warehouse_db: AsyncSession,
 ) -> None:
     raw = "  Ｆｏｏ   Straße  "
@@ -79,7 +79,7 @@ async def _assert_signatures_match(db: AsyncSession, item_id: uuid.UUID) -> None
     assert actual == expected == record.item.identity_signature
 
 
-async def test_f8_normal_create_matches_database_signature(
+async def test_normal_create_matches_database_signature(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -88,7 +88,7 @@ async def test_f8_normal_create_matches_database_signature(
     await _assert_signatures_match(db, item_id)
 
 
-async def test_f8_normal_catalog_update_preserves_identity_invariant(
+async def test_normal_catalog_update_preserves_identity_invariant(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -104,7 +104,7 @@ async def test_f8_normal_catalog_update_preserves_identity_invariant(
     await _assert_signatures_match(db, item_id)
 
 
-async def test_f8_rejects_forged_derived_name(
+async def test_rejects_forged_derived_name(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -129,7 +129,7 @@ async def test_f8_rejects_forged_derived_name(
     ) == original
 
 
-async def test_f8_rejects_direct_eav_change_with_stale_signature(
+async def test_rejects_direct_eav_change_with_stale_signature(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db

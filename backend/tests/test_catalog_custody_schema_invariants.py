@@ -29,7 +29,7 @@ from tests.warehouse_helpers import actor, cable_payload
 pytestmark = pytest.mark.asyncio
 
 
-async def test_cp02_required_catalog_attribute_cannot_be_deleted(
+async def test_required_catalog_attribute_cannot_be_deleted(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -74,7 +74,7 @@ async def test_cp02_required_catalog_attribute_cannot_be_deleted(
         await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
 
 
-async def test_cp02_ineligible_role_cannot_receive_custody_projection(
+async def test_ineligible_role_cannot_receive_custody_projection(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -102,7 +102,7 @@ async def test_cp02_ineligible_role_cannot_receive_custody_projection(
         await db.flush()
 
 
-async def test_cp02_existing_custody_blocks_audited_role_demotion_at_db_boundary(
+async def test_existing_custody_blocks_audited_role_demotion_at_db_boundary(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -152,7 +152,7 @@ async def test_cp02_existing_custody_blocks_audited_role_demotion_at_db_boundary
         await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
 
 
-async def test_cp02_readiness_rejects_missing_critical_db_trigger(
+async def test_readiness_rejects_missing_critical_db_trigger(
     migration_database: str,
 ) -> None:
     from tests.migration_helpers import alembic
@@ -181,7 +181,7 @@ async def test_cp02_readiness_rejects_missing_critical_db_trigger(
         await engine.dispose()
 
 
-async def test_cp02_catalog_update_can_replace_required_eav_rows(
+async def test_catalog_update_can_replace_required_eav_rows(
     warehouse_db: AsyncSession,
 ) -> None:
     from app.modules.catalog.schemas import ItemPatch
@@ -204,7 +204,7 @@ async def test_cp02_catalog_update_can_replace_required_eav_rows(
     await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
 
 
-async def test_cp02_eligible_user_can_receive_custody_projection(
+async def test_eligible_user_can_receive_custody_projection(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db

@@ -223,7 +223,7 @@ async def move_to_acceptance(
     return record
 
 
-async def test_cp01_admin_cannot_approve_pending_admin_via_telegram(
+async def test_admin_cannot_approve_pending_admin_via_telegram(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -271,7 +271,7 @@ async def test_cp01_admin_cannot_approve_pending_admin_via_telegram(
     assert target.access_status == UserAccessStatus.PENDING
 
 
-async def test_cp01_proposed_line_rejects_mismatched_existing_item_binding(
+async def test_proposed_line_rejects_mismatched_existing_item_binding(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -304,7 +304,7 @@ async def test_cp01_proposed_line_rejects_mismatched_existing_item_binding(
         )
 
 
-async def test_cp01_create_and_bind_rejects_payload_mismatching_approved_snapshot(
+async def test_create_and_bind_rejects_payload_mismatching_approved_snapshot(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -340,7 +340,7 @@ async def test_cp01_create_and_bind_rejects_payload_mismatching_approved_snapsho
     assert int(await db.scalar(select(func.count()).select_from(Item)) or 0) == item_count_before
 
 
-async def test_cp01_existing_item_identity_change_blocks_final_acceptance(
+async def test_existing_item_identity_change_blocks_final_acceptance(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -386,7 +386,7 @@ async def test_cp01_existing_item_identity_change_blocks_final_acceptance(
     assert int(await db.scalar(select(func.count(Movement.id))) or 0) == movement_count_before
 
 
-async def test_cp01_committed_revision_rejects_late_line_insert(
+async def test_committed_revision_rejects_late_line_insert(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -423,7 +423,7 @@ async def test_cp01_committed_revision_rejects_late_line_insert(
             await db.flush()
 
 
-async def test_cp01_adjusted_movement_cannot_later_become_final_procurement_receipt(
+async def test_adjusted_movement_cannot_later_become_final_procurement_receipt(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db

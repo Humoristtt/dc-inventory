@@ -105,7 +105,7 @@ async def create_existing_request(
     return initiator, manager, item_id, record
 
 
-async def test_cp01_procurement_notification_requires_current_read_capability(
+async def test_procurement_notification_requires_current_read_capability(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -149,7 +149,7 @@ async def test_cp01_procurement_notification_requires_current_read_capability(
     assert leaked is None
 
 
-async def test_cp01_revision_required_initiator_cannot_be_left_without_create_capability(
+async def test_revision_required_initiator_cannot_be_left_without_create_capability(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -208,7 +208,7 @@ async def test_cp01_revision_required_initiator_cannot_be_left_without_create_ca
     )
 
 
-async def test_cp01_archive_and_procurement_snapshot_are_serialized(
+async def test_archive_and_procurement_snapshot_are_serialized(
     migration_database: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

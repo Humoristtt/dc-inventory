@@ -70,7 +70,7 @@ async def proposed_request(
     return record, acceptor, item
 
 
-async def test_a9_existing_line_stores_approved_signature(
+async def test_existing_line_stores_approved_signature(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -80,7 +80,7 @@ async def test_a9_existing_line_stores_approved_signature(
     assert record.current_revision.lines[0].expected_identity_signature == item.identity_signature
 
 
-async def test_a9_bind_rejects_different_catalog_identity(
+async def test_bind_rejects_different_catalog_identity(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -108,7 +108,7 @@ async def test_a9_bind_rejects_different_catalog_identity(
     assert line.binding is None
 
 
-async def test_a9_create_and_bind_rejects_mismatched_item_without_commit(
+async def test_create_and_bind_rejects_mismatched_item_without_commit(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -136,7 +136,7 @@ async def test_a9_create_and_bind_rejects_mismatched_item_without_commit(
     assert await db.scalar(select(func.count(Item.id))) == count_before
 
 
-async def test_a9_create_and_bind_accepts_exact_approved_item(
+async def test_create_and_bind_accepts_exact_approved_item(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -161,7 +161,7 @@ async def test_a9_create_and_bind_accepts_exact_approved_item(
     assert created.identity_signature == line.expected_identity_signature
 
 
-async def test_a9_receipt_rejects_existing_item_mutated_after_approval(
+async def test_receipt_rejects_existing_item_mutated_after_approval(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -193,7 +193,7 @@ async def test_a9_receipt_rejects_existing_item_mutated_after_approval(
     assert record.request.final_movement_id is None
 
 
-async def test_a9_receipt_rejects_bound_proposed_item_mutated_after_binding(
+async def test_receipt_rejects_bound_proposed_item_mutated_after_binding(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -247,7 +247,7 @@ async def test_a9_receipt_rejects_bound_proposed_item_mutated_after_binding(
     assert record.request.final_movement_id is None
 
 
-async def test_a9_existing_snapshot_holds_item_lock_until_transaction_end(
+async def test_existing_snapshot_holds_item_lock_until_transaction_end(
     migration_database: str,
 ) -> None:
     url = migration_database

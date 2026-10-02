@@ -17,7 +17,7 @@ pytestmark = pytest.mark.asyncio
 MAX_FULL_FACET_SELECTS = 10
 
 
-async def test_cp06_catalog_list_stock_and_facet_scalability(
+async def test_catalog_list_stock_and_facet_scalability(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db

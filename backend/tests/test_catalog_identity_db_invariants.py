@@ -40,7 +40,7 @@ async def _expected_signature(
     )
 
 
-async def test_cp02_direct_name_change_cannot_leave_normalized_name_stale(
+async def test_direct_name_change_cannot_leave_normalized_name_stale(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -68,7 +68,7 @@ async def test_cp02_direct_name_change_cannot_leave_normalized_name_stale(
             assert actual == expected
 
 
-async def test_cp02_direct_normalized_name_change_cannot_diverge_from_name(
+async def test_direct_normalized_name_change_cannot_diverge_from_name(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -101,7 +101,7 @@ async def test_cp02_direct_normalized_name_change_cannot_diverge_from_name(
             assert actual == expected
 
 
-async def test_cp02_direct_model_change_cannot_leave_identity_stale(
+async def test_direct_model_change_cannot_leave_identity_stale(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -139,7 +139,7 @@ async def test_cp02_direct_model_change_cannot_leave_identity_stale(
             assert record.item.identity_signature == expected_signature
 
 
-async def test_cp02_direct_eav_change_cannot_leave_identity_signature_stale(
+async def test_direct_eav_change_cannot_leave_identity_signature_stale(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -194,7 +194,7 @@ async def test_cp02_direct_eav_change_cannot_leave_identity_signature_stale(
             assert actual_signature == expected_signature
 
 
-async def test_cp02_direct_identity_signature_change_cannot_diverge_from_data(
+async def test_direct_identity_signature_change_cannot_diverge_from_data(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -236,7 +236,7 @@ async def test_cp02_direct_identity_signature_change_cannot_diverge_from_data(
         "-25.5000000000",
     ],
 )
-async def test_cp02_decimal_identity_python_and_db_match(
+async def test_decimal_identity_python_and_db_match(
     warehouse_db: AsyncSession,
     raw: str,
 ) -> None:
@@ -262,7 +262,7 @@ async def test_cp02_decimal_identity_python_and_db_match(
     assert database_value == python_value
 
 
-async def test_cp02_normal_catalog_service_satisfies_identity_guard(
+async def test_normal_catalog_service_satisfies_identity_guard(
     warehouse_db: AsyncSession,
 ) -> None:
     from app.modules.catalog.schemas import ItemPatch
@@ -350,7 +350,7 @@ async def test_cp02_normal_catalog_service_satisfies_identity_guard(
     )
 
 
-async def test_cp02_readiness_rejects_missing_identity_helper_function(
+async def test_readiness_rejects_missing_identity_helper_function(
     migration_database: str,
 ) -> None:
     from sqlalchemy.ext.asyncio import (

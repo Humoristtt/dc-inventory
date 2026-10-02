@@ -26,7 +26,7 @@ from tests.warehouse_helpers import actor
 pytestmark = pytest.mark.asyncio
 
 
-async def test_cp04_revision_line_persists_expected_identity_signature(
+async def test_revision_line_persists_expected_identity_signature(
     warehouse_db: AsyncSession,
 ) -> None:
     db = warehouse_db
@@ -55,7 +55,7 @@ async def test_cp04_revision_line_persists_expected_identity_signature(
     )
 
 
-async def test_cp04_actor_capability_is_rechecked_after_request_serialization(
+async def test_actor_capability_is_rechecked_after_request_serialization(
     warehouse_db: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -132,7 +132,7 @@ async def test_cp04_actor_capability_is_rechecked_after_request_serialization(
     assert record.request.status.value == "AGREEMENT_PENDING_MANAGER"
 
 
-async def test_cp04_revision_required_initiator_cannot_be_blocked(
+async def test_revision_required_initiator_cannot_be_blocked(
     warehouse_db: AsyncSession,
 ) -> None:
     from app.modules.identity.admin_service import (

@@ -24,10 +24,8 @@ from app.modules.catalog.query_types import (
     CatalogQuerySpec,
     InventorySummary,
 )
-from app.modules.catalog.service import (
-    ItemRecord,
-    load_attributes_for_items,
-)
+from app.modules.catalog.read_service import load_attributes_for_items
+from app.modules.catalog.records import ItemRecord
 from app.modules.inventory.models import StockBalance
 
 

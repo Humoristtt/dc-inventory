@@ -135,9 +135,7 @@ export function useItemFormMutations({
           }
 
           return {
-            kind:
-              "procurement"
-              as const,
+            kind: "procurement" as const,
             saved:
               await createAndBindProcurementLine(
                 procurement,

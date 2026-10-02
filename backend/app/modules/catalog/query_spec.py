@@ -29,7 +29,7 @@ from app.modules.catalog.query_types import (
     AttributeFilter,
     CatalogQuerySpec,
 )
-from app.modules.catalog.service import get_category_by_key
+from app.modules.catalog.read_service import get_category_by_key
 from app.modules.catalog.validation import (
     CatalogValidationError,
     normalize_comparison,

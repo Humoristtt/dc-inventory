@@ -165,7 +165,7 @@ const requiredFormSurfaces = [
   "pages/catalog/ItemFormPage.tsx",
   "features/admin/AdminUserFilters.tsx",
   "pages/inventory/LocationsPage.tsx",
-  "pages/inventory/MovementsPage.tsx",
+  "features/inventory/MovementFilters.tsx",
   "features/inventory/ItemInventoryPanel.tsx",
   "pages/procurement/ProcurementCreatePage.tsx",
   "features/procurement/ProcurementDialog.tsx",

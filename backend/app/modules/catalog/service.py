@@ -62,8 +62,6 @@ __all__ = (
     "CatalogNotFoundError",
     "CatalogSchemaError",
     "CatalogValidationError",
-    "normalize_optional_text",
-    "prepare_attribute_filter_value",
 )
 
 

@@ -48,11 +48,13 @@ from app.modules.catalog.query_types import (
     InventorySummary,
 )
 from app.modules.catalog.service import (
-    CatalogSchemaError,
-    CatalogValidationError,
     ItemRecord,
     get_category_by_key,
     load_attributes_for_items,
+)
+from app.modules.catalog.validation import (
+    CatalogSchemaError,
+    CatalogValidationError,
     normalize_comparison,
     prepare_attribute_filter_value,
 )

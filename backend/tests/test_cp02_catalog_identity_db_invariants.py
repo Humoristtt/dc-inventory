@@ -19,8 +19,8 @@ from app.modules.catalog.normalization import item_signature
 from app.modules.catalog.service import (
     create_item,
     get_item_record,
-    normalize_comparison,
 )
+from app.modules.catalog.validation import normalize_comparison
 from tests.warehouse_helpers import cable_payload
 
 pytestmark = pytest.mark.asyncio

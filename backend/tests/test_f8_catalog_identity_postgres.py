@@ -20,9 +20,9 @@ from app.modules.catalog.schemas import ItemPatch
 from app.modules.catalog.service import (
     create_item,
     get_item_record,
-    normalize_comparison,
     update_item,
 )
+from app.modules.catalog.validation import normalize_comparison
 from tests.warehouse_helpers import cable_payload
 
 pytestmark = pytest.mark.asyncio

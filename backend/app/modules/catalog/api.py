@@ -20,12 +20,14 @@ from app.modules.catalog.configuration import MANUFACTURED_LEAVES
 from app.modules.catalog.enums import ItemStatus
 from app.modules.catalog.models import Category, CategoryAttribute, Manufacturer
 from app.modules.catalog.query import (
-    CatalogListRecord,
-    CatalogQuerySpec,
-    FacetRecord,
     build_catalog_query_spec,
     query_catalog_facets,
     query_catalog_items,
+)
+from app.modules.catalog.query_types import (
+    CatalogListRecord,
+    CatalogQuerySpec,
+    FacetRecord,
 )
 from app.modules.catalog.schemas import (
     CategoryAttributeOut,

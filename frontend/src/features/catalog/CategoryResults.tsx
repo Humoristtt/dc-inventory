@@ -341,7 +341,11 @@ export function CategoryResults({
           }
 
           <EquipmentList
-            attributes={attributes}
+            attributes={
+              attributes
+                ? [...attributes]
+                : undefined
+            }
             items={[...items]}
             returnTo={returnTo}
           />

@@ -25,12 +25,15 @@ from app.modules.catalog.service import (
     load_item_create_validation_context,
     validate_item_create_payload,
 )
-from app.modules.identity.enums import UserAccessStatus, UserRole
-from app.modules.identity.models import TelegramIdentity, User
+from app.modules.identity.models import User
 from app.modules.identity.policy import Capability, has_capability
 from app.modules.inventory.enums import MovementType
 from app.modules.inventory.schemas import MovementCreate, MovementLineCreate
 from app.modules.inventory.service import create_movement
+from app.modules.procurement.actors import (
+    _actor_snapshot,
+    _validate_manager,
+)
 from app.modules.procurement.domain import (
     MAX_AGGREGATED_ITEM_QUANTITY,
     ProcurementConflictError,
@@ -42,7 +45,6 @@ from app.modules.procurement.domain import (
     ProcurementServiceUnavailableError,
     ProcurementSummaryRecord,
     ProcurementValidationError,
-    _display_name,
     _normalize_client_request_id,
     _normalize_comment,
 )

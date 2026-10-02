@@ -7,9 +7,9 @@ from sqlalchemy.exc import DBAPIError
 
 from app.main import app as application
 from app.modules.inventory.api import _raise_retryable_db_conflict
-from app.modules.inventory.schemas import MovementCreate, MovementLineCreate
 from app.modules.inventory.domain import InventoryValidationError
 from app.modules.inventory.movements import validate_positions
+from app.modules.inventory.schemas import MovementCreate, MovementLineCreate
 
 
 @pytest.mark.parametrize("quantity", [True, 1.5, "1", 0, -1, 2**53])

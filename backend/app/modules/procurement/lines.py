@@ -10,10 +10,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
 from app.modules.catalog.enums import ItemStatus
-from app.modules.catalog.models import Item
-from app.modules.catalog.schemas import ItemCreate
 from app.modules.catalog.item_validation import load_item_create_validation_context
+from app.modules.catalog.models import Item
 from app.modules.catalog.read_service import load_attributes_for_items
+from app.modules.catalog.schemas import ItemCreate
 from app.modules.procurement.domain import (
     MAX_AGGREGATED_ITEM_QUANTITY,
     ProcurementConflictError,

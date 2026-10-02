@@ -19,6 +19,12 @@ from app.modules.catalog.models import (
     ItemAttributeValue,
     Manufacturer,
 )
+from app.modules.catalog.schemas import (
+    DuplicateCheckRequest,
+    ItemCreate,
+    ItemPatch,
+    ManufacturerCreate,
+)
 from app.modules.catalog.validation import (
     MAX_DECIMAL_INTEGRAL_DIGITS,
     MAX_DECIMAL_SCALE,
@@ -38,12 +44,6 @@ from app.modules.catalog.validation import (
     normalize_optional_text,
     prepare_attribute_filter_value,
     validate_attribute_values,
-)
-from app.modules.catalog.schemas import (
-    DuplicateCheckRequest,
-    ItemCreate,
-    ItemPatch,
-    ManufacturerCreate,
 )
 from app.modules.inventory.models import (
     MovementLine,

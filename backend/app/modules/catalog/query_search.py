@@ -30,6 +30,7 @@ from app.modules.catalog.validation import (
     MIN_SAFE_INTEGER,
 )
 
+
 def _escaped_like_fragment(value: str) -> str:
     return (
         value.replace("\\", "\\\\")

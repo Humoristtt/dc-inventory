@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import re
 import uuid
 from collections import defaultdict
 from collections.abc import Sequence
-from decimal import Decimal
 from typing import Any, cast
 
-from sqlalchemy import Numeric, case, exists, func, literal, or_, select
+from sqlalchemy import Numeric, exists, func, literal, or_, select
 from sqlalchemy import cast as sql_cast
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -29,14 +27,6 @@ from app.modules.catalog.models import (
     ItemAttributeValue,
     Manufacturer,
 )
-from app.modules.catalog.service import (
-    CatalogSchemaError,
-    CatalogValidationError,
-    get_category_by_key,
-    load_attributes_for_items,
-    normalize_comparison,
-    prepare_attribute_filter_value,
-)
 from app.modules.catalog.query_search import (
     _search_predicate,
     _search_relevance_score,
@@ -46,12 +36,28 @@ from app.modules.catalog.query_types import (
     CatalogItemPage,
     CatalogListRecord,
     CatalogQuerySpec,
+    DEFAULT_FACET_VALUE_LIMIT,
+    MAX_FACET_VALUE_LIMIT,
+    MAX_FILTER_EXPRESSION_LENGTH,
+    MAX_QUERY_VALUES,
+    MAX_SEARCH_TOKENS,
     FacetBound,
     FacetRecord,
+    FacetValue,
     FacetValueRecord,
     InventorySummary,
 )
+from app.modules.catalog.service import (
+    CatalogSchemaError,
+    CatalogValidationError,
+    ItemRecord,
+    get_category_by_key,
+    load_attributes_for_items,
+    normalize_comparison,
+    prepare_attribute_filter_value,
+)
 from app.modules.inventory.models import Location, StockBalance
+
 
 def _parse_controlled_enum(
     raw_value: str,

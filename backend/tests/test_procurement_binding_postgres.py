@@ -220,7 +220,7 @@ async def test_receipt_rejects_bound_proposed_item_mutated_after_binding(
         db,
         LocationCreate(
             code=uuid.uuid4().hex,
-            name="a9 isolated receipt regression",
+            name="isolated receipt regression",
             location_type="WAREHOUSE",
         ),
     )

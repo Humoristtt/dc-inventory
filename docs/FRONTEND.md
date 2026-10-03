@@ -46,7 +46,7 @@ SDK лежит локально в `frontend/public/vendor/telegram/telegram-web
 
 ## 4. Routing
 
-Routes определены в `frontend/src/app/App.tsx`, lazy loaders — в `frontend/src/app/routeModules.ts`.
+Canonical route registry находится в `frontend/src/app/appRoutes.ts`. Он задаёт path, lazy loader/component и optional primary-navigation metadata. `App.tsx`, preload logic и `ApplicationShell.tsx` используют один и тот же registry.
 
 Текущие маршруты:
 
@@ -65,18 +65,9 @@ Routes определены в `frontend/src/app/App.tsx`, lazy loaders — в `
 /more/users
 ```
 
-Unknown route перенаправляется на `/catalog`.
+Unknown route перенаправляется на общий `APP_DEFAULT_PATH` (`/catalog`). Active matching, visibility primary navigation и route preload также выводятся из `appRoutes.ts`.
 
-### Текущий maintainability risk
-
-Route knowledge дублируется:
-
-- render registry в `App.tsx`;
-- preload matcher в `routeModules.ts`;
-- primary navigation и active matching в `ApplicationShell.tsx`;
-- default/back route в `useTelegramNavigation.ts`.
-
-Это зафиксировано как F-02 в [CURRENT_STATE_AUDIT.md](CURRENT_STATE_AUDIT.md). Пока refactor не выполнен, изменение route требует синхронной проверки всех четырёх мест.
+`routeModules.ts` содержит только lazy import functions и не является вторым registry маршрутов. Это закрывает прежний F-02 maintainability finding.
 
 ## 5. Telegram navigation
 
@@ -171,27 +162,27 @@ Escape guard:
 - raw ≤ 310000 bytes;
 - gzip ≤ 100000 bytes.
 
-На audited baseline:
+На текущем audited baseline:
 
 ```text
-initial JS = 285273 bytes
-gzip       = 89245 bytes
+initial JS = 287575 bytes
+gzip       = 90127 bytes
 ```
 
 Это CI measurement конкретного baseline, не SLA пользовательской задержки.
 
-## 12. Current component hotspots
+## 12. Component boundaries
 
-Крупные orchestration components:
+Прежние крупные orchestration hotspots декомпозированы behavior-preserving change-set:
 
-- ItemFormPage;
-- AdminUsersPage;
-- ProcurementDetailPage;
-- LineComposer;
-- MovementsPage;
-- CategoryPage.
+- `ItemFormPage.tsx` — 434 строки;
+- `AdminUsersPage.tsx` — 461;
+- `ProcurementDetailPage.tsx` — 430;
+- `LineComposer.tsx` — 318;
+- `MovementsPage.tsx` — 343;
+- `CategoryPage.tsx` — 408.
 
-Они покрыты regressions, но при дальнейшем развитии их следует декомпозировать по hooks/domain sections без изменения transaction/idempotency semantics.
+Вынесенные filters/feed/results/family-grid/catalog-data hooks/components остаются feature-owned. При дальнейшем росте сохраняется тот же принцип: route/page отвечает за orchestration, reusable domain/presentation logic живёт в отдельном owning module.
 
 ## 13. Проверки
 

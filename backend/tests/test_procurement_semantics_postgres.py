@@ -119,7 +119,7 @@ async def test_actor_capability_is_rechecked_after_request_serialization(
             record.request.id,
             expected(
                 record,
-                "cp04-post-lock-capability",
+                "procurement-semantics-post-lock-capability",
             ),
             actor_user_id=manager.id,
         )
@@ -164,8 +164,8 @@ async def test_revision_required_initiator_cannot_be_blocked(
         CorrectionRequest(
             expected_state_version=(record.request.state_version),
             expected_revision_id=(record.request.current_revision_id),
-            client_request_id=(f"cp04-access-lifecycle-{record.request.id}"),
-            comment="CP04 lifecycle guard",
+            client_request_id=(f"procurement-semantics-access-lifecycle-{record.request.id}"),
+            comment="Procurement semantics lifecycle guard",
         ),
         actor_user_id=manager.id,
         settings=settings(),

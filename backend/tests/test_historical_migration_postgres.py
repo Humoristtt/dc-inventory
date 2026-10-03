@@ -54,7 +54,7 @@ async def test_historical_existing_line_uses_approved_snapshot_identity(
 
         current_signature = record.item.identity_signature
 
-        approved_model = "CP04 historical approved model"
+        approved_model = "historical approved model"
 
         approved_signature = item_signature(
             record.category.key,
@@ -156,10 +156,10 @@ async def test_historical_existing_line_uses_approved_snapshot_identity(
             ),
             {
                 "request_id": request_id,
-                "request_number": ("PR-CP04-HIST-" + uuid.uuid4().hex[:12]),
+                "request_number": ("PR-HIST-" + uuid.uuid4().hex[:12]),
                 "initiator_id": initiator_id,
                 "manager_id": manager_id,
-                "client_request_id": ("cp04-historical-" + uuid.uuid4().hex),
+                "client_request_id": ("historical-migration-" + uuid.uuid4().hex),
                 "request_fingerprint": "f" * 64,
                 "revision_id": revision_id,
             },
@@ -182,7 +182,7 @@ async def test_historical_existing_line_uses_approved_snapshot_identity(
                     :request_id,
                     1,
                     :initiator_id,
-                    'CP04 historical actor',
+                    'historical migration actor',
                     NULL,
                     1
                 )

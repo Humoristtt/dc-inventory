@@ -102,7 +102,7 @@ async def test_procurement_list_summary_does_not_load_full_history(
         db,
         ProcurementRequestCreate(
             assigned_manager_user_id=manager_id,
-            general_comment="CP06 summary query",
+            general_comment="PROCUREMENT_SCALE summary query",
             client_request_id=uuid.uuid4().hex,
             lines=[
                 ExistingItemLineCreate(
@@ -144,13 +144,13 @@ async def test_procurement_list_summary_does_not_load_full_history(
     ]
 
     assert not history_statements, (
-        "CP06 summary list must not load full "
+        "PROCUREMENT_SCALE summary list must not load full "
         "Procurement history; "
         f"history_sql={history_statements}"
     )
 
     assert len(statements) <= 4, (
-        "CP06 Procurement summary query count "
+        "PROCUREMENT_SCALE Procurement summary query count "
         "must remain bounded; "
         f"queries={len(statements)} "
         f"sql={lowered}"
@@ -238,14 +238,14 @@ async def test_prepare_lines_query_count_is_bounded_by_metadata_not_line_count(
     allowed = baseline + 6
 
     assert counts[100] <= allowed, (
-        "CP06 prepare-lines query count must stay "
+        "PROCUREMENT_SCALE prepare-lines query count must stay "
         "bounded as line count grows; "
         f"mode={mode} counts={counts} "
         f"allowed={allowed}"
     )
 
     assert counts[500] <= allowed, (
-        "CP06 prepare-lines query count must stay "
+        "PROCUREMENT_SCALE prepare-lines query count must stay "
         "bounded as line count grows; "
         f"mode={mode} counts={counts} "
         f"allowed={allowed}"
@@ -323,7 +323,7 @@ async def test_prepare_lines_500_distinct_existing_items(
             assert row.display_snapshot["attributes"]["color"] == expected_colors[row_item_id]
 
     print(
-        f"CP06_DISTINCT_EXISTING_COUNTS={counts}",
+        f"PROCUREMENT_SCALE_DISTINCT_EXISTING_COUNTS={counts}",
         flush=True,
     )
 
@@ -341,13 +341,13 @@ async def test_prepare_lines_500_mixed_proposed_items(
     manufacturers = [
         Manufacturer(
             id=uuid.uuid4(),
-            name=f"CP06 Alpha {suffix}",
-            normalized_name=f"cp06 alpha {suffix}",
+            name=f"PROCUREMENT_SCALE Alpha {suffix}",
+            normalized_name=f"procurement_scale alpha {suffix}",
         ),
         Manufacturer(
             id=uuid.uuid4(),
-            name=f"CP06 Beta {suffix}",
-            normalized_name=f"cp06 beta {suffix}",
+            name=f"PROCUREMENT_SCALE Beta {suffix}",
+            normalized_name=f"procurement_scale beta {suffix}",
         ),
     ]
 
@@ -368,14 +368,14 @@ async def test_prepare_lines_500_mixed_proposed_items(
         ItemCreate(
             category_key="optical_patch_cord",
             manufacturer_id=first_id,
-            name="CP06 MMF patch cord",
+            name="PROCUREMENT_SCALE MMF patch cord",
             model="OM4-5",
             attributes=cable_a.attributes,
         ),
         ItemCreate(
             category_key="optical_splitter",
             manufacturer_id=second_id,
-            name="CP06 splitter 1",
+            name="PROCUREMENT_SCALE splitter 1",
             model="SPLIT-12",
             attributes={
                 "type": "PLC",
@@ -390,14 +390,14 @@ async def test_prepare_lines_500_mixed_proposed_items(
         ItemCreate(
             category_key="optical_patch_cord",
             manufacturer_id=second_id,
-            name="CP06 SMF patch cord",
+            name="PROCUREMENT_SCALE SMF patch cord",
             model="OS2-75",
             attributes=cable_b.attributes,
         ),
         ItemCreate(
             category_key="optical_splitter",
             manufacturer_id=first_id,
-            name="CP06 splitter 2",
+            name="PROCUREMENT_SCALE splitter 2",
             model="SPLIT-14",
             attributes={
                 "type": "PLC",
@@ -474,7 +474,7 @@ async def test_prepare_lines_500_mixed_proposed_items(
             assert snapshot["attributes"] == expected_attributes
 
     print(
-        f"CP06_MIXED_PROPOSED_COUNTS={counts}",
+        f"PROCUREMENT_SCALE_MIXED_PROPOSED_COUNTS={counts}",
         flush=True,
     )
 
@@ -518,7 +518,7 @@ async def test_procurement_summary_three_views_and_pagination(
             db,
             ProcurementRequestCreate(
                 assigned_manager_user_id=manager_id,
-                general_comment="CP06 summary pagination",
+                general_comment="PROCUREMENT_SCALE summary pagination",
                 client_request_id=uuid.uuid4().hex,
                 lines=[
                     ExistingItemLineCreate(
@@ -688,7 +688,7 @@ async def test_procurement_summary_three_views_and_pagination(
         )
 
         print(
-            f"CP06_SUMMARY_VIEW={view} "
+            f"PROCUREMENT_SCALE_SUMMARY_VIEW={view} "
             f"OFFSET={offset} "
             f"SELECTS={len(statements)} "
             f"ITEMS={len(parsed.items)} "
@@ -782,7 +782,7 @@ async def test_prepare_lines_negative_proposed_item(
     attributes = dict(template.attributes)
 
     if case == "unknown":
-        attributes["cp06_nonexistent_attribute"] = "invalid"
+        attributes["procurement_scale_nonexistent_attribute"] = "invalid"
     else:
         attributes.pop("fiber")
 
@@ -814,7 +814,7 @@ async def test_prepare_lines_negative_input_order(
     template = cable_payload()
 
     invalid_attributes = dict(template.attributes)
-    invalid_attributes["cp06_nonexistent_attribute"] = "invalid"
+    invalid_attributes["procurement_scale_nonexistent_attribute"] = "invalid"
 
     invalid_proposed = ProposedItemLineCreate(
         line_type=ProcurementLineType.PROPOSED_ITEM,
@@ -851,6 +851,6 @@ async def test_prepare_lines_negative_input_order(
     assert second_error.value.code == "unknown_attribute"
 
     print(
-        "CP06_NEGATIVE_ERROR_ORDER=PASS",
+        "PROCUREMENT_SCALE_NEGATIVE_ERROR_ORDER=PASS",
         flush=True,
     )

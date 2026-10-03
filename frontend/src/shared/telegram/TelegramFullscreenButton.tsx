@@ -1,3 +1,4 @@
+import { Button } from "../ui";
 import {
   useEffect,
   useState,
@@ -53,7 +54,7 @@ export function TelegramFullscreenButton() {
     : "На весь экран";
 
   return (
-    <button
+    <Button
       aria-label={label}
       className="telegram-fullscreen-button"
       onClick={() => {
@@ -93,6 +94,6 @@ export function TelegramFullscreenButton() {
       </svg>
 
       <span>{label}</span>
-    </button>
+    </Button>
   );
 }

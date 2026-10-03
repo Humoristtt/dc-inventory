@@ -13,7 +13,8 @@ FROM nginx:alpine@sha256:a9ae6f6d078d477e21323310498e5196cb2b7c0aedd9e07b7306612
 
 RUN apk add --no-cache --upgrade \
     libexpat=2.8.5-r0 \
-    libuuid=2.42.3-r1
+    libuuid=2.42.3-r1 \
+    pcre2=10.49-r0
 
 ARG APP_REVISION
 RUN test -n "$APP_REVISION" \

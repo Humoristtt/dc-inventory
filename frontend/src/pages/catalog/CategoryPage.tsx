@@ -7,7 +7,6 @@ import {
   useState,
 } from "react";
 import {
-  Link,
   useLocation,
   useParams,
 } from "react-router-dom";
@@ -25,19 +24,12 @@ import {
   defaultCatalogFilterState,
   toCatalogQuery,
 } from "../../features/catalog/catalogQuery";
-import {
-  CatalogEmptyState,
-  CatalogErrorState,
-  CatalogListSkeleton,
-} from "../../features/catalog/CatalogState";
-import { EquipmentList } from "../../features/catalog/EquipmentList";
 import { FilterSheet } from "../../features/catalog/FilterSheet";
 import { DebouncedSearchField } from "../../features/catalog/DebouncedSearchField";
+import { CatalogErrorState } from "../../features/catalog/CatalogState";
 import {
   catalogDefaultSort,
-  nextQuickSort,
   quickSortOptions,
-  sortLabel,
   sortOptionsForContext,
 } from "../../features/catalog/catalogSort";
 import {
@@ -45,12 +37,11 @@ import {
 } from "../../features/catalog/SortSheet";
 import { useCatalogItems } from "../../features/catalog/useCatalogItems";
 import {
-  ETHERNET_SPEED_BUCKETS,
-  isSpeedBucketSelected,
-  speedFacetValuesForBucket,
-  toggleSpeedBucket,
+
 } from "../../features/catalog/transceiverFilters";
 import { useCatalogUrlState } from "../../features/catalog/useCatalogUrlState";
+import { CategoryFamilyGrid } from "../../features/catalog/CategoryFamilyGrid";
+import { CategoryResults } from "../../features/catalog/CategoryResults";
 import { useInternalBackNavigation } from "../../features/navigation/useTelegramNavigation";
 import { PageHeader } from "../../shared/ui";
 import { useTelegramWebApp } from "../../shared/telegram/useTelegramWebApp";
@@ -272,218 +263,95 @@ export function CategoryPage() {
           />
         ) : null}
 
-        {categoryShapeKnown && family ? <div className="category-grid">
-          {children.map(child => <Link key={child.id} className="category-tile" to={`/catalog/${child.key}`}><strong>{child.display_name}</strong>{child.description ? <p>{child.description}</p> : null}<i aria-hidden="true">↗</i></Link>)}
-          {categoryKey === "transceivers" ? (
-            <>
-              <Link className="category-tile" to="/catalog/transceiver_ethernet?rj45=true">
-                <strong>RJ-45 SFP</strong>
-                <p>Медные SFP/SFP+ трансиверы с разъёмом RJ-45.</p>
-                <i aria-hidden="true">↗</i>
-              </Link>
-              <Link className="category-tile" to="/catalog/transceivers?long_range=true">
-                <strong>Дальние</strong>
-                <p>Дальность от 2 км.</p>
-                <i aria-hidden="true">↗</i>
-              </Link>
-            </>
-          ) : null}
-        </div> : null}
-        {categoryShapeKnown && !categoryQuery.isError && !family ? (
-          <section aria-labelledby="category-items-title" className="catalog-section">
-            <div className="result-toolbar">
-              <div>
-                <span className="section-kicker">Подходящие позиции</span>
-                <h2 id="category-items-title">
-                  {categoryContentPending ? "Загрузка" : `${itemsQuery.total} шт.`}
-                </h2>
-              </div>
-              <div className="result-toolbar__actions">
-                {ethernetSpeedView ? (
-                  <div
-                    aria-label="Скорость Ethernet-трансивера"
-                    className="transceiver-speed-filter"
-                    role="group"
-                  >
-                    {ETHERNET_SPEED_BUCKETS.map((bucket) => {
-                      const values =
-                        speedFacetValuesForBucket(
-                          speedFacetQuery.data,
-                          bucket,
-                        );
-                      const selected =
-                        isSpeedBucketSelected(
-                          viewState.filters,
-                          values,
-                        );
-
-                      return (
-                        <button
-                          aria-pressed={selected}
-                          className={
-                            selected
-                              ? "tool-button transceiver-speed-filter__button quick-sort__button--active"
-                              : "tool-button transceiver-speed-filter__button"
-                          }
-                          disabled={
-                            speedFacetQuery.isPending
-                            || values.length === 0
-                          }
-                          key={bucket}
-                          onClick={() => {
-                            const current =
-                              catalogFiltersFromViewState(
-                                viewState,
-                              );
-                            updateFilters({
-                              ...current,
-                              filters: toggleSpeedBucket(
-                                current.filters,
-                                speedFacetQuery.data,
-                                bucket,
-                              ),
-                            });
-                          }}
-                          type="button"
-                        >
-                          {bucket}
-                        </button>
-                      );
-                    })}
-                  </div>
-                ) : null}
-
-                {ethernetSpeedView ? (
-                  <button
-                    className="tool-button"
-                    disabled={filtersCount === 0}
-                    onClick={clearAllFilters}
-                    type="button"
-                  >
-                    Сбросить фильтры
-                  </button>
-                ) : (
-                  <button
-                    className={
-                      filtersCount > 0
-                        ? "tool-button tool-button--active"
-                        : "tool-button"
-                    }
-                    onClick={() => setFiltersOpen(true)}
-                    type="button"
-                  >
-                    Фильтры
-                    {filtersCount > 0 ? (
-                      <span>{filtersCount}</span>
-                    ) : null}
-                  </button>
-                )}
-
-                <div
-                  aria-label="Быстрая сортировка"
-                  className="quick-sort"
-                  role="group"
-                >
-                  {quickSortChoices.map((option) => {
-                    const selected =
-                      viewState.sort === option.sort;
-                    const order = selected
-                      ? viewState.order
-                      : option.defaultOrder;
-
-                    return (
-                      <button
-                        aria-pressed={selected}
-                        className={
-                          selected
-                            ? "tool-button quick-sort__button quick-sort__button--active"
-                            : "tool-button quick-sort__button"
-                        }
-                        key={option.sort}
-                        onClick={() =>
-                          updateSort(
-                            nextQuickSort(
-                              viewState,
-                              option,
-                            ),
-                          )
-                        }
-                        type="button"
-                      >
-                        {option.label}
-                        <span aria-hidden="true">
-                          {order === "asc" ? "↑" : "↓"}
-                        </span>
-                      </button>
-                    );
-                  })}
-
-                  {!ethernetSpeedView ? (
-                    <button
-                      aria-label="Другие варианты сортировки"
-                      aria-pressed={!quickSortHasSelection}
-                      className={
-                        !quickSortHasSelection
-                          ? "tool-button quick-sort__more quick-sort__button--active"
-                          : "tool-button quick-sort__more"
-                      }
-                      onClick={() => setSortOpen(true)}
-                      type="button"
-                    >
-                      {quickSortHasSelection
-                        ? "Ещё"
-                        : sortLabel(viewState)}
-                      <span aria-hidden="true">•••</span>
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            </div>
-
-            {categoryContentPending ? <CatalogListSkeleton /> : null}
-            {itemsQuery.isError ? (
-              <CatalogErrorState onRetry={() => void itemsQuery.refetch()} />
-            ) : null}
-            {!categoryContentPending && !itemsQuery.isError && itemsQuery.items.length === 0 ? (
-              <CatalogEmptyState
-                action={filtersCount > 0 ? (
-                  <button className="button button--ghost" onClick={clearAllFilters} type="button">
-                    Сбросить фильтры
-                  </button>
-                ) : undefined}
-                title={filtersCount > 0 ? "По фильтрам ничего нет" : viewState.q ? "Ничего не найдено" : "В категории пока пусто"}
-              >
-                {filtersCount > 0
-                  ? "Измените параметры или очистите фильтры."
-                  : viewState.q
-                    ? "Попробуйте изменить поисковый запрос."
-                    : "Позиции появятся после наполнения каталога."}
-              </CatalogEmptyState>
-            ) : null}
-            {!categoryContentPending && itemsQuery.items.length > 0 ? (
-              <>
-                {itemsQuery.isFetching && !itemsQuery.isFetchingNextPage ? (
-                  <p className="background-status" role="status">Обновляем список…</p>
-                ) : null}
-                <EquipmentList
-                  attributes={categoryQuery.data?.attributes}
-                  items={itemsQuery.items}
-                  returnTo={returnTo}
-                />
-                {itemsQuery.hasNextPage ? (
-                  <button
-                    className="button button--load-more"
-                    disabled={itemsQuery.isFetchingNextPage}
-                    onClick={() => void itemsQuery.fetchNextPage()}
-                    type="button"
-                  >
-                    {itemsQuery.isFetchingNextPage ? "Загружаем…" : "Показать ещё"}
-                  </button>
-                ) : null}
-              </>
-            ) : null}
-          </section>
+        {categoryShapeKnown && family ? (
+          <CategoryFamilyGrid
+            categories={children}
+            categoryKey={categoryKey}
+          />
         ) : null}
+
+        {
+          categoryShapeKnown
+          && !categoryQuery.isError
+          && !family
+            ? (
+                <CategoryResults
+                  attributes={
+                    categoryQuery.data
+                      ?.attributes
+                  }
+                  error={
+                    itemsQuery.isError
+                  }
+                  ethernetSpeedView={
+                    ethernetSpeedView
+                  }
+                  fetching={
+                    itemsQuery.isFetching
+                  }
+                  fetchingNext={
+                    itemsQuery
+                      .isFetchingNextPage
+                  }
+                  filtersCount={
+                    filtersCount
+                  }
+                  hasNextPage={
+                    itemsQuery.hasNextPage
+                    ?? false
+                  }
+                  items={
+                    itemsQuery.items
+                  }
+                  loading={
+                    categoryContentPending
+                  }
+                  onClearFilters={
+                    clearAllFilters
+                  }
+                  onFetchNext={() =>
+                    void itemsQuery
+                      .fetchNextPage()
+                  }
+                  onOpenFilters={() =>
+                    setFiltersOpen(true)
+                  }
+                  onOpenSort={() =>
+                    setSortOpen(true)
+                  }
+                  onRetry={() =>
+                    void itemsQuery.refetch()
+                  }
+                  onUpdateFilters={
+                    updateFilters
+                  }
+                  onUpdateSort={
+                    updateSort
+                  }
+                  quickSortChoices={
+                    quickSortChoices
+                  }
+                  quickSortHasSelection={
+                    quickSortHasSelection
+                  }
+                  returnTo={returnTo}
+                  speedFacet={
+                    speedFacetQuery.data
+                  }
+                  speedFacetPending={
+                    speedFacetQuery
+                      .isPending
+                  }
+                  total={
+                    itemsQuery.total
+                  }
+                  viewState={
+                    viewState
+                  }
+                />
+              )
+            : null
+        }
       </div>
 
       {filtersOpen ? (

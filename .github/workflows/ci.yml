@@ -51,17 +51,17 @@ jobs:
         shell: bash
         run: python3 ops/tests/test_migration_frozen_artifacts_contract.py
 
-      - name: Stage 15 backup contract
+      - name: Backup contract
         shell: bash
-        run: python3 ops/tests/test_stage15_backup_contract.py
+        run: python3 ops/tests/test_backup_contract.py
 
-      - name: Stage 15 versioned backup and restore regressions
+      - name: Versioned backup and restore regressions
         shell: bash
         run: |
-          python3 -B ops/tests/test_stage15_version_ids.py
-          python3 -B ops/tests/test_stage15_restore_versions.py
+          python3 -B ops/tests/test_backup_version_ids.py
+          python3 -B ops/tests/test_restore_versions.py
 
-      - name: Stage 15 runtime provenance contract
+      - name: Runtime provenance contract
         shell: bash
         run: python3 ops/tests/test_runtime_provenance_contract.py
 
@@ -87,7 +87,7 @@ jobs:
         shell: bash
         run: python3 ops/tests/test_release_runtime_match.py
 
-      - name: Stage 15 S3 lifecycle prefix contract
+      - name: S3 lifecycle prefix contract
         shell: bash
         run: python3 ops/tests/test_s3_lifecycle_prefix.py
 
@@ -115,18 +115,18 @@ jobs:
         shell: bash
         run: python3 ops/tests/test_fullstack_e2e_contract.py
 
-      - name: Stage 15 recovery runbook contract
+      - name: Recovery runbook contract
         shell: bash
         run: |
           python3 ops/tests/test_recovery_runbook_contract.py
           python3 ops/tests/test_recovery_validation.py
-          python3 ops/tests/test_cp01_restore_session_invalidation.py
+          python3 ops/tests/test_restore_session_invalidation.py
 
-      - name: Stage 15 worker runtime contract
+      - name: Worker runtime contract
         shell: bash
         run: python3 ops/tests/test_worker_runtime_contract.py
 
-      - name: Stage 15 security scan contract
+      - name: Security scan contract
         shell: bash
         run: python3 ops/tests/test_security_scan_contract.py
 
@@ -187,6 +187,10 @@ jobs:
         working-directory: frontend
         run: npm ci
 
+      - name: Audit frontend dependencies
+        working-directory: frontend
+        run: npm audit --audit-level=high
+
       - name: Verify vendored Telegram SDK
         working-directory: frontend
         run: |
@@ -239,7 +243,7 @@ jobs:
           docker logs dc-inventory-playwright-web
           exit 1
 
-      - name: Stage 8 browser acceptance
+      - name: Browser acceptance
         working-directory: frontend
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173

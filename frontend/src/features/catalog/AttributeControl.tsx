@@ -1,3 +1,4 @@
+import { Button, Input, Select, Textarea } from "../../shared/ui";
 import type { CategoryAttribute } from "../../shared/api/catalog";
 import {
   SuggestionInput,
@@ -49,7 +50,7 @@ export function AttributeControl({
 
         <div className="catalog-form__boolean-row">
           <label className="catalog-switch" htmlFor={controlId}>
-            <input
+            <Input
               aria-describedby={error ? errorId : undefined}
               checked={value === true}
               id={controlId}
@@ -65,13 +66,13 @@ export function AttributeControl({
           </label>
 
           {specified && !attribute.required ? (
-            <button
+            <Button
               className="text-button"
               onClick={() => onChange(undefined)}
               type="button"
             >
               Сбросить
-            </button>
+            </Button>
           ) : null}
         </div>
 
@@ -92,7 +93,7 @@ export function AttributeControl({
       <label className="catalog-form__field" htmlFor={controlId}>
         {label}
 
-        <select
+        <Select
           aria-describedby={error ? errorId : undefined}
           aria-invalid={error !== undefined}
           id={controlId}
@@ -105,7 +106,7 @@ export function AttributeControl({
               {option}
             </option>
           ))}
-        </select>
+        </Select>
 
         {error ? (
           <small
@@ -132,7 +133,7 @@ export function AttributeControl({
       <label className="catalog-form__field" htmlFor={controlId}>
         {label}
 
-        <textarea
+        <Textarea
           aria-describedby={error ? errorId : undefined}
           aria-invalid={error !== undefined}
           autoCapitalize="none"

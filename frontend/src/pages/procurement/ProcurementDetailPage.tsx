@@ -1,3 +1,4 @@
+import { Button } from "../../shared/ui";
 import {
   useInfiniteQuery,
   useMutation,
@@ -5,16 +6,15 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import {
-  useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
-import { Link, Navigate, useParams } from "react-router-dom";
+import { Navigate, useParams } from "react-router-dom";
 
-import { LineComposer } from "../../features/procurement/LineComposer";
+import {
+  ProcurementDetailDialogs,
+} from "../../features/procurement/ProcurementDetailDialogs";
 import { useAuthState } from "../../features/auth/useAuthState";
 import { getCatalogItems } from "../../shared/api/catalog";
 import { getLocations } from "../../shared/api/inventory";
@@ -24,172 +24,23 @@ import {
   mutateProcurement,
   procurementError,
   procurementLinesPayload,
-  type ProcurementLine,
   type ProcurementLineInput,
 } from "../../shared/api/procurement";
+import {
+  ProcurementActionBar,
+  type ProcurementDialogKind,
+} from "../../features/procurement/ProcurementActionBar";
+import {
+  ProcurementCurrentLines,
+  ProcurementHistory,
+  ProcurementOverview,
+  ProcurementRevisions,
+} from "../../features/procurement/ProcurementSummarySections";
+import {
+  procurementInputFromLine,
+} from "../../features/procurement/procurementDetailModel";
 import { PageHeader } from "../../shared/ui";
 import "../../features/procurement/procurement.css";
-
-const eventLabels: Record<string, string> = {
-  REQUEST_CREATED: "Заявка создана",
-  REVISION_SUBMITTED: "Отправлена новая редакция",
-  MANAGER_ACCEPTED: "Менеджер принял в работу",
-  CORRECTION_REQUESTED: "Возвращено на корректировку",
-  ASSIGNMENT_TAKEN: "Менеджер взял заявку на себя",
-  ASSIGNMENT_TRANSFERRED: "Назначен другой менеджер",
-  TRANSFERRED_TO_ACCEPTANCE: "Передано на приёмку",
-  LINE_BOUND: "Позиция связана с каталогом",
-  DISCREPANCY_REPORTED: "Зафиксированы расхождения",
-  COMPLETED: "Приёмка завершена",
-};
-
-function inputFromLine(line: ProcurementLine): ProcurementLineInput {
-  if (line.line_type === "EXISTING_ITEM" && line.catalog_item_id) {
-    return {
-      line_type: "EXISTING_ITEM",
-      item_id: line.catalog_item_id,
-      display_name: lineTitle(line),
-      quantity: line.quantity,
-    };
-  }
-  const snapshot = line.display_snapshot;
-  return {
-    line_type: "PROPOSED_ITEM",
-    category_key: String(snapshot.category_key ?? ""),
-    manufacturer_id:
-      typeof snapshot.manufacturer_id === "string" ? snapshot.manufacturer_id : null,
-    name: String(snapshot.name ?? ""),
-    model: typeof snapshot.model === "string" ? snapshot.model : null,
-    attributes: (snapshot.attributes ?? {}) as Record<string, string | number | boolean>,
-    quantity: line.quantity,
-  };
-}
-
-function lineTitle(line: ProcurementLine): string {
-  return [
-    line.display_snapshot.manufacturer_name,
-    line.display_snapshot.name,
-    line.display_snapshot.model,
-  ]
-    .filter((value): value is string => typeof value === "string" && Boolean(value))
-    .join(" · ");
-}
-
-function Dialog({
-  open,
-  title,
-  children,
-  onClose,
-}: {
-  open: boolean;
-  title: string;
-  children: ReactNode;
-  onClose: () => void;
-}) {
-  const titleId = useId();
-  const dialogRef = useRef<HTMLElement>(null);
-  const onCloseRef = useRef(onClose);
-
-  useEffect(() => {
-    onCloseRef.current = onClose;
-  }, [onClose]);
-
-  useEffect(() => {
-    if (!open) return;
-
-    const previousFocus =
-      document.activeElement instanceof HTMLElement
-        ? document.activeElement
-        : null;
-    const dialogElement = dialogRef.current;
-    const focusableSelector =
-      'button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-    const firstFocusable =
-      dialogElement?.querySelector<HTMLElement>(focusableSelector);
-
-    if (firstFocusable) {
-      firstFocusable.focus();
-    } else {
-      dialogElement?.focus();
-    }
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onCloseRef.current();
-        return;
-      }
-
-      if (event.key !== "Tab" || !dialogElement) return;
-
-      const focusables = Array.from(
-        dialogElement.querySelectorAll<HTMLElement>(focusableSelector),
-      );
-      const first = focusables[0];
-      const last = focusables.at(-1);
-
-      if (!first || !last) {
-        event.preventDefault();
-        dialogElement.focus();
-        return;
-      }
-
-      if (!dialogElement.contains(document.activeElement)) {
-        event.preventDefault();
-        first.focus();
-        return;
-      }
-
-      if (event.shiftKey && document.activeElement === first) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first.focus();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-
-    return () => {
-      window.removeEventListener("keydown", handleKeyDown);
-      previousFocus?.focus();
-    };
-  }, [open]);
-
-  if (!open) return null;
-
-  return (
-    <div
-      className="procurement-dialog-backdrop"
-      role="presentation"
-      onMouseDown={onClose}
-    >
-      <section
-        aria-labelledby={titleId}
-        aria-modal="true"
-        className="procurement-dialog form-surface"
-        ref={dialogRef}
-        role="dialog"
-        tabIndex={-1}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
-        <div className="procurement-dialog__heading">
-          <h2 id={titleId}>{title}</h2>
-          <button
-            aria-label="Закрыть"
-            onClick={onClose}
-            type="button"
-          >
-            ×
-          </button>
-        </div>
-        {children}
-      </section>
-    </div>
-  );
-}
 
 export function ProcurementDetailPage() {
   const { requestId = "" } = useParams();
@@ -256,7 +107,7 @@ export function ProcurementDetailPage() {
     queryFn: ({ signal }) => getLocations(signal),
     enabled: Boolean(request.data?.available_actions.includes("complete_acceptance")),
   });
-  const [dialog, setDialog] = useState<"correction" | "revision" | "transfer" | "discrepancy" | "accept" | null>(null);
+  const [dialog, setDialog] = useState<ProcurementDialogKind | null>(null);
   const [comment, setComment] = useState("");
   const [proposal, setProposal] = useState<ProcurementLineInput[]>([]);
   const [revisionLines, setRevisionLines] = useState<ProcurementLineInput[]>([]);
@@ -379,13 +230,17 @@ export function ProcurementDetailPage() {
     return (
       <p role="alert">
         Не удалось открыть закупку.{" "}
-        <button onClick={() => void request.refetch()} type="button">Повторить</button>
+        <Button onClick={() => void request.refetch()} type="button">Повторить</Button>
       </p>
     );
   }
 
   const openRevision = () => {
-    setRevisionLines(current.current_revision.lines.map(inputFromLine));
+    setRevisionLines(
+      current.current_revision.lines.map(
+        procurementInputFromLine,
+      ),
+    );
     setDialog("revision");
   };
 
@@ -393,361 +248,182 @@ export function ProcurementDetailPage() {
     <main className="procurement-page">
       <PageHeader kicker="Закупка" title={current.request_number} description={current.status_label} />
       <div className="procurement-page__body">
-        <section className="detail-panel procurement-overview">
-          <div><span>Инициатор</span><strong>{current.initiator.display_name}</strong></div>
-          <div><span>Менеджер</span><strong>{current.assigned_manager.display_name}</strong></div>
-          <div><span>Редакция</span><strong>№ {current.revision_number}</strong></div>
-          {current.final_movement_id && canReadMovements ? (
-            <Link to={`/movements?movement=${current.final_movement_id}`}>Открыть складской приход</Link>
-          ) : null}
-        </section>
+        <ProcurementOverview
+          canReadMovements={
+            canReadMovements
+          }
+          request={current}
+        />
 
-        <section className="detail-panel">
-          <h2>Текущий состав</h2>
-          <ol className="procurement-lines procurement-lines--detail">
-            {current.current_revision.lines.map((line) => (
-              <li key={line.id}>
-                <div>
-                  <strong>{lineTitle(line)}</strong>
-                  <span>{line.quantity} шт.</span>
-                  {line.line_type === "PROPOSED_ITEM" ? (
-                    <small>{line.bound_item_id ? "Связана с каталогом" : "Нужна карточка каталога"}</small>
-                  ) : null}
-                </div>
-                {actions.has("bind_lines") && !line.bound_item_id ? (
-                  <div className="procurement-line-actions">
-                    <button className="button" disabled={mutation.isPending} onClick={() => setBindingLine(line.id)} type="button">
-                      Связать
-                    </button>
-                    <Link
-                      className="button button--accent"
-                      to={`/catalog/new?procurementRequestId=${current.id}&procurementLineId=${line.id}`}
-                    >
-                      Создать карточку
-                    </Link>
-                  </div>
-                ) : null}
-              </li>
-            ))}
-          </ol>
-          {current.current_revision.general_comment ? <p>{current.current_revision.general_comment}</p> : null}
-        </section>
+        <ProcurementCurrentLines
+          actions={actions}
+          mutationPending={
+            mutation.isPending
+          }
+          onBindLine={
+            setBindingLine
+          }
+          request={current}
+        />
 
-        <div className="procurement-actions">
-          {actions.has("take_ownership") ? <button className="button" disabled={mutation.isPending} onClick={() => act("take-ownership", { expected_assigned_manager_user_id: current.assigned_manager.id })} type="button">Взять на себя</button> : null}
-          {actions.has("transfer_manager") ? <button className="button" disabled={mutation.isPending} onClick={() => setDialog("transfer")} type="button">Передать менеджеру</button> : null}
-          {actions.has("manager_accept") ? <button className="button button--dark" disabled={mutation.isPending} onClick={() => act("manager-accept")} type="button">Принять в работу</button> : null}
-          {actions.has("return_for_correction") ? <button className="button button--danger" disabled={mutation.isPending} onClick={() => setDialog("correction")} type="button">Вернуть на корректировку</button> : null}
-          {actions.has("transfer_to_acceptance") ? <button className="button button--dark" disabled={mutation.isPending} onClick={() => act("transfer-to-acceptance")} type="button">Передать на приёмку</button> : null}
-          {actions.has("submit_revision") ? <button className="button button--accent" disabled={mutation.isPending} onClick={openRevision} type="button">Создать новую редакцию</button> : null}
-          {actions.has("report_discrepancy") ? <button className="button button--danger" disabled={mutation.isPending} onClick={() => setDialog("discrepancy")} type="button">Есть расхождения</button> : null}
-          {actions.has("complete_acceptance") ? <button className="button button--accent" disabled={mutation.isPending} onClick={() => setDialog("accept")} type="button">Подтвердить приёмку</button> : null}
-        </div>
-        {mutation.isPending ? <p role="status">Сохраняем…</p> : null}
-        {mutation.isError ? <p role="alert">{procurementError(mutation.error)}</p> : null}
+        <ProcurementActionBar
+          actions={actions}
+          mutationPending={
+            mutation.isPending
+          }
+          onAction={act}
+          onOpenDialog={
+            setDialog
+          }
+          onOpenRevision={
+            openRevision
+          }
+          request={current}
+        />
 
-        <section className="detail-panel">
-          <h2>История</h2>
-          <ol className="procurement-timeline">
-            {[...current.events].reverse().map((event) => (
-              <li key={event.id}>
-                <strong>{eventLabels[event.event_type] ?? event.event_type}</strong>
-                <span>{event.actor.display_name} · {new Date(event.occurred_at).toLocaleString("ru-RU")}</span>
-                {event.comment ? <p>{event.comment}</p> : null}
-                {Array.isArray(event.metadata?.alternative_proposal) ? (
-                  <p>Альтернативное предложение: {event.metadata.alternative_proposal.length} поз.</p>
-                ) : null}
-              </li>
-            ))}
-          </ol>
-        </section>
+        {mutation.isPending ? (
+          <p role="status">
+            Сохраняем…
+          </p>
+        ) : null}
 
-        <section className="detail-panel">
-          <h2>Редакции</h2>
-          {current.revisions.map((revision) => (
-            <details key={revision.id} open={revision.id === current.current_revision_id}>
-              <summary>Редакция №{revision.revision_number} · {revision.lines.length} поз.</summary>
-              <ul>{revision.lines.map((line) => <li key={line.id}>{lineTitle(line)} — {line.quantity} шт.</li>)}</ul>
-            </details>
-          ))}
-        </section>
+        {mutation.isError ? (
+          <p role="alert">
+            {
+              procurementError(
+                mutation.error,
+              )
+            }
+          </p>
+        ) : null}
+
+        <ProcurementHistory
+          events={current.events}
+        />
+
+        <ProcurementRevisions
+          request={current}
+        />
       </div>
 
-      <Dialog
-        open={dialog === "transfer"}
-        title="Передать менеджеру"
-        onClose={() => setDialog(null)}
-      >
-        <label>
-          Поиск менеджера
-          <input
-            value={managerSearch}
-            onChange={(event) => {
-              setManagerSearch(
-                event.target.value,
-              );
-              setManagerId("");
-            }}
-          />
-        </label>
-
-        {managers.isPending ? (
-          <p role="status">Загружаем менеджеров…</p>
-        ) : null}
-        {managers.isError ? (
-          <p role="alert">
-            Не удалось загрузить менеджеров.{" "}
-            <button
-              onClick={() => void managers.refetch()}
-              type="button"
-            >
-              Повторить
-            </button>
-          </p>
-        ) : null}
-        {!managers.isPending
-          && !managers.isError
-          && managerOptions.length === 0 ? (
-            <p>Менеджеры не найдены.</p>
-          ) : null}
-
-        <label>
-          Новый менеджер
-          <select
-            disabled={
-              managers.isPending
-              || managers.isError
-              || mutation.isPending
-            }
-            value={managerId}
-            onChange={(event) =>
-              setManagerId(
-                event.target.value,
-              )}
-          >
-            <option value="">
-              Выберите
-            </option>
-            {managerOptions
-              .filter(
-                (entry) =>
-                  entry.id
-                  !== current.assigned_manager.id,
-              )
-              .map((entry) => (
-                <option
-                  key={entry.id}
-                  value={entry.id}
-                >
-                  {entry.display_name}
-                </option>
-              ))}
-          </select>
-        </label>
-
-        {managers.hasNextPage ? (
-          <button
-            className="button button--load-more"
-            disabled={
-              managers.isFetchingNextPage
-            }
-            onClick={() =>
-              void managers.fetchNextPage()
-            }
-            type="button"
-          >
-            {managers.isFetchingNextPage
-              ? "Загружаем менеджеров…"
-              : "Показать ещё менеджеров"}
-          </button>
-        ) : null}
-
-        <button
-          className="button button--dark"
-          disabled={
-            !managerId
-            || managers.isError
-            || mutation.isPending
+      <ProcurementDetailDialogs
+        activeLocations={
+          activeLocations
+        }
+        bindingItemsError={
+          bindingItems.isError
+        }
+        bindingItemsHasNextPage={
+          bindingItems.hasNextPage
+          ?? false
+        }
+        bindingItemsLoading={
+          bindingItems.isPending
+        }
+        bindingItemsLoadingNext={
+          bindingItems
+            .isFetchingNextPage
+        }
+        bindingItemOptions={
+          bindingItemOptions
+        }
+        bindingLine={bindingLine}
+        bindingSearch={
+          bindingSearch
+        }
+        comment={comment}
+        current={current}
+        dialog={dialog}
+        locationId={locationId}
+        locationsError={
+          locations.isError
+        }
+        locationsLoading={
+          locations.isPending
+        }
+        managerId={managerId}
+        managerOptions={
+          managerOptions
+        }
+        managerSearch={
+          managerSearch
+        }
+        managersError={
+          managers.isError
+        }
+        managersHasNextPage={
+          managers.hasNextPage
+          ?? false
+        }
+        managersLoading={
+          managers.isPending
+        }
+        managersLoadingNext={
+          managers
+            .isFetchingNextPage
+        }
+        mutationPending={
+          mutation.isPending
+        }
+        onAction={act}
+        onBindingSearchChange={
+          setBindingSearch
+        }
+        onCloseDialog={() =>
+          setDialog(null)
+        }
+        onCommentChange={
+          setComment
+        }
+        onFetchMoreBindingItems={
+          () =>
+            void bindingItems
+              .fetchNextPage()
+        }
+        onFetchMoreManagers={
+          () =>
+            void managers
+              .fetchNextPage()
+        }
+        onLocationChange={
+          setLocationId
+        }
+        onManagerChange={
+          setManagerId
+        }
+        onManagerSearchChange={
+          (value) => {
+            setManagerSearch(value);
+            setManagerId("");
           }
-          onClick={() =>
-            act(
-              "transfer-manager",
-              {
-                expected_assigned_manager_user_id:
-                  current.assigned_manager.id,
-                manager_user_id: managerId,
-              },
-            )}
-          type="button"
-        >
-          Передать
-        </button>
-      </Dialog>
-
-      <Dialog open={dialog === "correction"} title="Вернуть на корректировку" onClose={() => setDialog(null)}>
-        <label>Комментарий<textarea maxLength={4000} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
-        <details><summary>Добавить альтернативный состав</summary><LineComposer lines={proposal} onChange={setProposal} /></details>
-        <button className="button button--danger" disabled={!comment.trim() || mutation.isPending} onClick={() => act("return-for-correction", { comment, alternative_proposal: proposal.length ? proposal : null })} type="button">Вернуть</button>
-      </Dialog>
-
-      <Dialog open={dialog === "revision"} title="Новая редакция" onClose={() => setDialog(null)}>
-        <LineComposer lines={revisionLines} onChange={setRevisionLines} />
-        <label>Комментарий<textarea maxLength={4000} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
-        <button className="button button--accent" disabled={!revisionLines.length || mutation.isPending} onClick={() => act("revisions", { lines: revisionLines, general_comment: comment.trim() || null })} type="button">Отправить редакцию</button>
-      </Dialog>
-
-      <Dialog open={dialog === "discrepancy"} title="Есть расхождения" onClose={() => setDialog(null)}>
-        <label>Что отличается<textarea maxLength={4000} value={comment} onChange={(event) => setComment(event.target.value)} /></label>
-        <button className="button button--danger" disabled={!comment.trim() || mutation.isPending} onClick={() => act("discrepancies", { comment })} type="button">Зафиксировать</button>
-      </Dialog>
-
-      <Dialog open={dialog === "accept"} title="Подтвердить приёмку" onClose={() => setDialog(null)}>
-        <p>После подтверждения на склад будет добавлено:</p>
-        <ul>{current.current_revision.lines.map((line) => <li key={line.id}>{lineTitle(line)} — {line.quantity} шт.</li>)}</ul>
-        {locations.isPending ? (
-          <p role="status">Загружаем места приёмки…</p>
-        ) : null}
-        {locations.isError ? (
-          <p role="alert">
-            Не удалось загрузить места приёмки.{" "}
-            <button onClick={() => void locations.refetch()} type="button">
-              Повторить
-            </button>
-          </p>
-        ) : null}
-        {!locations.isPending
-          && !locations.isError
-          && activeLocations.length === 0 ? (
-            <p>Нет доступных мест приёмки.</p>
-          ) : null}
-        <label>
-          Место приёмки
-          <select
-            disabled={
-              locations.isPending
-              || locations.isError
-              || mutation.isPending
-            }
-            value={locationId}
-            onChange={(event) => setLocationId(event.target.value)}
-          >
-            <option value="">Выберите</option>
-            {activeLocations.map((entry) => (
-              <option key={entry.id} value={entry.id}>
-                {entry.name} · {entry.code}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          className="button button--accent"
-          disabled={
-            !locationId
-            || locations.isError
-            || mutation.isPending
-            || current.current_revision.lines.some(
-              (line) => !line.bound_item_id,
-            )
-          }
-          onClick={() =>
-            act(
-              "acceptance",
-              { receiving_location_id: locationId },
-            )}
-          type="button"
-        >
-          Подтвердить и оприходовать
-        </button>
-      </Dialog>
-
-      <Dialog
-        open={bindingLine !== null}
-        title="Связать с каталогом"
-        onClose={() => setBindingLine(null)}
-      >
-        <label>
-          Поиск
-          <input
-            value={bindingSearch}
-            onChange={(event) =>
-              setBindingSearch(
-                event.target.value,
-              )}
-          />
-        </label>
-
-        {bindingSearch.trim().length < 2 ? (
-          <p>Введите минимум 2 символа для поиска.</p>
-        ) : null}
-        {bindingItems.isPending ? (
-          <p role="status">Ищем оборудование…</p>
-        ) : null}
-        {bindingItems.isError ? (
-          <p role="alert">
-            Не удалось загрузить оборудование.{" "}
-            <button
-              onClick={() => void bindingItems.refetch()}
-              type="button"
-            >
-              Повторить
-            </button>
-          </p>
-        ) : null}
-        {bindingSearch.trim().length >= 2
-          && !bindingItems.isPending
-          && !bindingItems.isError
-          && bindingItemOptions.length === 0 ? (
-            <p>Оборудование не найдено.</p>
-          ) : null}
-
-        <div className="procurement-binding-results">
-          {bindingItemOptions.map(
-            (item) => (
-              <button
-                className="button"
-                disabled={mutation.isPending}
-                key={item.id}
-                onClick={() =>
-                  act(
-                    "bind-line",
-                    {
-                      line_id:
-                        bindingLine,
-                      item_id:
-                        item.id,
-                    },
-                  )}
-                type="button"
-              >
-                {[
-                  item.manufacturer?.name,
-                  item.name,
-                  item.model,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </button>
-            ),
-          )}
-        </div>
-
-        {bindingItems.hasNextPage ? (
-          <button
-            className="button button--load-more"
-            disabled={
-              bindingItems.isFetchingNextPage
-            }
-            onClick={() =>
-              void bindingItems.fetchNextPage()
-            }
-            type="button"
-          >
-            {bindingItems.isFetchingNextPage
-              ? "Загружаем…"
-              : "Показать ещё"}
-          </button>
-        ) : null}
-      </Dialog>
+        }
+        onProposalChange={
+          setProposal
+        }
+        onRetryBindingItems={
+          () =>
+            void bindingItems
+              .refetch()
+        }
+        onRetryLocations={
+          () =>
+            void locations.refetch()
+        }
+        onRetryManagers={
+          () =>
+            void managers.refetch()
+        }
+        onRevisionLinesChange={
+          setRevisionLines
+        }
+        onSetBindingLine={
+          setBindingLine
+        }
+        proposal={proposal}
+        revisionLines={
+          revisionLines
+        }
+      />
     </main>
   );
 }

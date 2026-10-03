@@ -1,15 +1,22 @@
 :root {
   --color-ink: #000000;
 
+  /* Spikatel guidebook / 2026 brand palette. */
+  --color-brand-cream: #ffecb7;
+  --color-brand-neon: #fcff2e;
   --color-brand-primary: #feaa13;
+  --color-brand-orange-hot: #ff6600;
+  --color-brand-red: #ff0000;
   --color-brand-soft: #f9eb6e;
+  --color-brand-wine: #a1021b;
+  --color-brand-black: #000000;
   --color-brand-deep: #d69303;
 
   --color-cream: #fff3c4;
   --color-acid: var(--color-brand-soft);
   --color-orange: var(--color-brand-primary);
-  --color-red: #ff0000;
-  --color-wine: #a1021b;
+  --color-red: var(--color-brand-red);
+  --color-wine: var(--color-brand-wine);
   --color-paper: #f7f4eb;
   --color-surface: #fffdf7;
 
@@ -39,6 +46,9 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-bold: 700;
 
   --radius-card: 22px;
   --page-inline: clamp(14px, 3.8vw, 28px);

@@ -1,3 +1,4 @@
+import { Button, Input } from "../../shared/ui";
 import {
   useId,
   useState,
@@ -94,7 +95,7 @@ export function SuggestionInput({
     <div className={`catalog-form__field smart-suggest ${className}`.trim()}>
       <label htmlFor={controlId}>{label}</label>
 
-      <input
+      <Input
         aria-autocomplete="list"
         aria-controls={showSuggestions ? listboxId : undefined}
         aria-describedby={error ? errorId : undefined}
@@ -137,7 +138,7 @@ export function SuggestionInput({
             </span>
           ) : (
             visibleOptions.map((option) => (
-              <button
+              <Button
                 className="smart-suggest__option"
                 key={option.key}
                 onClick={() => select(option)}
@@ -149,7 +150,7 @@ export function SuggestionInput({
                 {option.secondary ? (
                   <small>{option.secondary}</small>
                 ) : null}
-              </button>
+              </Button>
             ))
           )}
         </div>

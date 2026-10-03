@@ -187,3 +187,17 @@ PostgreSQL защищает:
 - event/revision consistency;
 - final movement binding;
 - historical identity semantics.
+
+
+## 15. Implementation boundaries
+
+`app.modules.procurement.service` — публичный façade. Основная реализация распределена по owning modules:
+
+- `workflow.py` — create, manager decisions, revisions, assignment и transfer lifecycle;
+- `acceptance.py` — line binding, discrepancy и final technical acceptance;
+- `queries.py` — list/detail/manager reads;
+- `lines.py` — preparation и aggregate validation procurement lines;
+- `mutation_support.py` — locks, expected-state/idempotency checks, events и transitions support;
+- `actors.py`, `actions.py`, `notifications.py`, `domain.py` — соответствующие вспомогательные boundaries.
+
+Тесты, которым требуется monkeypatch execution dependency, должны подменять символ в owning module, где он реально вызывается, а не исторический re-export façade.

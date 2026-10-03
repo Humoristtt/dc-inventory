@@ -3,7 +3,7 @@ from __future__ import annotations
 import inspect
 from pathlib import Path
 
-from app.modules.inventory.service import (
+from app.modules.inventory.movement_support import (
     _lock_original_movement_context,
 )
 

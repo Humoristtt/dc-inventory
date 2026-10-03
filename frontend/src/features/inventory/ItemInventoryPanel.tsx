@@ -1,3 +1,4 @@
+import { Button, Input, Select } from "../../shared/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
@@ -40,20 +41,20 @@ export function ItemInventoryPanel({itemId, archived = false}: {itemId: string; 
   const changed = () => { setRequestId(crypto.randomUUID()); mutation.reset(); };
   return <section aria-labelledby="stock-title" className="detail-panel">
     <h2 id="stock-title">В наличии: {summary.data?.total_count ?? "…"}</h2>
-    {summary.isError ? <p role="alert">Не удалось загрузить остаток. <button onClick={() => void summary.refetch()}>Повторить</button></p> : null}
+    {summary.isError ? <p role="alert">Не удалось загрузить остаток. <Button onClick={() => void summary.refetch()}>Повторить</Button></p> : null}
     <dl className="detail-list">{summary.data?.locations.map(row => <div key={row.id}><dt>{row.location.name}</dt><dd>{row.quantity}</dd></div>)}</dl>
     {summary.data?.total_count === 0 ? <p>Оборудования в местах хранения пока нет.</p> : null}
-    {locations.isError ? <p role="alert">Не удалось загрузить места хранения. <button onClick={() => void locations.refetch()}>Повторить</button></p> : null}
-    <div className="warehouse-actions">{(Object.keys(actionNames) as Action[]).filter(key => hasCapability(auth.data?.user, "inventory.operate") && (hasCapability(auth.data?.user, "inventory.admin") || key !== "WRITE_OFF")).filter(key => !archived || key !== "ISSUE" && key !== "RECEIPT").map(key => <button type="button" className="button button--dark" key={key} disabled={summary.isPending || summary.isError || locations.isError || locations.isPending || mutation.isPending} onClick={() => {setAction(key); setSource(""); setDestination(""); setQuantity("1"); setNotice(""); changed();}}>{actionNames[key]}</button>)}</div>
+    {locations.isError ? <p role="alert">Не удалось загрузить места хранения. <Button onClick={() => void locations.refetch()}>Повторить</Button></p> : null}
+    <div className="warehouse-actions">{(Object.keys(actionNames) as Action[]).filter(key => hasCapability(auth.data?.user, "inventory.operate") && (hasCapability(auth.data?.user, "inventory.admin") || key !== "WRITE_OFF")).filter(key => !archived || key !== "ISSUE" && key !== "RECEIPT").map(key => <Button type="button" className="button button--dark" key={key} disabled={summary.isPending || summary.isError || locations.isError || locations.isPending || mutation.isPending} onClick={() => {setAction(key); setSource(""); setDestination(""); setQuantity("1"); setNotice(""); changed();}}>{actionNames[key]}</Button>)}</div>
     {notice ? <p role="status">{notice} <Link to="/movements">Движения</Link></p> : null}
     {action ? <form className="warehouse-form form-surface" onSubmit={event => {event.preventDefault(); if(valid && !mutation.isPending) mutation.mutate();}}>
       <h3>{actionNames[action]}</h3>
       <fieldset disabled={mutation.isPending}>
-      {needsSource ? <label>Откуда<select required value={sourceId} onChange={event => {setSource(event.target.value); setDestination(""); changed();}}><option value="">Выберите место хранения</option>{stocked.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select><small>Доступно: {available}</small></label> : null}
-      {needsDestination ? <label>Куда<select required value={destinationId} onChange={event => {setDestination(event.target.value); changed();}}><option value="">Выберите место хранения</option>{destinations.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</select></label> : null}
-      <label>Количество<input required type="number" inputMode="numeric" min="1" step="1" max={needsSource ? available : Number.MAX_SAFE_INTEGER} value={quantity} onChange={event => {setQuantity(event.target.value); changed();}} /></label>
+      {needsSource ? <label>Откуда<Select required value={sourceId} onChange={event => {setSource(event.target.value); setDestination(""); changed();}}><option value="">Выберите место хранения</option>{stocked.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</Select><small>Доступно: {available}</small></label> : null}
+      {needsDestination ? <label>Куда<Select required value={destinationId} onChange={event => {setDestination(event.target.value); changed();}}><option value="">Выберите место хранения</option>{destinations.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}</Select></label> : null}
+      <label>Количество<Input required type="number" inputMode="numeric" min="1" step="1" max={needsSource ? available : Number.MAX_SAFE_INTEGER} value={quantity} onChange={event => {setQuantity(event.target.value); changed();}} /></label>
       {mutation.isError ? <p role="alert">{inventoryError(mutation.error)}</p> : null}
-      <div className="warehouse-actions"><button className="button button--accent" disabled={!valid || mutation.isPending} type="submit">{mutation.isPending ? "Записываем…" : "Подтвердить"}</button><button className="button button--ghost" type="button" onClick={() => setAction(null)}>Отмена</button></div>
+      <div className="warehouse-actions"><Button className="button button--accent" disabled={!valid || mutation.isPending} type="submit">{mutation.isPending ? "Записываем…" : "Подтвердить"}</Button><Button className="button button--ghost" type="button" onClick={() => setAction(null)}>Отмена</Button></div>
       </fieldset>
     </form> : null}
   </section>;

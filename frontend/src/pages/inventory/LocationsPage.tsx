@@ -1,3 +1,4 @@
+import { Button, Input, Select, Textarea } from "../../shared/ui";
 import {
   useEffect,
   useState,
@@ -164,13 +165,13 @@ export function LocationsPage() {
         {canManageLocations || canManageCatalog ? (
           <div className="warehouse-actions">
             {canManageLocations ? (
-              <button
+              <Button
                 className="button button--dark"
                 onClick={openCreate}
                 type="button"
               >
                 Добавить место хранения
-              </button>
+              </Button>
             ) : null}
 
             {canManageCatalog ? (
@@ -188,14 +189,14 @@ export function LocationsPage() {
           <p role="alert">
             Не удалось загрузить места
             хранения.{" "}
-            <button
+            <Button
               onClick={() =>
                 void locations.refetch()
               }
               type="button"
             >
               Повторить
-            </button>
+            </Button>
           </p>
         ) : null}
 
@@ -225,7 +226,7 @@ export function LocationsPage() {
 
               {canManageLocations ? (
                 <div className="warehouse-actions">
-                  <button
+                  <Button
                     className="button"
                     disabled={
                       mutation.isPending
@@ -236,9 +237,9 @@ export function LocationsPage() {
                     type="button"
                   >
                     Редактировать
-                  </button>
+                  </Button>
 
-                  <button
+                  <Button
                     className="button"
                     disabled={
                       mutation.isPending
@@ -261,7 +262,7 @@ export function LocationsPage() {
                     "ACTIVE"
                       ? "Архивировать"
                       : "Вернуть из архива"}
-                  </button>
+                  </Button>
                 </div>
               ) : null}
             </section>
@@ -311,7 +312,7 @@ export function LocationsPage() {
                 </h2>
               </div>
 
-              <button
+              <Button
                 aria-label="Закрыть редактор места хранения"
                 autoFocus
                 className="icon-button"
@@ -323,7 +324,7 @@ export function LocationsPage() {
                 type="button"
               >
                 ×
-              </button>
+              </Button>
             </header>
 
             <form
@@ -358,7 +359,7 @@ export function LocationsPage() {
                   {!editing ? (
                     <label>
                       <span>Код</span>
-                      <input
+                      <Input
                         autoComplete="off"
                         maxLength={64}
                         onChange={(
@@ -380,7 +381,7 @@ export function LocationsPage() {
 
                   <label>
                     <span>Название</span>
-                    <input
+                    <Input
                       autoComplete="off"
                       maxLength={255}
                       onChange={(
@@ -401,7 +402,7 @@ export function LocationsPage() {
 
                   <label>
                     <span>Тип</span>
-                    <select
+                    <Select
                       onChange={(
                         event,
                       ) =>
@@ -423,12 +424,12 @@ export function LocationsPage() {
                       <option value="DATACENTER">
                         ЦОД
                       </option>
-                    </select>
+                    </Select>
                   </label>
 
                   <label className="location-editor__wide">
                     <span>Адрес</span>
-                    <textarea
+                    <Textarea
                       autoComplete="off"
                       maxLength={2000}
                       onChange={(
@@ -462,7 +463,7 @@ export function LocationsPage() {
               </div>
 
               <footer className="location-editor__footer">
-                <button
+                <Button
                   className="button button--ghost"
                   disabled={
                     mutation.isPending
@@ -473,9 +474,9 @@ export function LocationsPage() {
                   type="button"
                 >
                   Отмена
-                </button>
+                </Button>
 
-                <button
+                <Button
                   className="button button--accent"
                   disabled={
                     mutation.isPending
@@ -485,7 +486,7 @@ export function LocationsPage() {
                   {mutation.isPending
                     ? "Сохраняем…"
                     : "Сохранить"}
-                </button>
+                </Button>
               </footer>
             </form>
           </section>

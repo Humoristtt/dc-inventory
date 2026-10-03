@@ -1,3 +1,4 @@
+import { Button } from "../../shared/ui";
 import { useAuthState } from "../../features/auth/useAuthState";
 import { hasCapability } from "../../shared/api/auth";
 import { useQuery } from "@tanstack/react-query";
@@ -91,14 +92,14 @@ export function CatalogLandingPage() {
                 ) : null}
                 <EquipmentList items={itemsQuery.items} returnTo={returnTo} />
                 {itemsQuery.hasNextPage ? (
-                  <button
+                  <Button
                     className="button button--load-more"
                     disabled={itemsQuery.isFetchingNextPage}
                     onClick={() => void itemsQuery.fetchNextPage()}
                     type="button"
                   >
                     {itemsQuery.isFetchingNextPage ? "Загружаем…" : "Показать ещё"}
-                  </button>
+                  </Button>
                 ) : null}
               </>
             ) : null}

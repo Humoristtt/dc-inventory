@@ -10,11 +10,7 @@ import {
   resolve,
 } from "node:path";
 
-const root = resolve(
-  import.meta.dirname,
-  "..",
-);
-
+const root = resolve(import.meta.dirname, "..");
 const src = join(root, "src");
 
 function filesUnder(directory) {
@@ -26,10 +22,9 @@ function filesUnder(directory) {
 
     if (stat.isDirectory()) {
       result.push(...filesUnder(path));
-      continue;
+    } else {
+      result.push(path);
     }
-
-    result.push(path);
   }
 
   return result;
@@ -37,6 +32,20 @@ function filesUnder(directory) {
 
 const files = filesUnder(src);
 const violations = [];
+const canonicalCss = resolve(
+  src,
+  "shared/ui/design-system.css",
+);
+const controlsSource = resolve(
+  src,
+  "shared/ui/controls.tsx",
+);
+
+function addViolation(path, message) {
+  violations.push(
+    `${relative(root, path)}: ${message}`,
+  );
+}
 
 const legacyHeaderTokens = [
   "catalog-landing-header",
@@ -57,70 +66,40 @@ for (const path of files) {
     continue;
   }
 
-  const content = readFileSync(
-    path,
-    "utf8",
-  );
+  const content = readFileSync(path, "utf8");
 
   for (const token of legacyHeaderTokens) {
     if (content.includes(token)) {
-      violations.push(
-        `${relative(root, path)}: legacy header token ${token}`,
+      addViolation(
+        path,
+        `legacy header token ${token}`,
       );
     }
   }
 }
-
-const canonicalCss = resolve(
-  src,
-  "shared/ui/design-system.css",
-);
 
 for (const path of files) {
-  if (!path.endsWith(".css")) {
+  if (
+    !path.endsWith(".tsx")
+    || path.endsWith(".test.tsx")
+    || path.includes(`${join("src", "test")}/`)
+    || resolve(path) === controlsSource
+  ) {
     continue;
   }
 
-  if (resolve(path) === canonicalCss) {
-    continue;
-  }
+  const content = readFileSync(path, "utf8");
 
-  const content = readFileSync(
-    path,
-    "utf8",
-  );
-
-  for (const selector of [
-    ".compact-brand",
-    ".telegram-fullscreen-button",
+  for (const rawTag of [
+    "<button",
+    "<input",
+    "<select",
+    "<textarea",
   ]) {
-    if (content.includes(selector)) {
-      violations.push(
-        `${relative(root, path)}: shared selector ${selector} outside shared/ui`,
-      );
-    }
-  }
-}
-
-const pageFiles = files.filter(
-  (path) =>
-    path.includes(`${join("src", "pages")}/`)
-    && path.endsWith(".tsx"),
-);
-
-for (const path of pageFiles) {
-  const content = readFileSync(
-    path,
-    "utf8",
-  );
-
-  for (const primitive of [
-    "SpikatelBrand",
-    "TelegramFullscreenButton",
-  ]) {
-    if (content.includes(primitive)) {
-      violations.push(
-        `${relative(root, path)}: page directly owns ${primitive}`,
+    if (content.includes(rawTag)) {
+      addViolation(
+        path,
+        `raw ${rawTag.slice(1)} must use shared/ui controls`,
       );
     }
   }
@@ -146,6 +125,7 @@ for (const selector of [
   ".button {",
   ".icon-button {",
   ".section-kicker {",
+  ".ds-control {",
 ]) {
   if (globalStyles.includes(selector)) {
     violations.push(
@@ -154,35 +134,28 @@ for (const selector of [
   }
 }
 
-const forbiddenFeatureControlTokens = [
-  ".catalog-form__field input",
-  ".admin-users__filters input",
-  ".admin-users__button",
-  ".warehouse-form input",
-  ".location-editor__form input",
-];
-
 for (const path of files) {
-  if (!path.endsWith(".css")) {
-    continue;
-  }
-
-  if (resolve(path) === canonicalCss) {
-    continue;
-  }
-
-  const content = readFileSync(
-    path,
-    "utf8",
-  );
-
-  for (
-    const token
-    of forbiddenFeatureControlTokens
+  if (
+    !path.endsWith(".css")
+    || resolve(path) === canonicalCss
   ) {
-    if (content.includes(token)) {
-      violations.push(
-        `${relative(root, path)}: base control geometry ${token} outside shared/ui`,
+    continue;
+  }
+
+  const content = readFileSync(path, "utf8");
+
+  for (const selector of [
+    ".compact-brand",
+    ".telegram-fullscreen-button",
+    ".ds-control",
+    ".ds-input",
+    ".ds-select",
+    ".ds-textarea",
+  ]) {
+    if (content.includes(selector)) {
+      addViolation(
+        path,
+        `shared selector ${selector} outside shared/ui`,
       );
     }
   }
@@ -190,125 +163,139 @@ for (const path of files) {
 
 const requiredFormSurfaces = [
   "pages/catalog/ItemFormPage.tsx",
-  "pages/admin/AdminUsersPage.tsx",
+  "features/admin/AdminUserFilters.tsx",
   "pages/inventory/LocationsPage.tsx",
-  "pages/inventory/MovementsPage.tsx",
+  "features/inventory/MovementFilters.tsx",
   "features/inventory/ItemInventoryPanel.tsx",
+  "pages/procurement/ProcurementCreatePage.tsx",
+  "features/procurement/ProcurementDialog.tsx",
 ];
 
 for (const relativePath of requiredFormSurfaces) {
-  const content = readFileSync(
-    join(src, relativePath),
-    "utf8",
-  );
+  const path = join(src, relativePath);
+  const content = readFileSync(path, "utf8");
 
   if (!content.includes("form-surface")) {
-    violations.push(
-      `src/${relativePath}: canonical form-surface contract missing`,
+    addViolation(
+      path,
+      "canonical form-surface contract missing",
     );
   }
 }
 
-function selectorBlocks(
-  content,
-  selector,
-) {
-  const marker = `${selector} {`;
-  const blocks = [];
-  let cursor = 0;
+const searchFieldPath = join(
+  src,
+  "features/catalog/SearchField.tsx",
+);
+const searchField = readFileSync(
+  searchFieldPath,
+  "utf8",
+);
 
-  while (true) {
-    const start =
-      content.indexOf(
-        marker,
-        cursor,
-      );
-
-    if (start === -1) {
-      break;
-    }
-
-    const end =
-      content.indexOf(
-        "}",
-        start,
-      );
-
-    if (end === -1) {
-      break;
-    }
-
-    blocks.push(
-      content.slice(
-        start,
-        end + 1,
-      ),
-    );
-
-    cursor = end + 1;
-  }
-
-  return blocks;
-}
-
-for (
-  const [
-    relativePath,
-    selector,
-  ] of [
-    [
-      "features/admin/access-admin.css",
-      ".more-card span",
-    ],
-    [
-      "features/catalog/catalog.css",
-      ".category-tile p",
-    ],
-  ]
-) {
-  const content = readFileSync(
-    join(
-      src,
-      relativePath,
-    ),
-    "utf8",
+if (!searchField.includes('appearance="bare"')) {
+  addViolation(
+    searchFieldPath,
+    "search input must explicitly use the bare shared-control variant",
   );
+}
 
-  const blocks =
-    selectorBlocks(
-      content,
-      selector,
-    );
+const geometryProperties = [
+  "height:",
+  "min-height:",
+  "padding:",
+  "padding-inline:",
+  "padding-block:",
+  "border:",
+  "border-radius:",
+  "font-size:",
+  "font-weight:",
+];
 
-  if (blocks.length === 0) {
-    violations.push(
-      `src/${relativePath}: secondary typography selector ${selector} missing`,
-    );
+const rulePattern = /([^{}]+)\{([^{}]*)\}/g;
+
+for (const path of files) {
+  if (
+    !path.endsWith(".css")
+    || resolve(path) === canonicalCss
+  ) {
     continue;
   }
 
-  if (
-    !blocks.some(
-      (block) =>
-        block.includes(
-          "font-size: var(--font-meta);",
-        ),
-    )
-  ) {
-    violations.push(
-      `src/${relativePath}: ${selector} must use --font-meta`,
-    );
-  }
+  const content = readFileSync(path, "utf8");
+  let match;
 
-  for (const block of blocks) {
+  while ((match = rulePattern.exec(content)) !== null) {
+    const selector = match[1].trim();
+    const body = match[2];
+
+    const mentionsFormControl =
+      /\binput\b|\bselect\b|\btextarea\b/.test(
+        selector,
+      );
+
+    if (mentionsFormControl) {
+      const allowedChoiceControl =
+        selector.includes(".filter-option input")
+        || selector.includes(".catalog-switch input")
+        || selector.includes('input[type="checkbox"]')
+        || selector.includes('input[type="radio"]');
+
+      const allowedBareSearch =
+        selector.includes(".search-field input");
+
+      const allowedPseudoOnly =
+        selector.includes("::-webkit-")
+        || selector.includes("::placeholder")
+        || selector.includes(":focus");
+
+      if (
+        !allowedChoiceControl
+        && !allowedBareSearch
+        && !allowedPseudoOnly
+      ) {
+        for (const property of geometryProperties) {
+          if (body.includes(property)) {
+            addViolation(
+              path,
+              `control geometry ${property} in ${selector}; use shared/ui`,
+            );
+          }
+        }
+      }
+    }
+
     if (
-      block.includes("font-size:")
-      && !block.includes(
-        "font-size: var(--font-meta);",
-      )
+      /\.button\b|\.ds-button\b/.test(selector)
     ) {
-      violations.push(
-        `src/${relativePath}: ${selector} overrides shared secondary typography`,
+      for (const property of geometryProperties) {
+        if (body.includes(property)) {
+          addViolation(
+            path,
+            `button geometry ${property} in ${selector}; use shared/ui`,
+          );
+        }
+      }
+    }
+  }
+}
+
+const pageFiles = files.filter(
+  (path) =>
+    path.includes(`${join("src", "pages")}/`)
+    && path.endsWith(".tsx"),
+);
+
+for (const path of pageFiles) {
+  const content = readFileSync(path, "utf8");
+
+  for (const primitive of [
+    "SpikatelBrand",
+    "TelegramFullscreenButton",
+  ]) {
+    if (content.includes(primitive)) {
+      addViolation(
+        path,
+        `page directly owns ${primitive}`,
       );
     }
   }

@@ -1,0 +1,460 @@
+from __future__ import annotations
+
+import datetime as datetime_module
+import uuid
+from datetime import datetime
+
+from sqlalchemy import func, select, text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.idempotency import canonical_fingerprint
+from app.modules.catalog.enums import ItemStatus
+from app.modules.catalog.models import Item, Manufacturer
+from app.modules.identity.enums import UserAccessStatus
+from app.modules.identity.models import User
+from app.modules.identity.policy import CUSTODY_ROLES
+from app.modules.inventory.domain import (
+    InventoryConflictError,
+    InventoryNotFoundError,
+    InventoryValidationError,
+    MovementRecord,
+    MovementResult,
+    normalize_inline_text,
+)
+from app.modules.inventory.enums import LocationStatus, MovementType
+from app.modules.inventory.models import (
+    Location,
+    Movement,
+    MovementLine,
+    StockBalance,
+    UserItemCustodyBalance,
+)
+from app.modules.inventory.movement_support import (
+    _custody_delta,
+    _existing_idempotent_result,
+    _lock_idempotency_key,
+    _lock_original_movement_context,
+)
+from app.modules.inventory.queries import get_movement_record
+from app.modules.inventory.schemas import (
+    MovementCreate,
+    MovementLineCreate,
+    MovementReversalCreate,
+)
+
+
+def validate_positions(payload: MovementCreate) -> None:
+    source, destination = payload.source_location_id, payload.destination_location_id
+    if source is not None and source == destination:
+        raise InventoryValidationError("source and destination must differ", code="same_location")
+    shape = (source is not None, destination is not None)
+    allowed = {
+        MovementType.RECEIPT: {(False, True)},
+        MovementType.RETURN: {(False, True)},
+        MovementType.ISSUE: {(True, False)},
+        MovementType.WRITE_OFF: {(True, False)},
+        MovementType.TRANSFER: {(True, True)},
+        MovementType.CORRECTION: {(True, False), (False, True), (True, True)},
+        MovementType.REVERSAL: {(True, False), (False, True), (True, True)},
+    }
+    if shape not in allowed[payload.movement_type]:
+        raise InventoryValidationError(
+            "invalid movement locations", code="movement_positions_invalid"
+        )
+    linked = payload.movement_type in {MovementType.CORRECTION, MovementType.REVERSAL}
+    if linked != (payload.original_movement_id is not None):
+        raise InventoryValidationError("invalid original movement relationship")
+
+
+async def create_movement(
+    db: AsyncSession,
+    payload: MovementCreate,
+    *,
+    actor_user_id: uuid.UUID,
+    actor_display_name: str,
+    custody_user_id: uuid.UUID | None = None,
+) -> MovementResult:
+    if payload.movement_type == MovementType.REVERSAL:
+        raise InventoryValidationError("use the reversal endpoint")
+    return await _create_movement(
+        db,
+        payload,
+        actor_user_id=actor_user_id,
+        actor_display_name=actor_display_name,
+        custody_user_id=custody_user_id,
+    )
+
+
+async def _movement_timestamp(
+    db: AsyncSession,
+) -> datetime:
+    value = await db.scalar(
+        select(func.clock_timestamp())
+    )
+    if not isinstance(
+        value,
+        datetime_module.datetime,
+    ):
+        raise RuntimeError(
+            "database did not return a movement timestamp"
+        )
+    return value
+
+
+async def _create_movement(
+    db: AsyncSession,
+    payload: MovementCreate,
+    *,
+    actor_user_id: uuid.UUID,
+    actor_display_name: str,
+    custody_user_id: uuid.UUID | None = None,
+) -> MovementResult:
+    """Caller owns transaction.
+
+    Lock order: request, custody user, original, locations, items.
+
+    Locking every involved item serializes all runtime warehouse writes for
+    that item, including creation/update of projection rows inside the
+    database-controlled projection writer. The journal and both projections
+    commit or roll back together.
+    """
+    if payload.movement_type != MovementType.REVERSAL:
+        if custody_user_id is not None and payload.movement_type not in {
+            MovementType.ISSUE,
+            MovementType.RETURN,
+        }:
+            raise InventoryValidationError(
+                "custody is only valid for issue or return",
+                code="custody_movement_type_invalid",
+            )
+        if custody_user_id is not None and custody_user_id != actor_user_id:
+            raise InventoryValidationError(
+                "custody user must match movement actor",
+                code="custody_actor_mismatch",
+            )
+    request_id = normalize_inline_text(
+        payload.client_request_id, field="client_request_id", max_length=128
+    )
+    canonical = payload.model_dump(mode="json")
+    canonical["client_request_id"] = request_id
+    canonical["custody_user_id"] = str(custody_user_id) if custody_user_id else None
+    canonical["lines"] = sorted(canonical["lines"], key=lambda line: line["item_id"])
+    fingerprint = canonical_fingerprint(canonical)
+    await _lock_idempotency_key(db, actor_user_id, request_id)
+    existing = await _existing_idempotent_result(
+        db,
+        actor_user_id=actor_user_id,
+        client_request_id=request_id,
+        request_fingerprint=fingerprint,
+    )
+    if existing:
+        return existing
+
+    movement_occurred_at = await _movement_timestamp(db)
+
+    custody_user: User | None = None
+
+    if custody_user_id is not None:
+        # Serialize custody-changing warehouse operations with administrative
+        # APPROVED -> BLOCKED transitions. update_user_access() locks the same
+        # users row before it checks whether blocking is allowed.
+        custody_user = await db.scalar(
+            select(User)
+            .where(User.id == custody_user_id)
+            .with_for_update()
+        )
+
+        if custody_user is None:
+            raise InventoryNotFoundError(
+                "custody user not found",
+                code="custody_user_not_found",
+            )
+
+        if (
+            payload.movement_type != MovementType.REVERSAL
+            and (
+                custody_user.role not in CUSTODY_ROLES
+                or custody_user.access_status
+                != UserAccessStatus.APPROVED
+            )
+        ):
+            raise InventoryConflictError(
+                "custody user is not an approved user",
+                code="custody_user_not_approved",
+            )
+
+    validate_positions(payload)
+    original: MovementRecord | None = None
+    if payload.original_movement_id:
+        await _lock_original_movement_context(db, payload.original_movement_id)
+        from app.modules.procurement.models import ProcurementRequest
+
+        protected_request_id = await db.scalar(
+            select(ProcurementRequest.id)
+            .where(ProcurementRequest.final_movement_id == payload.original_movement_id)
+            .with_for_update()
+        )
+        if protected_request_id is not None:
+            raise InventoryConflictError(
+                "procurement receipt cannot be generically adjusted",
+                code="procurement_movement_protected",
+            )
+        original = await get_movement_record(db, payload.original_movement_id)
+        if original.movement.movement_type == MovementType.REVERSAL:
+            raise InventoryValidationError("invalid correction/reversal target")
+        if (
+            payload.movement_type == MovementType.CORRECTION
+            and original.movement.custody_user_id is not None
+        ):
+            raise InventoryValidationError(
+                "correction of a custody movement is forbidden",
+                code="custody_correction_forbidden",
+            )
+        if (
+            payload.movement_type == MovementType.REVERSAL
+            and custody_user_id != original.movement.custody_user_id
+        ):
+            raise InventoryValidationError(
+                "reversal custody must match original movement",
+                code="reversal_custody_mismatch",
+            )
+        if payload.movement_type == MovementType.REVERSAL and await db.scalar(
+            select(Movement.id).where(
+                Movement.original_movement_id == payload.original_movement_id,
+                Movement.movement_type == MovementType.REVERSAL,
+            )
+        ):
+            raise InventoryConflictError(
+                "movement already reversed", code="movement_already_reversed"
+            )
+
+        # Reversing a RETURN recreates employee custody. It must therefore
+        # obey the same approved-user boundary as a normal ISSUE.
+        #
+        # A reversal that reduces custody is not rejected here: that remains
+        # available as an administrative repair path.
+        if (
+            payload.movement_type == MovementType.REVERSAL
+            and custody_user_id is not None
+            and _custody_delta(payload.movement_type, original) > 0
+            and (
+                custody_user is None
+                or custody_user.role not in CUSTODY_ROLES
+                or custody_user.access_status
+                != UserAccessStatus.APPROVED
+            )
+        ):
+            raise InventoryConflictError(
+                "custody user is not an approved user",
+                code="custody_user_not_approved",
+            )
+
+    location_ids = {x for x in (payload.source_location_id, payload.destination_location_id) if x}
+    locations = {
+        x.id: x
+        for x in (
+            await db.scalars(
+                select(Location)
+                .where(Location.id.in_(location_ids))
+                .order_by(Location.id)
+                .with_for_update()
+            )
+        ).all()
+    }
+    if set(locations) != location_ids:
+        raise InventoryNotFoundError("location not found")
+    if any(x.status != LocationStatus.ACTIVE for x in locations.values()):
+        raise InventoryConflictError("archived location cannot be used", code="location_archived")
+    item_ids = {line.item_id for line in payload.lines}
+    if len(item_ids) != len(payload.lines):
+        raise InventoryValidationError("each item must occur once per movement")
+    items = {
+        x.id: x
+        for x in (
+            await db.scalars(
+                select(Item).where(Item.id.in_(item_ids)).order_by(Item.id).with_for_update()
+            )
+        ).all()
+    }
+    if set(items) != item_ids:
+        raise InventoryNotFoundError("item not found")
+    if payload.movement_type in {MovementType.RECEIPT, MovementType.ISSUE} and any(
+        x.status != ItemStatus.ACTIVE for x in items.values()
+    ):
+        raise InventoryConflictError("archived item cannot be received or issued")
+    if original and payload.movement_type == MovementType.CORRECTION:
+        original_locations = {
+            original.movement.source_location_id,
+            original.movement.destination_location_id,
+        } - {None}
+        if not location_ids.intersection(original_locations) or not item_ids.issubset(
+            {line.item_id for line in original.lines}
+        ):
+            raise InventoryValidationError("correction must concern an original item and location")
+    manufacturers = {
+        x.id: x.name
+        for x in (
+            await db.scalars(
+                select(Manufacturer).where(
+                    Manufacturer.id.in_(
+                        {x.manufacturer_id for x in items.values() if x.manufacturer_id}
+                    )
+                )
+            )
+        ).all()
+    }
+    source = locations.get(payload.source_location_id) if payload.source_location_id else None
+    destination = (
+        locations.get(payload.destination_location_id) if payload.destination_location_id else None
+    )
+    # The request is bounded to 500 items and two locations. Item locks above
+    # serialize both existing and missing projection rows for normal runtime
+    # writers. Projection rows are read here for validation; the privileged DB
+    # writer performs the actual journal-derived DML after movement lines exist.
+    balances = {
+        (balance.item_id, balance.location_id): balance
+        for balance in (
+            await db.scalars(
+                select(StockBalance)
+                .where(
+                    StockBalance.item_id.in_(item_ids),
+                    StockBalance.location_id.in_(location_ids),
+                )
+                .order_by(StockBalance.item_id, StockBalance.location_id)
+            )
+        ).all()
+    }
+    custody_balances: dict[uuid.UUID, UserItemCustodyBalance] = {}
+    if custody_user_id is not None:
+        custody_balances = {
+            balance.item_id: balance
+            for balance in (
+                await db.scalars(
+                    select(UserItemCustodyBalance)
+                    .where(
+                        UserItemCustodyBalance.user_id == custody_user_id,
+                        UserItemCustodyBalance.item_id.in_(item_ids),
+                    )
+                    .order_by(UserItemCustodyBalance.item_id)
+                )
+            ).all()
+        }
+    movement = Movement(
+        id=uuid.uuid4(),
+        movement_type=payload.movement_type,
+        line_count=len(payload.lines),
+        actor_user_id=actor_user_id,
+        custody_user_id=custody_user_id,
+        actor_display_name_snapshot=normalize_inline_text(
+            actor_display_name, field="actor", max_length=579
+        ),
+        source_location_id=payload.source_location_id,
+        destination_location_id=payload.destination_location_id,
+        source_location_code_snapshot=source.code if source else None,
+        source_location_name_snapshot=source.name if source else None,
+        destination_location_code_snapshot=destination.code if destination else None,
+        destination_location_name_snapshot=destination.name if destination else None,
+        original_movement_id=payload.original_movement_id,
+        client_request_id=request_id,
+        request_fingerprint=fingerprint,
+        occurred_at=movement_occurred_at,
+    )
+    db.add(movement)
+    await db.flush()
+    movement_lines = []
+    for number, line in enumerate(sorted(payload.lines, key=lambda x: x.item_id), 1):
+        if line.quantity <= 0:
+            raise InventoryValidationError("quantity must be positive")
+        for location_id, delta in (
+            (payload.source_location_id, -line.quantity),
+            (payload.destination_location_id, line.quantity),
+        ):
+            if location_id is None:
+                continue
+            balance = balances.get((line.item_id, location_id))
+            quantity = (balance.quantity if balance else 0) + delta
+            if quantity < 0:
+                raise InventoryConflictError("insufficient stock", code="insufficient_stock")
+            if quantity > 2**53 - 1:
+                raise InventoryConflictError(
+                    "quantity exceeds supported range", code="quantity_overflow"
+                )
+        custody_delta = _custody_delta(payload.movement_type, original) * line.quantity
+        if custody_user_id is not None and custody_delta:
+            custody_balance = custody_balances.get(line.item_id)
+            custody_quantity = (
+                custody_balance.quantity if custody_balance is not None else 0
+            ) + custody_delta
+            if custody_quantity < 0:
+                raise InventoryConflictError(
+                    "insufficient user custody",
+                    code="insufficient_custody",
+                )
+            if custody_quantity > 2**53 - 1:
+                raise InventoryConflictError(
+                    "quantity exceeds supported range",
+                    code="quantity_overflow",
+                )
+        item = items[line.item_id]
+        movement_lines.append(
+            MovementLine(
+                movement_id=movement.id,
+                line_no=number,
+                item_id=item.id,
+                quantity=line.quantity,
+                item_name_snapshot=item.name,
+                model_snapshot=item.model,
+                manufacturer_name_snapshot=manufacturers.get(item.manufacturer_id)
+                if item.manufacturer_id
+                else None,
+            )
+        )
+    db.add_all(movement_lines)
+    await db.flush()
+
+    # The runtime principal has no direct DML privileges on warehouse
+    # projections. The SECURITY DEFINER function re-derives each affected
+    # balance from the immutable journal, so retries cannot double-apply a
+    # delta and arbitrary projection writes cannot bypass the ledger.
+    for movement_line in movement_lines:
+        await db.execute(
+            text(
+                "SELECT refresh_warehouse_projection("
+                "CAST(:movement_id AS uuid), CAST(:item_id AS uuid)"
+                ")"
+            ),
+            {
+                "movement_id": str(movement.id),
+                "item_id": str(movement_line.item_id),
+            },
+        )
+
+    await db.flush()
+    return MovementResult(MovementRecord(movement, movement_lines), replayed=False)
+
+
+async def reverse_movement(
+    db: AsyncSession,
+    original_movement_id: uuid.UUID,
+    payload: MovementReversalCreate,
+    *,
+    actor_user_id: uuid.UUID,
+    actor_display_name: str,
+) -> MovementResult:
+    original = await get_movement_record(db, original_movement_id)
+    return await _create_movement(
+        db,
+        MovementCreate(
+            movement_type=MovementType.REVERSAL,
+            original_movement_id=original_movement_id,
+            client_request_id=payload.client_request_id,
+            source_location_id=original.movement.destination_location_id,
+            destination_location_id=original.movement.source_location_id,
+            lines=[
+                MovementLineCreate(item_id=x.item_id, quantity=x.quantity) for x in original.lines
+            ],
+        ),
+        actor_user_id=actor_user_id,
+        actor_display_name=actor_display_name,
+        custody_user_id=original.movement.custody_user_id,
+    )

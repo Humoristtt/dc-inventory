@@ -187,9 +187,9 @@ jobs:
         working-directory: frontend
         run: npm ci
 
-      - name: Dependency audit diagnostic
+      - name: Audit frontend dependencies
         working-directory: frontend
-        run: npm audit --json || true
+        run: npm audit --audit-level=high
 
       - name: Verify vendored Telegram SDK
         working-directory: frontend

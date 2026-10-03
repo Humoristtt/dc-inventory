@@ -77,7 +77,7 @@ async def test_owner_can_approve_pending_admin_via_telegram(
     result = await apply_access_decision(
         db,
         callback_data=access_callback_data(approve.token),
-        callback_query_id=f"cp03-owner-{uuid.uuid4().hex}",
+        callback_query_id=f"rbac-owner-{uuid.uuid4().hex}",
         actor_telegram_user_id=await _telegram_user_id(
             db,
             owner.id,
@@ -155,7 +155,7 @@ async def test_expired_privileged_callback_is_rejected_without_mutation(
         await apply_access_decision(
             db,
             callback_data=access_callback_data(approve.token),
-            callback_query_id=f"cp03-expired-{uuid.uuid4().hex}",
+            callback_query_id=f"rbac-expired-{uuid.uuid4().hex}",
             actor_telegram_user_id=await _telegram_user_id(
                 db,
                 admin.id,

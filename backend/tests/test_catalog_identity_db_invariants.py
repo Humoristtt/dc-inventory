@@ -50,7 +50,7 @@ async def test_direct_name_change_cannot_leave_normalized_name_stale(
         cable_payload(),
     )
 
-    new_name = "CP02 Straße Cable"
+    new_name = "Identity Straße Cable"
     expected = normalize_comparison(
         new_name,
         field="name",
@@ -91,7 +91,7 @@ async def test_direct_normalized_name_change_cannot_diverge_from_name(
             await db.execute(
                 update(Item)
                 .where(Item.id == item_id)
-                .values(normalized_name="cp02-forged-normalized-name")
+                .values(normalized_name="forged-normalized-name")
             )
 
             await db.execute(text("SET CONSTRAINTS ALL IMMEDIATE"))
@@ -302,7 +302,7 @@ async def test_normal_catalog_service_satisfies_identity_guard(
     attributes["length_m"] = "123000"
 
     patch = ItemPatch(
-        name="CP02 Straße Cable",
+        name="Identity Straße Cable",
         model="MÖDEL-ß",
         attributes=attributes,
     )

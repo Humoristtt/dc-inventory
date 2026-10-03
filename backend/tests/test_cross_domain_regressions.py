@@ -89,7 +89,7 @@ async def create_existing_request(
         db,
         ProcurementRequestCreate(
             assigned_manager_user_id=manager.id,
-            client_request_id=f"cp01-create-{uuid.uuid4().hex}",
+            client_request_id=f"cross-domain-create-{uuid.uuid4().hex}",
             lines=[
                 ExistingItemLineCreate(
                     line_type=ProcurementLineType.EXISTING_ITEM,
@@ -137,7 +137,7 @@ async def test_procurement_notification_requires_current_read_capability(
         request_id=record.request.id,
         request_number=record.request.request_number,
         event_id=event_id,
-        action="CP01 capability regression",
+        action="cross-domain capability regression",
         lines=record.current_revision.lines,
         recipient_user_ids={engineer.id},
     )
@@ -171,8 +171,8 @@ async def test_revision_required_initiator_cannot_be_left_without_create_capabil
         CorrectionRequest(
             expected_state_version=record.request.state_version,
             expected_revision_id=record.request.current_revision_id,
-            client_request_id=(f"cp01-correction-{uuid.uuid4().hex}"),
-            comment="CP01 revision required",
+            client_request_id=(f"cross-domain-correction-{uuid.uuid4().hex}"),
+            comment="cross-domain revision required",
         ),
         actor_user_id=manager.id,
         settings=settings(),
@@ -285,7 +285,7 @@ async def test_archive_and_procurement_snapshot_are_serialized(
                         create_db,
                         ProcurementRequestCreate(
                             assigned_manager_user_id=manager_id,
-                            client_request_id=(f"cp01-race-{uuid.uuid4().hex}"),
+                            client_request_id=(f"cross-domain-race-{uuid.uuid4().hex}"),
                             lines=[
                                 ExistingItemLineCreate(
                                     line_type=(ProcurementLineType.EXISTING_ITEM),

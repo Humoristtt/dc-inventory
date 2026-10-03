@@ -62,6 +62,17 @@ POST /api/telegram/webhook
 
 Cloudflare Gateway для **исходящей** Telegram-доставки и Cloudflare Tunnel для **входящего** webhook — разные компоненты.
 
+
+### Backend module boundaries
+
+Backend остаётся модульным монолитом, но публичные service/query modules не содержат всю реализацию в одном файле.
+
+- Catalog: `service.py` — façade; mutations — `mutations.py`; reads — `read_service.py`; item validation — `item_validation.py`; records — `records.py`. Query path разделён на `query_spec.py`, `query_predicates.py`, `query_items.py`, `query_facets.py`, `query_search.py` и `query_types.py`.
+- Inventory: `service.py` — façade; movement mutations — `movements.py`; location mutations — `locations.py`; read paths — `queries.py`; low-level movement/idempotency support — `movement_support.py`; domain records/errors — `domain.py`.
+- Procurement: `service.py` — façade; lifecycle — `workflow.py`; technical acceptance/binding — `acceptance.py`; reads — `queries.py`; line preparation — `lines.py`; locking/idempotency/state validation — `mutation_support.py`; actors/actions/domain вынесены в отдельные owning modules.
+
+API imports могут идти через публичный façade. Внутренние cross-domain зависимости привязываются к owning module, если тест или caller должен подменять именно execution dependency. Это предотвращает ложные monkeypatch boundaries после декомпозиции.
+
 ## 2. Runtime services
 
 Production-shaped `compose.yaml` определяет:

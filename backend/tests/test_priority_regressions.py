@@ -110,8 +110,8 @@ async def create_existing_procurement(
     location = await create_location(
         db,
         LocationCreate(
-            code=f"CP01-{uuid.uuid4().hex}",
-            name="CP01 receiving",
+            code=f"PRIORITY-{uuid.uuid4().hex}",
+            name="PRIORITY receiving",
             location_type="WAREHOUSE",
         ),
     )
@@ -120,7 +120,7 @@ async def create_existing_procurement(
         db,
         ProcurementRequestCreate(
             assigned_manager_user_id=manager.id,
-            client_request_id=f"cp01-create-{uuid.uuid4().hex}",
+            client_request_id=f"priority-create-{uuid.uuid4().hex}",
             lines=[
                 ExistingItemLineCreate(
                     line_type=ProcurementLineType.EXISTING_ITEM,
@@ -168,7 +168,7 @@ async def create_proposed_procurement(
         db,
         ProcurementRequestCreate(
             assigned_manager_user_id=manager.id,
-            client_request_id=f"cp01-proposed-{uuid.uuid4().hex}",
+            client_request_id=f"priority-proposed-{uuid.uuid4().hex}",
             lines=[
                 ProposedItemLineCreate(
                     line_type=ProcurementLineType.PROPOSED_ITEM,
@@ -199,7 +199,7 @@ async def move_to_acceptance(
         record.request.id,
         expected(
             record,
-            f"cp01-manager-accept-{uuid.uuid4().hex}",
+            f"priority-manager-accept-{uuid.uuid4().hex}",
         ),
         actor_user_id=manager_id,
     )
@@ -209,7 +209,7 @@ async def move_to_acceptance(
         record.request.id,
         expected(
             record,
-            f"cp01-transfer-{uuid.uuid4().hex}",
+            f"priority-transfer-{uuid.uuid4().hex}",
         ),
         actor_user_id=manager_id,
         settings=settings(),
@@ -260,7 +260,7 @@ async def test_admin_cannot_approve_pending_admin_via_telegram(
         await apply_access_decision(
             db,
             callback_data=access_callback_data(approve.token),
-            callback_query_id=f"cp01-{uuid.uuid4().hex}",
+            callback_query_id=f"priority-{uuid.uuid4().hex}",
             actor_telegram_user_id=(admin_identity.telegram_user_id),
             message_chat_id=None,
             message_id=None,
@@ -284,7 +284,7 @@ async def test_proposed_line_rejects_mismatched_existing_item_binding(
         record,
     ) = await create_proposed_procurement(db)
 
-    wrong_item = approved_item.model_copy(update={"model": "CP01-WRONG-MODEL"})
+    wrong_item = approved_item.model_copy(update={"model": "PRIORITY-WRONG-MODEL"})
     wrong_item_id = await create_item(db, wrong_item)
 
     line = record.current_revision.lines[0]
@@ -296,7 +296,7 @@ async def test_proposed_line_rejects_mismatched_existing_item_binding(
             LineBindingCreate(
                 expected_state_version=(record.request.state_version),
                 expected_revision_id=(record.request.current_revision_id),
-                client_request_id=(f"cp01-bind-{uuid.uuid4().hex}"),
+                client_request_id=(f"priority-bind-{uuid.uuid4().hex}"),
                 item_id=wrong_item_id,
                 line_id=line.id,
             ),
@@ -317,7 +317,7 @@ async def test_create_and_bind_rejects_payload_mismatching_approved_snapshot(
         record,
     ) = await create_proposed_procurement(db)
 
-    wrong_item = approved_item.model_copy(update={"model": "CP01-CREATE-WRONG-MODEL"})
+    wrong_item = approved_item.model_copy(update={"model": "PRIORITY-CREATE-WRONG-MODEL"})
 
     line = record.current_revision.lines[0]
 
@@ -330,7 +330,7 @@ async def test_create_and_bind_rejects_payload_mismatching_approved_snapshot(
             ProposedItemCreateAndBind(
                 expected_state_version=(record.request.state_version),
                 expected_revision_id=(record.request.current_revision_id),
-                client_request_id=(f"cp01-create-bind-{uuid.uuid4().hex}"),
+                client_request_id=(f"priority-create-bind-{uuid.uuid4().hex}"),
                 line_id=line.id,
                 item=wrong_item,
             ),
@@ -363,7 +363,7 @@ async def test_existing_item_identity_change_blocks_final_acceptance(
     await update_item(
         db,
         item_id,
-        ItemPatch(model="CP01-MUTATED-AFTER-APPROVAL"),
+        ItemPatch(model="PRIORITY-MUTATED-AFTER-APPROVAL"),
         fields_set={"model"},
     )
 
@@ -376,7 +376,7 @@ async def test_existing_item_identity_change_blocks_final_acceptance(
             ProcurementAcceptanceCreate(
                 expected_state_version=(record.request.state_version),
                 expected_revision_id=(record.request.current_revision_id),
-                client_request_id=(f"cp01-accept-{uuid.uuid4().hex}"),
+                client_request_id=(f"priority-accept-{uuid.uuid4().hex}"),
                 receiving_location_id=location.id,
             ),
             actor_user_id=senior.id,
@@ -445,7 +445,7 @@ async def test_adjusted_movement_cannot_later_become_final_procurement_receipt(
         MovementCreate(
             movement_type=MovementType.RECEIPT,
             destination_location_id=location.id,
-            client_request_id=(f"cp01-independent-receipt-{uuid.uuid4().hex}"),
+            client_request_id=(f"priority-independent-receipt-{uuid.uuid4().hex}"),
             lines=[
                 MovementLineCreate(
                     item_id=item_id,
@@ -454,7 +454,7 @@ async def test_adjusted_movement_cannot_later_become_final_procurement_receipt(
             ],
         ),
         actor_user_id=senior.id,
-        actor_display_name="CP01 senior",
+        actor_display_name="PRIORITY senior",
     )
 
     receipt_id = receipt.record.movement.id
@@ -465,7 +465,7 @@ async def test_adjusted_movement_cannot_later_become_final_procurement_receipt(
             movement_type=MovementType.CORRECTION,
             source_location_id=location.id,
             original_movement_id=receipt_id,
-            client_request_id=(f"cp01-prebind-correction-{uuid.uuid4().hex}"),
+            client_request_id=(f"priority-prebind-correction-{uuid.uuid4().hex}"),
             lines=[
                 MovementLineCreate(
                     item_id=item_id,
@@ -474,7 +474,7 @@ async def test_adjusted_movement_cannot_later_become_final_procurement_receipt(
             ],
         ),
         actor_user_id=senior.id,
-        actor_display_name="CP01 senior",
+        actor_display_name="PRIORITY senior",
     )
 
     assert correction.record.movement.original_movement_id == receipt_id

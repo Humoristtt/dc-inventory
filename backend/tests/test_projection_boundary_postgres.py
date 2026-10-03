@@ -40,7 +40,7 @@ async def test_service_keeps_stock_and_custody_equal_to_journal(
         "RECEIPT",
         10,
         destination=state[2],
-        key="d2-receipt",
+        key="projection-receipt",
     )
     issue = await move(
         db,
@@ -49,7 +49,7 @@ async def test_service_keeps_stock_and_custody_equal_to_journal(
         4,
         source=state[2],
         custody_user_id=state[0],
-        key="d2-issue",
+        key="projection-issue",
     )
 
     assert (
@@ -109,7 +109,7 @@ async def test_upgrade_refuses_existing_projection_drift(
             "RECEIPT",
             5,
             destination=state[2],
-            key="d2-preflight-receipt",
+            key="projection-preflight-receipt",
         )
         item_id = state[1]
         location_id = state[2]

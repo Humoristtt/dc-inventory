@@ -1,4 +1,4 @@
-"""Isolated PostgreSQL 18 regressions for f8 catalog identity invariants."""
+"""Isolated PostgreSQL 18 regressions for catalog identity invariants."""
 
 from __future__ import annotations
 
@@ -95,7 +95,7 @@ async def test_normal_catalog_update_preserves_identity_invariant(
     payload = cable_payload(length_m="1000")
     item_id = await create_item(db, payload)
     patch = ItemPatch(
-        name="CP08 Straße cable",
+        name="Identity Straße cable",
         model="MÖDEL-ß",
         attributes={**payload.attributes, "length_m": "123000"},
     )

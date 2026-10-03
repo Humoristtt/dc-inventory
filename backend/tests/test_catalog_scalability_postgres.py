@@ -30,9 +30,9 @@ async def test_catalog_list_stock_and_facet_scalability(
 
         for index in range(size):
             payload = cable_payload(
-                color=f"cp06-{marker}-{size}-{index:04d}",
+                color=f"catalog-scale-{marker}-{size}-{index:04d}",
             )
-            payload.name = f"CP06-{marker}-GROUP-{size}-END"
+            payload.name = f"CATALOG-SCALE-{marker}-GROUP-{size}-END"
             group.append(await create_item(db, payload))
 
         groups[size] = group
@@ -57,7 +57,7 @@ async def test_catalog_list_stock_and_facet_scalability(
     for size in (1, 100, 500):
         spec = await build_catalog_query_spec(
             db,
-            q=f"CP06-{marker}-GROUP-{size}-END",
+            q=f"CATALOG-SCALE-{marker}-GROUP-{size}-END",
             category_key="optical_patch_cord",
         )
 
@@ -94,7 +94,7 @@ async def test_catalog_list_stock_and_facet_scalability(
 
     spec = await build_catalog_query_spec(
         db,
-        q=f"CP06-{marker}-GROUP-500-END",
+        q=f"CATALOG-SCALE-{marker}-GROUP-500-END",
         category_key="optical_patch_cord",
     )
 
@@ -127,7 +127,7 @@ async def test_catalog_list_stock_and_facet_scalability(
 
     stock_spec = await build_catalog_query_spec(
         db,
-        q=f"CP06-{marker}-GROUP-500-END",
+        q=f"CATALOG-SCALE-{marker}-GROUP-500-END",
         category_key="optical_patch_cord",
         availability="IN_STOCK",
     )
@@ -168,11 +168,11 @@ async def test_catalog_list_stock_and_facet_scalability(
     assert scoped_facets[0].key == "availability"
 
     print(
-        f"CP06_CATALOG_LIST_SELECTS={list_counts}",
+        f"CATALOG_LIST_SELECTS={list_counts}",
         flush=True,
     )
     print(
-        f"CP06_CATALOG_FULL_FACET_SELECTS={facet_counts}",
+        f"CATALOG_FULL_FACET_SELECTS={facet_counts}",
         flush=True,
     )
 

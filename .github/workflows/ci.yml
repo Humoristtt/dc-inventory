@@ -239,7 +239,7 @@ jobs:
           docker logs dc-inventory-playwright-web
           exit 1
 
-      - name: Stage 8 browser acceptance
+      - name: Browser acceptance
         working-directory: frontend
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:4173

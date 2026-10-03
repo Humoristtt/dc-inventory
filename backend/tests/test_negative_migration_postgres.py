@@ -101,7 +101,7 @@ async def test_rejects_unverifiable_historical_snapshot(
                     :client_key, :fingerprint, CAST(:revision AS uuid), 1
                 )
             """),
-            {"request": request, "number": "PR-A9-" + uuid.uuid4().hex[:12],
+            {"request": request, "number": "PR-MIGRATION-" + uuid.uuid4().hex[:12],
              "initiator": initiator, "manager": manager,
              "client_key": uuid.uuid4().hex, "fingerprint": "a" * 64,
              "revision": revision},
@@ -136,8 +136,8 @@ async def test_rejects_unverifiable_historical_snapshot(
         await db.commit()
     await engine.dispose()
 
-    # Tests cannot pass just because a9 never runs: check actual Alembic failure,
-    # then prove transactional rollback left schema on f8 with no new column.
+    # The test must exercise CURRENT: check the actual Alembic failure,
+    # then prove transactional rollback left schema on PREVIOUS with no new column.
     output = alembic(url, "upgrade", CURRENT, success=False)
     assert any(marker in output for marker in (
         "cannot safely reconstruct canonical identity",

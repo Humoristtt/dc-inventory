@@ -1,4 +1,4 @@
-"""Functional tests for version-pinned Stage15 S3 uploads.
+"""Functional tests for version-pinned S3 backup uploads.
 
 No network, credentials or production resources are used.
 """
@@ -37,7 +37,7 @@ sys.modules["botocore.config"] = config
 sys.path.insert(0, str(HELPER.parent))
 
 spec = importlib.util.spec_from_file_location(
-    "versioned_stage15_s3", HELPER
+    "versioned_backup_s3", HELPER
 )
 module = importlib.util.module_from_spec(spec)
 assert spec.loader is not None

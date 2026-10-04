@@ -1,7 +1,7 @@
 # Чистый аудит текущего состояния
 
-Дата: **2026-10-03**  
-Аудируемый source baseline: `14ee3f01ecce96722ba2c170a5f95c5ba068b710`  
+Дата: **2026-10-04**  
+Аудируемый source baseline: `0c19033fc9c5047b0f47af29889fb283f8d65dec`  
 Alembic source head: `e3f4a5b6c7d8`
 
 Этот документ — результат независимого прохода по текущему репозиторию. Предыдущие audit/remediation/stage документы не использовались как основание для выводов.
@@ -185,23 +185,21 @@ Route metadata сведена в `frontend/src/app/appRoutes.ts`. Один regis
 
 Статус: **CLOSED**. Ruff, mypy, полный backend suite и отдельный PostgreSQL invariant audit проходят после декомпозиции.
 
-### F-05 — P3 — npm сообщает один high-severity advisory во время `npm ci`
+### F-05 — P3 — npm dependency audit signal
 
-В successful frontend/runtime jobs npm печатает `1 high severity vulnerability`. Одновременно обязательный Trivy filesystem scan и финальные image scans HIGH/CRITICAL проходят.
+Диагностический `npm audit --json` установил источник прежнего HIGH signal: транзитивный `undici 8.10.1` через dev dependency `jsdom 30.0.1`. Уязвимый диапазон advisory заканчивался до `8.10.2`.
 
-Это означает не подтверждённую runtime-уязвимость, а **неразрешённый dependency-audit signal**: из текущего CI log нельзя установить пакет/advisory и runtime reachability.
+Lockfile обновлён до `undici 8.10.2` без force-upgrade dependency tree. После обновления `npm ci` и `npm audit --audit-level=high` возвращают `found 0 vulnerabilities`. High-severity npm audit теперь является обязательным CI gate, а не диагностикой `|| true`.
 
-Статус: **OPEN**. Следующий безопасный шаг — получить `npm audit --json` на текущем lockfile, определить dependency path и только после этого обновлять пакет/lockfile. Не использовать `npm audit fix --force` без анализа.
+Статус: **CLOSED**. Dependency signal устранён и защищён отдельным CI regression gate.
 
 ## 5. Итог
 
 На audited baseline не найдено P0/P1 correctness/security defect, который по имеющимся source+CI evidence делает систему заведомо небезопасной или неконсистентной.
 
-Открыт один source-level finding:
+Открытых source-level findings в этом проходе не осталось.
 
-- F-05 — P3 dependency-audit signal от npm.
-
-F-01—F-04 закрыты и подтверждены зелёным CI.
+F-01—F-05 закрыты и подтверждены зелёным CI. Отдельно сохраняется только необходимость live runtime verification перед production change.
 
 Отдельно остаётся **неизмеренное live production state**. Это не finding исходного кода: его нельзя достоверно вывести из Git. Перед production change необходимо выполнить runtime verification из `OPERATIONS.md`.
 

@@ -21,7 +21,7 @@ def require(source: str, needle: str, label: str) -> None:
 
 for path in (BACKUP, HELPER, SERVICE, TIMER):
     if not path.is_file():
-        raise RuntimeError(f"Missing Stage15A file: {path}")
+        raise RuntimeError(f"Missing backup contract file: {path}")
 
 backup = BACKUP.read_text()
 helper = HELPER.read_text()
@@ -50,7 +50,7 @@ for needle, label in (
     ('last-failure.json', "failure state"),
     ('docker compose ps -q postgres', "existing PostgreSQL container"),
     ('safe.directory="${ROOT_DIR}"', "root Git safety"),
-    ('STAGE15A_BACKUP=PASS', "success marker"),
+    ('BACKUP_VERIFIED=PASS', "semantic success marker"),
 ):
     require(backup, needle, label)
 
@@ -65,7 +65,7 @@ for needle, label in (
     ('"sha256": sha256', "SHA-256 upload metadata"),
     ('S3_OBJECT_LOCK=GOVERNANCE_7D_PASS', "Object Lock marker"),
     ('S3_RETENTION_30D=PASS', "retention marker"),
-    ('STAGE15A_REMOTE_VERIFICATION=PASS', "remote verification marker"),
+    ('BACKUP_REMOTE_VERIFICATION=PASS', "semantic remote verification marker"),
 ):
     require(helper, needle, label)
 
@@ -140,4 +140,4 @@ for needle in (
 ):
     require(helper, needle, "version-specific backup verification")
 
-print("STAGE15A_CONTRACT_TEST=PASS")
+print("BACKUP_CONTRACT_TEST=PASS")

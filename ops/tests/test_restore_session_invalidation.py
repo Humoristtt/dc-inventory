@@ -23,5 +23,5 @@ assert (
 ), "restored sessions must be revoked or removed"
 
 print(
-    "CP01_RESTORE_SESSION_INVALIDATION=PASS"
+    "RESTORE_SESSION_INVALIDATION_CONTRACT=PASS"
 )

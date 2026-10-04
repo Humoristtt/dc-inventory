@@ -129,7 +129,7 @@ cleanup_runtime
         with patch.dict(sys.modules, {"boto3": boto3, "botocore": botocore,
                                       "botocore.config": config, "lifecycle_policy": lifecycle}):
             s3_spec = importlib.util.spec_from_file_location(
-                "stage15_s3_test", ROOT / "ops/backup/s3_stage15.py"
+                "backup_s3_test", ROOT / "ops/backup/s3_stage15.py"
             )
             s3_module = importlib.util.module_from_spec(s3_spec)
             s3_spec.loader.exec_module(s3_module)

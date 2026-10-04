@@ -35,7 +35,7 @@ def validate_manifest(manifest: object, manifest_key: str, prefix: str) -> dict[
     if not isinstance(manifest, dict):
         raise ValueError("backup manifest is not an object")
     if manifest.get("schema_version") != 2:
-        raise ValueError("Stage15 final recovery requires manifest schema v2")
+        raise ValueError("backup recovery requires manifest schema v2")
     if manifest.get("application") != "dc-inventory" or manifest.get("backup_type") != "full":
         raise ValueError("backup manifest application/type mismatch")
     if not manifest_key.startswith(prefix) or not manifest_key.endswith(".manifest.json"):

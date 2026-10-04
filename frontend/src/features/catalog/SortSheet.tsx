@@ -1,3 +1,4 @@
+import { Button } from "../../shared/ui";
 import type {
   SortOption,
   SortSelection,
@@ -36,7 +37,7 @@ export function SortSheet({
             <span className="section-kicker">Порядок списка</span>
             <h2 id="sort-sheet-title">Сортировка</h2>
           </div>
-          <button
+          <Button
             aria-label="Закрыть сортировку"
             className="icon-button"
             data-escape-dismiss=""
@@ -44,13 +45,13 @@ export function SortSheet({
             type="button"
           >
             ×
-          </button>
+          </Button>
         </header>
         <div className="sort-options">
           {options.map((option) => {
             const selected = option.sort === active.sort && option.order === active.order;
             return (
-              <button
+              <Button
                 aria-pressed={selected}
                 className={selected ? "sort-option sort-option--active" : "sort-option"}
                 key={`${option.sort}:${option.order}`}
@@ -60,7 +61,7 @@ export function SortSheet({
                 <span>{option.label}</span>
                 <small>{option.hint}</small>
                 <i aria-hidden="true">{selected ? "●" : "○"}</i>
-              </button>
+              </Button>
             );
           })}
         </div>

@@ -130,8 +130,8 @@ nonce="$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
 
 docker compose -f compose.dev.yaml exec -T postgres \
   psql -U "$POSTGRES_USER" -d "$TEST_DB" -v ON_ERROR_STOP=1 \
-  -c "CREATE TABLE cp15_fullstack_probe (token text NOT NULL);
-      INSERT INTO cp15_fullstack_probe (token) VALUES ('$nonce');" \
+  -c "CREATE TABLE fullstack_isolation_probe (token text NOT NULL);
+      INSERT INTO fullstack_isolation_probe (token) VALUES ('$nonce');" \
   </dev/null >/dev/null
 
 (
@@ -145,7 +145,7 @@ docker compose -f compose.dev.yaml exec -T postgres \
 
 docker compose -f compose.dev.yaml exec -T postgres \
   psql -U "$POSTGRES_USER" -d "$TEST_DB" -v ON_ERROR_STOP=1 \
-  -c 'DROP TABLE cp15_fullstack_probe' </dev/null >/dev/null
+  -c 'DROP TABLE fullstack_isolation_probe' </dev/null >/dev/null
 
 (
   cd backend

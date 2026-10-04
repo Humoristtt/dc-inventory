@@ -1,3 +1,4 @@
+import { Button, Input, Select, Textarea } from "../../shared/ui";
 import { useInfiniteQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
@@ -121,7 +122,7 @@ export function ProcurementCreatePage() {
           <h2>Ответственный</h2>
           <label>
             Поиск менеджера
-            <input
+            <Input
               value={managerSearch}
               onChange={(event) => {
                 setManagerSearch(
@@ -134,7 +135,7 @@ export function ProcurementCreatePage() {
 
           <label>
             Менеджер
-            <select
+            <Select
               value={manager}
               onChange={(event) =>
                 setManager(
@@ -154,11 +155,11 @@ export function ProcurementCreatePage() {
                   </option>
                 ),
               )}
-            </select>
+            </Select>
           </label>
 
           {managers.hasNextPage ? (
-            <button
+            <Button
               className="button button--load-more"
               disabled={
                 managers.isFetchingNextPage
@@ -171,11 +172,11 @@ export function ProcurementCreatePage() {
               {managers.isFetchingNextPage
                 ? "Загружаем менеджеров…"
                 : "Показать ещё менеджеров"}
-            </button>
+            </Button>
           ) : null}
           <label>
             Общий комментарий
-            <textarea
+            <Textarea
               maxLength={4000}
               value={comment}
               onChange={(event) => setComment(event.target.value)}
@@ -184,13 +185,13 @@ export function ProcurementCreatePage() {
         </section>
         <LineComposer lines={lines} onChange={setLines} />
         {mutation.isError ? <p role="alert">{procurementError(mutation.error)}</p> : null}
-        <button
+        <Button
           className="button button--dark procurement-primary"
           disabled={!manager || !lines.length || mutation.isPending}
           type="submit"
         >
           {mutation.isPending ? "Отправляем…" : "Отправить заявку"}
-        </button>
+        </Button>
       </form>
     </main>
   );

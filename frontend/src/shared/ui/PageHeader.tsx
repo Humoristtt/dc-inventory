@@ -1,3 +1,4 @@
+import { Button } from "./controls";
 import type {
   ReactNode,
 } from "react";
@@ -51,14 +52,14 @@ export function PageHeader({
       <div className={headingRowClasses}>
         <div className="ds-page-header__back-slot">
           {onBack ? (
-            <button
+            <Button
               aria-label={backLabel}
               className="icon-button icon-button--light ds-page-header__back"
               onClick={onBack}
               type="button"
             >
               ←
-            </button>
+            </Button>
           ) : null}
         </div>
 

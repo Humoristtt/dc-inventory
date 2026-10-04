@@ -304,6 +304,12 @@ it(
         },
       );
 
+    await waitFor(() => {
+      expect(
+        (submit as HTMLButtonElement).disabled,
+      ).toBe(false);
+    });
+
     for (const count of [1, 2]) {
       fireEvent.click(submit);
 
@@ -383,6 +389,12 @@ it(
           name: "Сохранить",
         },
       );
+
+    await waitFor(() => {
+      expect(
+        (submit as HTMLButtonElement).disabled,
+      ).toBe(false);
+    });
 
     fireEvent.click(submit);
     fireEvent.click(submit);

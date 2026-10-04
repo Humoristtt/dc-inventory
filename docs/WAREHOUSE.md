@@ -140,3 +140,16 @@ Final technical acceptance вызывает Warehouse service **до commit**, �
 - cursor/snapshot history;
 - Procurement receipt protection;
 - migration/readiness compatibility.
+
+
+## 14. Implementation boundaries
+
+`app.modules.inventory.service` — публичный façade. Реальная ответственность разделена:
+
+- `locations.py` — create/update/archive location;
+- `movements.py` — create/reverse movement и warehouse mutation orchestration;
+- `movement_support.py` — advisory locks, idempotent replay и custody delta helpers;
+- `queries.py` — stock/location/movement read paths и cursor/snapshot feed;
+- `domain.py` — errors, records/pages и normalization helpers.
+
+Lock order и transaction ownership являются contract. Refactor между этими modules не должен менять порядок блокировок или превращать append-only journal в mutable state.

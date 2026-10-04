@@ -5,12 +5,11 @@ import { createRoot } from "react-dom/client";
 
 import { App } from "./app/App";
 import { AppProviders } from "./app/providers/AppProviders";
-import { preloadRouteForPath } from "./app/routeModules";
+import { preloadRouteForPath } from "./app/appRoutes";
 import "./app/styles/tokens.css";
 import "./app/styles/global.css";
 import "./shared/ui/design-system.css";
 import "./shared/ui/responsive.css";
-import "./features/admin/admin-select-alignment.css";
 import { TelegramAccessGate } from "./features/auth/TelegramAccessGate";
 
 const root = document.getElementById("root");

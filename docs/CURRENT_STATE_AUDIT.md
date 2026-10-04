@@ -1,7 +1,7 @@
 # Чистый аудит текущего состояния
 
-Дата: **2026-09-30**  
-Аудируемый source baseline: `2ba1fa1b1ca60bbbe4f75bf40e41f826581222c3`  
+Дата: **2026-10-04**  
+Аудируемый source baseline: `0c19033fc9c5047b0f47af29889fb283f8d65dec`  
 Alembic source head: `e3f4a5b6c7d8`
 
 Этот документ — результат независимого прохода по текущему репозиторию. Предыдущие audit/remediation/stage документы не использовались как основание для выводов.
@@ -40,13 +40,13 @@ GitHub Actions run для audited SHA завершён успешно во вс�
 Детали:
 
 - Ruff: PASS;
-- mypy: PASS, 212 source files;
+- mypy: PASS, 236 source files;
 - Alembic fresh upgrade: PASS;
 - `alembic check`: PASS;
 - source Alembic head: `e3f4a5b6c7d8`;
 - backend: `648 passed, 1 skipped`;
-- frontend unit: `165 passed` в 34 files;
-- frontend build/bundle: PASS, initial JS 285273 bytes, gzip 89245 bytes;
+- frontend unit: `186 passed` в 36 files;
+- frontend build/bundle: PASS, initial JS 287575 bytes, gzip 90127 bytes;
 - browser acceptance: `142 passed, 12 skipped`;
 - production-shaped full-stack: `2 passed`;
 - full-stack DB side effects: PASS;
@@ -151,67 +151,55 @@ GitHub Actions run для audited SHA завершён успешно во вс�
 
 Статус: **CLOSED**. Legacy documentation удалена; current-state documentation contracts прошли полный CI.
 
-### F-02 — P2 — знания о frontend routes дублируются
+### F-02 — P2 — знания о frontend routes дублировались
 
-Текущий frontend хранит route knowledge минимум в четырёх местах:
+Route metadata сведена в `frontend/src/app/appRoutes.ts`. Один registry теперь определяет render route, lazy loader, primary navigation metadata, visibility и path matching. `App.tsx`, `ApplicationShell.tsx` и preload logic потребляют этот registry, а Telegram back-navigation использует общий `APP_DEFAULT_PATH`.
 
-- JSX `<Route>` в `frontend/src/app/App.tsx`;
-- path→loader matcher в `frontend/src/app/routeModules.ts`;
-- bottom navigation/active matching в `ApplicationShell.tsx`;
-- default/back behavior в `useTelegramNavigation.ts`.
-
-Это не текущий функциональный сбой, но изменение маршрута может рассинхронизировать render/preload/navigation/back behavior.
-
-Статус: **OPEN, maintainability**.
+Статус: **CLOSED**. Route architecture централизована; regression tests проверяют registry/matching/navigation behavior.
 
 ### F-03 — P3 — крупные frontend orchestration components
 
-Текущие размеры:
+Шесть исходных hotspots декомпозированы без изменения публичного route behavior. Текущие размеры файлов:
 
-- `ItemFormPage.tsx`: 958 строк, основной component — около 745;
-- `AdminUsersPage.tsx`: 850, component — около 726;
-- `ProcurementDetailPage.tsx`: 754, component — около 561;
-- `LineComposer.tsx`: 679, component — около 548;
-- `MovementsPage.tsx`: 549, component — около 521;
-- `CategoryPage.tsx`: 540, component — около 483.
+- `ItemFormPage.tsx`: 434 строки;
+- `AdminUsersPage.tsx`: 461;
+- `ProcurementDetailPage.tsx`: 430;
+- `LineComposer.tsx`: 318;
+- `MovementsPage.tsx`: 343;
+- `CategoryPage.tsx`: 408.
 
-Функции покрыты тестами, но server state, form state, mutation orchestration и presentation слишком тесно связаны.
+Фильтры, feeds, results, family grid и catalog lookup/data-loading logic вынесены в отдельные компоненты/hooks там, где это уменьшает связность orchestration layer.
 
-Статус: **OPEN, maintainability**. Декомпозиция должна быть behavior-preserving и выполняться отдельными малыми change-set.
+Статус: **CLOSED**. Все исходные frontend hotspots ниже 500 строк; frontend lint/typecheck/unit/browser acceptance проходят.
 
 ### F-04 — P3 — крупные backend service modules
 
-Текущие размеры:
+Исходные service/query hotspots разложены по ответственности с сохранением transaction ownership и lock semantics. Публичные façade теперь компактны:
 
-- `procurement/service.py`: 1472 строки;
-- `catalog/query.py`: 1403;
-- `catalog/service.py`: 1080;
-- `inventory/service.py`: 987;
-- `_create_movement()`: около 332 строк;
-- `complete_acceptance()`: около 156;
-- `build_catalog_query_spec()`: около 161.
+- `procurement/service.py`: 69 строк;
+- `inventory/service.py`: 77;
+- `catalog/query.py`: 67;
+- `catalog/service.py`: 87.
 
-Correctness contracts сильные, но стоимость безопасного изменения растёт.
+Основная реализация распределена по owning modules: Procurement — `workflow.py`, `acceptance.py`, `queries.py`, `lines.py`, `mutation_support.py`; Inventory — `movements.py`, `queries.py`, `locations.py`, `movement_support.py`; Catalog query — `query_spec.py`, `query_items.py`, `query_facets.py`, `query_predicates.py`; Catalog service — `item_validation.py`, `read_service.py`, `mutations.py`, `records.py`.
 
-Статус: **OPEN, maintainability**. Разделять только по существующим transaction/lock boundaries, не меняя lock order и transaction ownership.
+Статус: **CLOSED**. Ruff, mypy, полный backend suite и отдельный PostgreSQL invariant audit проходят после декомпозиции.
 
-### F-05 — P3 — npm сообщает один high-severity advisory во время `npm ci`
+### F-05 — P3 — npm dependency audit signal
 
-В successful frontend/runtime jobs npm печатает `1 high severity vulnerability`. Одновременно обязательный Trivy filesystem scan и финальные image scans HIGH/CRITICAL проходят.
+Диагностический `npm audit --json` установил источник прежнего HIGH signal: транзитивный `undici 8.10.1` через dev dependency `jsdom 30.0.1`. Уязвимый диапазон advisory заканчивался до `8.10.2`.
 
-Это означает не подтверждённую runtime-уязвимость, а **неразрешённый dependency-audit signal**: из текущего CI log нельзя установить пакет/advisory и runtime reachability.
+Lockfile обновлён до `undici 8.10.2` без force-upgrade dependency tree. После обновления `npm ci` и `npm audit --audit-level=high` возвращают `found 0 vulnerabilities`. High-severity npm audit теперь является обязательным CI gate, а не диагностикой `|| true`.
 
-Статус: **OPEN**. Следующий безопасный шаг — получить `npm audit --json` на текущем lockfile, определить dependency path и только после этого обновлять пакет/lockfile. Не использовать `npm audit fix --force` без анализа.
+Статус: **CLOSED**. Dependency signal устранён и защищён отдельным CI regression gate.
 
 ## 5. Итог
 
 На audited baseline не найдено P0/P1 correctness/security defect, который по имеющимся source+CI evidence делает систему заведомо небезопасной или неконсистентной.
 
-Открыты:
+Открытых source-level findings в этом проходе не осталось.
 
-- 1 P2 maintainability finding по route metadata;
-- 2 P3 maintainability findings по размеру frontend/backend orchestration;
-- 1 P3 dependency-audit finding.
+F-01—F-05 закрыты и подтверждены зелёным CI. Отдельно сохраняется только необходимость live runtime verification перед production change.
 
 Отдельно остаётся **неизмеренное live production state**. Это не finding исходного кода: его нельзя достоверно вывести из Git. Перед production change необходимо выполнить runtime verification из `OPERATIONS.md`.
 

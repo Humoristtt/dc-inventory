@@ -139,11 +139,14 @@ CI проверяет:
 - GitHub Actions refs pinned на 40-char commit SHA;
 - external base images pinned по digest;
 - backend Python dependencies устанавливаются с `--require-hashes`;
+- frontend lockfile проходит `npm audit --audit-level=high`;
 - vendored Telegram Web App SDK проверяется по SHA-256 и размеру;
 - Trivy filesystem scan HIGH/CRITICAL;
 - финальные backend/web/postgres image scans HIGH/CRITICAL.
 
-Текущий audit отдельно зафиксировал npm signal `1 high severity vulnerability` во время `npm ci`, несмотря на зелёный Trivy gate. До идентификации advisory это остаётся P3 finding, а не доказанный runtime exploit.
+Прежний npm HIGH signal был локализован до транзитивного `undici 8.10.1` через `jsdom` и закрыт обновлением lockfile до `undici 8.10.2`. Текущий CI получает `found 0 vulnerabilities`.
+
+Backend PCRE2 security package фиксируется версией и SHA-256 официального Debian Security pool artifact для amd64/arm64. Это исключает зависимость сборки от ротации moving apt index; после установки финальный image всё равно обязан пройти Trivy HIGH/CRITICAL gate.
 
 ## 10. Data integrity security
 

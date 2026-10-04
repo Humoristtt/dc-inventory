@@ -93,25 +93,26 @@ PostgreSQL 18
 
 ## Проверенный application baseline
 
-Чистый аудит application/runtime-кода выполнен на baseline, который предшествовал документационной замене и не изменялся ею:
+Текущий engineering pass подтверждён на зелёном source baseline:
 
 ```text
-AUDITED_APPLICATION_SHA=2ba1fa1b1ca60bbbe4f75bf40e41f826581222c3
-AUDIT_DATE=2026-09-30
+AUDITED_APPLICATION_SHA=0c19033fc9c5047b0f47af29889fb283f8d65dec
+AUDIT_DATE=2026-10-04
 ALEMBIC_HEAD=e3f4a5b6c7d8
 ```
 
-GitHub CI на этом application baseline и полный CI документационного change-set завершились успешно. Для application baseline подтверждено:
+Для этого baseline GitHub CI и отдельный PostgreSQL invariant audit завершились успешно:
 
-- backend: Ruff PASS, mypy PASS для 212 source files, migration check PASS, `648 passed, 1 skipped`;
-- frontend: lint/typecheck/build PASS, `165 passed` unit tests;
+- backend: Ruff PASS, mypy PASS для 236 source files, migration check PASS, `648 passed, 1 skipped`;
+- frontend: lint/typecheck/build PASS, `186 passed` unit tests в 36 files;
 - browser acceptance: `142 passed, 12 skipped`;
 - production-shaped full-stack: `2 passed` + проверка фактических DB side effects;
 - Telegram Gateway: `7 passed`;
 - runtime provenance и least-privilege DB checks: PASS;
-- Trivy repository/image HIGH+CRITICAL gates: PASS.
+- Trivy repository/image HIGH+CRITICAL gates: PASS;
+- `npm audit --audit-level=high`: PASS, `found 0 vulnerabilities`.
 
-Это **application/source + CI evidence**, а не утверждение о текущем Git HEAD или live production. Фактическое состояние production проверяется только runtime-командами из [docs/OPERATIONS.md](docs/OPERATIONS.md).
+Это **application/source + CI evidence**, а не утверждение о live production. Фактическое состояние production проверяется только runtime-командами из [docs/OPERATIONS.md](docs/OPERATIONS.md).
 
 Полный результат аудита и открытые технические риски: [docs/CURRENT_STATE_AUDIT.md](docs/CURRENT_STATE_AUDIT.md).
 

@@ -1,8 +1,6 @@
 import inspect
 
-from app.modules.inventory.service import (
-    list_movements_cursor,
-)
+from app.modules.inventory.queries import list_movements_cursor
 
 
 def test_movement_cursor_has_no_count_or_offset() -> None:

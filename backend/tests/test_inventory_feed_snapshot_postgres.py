@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 
-from app.modules.inventory.service import (
-    _create_movement,
+from app.modules.inventory.movements import _create_movement
+from app.modules.inventory.queries import (
     acquire_movement_feed_snapshot,
     list_movements_cursor,
 )

@@ -5,7 +5,7 @@ import pytest
 
 from app.modules.catalog.enums import AttributeDataType, FilterType
 from app.modules.catalog.models import CategoryAttribute
-from app.modules.catalog.service import (
+from app.modules.catalog.validation import (
     CatalogSchemaError,
     CatalogValidationError,
     normalize_comparison,

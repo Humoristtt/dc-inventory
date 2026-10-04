@@ -162,57 +162,6 @@
   overflow-wrap: anywhere;
 }
 
-/* Retain native select keyboard, accessibility and OS picker behavior;
- * style its closed appearance to match the existing form design system. */
-.admin-users-page__body .admin-user-card > label {
-  display: grid;
-  min-width: 0;
-  gap: 9px;
-  color: #5a5348;
-  font-size: 12px;
-  font-weight: 760;
-  letter-spacing: 0.045em;
-  text-transform: uppercase;
-}
-
-.admin-users-page__body .admin-user-card > label select {
-  width: min(100%, 390px);
-  min-width: 0;
-  min-height: var(--form-control-height);
-  padding: 0 45px 0 16px;
-  appearance: none;
-  border: 1px solid #d8d2c4;
-  border-radius: var(--form-control-radius);
-  outline-offset: 3px;
-  background-color: #fff;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none'%3E%3Cpath d='m5 7 5 5 5-5' stroke='%23201c16' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 15px center;
-  background-size: 18px;
-  box-shadow: 0 2px 6px rgb(26 17 0 / 3%);
-  color: var(--color-ink);
-  cursor: pointer;
-  font-size: 16px;
-  font-weight: 700;
-  letter-spacing: normal;
-  line-height: 1.3;
-  text-transform: none;
-}
-
-.admin-users-page__body .admin-user-card > label select:hover:not(:disabled) {
-  border-color: #a99c7e;
-}
-
-.admin-users-page__body .admin-user-card > label select:focus-visible {
-  border-color: var(--color-brand-primary);
-  outline: 2px solid rgb(254 170 19 / 55%);
-}
-
-.admin-users-page__body .admin-user-card > label select:disabled {
-  cursor: not-allowed;
-  opacity: 0.55;
-}
-
 .admin-users-page__body .admin-user-card__actions {
   display: flex;
   flex-wrap: wrap;
@@ -221,14 +170,6 @@
   margin-top: auto;
   padding-top: 16px;
   border-top: 1px solid #ece6d9;
-}
-
-.admin-users-page__body .admin-user-card__actions > .button {
-  min-height: 48px;
-  padding-inline: 17px;
-  border-radius: 13px;
-  font-size: 14px;
-  font-weight: 740;
 }
 
 /* Blocking/rejection requires confirmation but should not look like a

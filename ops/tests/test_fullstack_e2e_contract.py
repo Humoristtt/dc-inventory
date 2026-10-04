@@ -76,9 +76,9 @@ assert "a9c0d1e2f3a4" not in local_runner
 assert (
     local_runner.index("fullstack_db_guard.py topology")
     < local_runner.index("createdb")
-    < local_runner.index("CREATE TABLE cp15_fullstack_probe")
+    < local_runner.index("CREATE TABLE fullstack_isolation_probe")
     < local_runner.index("fullstack_db_guard.py verify")
-    < local_runner.index("DROP TABLE cp15_fullstack_probe")
+    < local_runner.index("DROP TABLE fullstack_isolation_probe")
     < local_runner.index(".venv/bin/alembic upgrade head")
     < local_runner.index("export REAL_INVENTORY_MUTATIONS_ENABLED=true")
 )

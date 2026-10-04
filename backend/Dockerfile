@@ -2,14 +2,27 @@ FROM python:3.12-slim-bookworm@sha256:782412e85d0f0984994c290652577d4018aff08145
 
 ARG APP_REVISION
 ARG PCRE2_VERSION=10.42-1+deb12u1
+ARG PCRE2_AMD64_SHA256=81c5502941118a24d47af69a17b8b0b9548d75cc6d72b3eb3fe01047b46fa10e
+ARG PCRE2_ARM64_SHA256=d178d33697eef877c2c27733141b7f8520fee66a329ae5809e8c8eae3709efa3
 
 RUN test -n "$APP_REVISION" \
     && test "$APP_REVISION" != "unknown"
 
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        "libpcre2-8-0=${PCRE2_VERSION}" \
-    && rm -rf /var/lib/apt/lists/*
+# Debian security package indexes can rotate while the signed pool artifact
+# remains available. Install the exact fixed artifact by version + SHA-256
+# instead of depending on a moving apt index.
+RUN set -eux; \
+    arch="$(dpkg --print-architecture)"; \
+    case "$arch" in \
+        amd64) checksum="${PCRE2_AMD64_SHA256}" ;; \
+        arm64) checksum="${PCRE2_ARM64_SHA256}" ;; \
+        *) echo "unsupported architecture: $arch" >&2; exit 1 ;; \
+    esac; \
+    url="https://security.debian.org/debian-security/pool/updates/main/p/pcre2/libpcre2-8-0_${PCRE2_VERSION}_${arch}.deb"; \
+    python -c "import urllib.request; urllib.request.urlretrieve('${url}', '/tmp/libpcre2.deb')"; \
+    echo "${checksum}  /tmp/libpcre2.deb" | sha256sum --check -; \
+    dpkg -i /tmp/libpcre2.deb; \
+    rm -f /tmp/libpcre2.deb
 LABEL org.opencontainers.image.revision="${APP_REVISION}"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \

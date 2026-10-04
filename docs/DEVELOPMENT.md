@@ -193,6 +193,9 @@ GitHub runtime job дополнительно запускает `frontend/e2e/f
 
 Использовать существующие real-PostgreSQL query-count/performance contracts. При изменении semantics сначала сохранить correctness test, затем оптимизировать plan.
 
+
+Для service/query decomposition сохранять публичный façade, но новые внутренние зависимости импортировать из owning module. Если regression test подменяет dependency, patch target должен совпадать с module namespace, из которого функция вызывается во время выполнения.
+
 ## 11. Безопасность test data
 
 Запрещено:

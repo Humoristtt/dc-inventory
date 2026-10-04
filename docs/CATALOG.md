@@ -152,3 +152,20 @@ Readiness включает Catalog critical DB objects:
 - Unicode collation.
 
 Удаление/disable одного из критичных объектов делает readiness fail-closed.
+
+
+## 12. Implementation boundaries
+
+Публичный `app.modules.catalog.service` — compatibility façade. Реализация разделена так:
+
+- `item_validation.py` — batch loading metadata, prepared identity и validation draft;
+- `read_service.py` — category/manufacturer/item reads, EAV loading и duplicate lookup;
+- `mutations.py` — manufacturer/item create/update/archive/delete;
+- `records.py` — service result records;
+- `query_spec.py` — parsing query contract и category scope;
+- `query_predicates.py` — reusable SQL predicates;
+- `query_items.py` — paginated item reads/order;
+- `query_facets.py` — facet aggregation;
+- `query_search.py` / `query_types.py` — search relevance и query value types.
+
+Внутренний код не должен складывать эти обязанности обратно в `service.py` или `query.py`; transaction semantics остаются на caller/API boundary.

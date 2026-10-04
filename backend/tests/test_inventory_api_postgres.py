@@ -159,7 +159,7 @@ async def test_read_access_and_actor_scoped_journal(warehouse_db: AsyncSession) 
     # Inject the timestamp before INSERT; the journal itself cannot be edited.
     from unittest.mock import patch
 
-    from app.modules.inventory import service
+    from app.modules.inventory import movements as inventory_movements
 
     old_timestamp = datetime.now(UTC) - timedelta(days=150)
 
@@ -169,7 +169,7 @@ async def test_read_access_and_actor_scoped_journal(warehouse_db: AsyncSession) 
         return old_timestamp
 
     with patch.object(
-        service,
+        inventory_movements,
         "_movement_timestamp",
         old_movement_timestamp,
     ):
@@ -664,14 +664,18 @@ async def test_movement_feed_uses_stable_journal_cursor(
 async def test_actor_names_use_latest_journal_snapshot(warehouse_db: AsyncSession) -> None:
     from unittest.mock import patch
 
-    from app.modules.inventory import service
+    from app.modules.inventory import movements as inventory_movements
 
     db = warehouse_db
     s = await scenario(db)
     app, users = await api_context(db)
     await move(db, s, "RECEIPT", 2, destination=s[2])
     for name in ("Zulu old", "Alpha latest"):
-        with patch.object(service, "normalize_inline_text", return_value=name):
+        with patch.object(
+            inventory_movements,
+            "normalize_inline_text",
+            return_value=name,
+        ):
             await move(
                 db,
                 (users["user"][0], *s[1:]),

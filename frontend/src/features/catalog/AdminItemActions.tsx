@@ -1,3 +1,4 @@
+import { Button } from "../../shared/ui";
 import {
   useMutation,
   useQueryClient,
@@ -125,7 +126,7 @@ export function AdminItemActions({ item }: { item: CatalogItem }) {
         ) : null}
 
         {canArchive ? (
-          <button
+          <Button
             className={
               item.status === "ACTIVE"
                 ? "button button--danger"
@@ -140,11 +141,11 @@ export function AdminItemActions({ item }: { item: CatalogItem }) {
             {item.status === "ACTIVE"
               ? "В архив"
               : "Вернуть из архива"}
-          </button>
+          </Button>
         ) : null}
 
         {canDelete ? (
-          <button
+          <Button
             className="button button--danger"
             disabled={anyMutationPending}
             onClick={() =>
@@ -153,7 +154,7 @@ export function AdminItemActions({ item }: { item: CatalogItem }) {
             type="button"
           >
             Удалить позицию
-          </button>
+          </Button>
         ) : null}
       </div>
 
@@ -198,7 +199,7 @@ export function AdminItemActions({ item }: { item: CatalogItem }) {
                     : "Вернуть позицию?"}
                 </h2>
               </div>
-              <button
+              <Button
                 aria-label="Закрыть подтверждение"
                 className="icon-button"
                 data-escape-dismiss=""
@@ -208,7 +209,7 @@ export function AdminItemActions({ item }: { item: CatalogItem }) {
                 type="button"
               >
                 ×
-              </button>
+              </Button>
             </header>
 
             <div className="sheet__body archive-sheet__body">
@@ -228,7 +229,7 @@ export function AdminItemActions({ item }: { item: CatalogItem }) {
             </div>
 
             <footer className="sheet__footer">
-              <button
+              <Button
                 className="button button--ghost"
                 disabled={archiveMutation.isPending}
                 onClick={() =>
@@ -237,8 +238,8 @@ export function AdminItemActions({ item }: { item: CatalogItem }) {
                 type="button"
               >
                 Отмена
-              </button>
-              <button
+              </Button>
+              <Button
                 className="button button--dark"
                 disabled={archiveMutation.isPending}
                 onClick={() =>
@@ -249,7 +250,7 @@ export function AdminItemActions({ item }: { item: CatalogItem }) {
                 {archiveMutation.isPending
                   ? "Сохраняем…"
                   : "Подтвердить"}
-              </button>
+              </Button>
             </footer>
           </section>
         </div>
@@ -275,7 +276,7 @@ export function AdminItemActions({ item }: { item: CatalogItem }) {
                   Удалить позицию безвозвратно?
                 </h2>
               </div>
-              <button
+              <Button
                 aria-label="Закрыть подтверждение"
                 className="icon-button"
                 data-escape-dismiss=""
@@ -285,7 +286,7 @@ export function AdminItemActions({ item }: { item: CatalogItem }) {
                 type="button"
               >
                 ×
-              </button>
+              </Button>
             </header>
 
             <div className="sheet__body archive-sheet__body">
@@ -299,7 +300,7 @@ export function AdminItemActions({ item }: { item: CatalogItem }) {
             </div>
 
             <footer className="sheet__footer">
-              <button
+              <Button
                 className="button button--ghost"
                 disabled={deleteMutation.isPending}
                 onClick={() =>
@@ -308,8 +309,8 @@ export function AdminItemActions({ item }: { item: CatalogItem }) {
                 type="button"
               >
                 Отмена
-              </button>
-              <button
+              </Button>
+              <Button
                 className="button button--danger"
                 disabled={deleteMutation.isPending}
                 onClick={() =>
@@ -320,7 +321,7 @@ export function AdminItemActions({ item }: { item: CatalogItem }) {
                 {deleteMutation.isPending
                   ? "Удаляем…"
                   : "Удалить безвозвратно"}
-              </button>
+              </Button>
             </footer>
           </section>
         </div>

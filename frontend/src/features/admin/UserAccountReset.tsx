@@ -1,3 +1,4 @@
+import { Button, Input } from "../../shared/ui";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -55,13 +56,13 @@ export function UserAccountReset({ user, currentUserId, canAssignAdmin }: Props)
         <strong>Сброс учётной записи</strong>
         <span>Отвязать Telegram и завершить сеансы. История складского учёта сохранится.</span>
       </div>
-      <button
+      <Button
         className="button admin-user-reset__trigger"
         type="button"
         onClick={() => setOpen(true)}
       >
         Сбросить
-      </button>
+      </Button>
 
       {open ? (
         <div className="admin-user-reset__backdrop">
@@ -87,7 +88,7 @@ export function UserAccountReset({ user, currentUserId, canAssignAdmin }: Props)
             </p>
             <label htmlFor={`reset-confirm-${user.id}`}>
               Для подтверждения введите <strong>{CONFIRMATION}</strong>
-              <input
+              <Input
                 autoFocus
                 id={`reset-confirm-${user.id}`}
                 autoComplete="off"
@@ -105,22 +106,22 @@ export function UserAccountReset({ user, currentUserId, canAssignAdmin }: Props)
               </p>
             ) : null}
             <div className="admin-user-reset__dialog-actions">
-              <button
+              <Button
                 className="button button--ghost"
                 type="button"
                 onClick={close}
                 disabled={mutation.isPending}
               >
                 Отмена
-              </button>
-              <button
+              </Button>
+              <Button
                 className="button admin-user-reset__confirm"
                 type="button"
                 disabled={confirmation !== CONFIRMATION || mutation.isPending}
                 onClick={() => mutation.mutate()}
               >
                 {mutation.isPending ? "Сбрасываем…" : "Подтвердить сброс"}
-              </button>
+              </Button>
             </div>
           </section>
         </div>

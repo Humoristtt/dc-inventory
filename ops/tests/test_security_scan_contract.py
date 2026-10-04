@@ -83,10 +83,22 @@ assert 'test "$(git rev-parse HEAD)" = "${GOSU_COMMIT}"' in POSTGRES_DOCKERFILE
 assert "gosu nobody true" in POSTGRES_DOCKERFILE
 
 backend_pcre2_version = pinned_arg(BACKEND_DOCKERFILE, "PCRE2_VERSION")
+backend_pcre2_amd64_sha256 = pinned_arg(
+    BACKEND_DOCKERFILE,
+    "PCRE2_AMD64_SHA256",
+)
+backend_pcre2_arm64_sha256 = pinned_arg(
+    BACKEND_DOCKERFILE,
+    "PCRE2_ARM64_SHA256",
+)
 assert re.fullmatch(r"\d+\.\d+-[^\s]+", backend_pcre2_version)
-assert '"libpcre2-8-0=${PCRE2_VERSION}"' in BACKEND_DOCKERFILE
-assert "apt-get update" in BACKEND_DOCKERFILE
-assert "rm -rf /var/lib/apt/lists/*" in BACKEND_DOCKERFILE
+assert re.fullmatch(r"[0-9a-f]{64}", backend_pcre2_amd64_sha256)
+assert re.fullmatch(r"[0-9a-f]{64}", backend_pcre2_arm64_sha256)
+assert 'arch="$(dpkg --print-architecture)"' in BACKEND_DOCKERFILE
+assert "security.debian.org/debian-security/pool/updates/main/p/pcre2/" in BACKEND_DOCKERFILE
+assert "libpcre2-8-0_${PCRE2_VERSION}_${arch}.deb" in BACKEND_DOCKERFILE
+assert "sha256sum --check -" in BACKEND_DOCKERFILE
+assert "dpkg -i /tmp/libpcre2.deb" in BACKEND_DOCKERFILE
 
 assert re.search(r"libexpat=[^\s\\]+", WEB_DOCKERFILE)
 assert re.search(r"libuuid=[^\s\\]+", WEB_DOCKERFILE)

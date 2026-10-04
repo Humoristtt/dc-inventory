@@ -1,4 +1,4 @@
-"""Functional tests of the actual Stage15 restore download handler.
+"""Functional tests of the actual backup restore download handler.
 
 Uses a temporary fake S3 implementation. No network or production access.
 """

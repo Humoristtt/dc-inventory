@@ -283,6 +283,12 @@ Successful backup state должен связывать:
 
 Удалённая версия объекта важнее mutable «последнего имени».
 
+### Compatibility identifiers
+
+Файлы/идентификаторы `/etc/dc-inventory/stage15-backup.env`, `ops/backup/s3_stage15.py` и legacy markers `STAGE15A_*` сохранены как deployed compatibility surface. Они **не обозначают текущий этап проекта** и не должны использоваться в новых test/document names.
+
+Новые машинно-читаемые markers: `BACKUP_S3_PREFLIGHT=PASS`, `BACKUP_REMOTE_VERIFICATION=PASS`, `BACKUP_VERIFIED=PASS`.
+
 ## 16. Recovery rehearsal
 
 Для проверки backup использовать только [RECOVERY_RUNBOOK.md](RECOVERY_RUNBOOK.md).

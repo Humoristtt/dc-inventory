@@ -96,8 +96,8 @@ PostgreSQL 18
 Текущий engineering pass подтверждён на зелёном source baseline:
 
 ```text
-AUDITED_APPLICATION_SHA=14ee3f01ecce96722ba2c170a5f95c5ba068b710
-AUDIT_DATE=2026-10-03
+AUDITED_APPLICATION_SHA=0c19033fc9c5047b0f47af29889fb283f8d65dec
+AUDIT_DATE=2026-10-04
 ALEMBIC_HEAD=e3f4a5b6c7d8
 ```
 
@@ -109,7 +109,8 @@ ALEMBIC_HEAD=e3f4a5b6c7d8
 - production-shaped full-stack: `2 passed` + проверка фактических DB side effects;
 - Telegram Gateway: `7 passed`;
 - runtime provenance и least-privilege DB checks: PASS;
-- Trivy repository/image HIGH+CRITICAL gates: PASS.
+- Trivy repository/image HIGH+CRITICAL gates: PASS;
+- `npm audit --audit-level=high`: PASS, `found 0 vulnerabilities`.
 
 Это **application/source + CI evidence**, а не утверждение о live production. Фактическое состояние production проверяется только runtime-командами из [docs/OPERATIONS.md](docs/OPERATIONS.md).
 

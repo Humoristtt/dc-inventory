@@ -111,4 +111,13 @@ for stale in (
 ):
     assert stale not in combined, stale
 
+audit = texts["docs/CURRENT_STATE_AUDIT.md"]
+security = texts["docs/SECURITY.md"]
+assert "F-01—F-05 закрыты" in audit
+assert "Открытых source-level findings" in audit
+assert "undici 8.10.2" in audit
+assert "npm audit --audit-level=high" in audit
+assert "found 0 vulnerabilities" in audit
+assert "npm audit --audit-level=high" in security
+
 print(f"DOCS_FRESHNESS=PASS alembic_head={head}")

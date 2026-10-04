@@ -376,6 +376,8 @@ def command_preflight(args: argparse.Namespace) -> None:
 
     validate_storage(client, env)
 
+    print("BACKUP_S3_PREFLIGHT=PASS")
+    # Compatibility marker retained for deployed log consumers.
     print("STAGE15A_S3_PREFLIGHT=PASS")
 
 
@@ -464,6 +466,8 @@ def command_upload(args: argparse.Namespace) -> None:
     temporary.replace(args.versions_output)
 
     print("S3_VERSION_IDS=RECORDED")
+    print("BACKUP_REMOTE_VERIFICATION=PASS")
+    # Compatibility marker retained for deployed log consumers.
     print("STAGE15A_REMOTE_VERIFICATION=PASS")
 
 
